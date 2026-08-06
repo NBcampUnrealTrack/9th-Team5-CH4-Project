@@ -8,7 +8,13 @@ public class DeepRaiders : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
+			
+			// Voxel
+			"Voxel",
+		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
