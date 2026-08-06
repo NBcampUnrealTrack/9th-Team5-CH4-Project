@@ -9,11 +9,18 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "InputMappingContext.h"
+#include "Net/UnrealNetwork.h"
 
 ADRCNPlayerCharacter::ADRCNPlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	// 이 Actor가 서버에서 클라이언트로 복제되도록 설정
+	bReplicates = true;
+
+	// Actor 이동 정보도 복제
+	SetReplicateMovement(true);
+	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
@@ -109,6 +116,15 @@ void ADRCNPlayerCharacter::SetupPlayerInputComponent(
 			this,
 			&ACharacter::StopJumping);
 	}
+	
+	if (IsValid(NetworkTestAction.Get()))
+	{
+		EnhancedInput->BindAction(
+			NetworkTestAction.Get(),
+			ETriggerEvent::Started,
+			this,
+			&ThisClass::HandleNetworkTest);
+	}
 }
 
 void ADRCNPlayerCharacter::Move(const FInputActionValue& Value)
@@ -142,6 +158,40 @@ void ADRCNPlayerCharacter::Look(const FInputActionValue& Value)
 
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);
+}
+
+void ADRCNPlayerCharacter::HandleNetworkTest(
+	const FInputActionValue& Value)
+{
+	/*
+	 * 이 함수는 입력을 가진 Pawn에서만 실행되어야 한다.
+	 *
+	 * 호스트 자기 Pawn:
+	 * Authority = true
+	 * Local = true
+	 *
+	 * 게스트 자기 Pawn:
+	 * Authority = false
+	 * Local = true
+	 */
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[HandleNetworkTest] Name=%s "
+			"Authority=%d Local=%d"
+		),
+		*GetName(),
+		HasAuthority(),
+		IsLocallyControlled());
+
+	// 실제 상태 변경은 서버에 요청
+	ServerToggleNetworkTest();
 }
 
 void ADRCNPlayerCharacter::PossessedBy(AController* NewController)
@@ -255,4 +305,77 @@ void ADRCNPlayerCharacter::PawnClientRestart()
 		TEXT("[%s] Added Mapping Context: %s"),
 		*GetName(),
 		*GetNameSafe(MappingContext));
+}
+
+void ADRCNPlayerCharacter::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(
+		ADRCNPlayerCharacter,
+		bNetworkTestActive);
+}
+
+void ADRCNPlayerCharacter::ServerToggleNetworkTest_Implementation()
+{
+	/*
+	 * 이 함수는 서버에서만 실행된다.
+	 * 따라서 여기에서 다시 HasAuthority()를 검사할 필요는 없다.
+	 */
+
+	bNetworkTestActive = !bNetworkTestActive;
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[ServerToggleNetworkTest] Name=%s "
+			"NewState=%d Authority=%d"
+		),
+		*GetName(),
+		bNetworkTestActive,
+		HasAuthority());
+
+	/*
+	 * C++에서 서버가 값을 직접 변경해도
+	 * 서버 자신의 OnRep는 자동 호출되지 않는다.
+	 *
+	 * 리슨 서버 호스트 화면에도 효과를 적용하기 위해
+	 * 서버에서는 직접 호출한다.
+	 */
+	OnRep_NetworkTestActive();
+
+	/*
+	 * 다음 일반 네트워크 업데이트를 기다리지 않고
+	 * 해당 Actor의 복제를 가능한 한 빨리 요청한다.
+	 *
+	 * 필수는 아니지만 테스트 반응을 확인하기 편하다.
+	 */
+	ForceNetUpdate();
+}
+
+void ADRCNPlayerCharacter::OnRep_NetworkTestActive()
+{
+	/*
+	 * 테스트 상태가 true일 때 Mesh 숨김.
+	 * 다시 F를 누르면 false가 되면서 Mesh가 나타난다.
+	 */
+	GetMesh()->SetVisibility(
+		!bNetworkTestActive,
+		true);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[OnRep_NetworkTestActive] "
+			"Name=%s State=%d "
+			"NetMode=%d Authority=%d Local=%d"
+		),
+		*GetName(),
+		bNetworkTestActive,
+		static_cast<int32>(GetNetMode()),
+		HasAuthority(),
+		IsLocallyControlled());
 }
