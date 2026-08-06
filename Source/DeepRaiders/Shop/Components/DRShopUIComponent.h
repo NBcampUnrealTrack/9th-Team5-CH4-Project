@@ -6,7 +6,7 @@
 
 class APawn;
 class UDRInteractionComponent;
-class UUserWidget;
+class UDRShopWidget;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
@@ -27,13 +27,14 @@ private:
 	UFUNCTION()
 	void HandleInteractionExited(APawn* Interactor);
 
+	UFUNCTION()
 	void HideShopWidget();
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
-	TSubclassOf<UUserWidget> ShopWidgetClass;
+	TSubclassOf<UDRShopWidget> ShopWidgetClass;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UUserWidget> ShopWidget;
+	TObjectPtr<UDRShopWidget> ShopWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;

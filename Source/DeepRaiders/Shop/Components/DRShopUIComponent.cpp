@@ -1,7 +1,7 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
-#include "Blueprint/UserWidget.h"
+#include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
@@ -63,13 +63,24 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		return;
 	}
 
-	ShopWidget = CreateWidget<UUserWidget>(
+	ShopWidget = CreateWidget<UDRShopWidget>(
 		PlayerController,
 		ShopWidgetClass);
 
 	if (IsValid(ShopWidget))
 	{
+		ShopWidget->OnCloseRequested.AddDynamic(
+			this,
+			&ThisClass::HideShopWidget);
 		ShopWidget->AddToViewport();
+
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(ShopWidget->TakeWidget());
+		InputMode.SetLockMouseToViewportBehavior(
+			EMouseLockMode::DoNotLock);
+		PlayerController->FlushPressedKeys();
+		PlayerController->SetInputMode(InputMode);
+		PlayerController->bShowMouseCursor = true;
 	}
 }
 
@@ -88,6 +99,18 @@ void UDRShopUIComponent::HideShopWidget()
 		return;
 	}
 
+	APlayerController* PlayerController = ShopWidget->GetOwningPlayer();
+
+	ShopWidget->OnCloseRequested.RemoveDynamic(
+		this,
+		&ThisClass::HideShopWidget);
 	ShopWidget->RemoveFromParent();
 	ShopWidget = nullptr;
+
+	if (IsValid(PlayerController))
+	{
+		PlayerController->FlushPressedKeys();
+		PlayerController->SetInputMode(FInputModeGameOnly());
+		PlayerController->bShowMouseCursor = false;
+	}
 }
