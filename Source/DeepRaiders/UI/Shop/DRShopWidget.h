@@ -5,9 +5,11 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
+class ADRShopTestPlayerState;
 class UDRItemDefinition;
 class UDRShopItemWidget;
 class UScrollBox;
+class UTextBlock;
 enum class EItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
@@ -22,8 +24,9 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeItems(
-		const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions);
+	void InitializeShop(
+		const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions,
+		ADRShopTestPlayerState* PlayerState);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -36,7 +39,12 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
+	void SelectCategory(EItemCategory Category);
 	void RefreshItems(EItemCategory Category);
+	void SetPlayerState(ADRShopTestPlayerState* PlayerState);
+
+	UFUNCTION()
+	void HandleCoinsChanged(int32 NewCoins);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -62,9 +70,15 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CoinsText;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UDRItemDefinition>> ItemDefinitions;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRShopTestPlayerState> PlayerState;
 };

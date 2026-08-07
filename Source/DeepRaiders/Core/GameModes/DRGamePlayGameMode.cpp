@@ -2,7 +2,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/DeepRaiders.h"
-#include "DeepRaiders/Player/DRShopTestPlayerState.h"
+#include "DeepRaiders/Shop/DRShopTestPlayerState.h"
 
 ADRGamePlayGameMode::ADRGamePlayGameMode()
 {
