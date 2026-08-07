@@ -1,6 +1,8 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRShopTestPlayerState.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -8,6 +10,23 @@
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+}
+
+bool UDRShopUIComponent::IsItemAvailable(
+	const UDRItemDefinition* ItemDefinition) const
+{
+	return IsValid(ItemDefinition)
+		&& ItemDefinitions.Contains(ItemDefinition);
+}
+
+bool UDRShopUIComponent::CanPurchase(
+	const APawn* Interactor,
+	const UDRItemDefinition* ItemDefinition) const
+{
+	return IsItemAvailable(ItemDefinition)
+		&& IsValid(InteractionComponent)
+		&& IsValid(Interactor)
+		&& InteractionComponent->IsOverlappingActor(Interactor);
 }
 
 void UDRShopUIComponent::BeginPlay()
@@ -66,6 +85,9 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		return;
 	}
 
+	TestPlayerState =
+		PlayerController->GetPlayerState<ADRShopTestPlayerState>();
+
 	ShopWidget = CreateWidget<UDRShopWidget>(
 		PlayerController,
 		ShopWidgetClass);
@@ -77,6 +99,9 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,
 			&ThisClass::HideShopWidget);
+		ShopWidget->OnPurchaseRequested.AddDynamic(
+			this,
+			&ThisClass::HandlePurchaseRequested);
 		ShopWidget->AddToViewport();
 
 		FInputModeUIOnly InputMode;
@@ -109,8 +134,12 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopWidget->OnCloseRequested.RemoveDynamic(
 		this,
 		&ThisClass::HideShopWidget);
+	ShopWidget->OnPurchaseRequested.RemoveDynamic(
+		this,
+		&ThisClass::HandlePurchaseRequested);
 	ShopWidget->RemoveFromParent();
 	ShopWidget = nullptr;
+	TestPlayerState = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -118,5 +147,14 @@ void UDRShopUIComponent::HideShopWidget()
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
+	}
+}
+
+void UDRShopUIComponent::HandlePurchaseRequested(
+	UDRItemDefinition* ItemDefinition)
+{
+	if (IsValid(TestPlayerState))
+	{
+		TestPlayerState->RequestPurchase(GetOwner(), ItemDefinition);
 	}
 }

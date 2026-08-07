@@ -5,6 +5,7 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
+class ADRShopTestPlayerState;
 class UDRInteractionComponent;
 class UDRItemDefinition;
 class UDRShopWidget;
@@ -16,6 +17,10 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 
 public:
 	UDRShopUIComponent();
+	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;
+	bool CanPurchase(
+		const APawn* Interactor,
+		const UDRItemDefinition* ItemDefinition) const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -31,6 +36,9 @@ private:
 	UFUNCTION()
 	void HideShopWidget();
 
+	UFUNCTION()
+	void HandlePurchaseRequested(UDRItemDefinition* ItemDefinition);
+
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
 
@@ -42,4 +50,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRShopTestPlayerState> TestPlayerState;
 };

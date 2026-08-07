@@ -5,7 +5,13 @@
 #include "DRShopItemWidget.generated.h"
 
 class UDRItemDefinition;
+class UButton;
 class UTextBlock;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRShopItemPurchaseRequestedSignature,
+	UDRItemDefinition*,
+	ItemDefinition);
 
 UCLASS()
 class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
@@ -15,12 +21,21 @@ class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
 public:
 	void SetItemDefinition(UDRItemDefinition* NewItemDefinition);
 
+	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
+	FDRShopItemPurchaseRequestedSignature OnPurchaseRequested;
+
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:
 	void ApplyItemDefinition();
+
+	UFUNCTION()
+	void HandleBuyButtonClicked();
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> Buy;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> DisplayNameText;

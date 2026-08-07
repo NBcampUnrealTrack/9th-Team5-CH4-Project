@@ -6,7 +6,13 @@
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeItems(
-	const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions)
+	const TArray<TObjectPtr<UDRItemDefinition>>& NewItemDefinitions)
+{
+	ItemDefinitions = NewItemDefinitions;
+	RefreshItems(EItemCategory::Equipment);
+}
+
+void UDRShopWidget::RefreshItems(EItemCategory Category)
 {
 	if (!ItemWidgetClass)
 	{
@@ -29,7 +35,8 @@ void UDRShopWidget::InitializeItems(
 
 	for (UDRItemDefinition* ItemDefinition : ItemDefinitions)
 	{
-		if (!IsValid(ItemDefinition))
+		if (!IsValid(ItemDefinition)
+			|| ItemDefinition->Category != Category)
 		{
 			continue;
 		}
@@ -48,14 +55,16 @@ void UDRShopWidget::InitializeItems(
 		}
 
 		ItemWidget->SetItemDefinition(ItemDefinition);
+		ItemWidget->OnPurchaseRequested.AddDynamic(
+			this,
+			&ThisClass::HandlePurchaseRequested);
 		ItemScrollBox->AddChild(ItemWidget);
 		++CreatedItemCount;
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("Shop items created successfully: %d/%d items."),
-		CreatedItemCount,
-		ItemDefinitions.Num());
+		TEXT("Shop category items created successfully: %d items."),
+		CreatedItemCount);
 }
 
 void UDRShopWidget::NativeOnInitialized()
@@ -68,6 +77,13 @@ void UDRShopWidget::NativeOnInitialized()
 			this,
 			&ThisClass::HandleCloseButtonClicked);
 	}
+
+	EquipmentButton->OnClicked.AddDynamic(
+		this,
+		&ThisClass::HandleEquipmentButtonClicked);
+	ConsumableButton->OnClicked.AddDynamic(
+		this,
+		&ThisClass::HandleConsumableButtonClicked);
 }
 
 void UDRShopWidget::NativeDestruct()
@@ -79,10 +95,33 @@ void UDRShopWidget::NativeDestruct()
 			&ThisClass::HandleCloseButtonClicked);
 	}
 
+	EquipmentButton->OnClicked.RemoveDynamic(
+		this,
+		&ThisClass::HandleEquipmentButtonClicked);
+	ConsumableButton->OnClicked.RemoveDynamic(
+		this,
+		&ThisClass::HandleConsumableButtonClicked);
+
 	Super::NativeDestruct();
 }
 
 void UDRShopWidget::HandleCloseButtonClicked()
 {
 	OnCloseRequested.Broadcast();
+}
+
+void UDRShopWidget::HandleEquipmentButtonClicked()
+{
+	RefreshItems(EItemCategory::Equipment);
+}
+
+void UDRShopWidget::HandleConsumableButtonClicked()
+{
+	RefreshItems(EItemCategory::Consumable);
+}
+
+void UDRShopWidget::HandlePurchaseRequested(
+	UDRItemDefinition* ItemDefinition)
+{
+	OnPurchaseRequested.Broadcast(ItemDefinition);
 }
