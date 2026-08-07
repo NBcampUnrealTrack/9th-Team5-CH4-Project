@@ -1,5 +1,6 @@
 #include "DRMiningComponent.h"
 
+#include "Components/PrimitiveComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
@@ -12,17 +13,21 @@ UDRMiningComponent::UDRMiningComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 
 	SetIsReplicatedByDefault(true);
+
+	bDrawMineAreaOnMine = true;
 }
 
 void UDRMiningComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	OwnerCharacter = Cast<ADRCNPlayerCharacter>(GetOwner());
+	CacheOwnerCharacter();
 }
 
 void UDRMiningComponent::TryMine()
 {
+	CacheOwnerCharacter();
+
 	if (!CanMine())
 	{
 		return;
@@ -42,52 +47,60 @@ void UDRMiningComponent::TryMine()
 	LastMineTime = GetWorld()->GetTimeSeconds();
 }
 
-void UDRMiningComponent::Server_RequestMine_Implementation(FVector_NetQuantize TraceStart,	FVector_NetQuantize TraceEnd)
+void UDRMiningComponent::PreviewMineTarget()
 {
+	CacheOwnerCharacter();
+
 	if (!IsValid(OwnerCharacter.Get()))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] Preview blocked: OwnerCharacter invalid"));
 		return;
 	}
 
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	if (!OwnerCharacter->IsLocallyControlled())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] Preview blocked: not locally controlled"));
 		return;
 	}
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ServerMineTrace), false);
-	QueryParams.AddIgnoredActor(OwnerCharacter.Get());
 
 	FHitResult HitResult;
-	const bool bHit = World->LineTraceSingleByChannel(
-		HitResult,
-		TraceStart,
-		TraceEnd,
-		ECC_Visibility,
-		QueryParams);
-
-	if (!bHit)
+	if (!PerformMiningTrace(HitResult))
 	{
 		return;
 	}
 
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[Mining] Server hit: Actor=%s Location=%s"),
-		*GetNameSafe(HitResult.GetActor()),
-		*HitResult.ImpactPoint.ToString());
+	if (!IsValid(GetVoxelWorldFromHit(HitResult)))
+	{
+		return;
+	}
+
+	FVector MinePosition;
+	if (GetMinePositionFromHit(HitResult, MinePosition))
+	{
+		DrawMineArea(MinePosition, FColor::Green, PreviewDebugDrawTime);
+	}
+}
+
+void UDRMiningComponent::Server_RequestMine_Implementation(
+	FVector_NetQuantize TraceStart,
+	FVector_NetQuantize TraceEnd)
+{
+	// TODO: 서버 권한 채굴로 전환할 때 검증 및 Voxel 편집 처리를 구현한다.
+	(void)TraceStart;
+	(void)TraceEnd;
 }
 
 bool UDRMiningComponent::CanMine() const
 {
 	if (!IsValid(OwnerCharacter.Get()))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] CanMine false: OwnerCharacter invalid"));
 		return false;
 	}
 
 	if (!OwnerCharacter->IsLocallyControlled())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] CanMine false: not locally controlled"));
 		return false;
 	}
 
@@ -109,8 +122,15 @@ bool UDRMiningComponent::IsMineOnCooldown() const
 bool UDRMiningComponent::PerformMiningTrace(FHitResult& OutHitResult) const
 {
 	const UWorld* World = GetWorld();
-	if (!IsValid(World) || !IsValid(OwnerCharacter.Get()))
+	if (!IsValid(World))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] Trace failed: World invalid"));
+		return false;
+	}
+
+	if (!IsValid(OwnerCharacter.Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Mining] Trace failed: OwnerCharacter invalid"));
 		return false;
 	}
 
@@ -122,28 +142,40 @@ bool UDRMiningComponent::PerformMiningTrace(FHitResult& OutHitResult) const
 		TraceStart + (TraceRotation.Vector() * MineTraceDistance);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(MineTrace), false);
+	QueryParams.bTraceComplex = true;
 	QueryParams.AddIgnoredActor(OwnerCharacter.Get());
 
-	const bool bHit = World->LineTraceSingleByChannel(
-		OutHitResult,
-		TraceStart,
-		TraceEnd,
-		ECC_Visibility,
-		QueryParams);
+	bool bHit = false;
 
-	if (bDrawDebugTrace)
+	switch (TraceMode)
 	{
-		const FColor TraceColor = bHit ? FColor::Green : FColor::Red;
-
-		DrawDebugLine(
-			World,
+	case EDRMiningTraceMode::LineTrace:
+		bHit = World->LineTraceSingleByChannel(
+			OutHitResult,
 			TraceStart,
 			TraceEnd,
-			TraceColor,
-			false,
-			1.f,
-			0,
-			1.f);
+			ECC_Visibility,
+			QueryParams);
+		break;
+
+	case EDRMiningTraceMode::SphereSweep:
+		{
+			const FCollisionShape MineShape =
+				FCollisionShape::MakeSphere(MineRadius);
+
+			bHit = World->SweepSingleByChannel(
+				OutHitResult,
+				TraceStart,
+				TraceEnd,
+				FQuat::Identity,
+				ECC_Visibility,
+				MineShape,
+				QueryParams);
+		}
+		break;
+
+	default:
+		break;
 	}
 
 	return bHit;
@@ -151,14 +183,29 @@ bool UDRMiningComponent::PerformMiningTrace(FHitResult& OutHitResult) const
 
 bool UDRMiningComponent::MineLocal(const FHitResult& HitResult) const
 {
-	AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(HitResult.GetActor());
+	AVoxelWorld* VoxelWorld = GetVoxelWorldFromHit(HitResult);
 	if (!IsValid(VoxelWorld))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Mining] Hit actor is not a VoxelWorld. Actor=%s Component=%s"),
+			*GetNameSafe(HitResult.GetActor()),
+			*GetNameSafe(HitResult.GetComponent()));
+
+		return false;
+	}
+
+	FVector MinePosition;
+	if (!GetMinePositionFromHit(HitResult, MinePosition))
 	{
 		return false;
 	}
 
-	const FVector MinePosition =
-		HitResult.ImpactPoint - (HitResult.ImpactNormal * MineRadius * 0.5f);
+	if (bDrawMineAreaOnMine)
+	{
+		DrawMineArea(MinePosition, FColor::Blue, MineDebugDrawTime);
+	}
 
 	UVoxelSphereTools::RemoveSphere(
 		VoxelWorld,
@@ -170,20 +217,91 @@ bool UDRMiningComponent::MineLocal(const FHitResult& HitResult) const
 		true,
 		true);
 
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[Mining] Local mine: VoxelWorld=%s Location=%s Radius=%.2f"),
-		*GetNameSafe(VoxelWorld),
-		*MinePosition.ToString(),
-		MineRadius);
+	return true;
+}
+
+AVoxelWorld* UDRMiningComponent::GetVoxelWorldFromHit(const FHitResult& HitResult) const
+{
+	if (AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(HitResult.GetActor()))
+	{
+		return VoxelWorld;
+	}
+
+	const UPrimitiveComponent* HitComponent = HitResult.GetComponent();
+	if (!IsValid(HitComponent))
+	{
+		return nullptr;
+	}
+
+	return Cast<AVoxelWorld>(HitComponent->GetOwner());
+}
+
+bool UDRMiningComponent::GetMinePositionFromHit(const FHitResult& HitResult, FVector& OutMinePosition) const
+{
+	if (!HitResult.bBlockingHit)
+	{
+		return false;
+	}
+
+	const FVector SurfaceNormal =
+		HitResult.ImpactNormal.IsNearlyZero()
+			? FVector::UpVector
+			: HitResult.ImpactNormal.GetSafeNormal();
+
+	OutMinePosition =
+		HitResult.ImpactPoint -
+		(SurfaceNormal * MineRadius * MineSurfaceDepthRatio);
 
 	return true;
 }
 
-void UDRMiningComponent::GetTraceViewPoint(
-	FVector& OutLocation,
-	FRotator& OutRotation) const
+void UDRMiningComponent::CacheOwnerCharacter()
+{
+	if (IsValid(OwnerCharacter.Get()))
+	{
+		return;
+	}
+
+	OwnerCharacter = Cast<ADRCNPlayerCharacter>(GetOwner());
+}
+
+void UDRMiningComponent::DrawMineArea(
+	const FVector& MinePosition,
+	const FColor& Color,
+	float DrawTime) const
+{
+	if (!bDrawDebugTrace)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	DrawDebugSphere(
+		World,
+		MinePosition,
+		MineRadius,
+		24,
+		Color,
+		false,
+		DrawTime,
+		0,
+		2.f);
+
+	DrawDebugPoint(
+		World,
+		MinePosition,
+		10.f,
+		Color,
+		false,
+		DrawTime);
+}
+
+void UDRMiningComponent::GetTraceViewPoint(FVector& OutLocation, FRotator& OutRotation) const
 {
 	if (!IsValid(OwnerCharacter.Get()))
 	{
