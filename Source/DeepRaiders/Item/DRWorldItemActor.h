@@ -16,6 +16,7 @@ public:
 	ADRWorldItemActor();
 	
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	const FDRItemInstance& GetItemInstance() const
 	{

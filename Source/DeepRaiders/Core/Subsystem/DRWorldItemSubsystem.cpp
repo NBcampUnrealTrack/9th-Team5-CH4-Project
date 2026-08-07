@@ -87,6 +87,7 @@ ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItem(const FDRItemInstance& 
 	{
 		UE_LOG(LogTemp, Error, TEXT("[%s] : Set InitialItem Function failed."), *GetName());
 		
+		ItemActor->Destroy();
 		return nullptr;
 	}
 	
