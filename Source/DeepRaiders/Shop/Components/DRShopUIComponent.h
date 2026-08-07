@@ -6,6 +6,7 @@
 
 class APawn;
 class UDRInteractionComponent;
+class UDRShopCatalogData;
 class UDRShopWidget;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
@@ -32,6 +33,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|Data")
+	TObjectPtr<UDRShopCatalogData> ShopCatalog;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopWidget> ShopWidget;

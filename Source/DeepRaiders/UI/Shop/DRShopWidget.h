@@ -5,6 +5,9 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
+class UDRShopCatalogData;
+class UDRShopItemWidget;
+class UScrollBox;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 
@@ -14,6 +17,8 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	void InitializeItems(const UDRShopCatalogData* ShopCatalog);
+
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
 
@@ -27,4 +32,10 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UScrollBox> ItemScrollBox;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
+	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 };

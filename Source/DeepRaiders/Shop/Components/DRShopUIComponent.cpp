@@ -1,6 +1,7 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
+#include "DeepRaiders/Shop/Data/DRShopCatalogData.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -72,6 +73,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 
 	if (IsValid(ShopWidget))
 	{
+		ShopWidget->InitializeItems(ShopCatalog);
 		// 위젯을 표시하고 입력을 UI로 전환합니다.
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,
@@ -79,7 +81,6 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		ShopWidget->AddToViewport();
 
 		FInputModeUIOnly InputMode;
-		InputMode.SetWidgetToFocus(ShopWidget->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(
 			EMouseLockMode::DoNotLock);
 		// 상호작용 키가 UI에 남아 있는 상태를 초기화합니다.
