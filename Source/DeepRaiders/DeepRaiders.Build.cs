@@ -11,7 +11,12 @@ public class DeepRaiders : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
-			"OnlineSubsystem", "OnlineSubsystemUtils", "Sockets"
+			
+			// Online
+			"OnlineSubsystem", "OnlineSubsystemUtils", "Sockets",
+			
+			// Voxel
+			"Voxel",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
