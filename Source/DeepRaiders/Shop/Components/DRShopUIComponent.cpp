@@ -22,6 +22,7 @@ void UDRShopUIComponent::BeginPlay()
 		return;
 	}
 
+	// 상호작용 범위 진입 및 이탈 이벤트를 구독합니다.
 	InteractionComponent->OnInteractionEntered.AddDynamic(
 		this,
 		&ThisClass::HandleInteractionEntered);
@@ -35,6 +36,7 @@ void UDRShopUIComponent::EndPlay(
 {
 	if (IsValid(InteractionComponent))
 	{
+		// EndPlay 이후 이벤트가 호출되지 않도록 구독을 해제합니다.
 		InteractionComponent->OnInteractionEntered.RemoveDynamic(
 			this,
 			&ThisClass::HandleInteractionEntered);
@@ -49,6 +51,7 @@ void UDRShopUIComponent::EndPlay(
 
 void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 {
+	// 로컬 플레이어의 중복 UI 생성을 방지합니다.
 	if (!IsValid(Interactor) || !Interactor->IsLocallyControlled()
 		|| IsValid(ShopWidget) || !ShopWidgetClass)
 	{
@@ -69,6 +72,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 
 	if (IsValid(ShopWidget))
 	{
+		// 위젯을 표시하고 입력을 UI로 전환합니다.
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,
 			&ThisClass::HideShopWidget);
@@ -78,6 +82,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		InputMode.SetWidgetToFocus(ShopWidget->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(
 			EMouseLockMode::DoNotLock);
+		// 상호작용 키가 UI에 남아 있는 상태를 초기화합니다.
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->bShowMouseCursor = true;
@@ -109,6 +114,7 @@ void UDRShopUIComponent::HideShopWidget()
 
 	if (IsValid(PlayerController))
 	{
+		// 위젯을 닫고 게임 입력으로 복구합니다.
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;

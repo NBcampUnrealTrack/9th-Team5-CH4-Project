@@ -15,6 +15,7 @@ UDRInteractionComponent::UDRInteractionComponent()
 	SetHiddenInGame(true);
 	ShapeColor = FColor::Green;
 
+	// 플레이어의 상호작용 범위 진입 및 이탈을 감지합니다.
 	OnComponentBeginOverlap.AddDynamic(
 		this,
 		&ThisClass::HandleBeginOverlap);
@@ -23,23 +24,11 @@ UDRInteractionComponent::UDRInteractionComponent()
 		&ThisClass::HandleEndOverlap);
 }
 
-bool UDRInteractionComponent::IsInInteractionRange(
-	const APawn* Interactor) const
-{
-	if (!IsValid(Interactor))
-	{
-		return false;
-	}
-
-	return FVector::DistSquared(
-		GetComponentLocation(),
-		Interactor->GetActorLocation()) <= FMath::Square(GetScaledSphereRadius());
-}
-
 void UDRInteractionComponent::Interact(APawn* Interactor)
 {
 	AActor* Owner = GetOwner();
 
+	// 상호작용은 유효한 서버 오브젝트와 플레이어만 처리합니다.
 	if (!IsValid(Owner) || !Owner->HasAuthority()
 		|| !IsValid(Interactor))
 	{
@@ -53,6 +42,7 @@ void UDRInteractionComponent::Interact(APawn* Interactor)
 		*GetNameSafe(Interactor),
 		*GetNameSafe(Owner));
 
+	// 상호작용 이벤트를 구독자에게 전달합니다.
 	OnInteracted.Broadcast(Interactor);
 }
 
@@ -66,11 +56,13 @@ void UDRInteractionComponent::HandleBeginOverlap(
 {
 	APawn* Interactor = Cast<APawn>(OtherActor);
 
+	// 플레이어가 아닌 오브젝트의 오버랩은 무시합니다.
 	if (!IsValid(Interactor))
 	{
 		return;
 	}
 
+	// 범위 진입 이벤트를 알리고 상호작용을 실행합니다.
 	OnInteractionEntered.Broadcast(Interactor);
 	Interact(Interactor);
 }
@@ -85,6 +77,7 @@ void UDRInteractionComponent::HandleEndOverlap(
 
 	if (IsValid(Interactor))
 	{
+		// 범위를 벗어난 플레이어에게 이탈 이벤트를 알립니다.
 		OnInteractionExited.Broadcast(Interactor);
 	}
 }

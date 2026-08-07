@@ -19,9 +19,6 @@ class DEEPRAIDERS_API UDRInteractionComponent : public USphereComponent
 public:
 	UDRInteractionComponent();
 
-	UFUNCTION(BlueprintPure, Category = "Interaction")
-	bool IsInInteractionRange(const APawn* Interactor) const;
-	
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void Interact(APawn* Interactor);
 
