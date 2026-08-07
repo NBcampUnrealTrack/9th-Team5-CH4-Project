@@ -4,7 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "DRMiningComponent.generated.h"
 
-class ADRCNPlayerCharacter;
+class ADRPlayerCharacter;
 class AVoxelWorld;
 
 UENUM(BlueprintType)
@@ -137,7 +137,7 @@ protected:
 
 private:
 	UPROPERTY(Transient)
-	TObjectPtr<ADRCNPlayerCharacter> OwnerCharacter;
+	TObjectPtr<ADRPlayerCharacter> OwnerCharacter;
 
 	float LastMineTime = -BIG_NUMBER;
 };

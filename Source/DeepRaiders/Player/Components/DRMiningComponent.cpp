@@ -4,7 +4,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
-#include "DeepRaiders/Player/DRCNPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelWorld.h"
 
@@ -262,7 +262,7 @@ void UDRMiningComponent::CacheOwnerCharacter()
 		return;
 	}
 
-	OwnerCharacter = Cast<ADRCNPlayerCharacter>(GetOwner());
+	OwnerCharacter = Cast<ADRPlayerCharacter>(GetOwner());
 }
 
 void UDRMiningComponent::DrawMineArea(
