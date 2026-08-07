@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "DeepRaiders/Player/Components/DRMiningComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter()
 {
@@ -12,6 +13,10 @@ ADRPlayerCharacter::ADRPlayerCharacter()
 
 	// 이 Actor가 서버에서 클라이언트로 복제되도록 설정
 	bReplicates = true;
+	
+	MiningComponent =
+		CreateDefaultSubobject<UDRMiningComponent>(
+			TEXT("MiningComponent"));
 
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -91,6 +96,22 @@ ADRPlayerCharacter::ADRPlayerCharacter()
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+}
+
+void ADRPlayerCharacter::RequestMine()
+{
+	if (!IsValid(MiningComponent))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[%s] MiningComponent is invalid"),
+			*GetName());
+
+		return;
+	}
+
+	MiningComponent->TryMine();
 }
 
 void ADRPlayerCharacter::BeginPlay()
