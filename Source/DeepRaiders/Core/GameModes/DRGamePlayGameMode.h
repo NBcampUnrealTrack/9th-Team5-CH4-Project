@@ -9,14 +9,6 @@ class DEEPRAIDERS_API ADRGamePlayGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
-protected:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Setup")
-	TSubclassOf<UUserWidget> HostOrJoinWidgetClass;
-
-private:
-	UPROPERTY()
-	UUserWidget* HostOrJoinWidgetInstance;
-
 public:
 	ADRGamePlayGameMode();
 	virtual void PostLogin(APlayerController* NewPlayer) override;

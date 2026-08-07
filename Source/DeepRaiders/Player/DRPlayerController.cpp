@@ -10,6 +10,11 @@ void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
 
+    SetShowMouseCursor(false);
+
+    FInputModeGameOnly InputModeData;
+    SetInputMode(InputModeData);
+
     // 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
     if (!IsLocalController())
     {
