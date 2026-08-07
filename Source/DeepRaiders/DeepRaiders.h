@@ -34,7 +34,7 @@ public:
 		if (IsValid(GEngine))
 		{
 			const ENetMode NetMode = InWorldContextActor->GetNetMode();
-			const FString NetModeString = GetNetModeString(NetMode);
+			const FString NetModeString = ConvertNetModeToString(NetMode);
 
 			// [실행모드] 로그 내용 (함수 이름 : (%s:%d))
 			FString FullFormattedString = FString::Printf(
@@ -80,33 +80,30 @@ public:
 			return;
 		}
 
-		if (IsValid(GEngine))
+		const ENetMode NetMode = InWorldContextActor->GetNetMode();
+		const FString NetModeString = ConvertNetModeToString(NetMode);
+
+		// [실행모드] 로그 내용 (함수 이름 : (%s:%d))
+		FString FullFormattedString = FString::Printf(
+			TEXT("[%s] %s (%s:%d)"), *NetModeString, *InString, *InFuncName, InLineNumber);
+
+		switch (InVerbosity)
 		{
-			const ENetMode NetMode = InWorldContextActor->GetNetMode();
-			const FString NetModeString = GetNetModeString(NetMode);
-
-			// [실행모드] 로그 내용 (함수 이름 : (%s:%d))
-			FString FullFormattedString = FString::Printf(
-				TEXT("[%s] %s (%s:%d)"), *NetModeString, *InString, *InFuncName, InLineNumber);
-
-			switch (InVerbosity)
-			{
-			case EDRLogVerbosity::Warning:
-				UE_LOG(LogTemp, Warning, TEXT("%s"), *FullFormattedString);
-				break;
-			case EDRLogVerbosity::Error:
-				UE_LOG(LogTemp, Error, TEXT("%s"), *FullFormattedString);
-				break;
-			case EDRLogVerbosity::Log:
-			default:
-				UE_LOG(LogTemp, Log, TEXT("%s"), *FullFormattedString);
-				break;
-			}
+		case EDRLogVerbosity::Warning:
+			UE_LOG(LogTemp, Warning, TEXT("%s"), *FullFormattedString);
+			break;
+		case EDRLogVerbosity::Error:
+			UE_LOG(LogTemp, Error, TEXT("%s"), *FullFormattedString);
+			break;
+		case EDRLogVerbosity::Log:
+		default:
+			UE_LOG(LogTemp, Log, TEXT("%s"), *FullFormattedString);
+			break;
 		}
 	}
 
 private:
-	static FString GetNetModeString(const ENetMode NetMode)
+	static FString ConvertNetModeToString(const ENetMode NetMode)
 	{
 		FString NetModeString = TEXT("None");
 

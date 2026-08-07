@@ -21,7 +21,8 @@ void UDRSessionSubsystem::CreateSession(const int32 NumPublicConnections, const 
 		return;
 	}
 
-	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr) //기존 세션이 남아있다면
+	//기존 세션이 남아있는 경우 제거
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
 		SessionInterface->DestroySession(NAME_GameSession);
 
 	FOnlineSessionSettings SessionSettings;
@@ -37,7 +38,7 @@ void UDRSessionSubsystem::CreateSession(const int32 NumPublicConnections, const 
 	SessionSettings.Set(FName("MatchType"), MatchType.ToString(),
 	                    EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
-	LoadLevelName = InLoadLevelName;
+	LoadLevelName = InLoadLevelName; // 세션 생성 후 레벨 이동을 위한 부분
 
 	const ULocalPlayer* LocalPlayer = GetGameInstance()->GetFirstGamePlayer();
 	if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionSettings))
@@ -63,65 +64,20 @@ void UDRSessionSubsystem::FindAndJoinSession()
 
 void UDRSessionSubsystem::JoinSession(const FString& IPAddress)
 {
-	FString CleanedIP = IPAddress.TrimStartAndEnd();
-	if (CleanedIP.IsEmpty()) return;
-
-	if (CleanedIP.Contains(TEXT("://")))
+	FString OutFinalConnectURL;
+	if (!TryConvertDomainToIP(IPAddress, OutFinalConnectURL)) // 입력 받은 주소를 IP 주소로 변환
 	{
-		int32 ProtocolIndex = CleanedIP.Find(TEXT("://"));
-		CleanedIP = CleanedIP.RightChop(ProtocolIndex + 3);
+		DR_PRINT_ERROR(TEXT("올바르지 않은 주소 입니다: %s"), *IPAddress);
+		OnJoinSessionComplete.Broadcast(false);
+
+		return;
 	}
 
-	FString HostDomain = CleanedIP;
-	FString PortSuffix = TEXT(":7777"); // 기본 포트 지정
-	int32 LastColonIndex;
-
-	if (CleanedIP.FindLastChar(':', LastColonIndex))
-	{
-		HostDomain = CleanedIP.Left(LastColonIndex);
-		PortSuffix = CleanedIP.RightChop(LastColonIndex);
-	}
-
-	if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
-	{
-		TSharedRef<FInternetAddr> ResolvedAddr = SocketSubsystem->CreateInternetAddr();
-		bool bIsValidIP = false;
-
-		ResolvedAddr->SetIp(*HostDomain, bIsValidIP);
-
-		if (!bIsValidIP)
-		{
-			const TCHAR* HostNamePtr = HostDomain.GetCharArray().GetData();
-			const FAddressInfoResult AddressInfo = SocketSubsystem->GetAddressInfo(
-				HostNamePtr, nullptr, EAddressInfoFlags::Default, NAME_None, SOCKTYPE_Unknown
-			);
-
-			if (AddressInfo.Results.Num() > 0)
-			{
-				ResolvedAddr = AddressInfo.Results[0].Address;
-				bIsValidIP = true;
-			}
-		}
-
-		if (bIsValidIP)
-		{
-			HostDomain = ResolvedAddr->ToString(false);
-		}
-		else
-		{
-			DR_PRINT_ERROR(TEXT("[DNS 실패] 주소를 해석할 수 없습니다: %s"), *HostDomain);
-			OnJoinSessionComplete.Broadcast(false);
-			return;
-		}
-	}
-
-	const FString FinalConnectURL = FString::Printf(TEXT("%s%s"), *HostDomain, *PortSuffix);
-
-	DR_PRINT_LOG(TEXT("[접속 시도 URL] 최종 목적지: %s"), *FinalConnectURL);
+	DR_PRINT_LOG(TEXT("[접속 시도 URL] 최종 목적지: %s"), *OutFinalConnectURL);
 
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
-		PlayerController->ClientTravel(FinalConnectURL, TRAVEL_Absolute);
+		PlayerController->ClientTravel(OutFinalConnectURL, TRAVEL_Absolute);
 	}
 }
 
@@ -166,7 +122,7 @@ void UDRSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool bW
 		else
 		{
 			FString CurrentMapName = World->GetMapName();
-			CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix); //접두사 제거
+			CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix); //레벨 접두사 제거
 			World->ServerTravel(FString::Printf(TEXT("%s?listen"), *CurrentMapName));
 		}
 	}
@@ -205,4 +161,58 @@ void UDRSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinSe
 				PlayerController->ClientTravel(ConnectInfo, TRAVEL_Absolute);
 		}
 	}
+}
+
+bool UDRSessionSubsystem::TryConvertDomainToIP(const FString& IPAddress, FString& OutFinalConnectURL)
+{
+	FString CleanedIP = IPAddress.TrimStartAndEnd();
+	if (CleanedIP.IsEmpty()) return false;
+
+	// http://, tcp:// 와 같은 접두사를 제거하는 부분
+	if (CleanedIP.Contains(TEXT("://")))
+	{
+		int32 ProtocolIndex = CleanedIP.Find(TEXT("://"));
+		CleanedIP = CleanedIP.RightChop(ProtocolIndex + 3);
+	}
+
+	FString HostDomain = CleanedIP;
+	FString PortSuffix = TEXT(":7777"); // 기본 포트 지정
+	int32 LastColonIndex;
+
+	// 주소와 포트 분리
+	if (CleanedIP.FindLastChar(':', LastColonIndex))
+	{
+		HostDomain = CleanedIP.Left(LastColonIndex);
+		PortSuffix = CleanedIP.RightChop(LastColonIndex);
+	}
+
+	if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+	{
+		TSharedRef<FInternetAddr> ResolvedAddr = SocketSubsystem->CreateInternetAddr();
+		bool bIsValidIP = false;
+
+		ResolvedAddr->SetIp(*HostDomain, bIsValidIP); // 입력된 주소가 도메인 주소가 아니라 IP 주소인지 확인
+
+		if (!bIsValidIP)
+		{
+			// 도메인 주소를 IP 주소로 변환
+			const FAddressInfoResult AddressInfo = SocketSubsystem->GetAddressInfo(
+				*HostDomain, nullptr, EAddressInfoFlags::Default, NAME_None, SOCKTYPE_Datagram
+			);
+
+			if (AddressInfo.Results.Num() > 0) // 도메인 주소를 IP 주소로 변환한 결과가 있는지 확인
+			{
+				ResolvedAddr = AddressInfo.Results[0].Address;
+				bIsValidIP = true;
+			}
+		}
+
+		if (bIsValidIP)
+			HostDomain = ResolvedAddr->ToString(false); // 도메인 주소를 IP 주소로 변환한 결과를 사용
+		else
+			return false;
+	}
+
+	OutFinalConnectURL = FString::Printf(TEXT("%s%s"), *HostDomain, *PortSuffix);
+	return true;
 }

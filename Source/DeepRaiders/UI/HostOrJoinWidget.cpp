@@ -43,18 +43,18 @@ void UHostOrJoinWidget::OnJoinButtonClicked()
 	if (!SessionSubsystem)
 		return;
 
-	if (ETB_IPAddress)
+	if (ETB_IPAddress) // 입력을 위한 위젯이 있을 경우
 	{
 		FString TargetIP = ETB_IPAddress->GetText().ToString();
 
 		TargetIP = TargetIP.TrimStartAndEnd();
 		if (TargetIP.IsEmpty()) return;
 
-		SessionSubsystem->JoinSession(TargetIP);
+		SessionSubsystem->JoinSession(TargetIP); // 입력을 받은 IP 주소로 세션 입장
 	}
 	else
 	{
-		SessionSubsystem->FindAndJoinSession();
+		SessionSubsystem->FindAndJoinSession(); // 세션 입장
 	}
 }
 
