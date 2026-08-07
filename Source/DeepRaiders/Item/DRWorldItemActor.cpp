@@ -6,7 +6,7 @@
 #include "DRItemDefinition.h"
 #include "Net/UnrealNetwork.h"
 
-// Sets default values
+
 ADRWorldItemActor::ADRWorldItemActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -20,6 +20,7 @@ ADRWorldItemActor::ADRWorldItemActor()
 	
 	StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	StaticMeshComponent->SetSimulatePhysics(true);
+	StaticMeshComponent->BodyInstance.bStartAwake = false;
 	
 	ConstructorHelpers::FObjectFinder<UDRItemDefinition> ItemDefinitionAssetRef(TEXT("/Script/DeepRaiders.DRItemDefinition'/Game/DeepRaiders/Data/DataAssets/DA_DRTestItemDefinition.DA_DRTestItemDefinition'"));
 	if (ItemDefinitionAssetRef.Object)
@@ -68,6 +69,15 @@ void ADRWorldItemActor::InitializeItem(const FDRItemInstance& InItemInstance)
 	
 	ItemInstance = InItemInstance;
 	RefreshItemPresentation();
+	
+	if (const UDRItemDefinition* ItemDefinition = ItemInstance.Definition)
+	{
+		const FTransform FinalTransform = ItemDefinition->OffsetTransform * GetActorTransform();
+		SetActorTransform(FinalTransform, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+	
+	StaticMeshComponent->PutRigidBodyToSleep();
+	
 	ForceNetUpdate();
 	
 	UE_LOG(LogTemp, Error, TEXT("[InitializeItem] Actor=%s Definition=%s Quantity=%d")
@@ -100,7 +110,11 @@ void ADRWorldItemActor::InitializeItemFromDefinition(UDRItemDefinition* InDefini
 	NewItemInstance.InstanceId = FGuid::NewGuid();
 	NewItemInstance.Quantity = FMath::Min(InQuantity, InDefinition->MaxStackSize);
 	
-	InitializeItem(NewItemInstance);
+	ItemInstance = NewItemInstance;
+	InitializeItem(ItemInstance);
+
+	UE_LOG(LogTemp, Error, TEXT("[InitializeItemFromDefinition] Actor=%s Definition=%s Quantity=%d")
+		, *GetName(), *GetNameSafe(ItemInstance.Definition), ItemInstance.Quantity);
 }
 
 void ADRWorldItemActor::OnRep_ItemInstance()
@@ -115,7 +129,8 @@ void ADRWorldItemActor::RefreshItemPresentation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
 	
-	if (!ItemInstance.IsValid())
+	if (Definition == nullptr
+		|| !ItemInstance.IsValid())
 	{
 		StaticMeshComponent->SetStaticMesh(nullptr);
 		StaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);

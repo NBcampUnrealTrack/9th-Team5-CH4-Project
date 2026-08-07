@@ -46,6 +46,8 @@ protected:
 	int32 DefaultItemQuantity = 1;
 	
 private:
+	// ItemInstance 갱신 시마다 호출
+	// MeshData 갱신
 	void RefreshItemPresentation();
 	
 };

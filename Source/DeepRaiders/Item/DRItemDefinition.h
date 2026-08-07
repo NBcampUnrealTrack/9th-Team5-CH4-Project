@@ -18,7 +18,7 @@ enum class EItemCategory : uint8
 /**
  * 
  */
-UCLASS(BlueprintType)
+UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))
 class DEEPRAIDERS_API UDRItemDefinition : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
@@ -39,13 +39,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item", meta = (ClampMin = 1, UIMin = 1))
 	int32 MaxStackSize = 1;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item | Trade")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade")
 	uint8 bCanBeSold:1 = false;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item | Trade", meta = (ClampMin = 1, UIMin = 1))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade", meta = (ClampMin = 1, UIMin = 1))
 	int32 Price = 0;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")
 	TObjectPtr<UStaticMesh> WorldMesh;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
+	FTransform OffsetTransform;
 };
 
