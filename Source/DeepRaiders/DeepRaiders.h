@@ -119,7 +119,7 @@ private:
 			NetModeString = TEXT("ListenServer");
 			break;
 		case NM_Client:
-			NetModeString = TEXT("Client");
+			NetModeString = FString::Printf(TEXT("Client%02d"), UE::GetPlayInEditorID());
 			break;
 		default:
 			NetModeString = TEXT("Unknown");
