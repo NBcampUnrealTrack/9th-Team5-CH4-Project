@@ -29,8 +29,7 @@ void UDRShopWidget::InitializeItems(
 
 	for (UDRItemDefinition* ItemDefinition : ItemDefinitions)
 	{
-		if (!IsValid(ItemDefinition)
-			|| ItemDefinition->Category != EItemCategory::Consumable)
+		if (!IsValid(ItemDefinition))
 		{
 			continue;
 		}
