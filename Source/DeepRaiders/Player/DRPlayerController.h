@@ -33,6 +33,8 @@ private:
 	// 임시 네트워크 검증 입력
 	void HandleNetworkTest(const FInputActionValue& Value);
 
+	void HandleMine(const FInputActionValue& Value);
+	
 protected:
 	UPROPERTY(
 		EditDefaultsOnly,
@@ -69,4 +71,11 @@ protected:
 		BlueprintReadOnly,
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> NetworkTestAction;
+	
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Player|Input")
+	TObjectPtr<UInputAction> MineAction;
+	
 };
