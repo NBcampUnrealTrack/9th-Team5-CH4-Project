@@ -119,6 +119,15 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleNetworkTest);
     }
+    
+    if (IsValid(MineAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            MineAction.Get(),
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleMine);
+    }
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -190,6 +199,20 @@ void ADRPlayerController::HandleNetworkTest(
     {
         PlayerCharacter->RequestNetworkTest();
     }
+}
+
+void ADRPlayerController::HandleMine(
+    const FInputActionValue& Value)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestMine();
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(

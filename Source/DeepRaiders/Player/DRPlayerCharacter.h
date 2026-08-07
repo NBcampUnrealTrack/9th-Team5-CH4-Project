@@ -10,6 +10,7 @@ class UStaticMeshComponent;
 class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
+class UDRMiningComponent;
 
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
@@ -25,6 +26,9 @@ class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter
 public:
     ADRPlayerCharacter();
 
+    /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
+    void RequestMine();
+    
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
 
@@ -58,6 +62,12 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Mining")
+    TObjectPtr<UDRMiningComponent> MiningComponent;
+    
 private:
 
     // 임시 네트워크 복제 검증용
