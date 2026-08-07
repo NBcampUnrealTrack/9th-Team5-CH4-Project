@@ -2,10 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "DeepRaiders/Shop/Data/DRShopTestData.h"
 #include "DRShopItemWidget.generated.h"
 
-class UImage;
+class UDRItemDefinition;
 class UTextBlock;
 
 UCLASS()
@@ -14,30 +13,26 @@ class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void SetItemData(const FDRShopItemData& ItemData);
+	void SetItemDefinition(UDRItemDefinition* NewItemDefinition);
 
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:
-	void ApplyItemData();
+	void ApplyItemDefinition();
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UImage> ItemIcon;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> ItemNameText;
+	TObjectPtr<UTextBlock> DisplayNameText;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> PriceText;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> InformationText;
+	TObjectPtr<UTextBlock> DescriptionText;
 
 	UPROPERTY(Transient)
-	FDRShopItemData ItemData;
+	TObjectPtr<UDRItemDefinition> ItemDefinition;
 
-	bool IsItemDataSet = false;
 	bool IsWidgetConstructed = false;
 };

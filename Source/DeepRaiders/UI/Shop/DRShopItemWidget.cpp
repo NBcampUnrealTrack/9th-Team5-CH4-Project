@@ -1,17 +1,16 @@
 #include "DRShopItemWidget.h"
 
-#include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
 
-void UDRShopItemWidget::SetItemData(
-	const FDRShopItemData& NewItemData)
+void UDRShopItemWidget::SetItemDefinition(
+	UDRItemDefinition* NewItemDefinition)
 {
-	ItemData = NewItemData;
-	IsItemDataSet = true;
+	ItemDefinition = NewItemDefinition;
 
 	if (IsWidgetConstructed)
 	{
-		ApplyItemData();
+		ApplyItemDefinition();
 	}
 }
 
@@ -19,7 +18,7 @@ void UDRShopItemWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	IsWidgetConstructed = true;
-	ApplyItemData();
+	ApplyItemDefinition();
 }
 
 void UDRShopItemWidget::NativeDestruct()
@@ -28,15 +27,14 @@ void UDRShopItemWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UDRShopItemWidget::ApplyItemData()
+void UDRShopItemWidget::ApplyItemDefinition()
 {
-	if (!IsItemDataSet)
+	if (!IsValid(ItemDefinition))
 	{
 		return;
 	}
 
-	ItemIcon->SetBrushFromTexture(ItemData.Icon);
-	ItemNameText->SetText(ItemData.ItemName);
-	PriceText->SetText(FText::AsNumber(ItemData.Price));
-	InformationText->SetText(ItemData.Information);
+	DisplayNameText->SetText(ItemDefinition->DisplayName);
+	DescriptionText->SetText(ItemDefinition->Description);
+	PriceText->SetText(FText::AsNumber(ItemDefinition->Price));
 }

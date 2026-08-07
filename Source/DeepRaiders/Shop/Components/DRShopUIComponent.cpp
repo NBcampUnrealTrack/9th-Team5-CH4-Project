@@ -1,7 +1,6 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
-#include "DeepRaiders/Shop/Data/DRShopTestData.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -73,7 +72,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 
 	if (IsValid(ShopWidget))
 	{
-		ShopWidget->InitializeItems(ShopCatalog);
+		ShopWidget->InitializeItems(ItemDefinitions);
 		// 위젯을 표시하고 입력을 UI로 전환합니다.
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,

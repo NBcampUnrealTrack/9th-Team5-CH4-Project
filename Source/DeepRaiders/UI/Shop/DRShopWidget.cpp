@@ -2,21 +2,12 @@
 
 #include "Components/Button.h"
 #include "Components/ScrollBox.h"
-#include "DeepRaiders/Shop/Data/DRShopTestData.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeItems(
-	const UDRShopTestData* ShopCatalog)
+	const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions)
 {
-	if (!IsValid(ShopCatalog))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("Shop items initialization failed: ShopCatalog is invalid."));
-		return;
-	}
-
 	if (!ItemWidgetClass)
 	{
 		UE_LOG(
@@ -36,8 +27,14 @@ void UDRShopWidget::InitializeItems(
 	ItemScrollBox->ClearChildren();
 	int32 CreatedItemCount = 0;
 
-	for (const FDRShopItemData& ItemData : ShopCatalog->Items)
+	for (UDRItemDefinition* ItemDefinition : ItemDefinitions)
 	{
+		if (!IsValid(ItemDefinition)
+			|| ItemDefinition->Category != EItemCategory::Consumable)
+		{
+			continue;
+		}
+
 		UDRShopItemWidget* ItemWidget =
 			CreateWidget<UDRShopItemWidget>(
 				GetOwningPlayer(),
@@ -47,11 +44,11 @@ void UDRShopWidget::InitializeItems(
 		{
 			UE_LOG(LogTemp, Warning,
 				TEXT("Shop item widget creation failed: Item=%s."),
-				*ItemData.ItemName.ToString());
+				*ItemDefinition->DisplayName.ToString());
 			continue;
 		}
 
-		ItemWidget->SetItemData(ItemData);
+		ItemWidget->SetItemDefinition(ItemDefinition);
 		ItemScrollBox->AddChild(ItemWidget);
 		++CreatedItemCount;
 	}
@@ -59,7 +56,7 @@ void UDRShopWidget::InitializeItems(
 	UE_LOG(LogTemp, Log,
 		TEXT("Shop items created successfully: %d/%d items."),
 		CreatedItemCount,
-		ShopCatalog->Items.Num());
+		ItemDefinitions.Num());
 }
 
 void UDRShopWidget::NativeOnInitialized()
