@@ -9,15 +9,13 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class USceneComponent;
 class UStaticMesh;
-class UInputAction;
-class UInputMappingContext;
 class FLifetimeProperty;
 
 /**
- * 플레이어 입력, 카메라와 장비 외형 표현을 담당한다.
+ * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
  *
- * 인벤토리, 퀵슬롯, 실제 장착 상태는 별도 컴포넌트가 관리하고
- * 이 클래스는 전달받은 메시를 1인칭 및 월드에 표시한다.
+ * 입력 바인딩은 DRPlayerController가 담당하며,
+ * 인벤토리, 퀵슬롯과 실제 장착 상태는 별도 컴포넌트가 관리한다.
  */
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter
@@ -29,7 +27,6 @@ public:
 
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
-    virtual void PawnClientRestart() override;
 
     virtual void GetLifetimeReplicatedProps(
         TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -52,18 +49,18 @@ public:
     /** 현재 등 장비 외형을 제거한다. */
     void ClearBackEquipmentVisual();
 
+    void MoveInput(const FVector2D& MoveInput);
+    void LookInput(const FVector2D& LookInput);
+
+    // 임시 네트워크 테스트 진입점
+    void RequestNetworkTest();
+    
 protected:
     virtual void BeginPlay() override;
 
-    virtual void SetupPlayerInputComponent(
-        UInputComponent* PlayerInputComponent) override;
-
 private:
-    void Move(const FInputActionValue& Value);
-    void Look(const FInputActionValue& Value);
 
     // 임시 네트워크 복제 검증용
-    void HandleNetworkTest(const FInputActionValue& Value);
     void ApplyNetworkTestState();
 
     void PrintNetworkState(const TCHAR* Context) const;
@@ -110,36 +107,6 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Input")
-    TObjectPtr<UInputMappingContext> DefaultMappingContext;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Input")
-    TObjectPtr<UInputAction> MoveAction;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Input")
-    TObjectPtr<UInputAction> LookAction;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Input")
-    TObjectPtr<UInputAction> JumpAction;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Input")
-    TObjectPtr<UInputAction> NetworkTestAction;
 
     /** 서버가 관리하며, 클라이언트에서는 RepNotify로 외형을 갱신한다. */
     UPROPERTY(
