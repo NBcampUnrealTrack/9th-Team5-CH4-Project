@@ -1,4 +1,4 @@
-#include "DRCNPlayerCharacter.h"
+#include "DRPlayerCharacter.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -11,7 +11,7 @@
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 
-ADRCNPlayerCharacter::ADRCNPlayerCharacter()
+ADRPlayerCharacter::ADRPlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
@@ -35,43 +35,77 @@ ADRCNPlayerCharacter::ADRCNPlayerCharacter()
 	FirstPersonCamera->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
 	FirstPersonCamera->bUsePawnControlRotation = true;
 
-	FirstPersonEquipmentMesh =
-		CreateDefaultSubobject<UStaticMeshComponent>(
-			TEXT("FirstPersonEquipmentMesh"));
+	// 1인칭 장비 위치 - 애니메이션 피벗
+	// 이 장비 흔들때 나중에 이 피벗만 움직이도록 하기위해서 설정
+	FirstPersonEquipmentRoot =
+	CreateDefaultSubobject<USceneComponent>(
+		TEXT("FirstPersonEquipmentRoot"));
 
-	FirstPersonEquipmentMesh->SetupAttachment(FirstPersonCamera);
-	FirstPersonEquipmentMesh->SetCollisionEnabled(
+	FirstPersonEquipmentRoot->SetupAttachment(FirstPersonCamera);
+	
+	// 1인칭 시점 손에 들릴 메쉬
+	FirstPersonHandEquipmentMesh =
+		CreateDefaultSubobject<UStaticMeshComponent>(
+			TEXT("FirstPersonHandEquipmentMesh"));
+
+	FirstPersonHandEquipmentMesh->SetupAttachment(
+		FirstPersonEquipmentRoot);
+
+	FirstPersonHandEquipmentMesh->SetCollisionEnabled(
 		ECollisionEnabled::NoCollision);
-	FirstPersonEquipmentMesh->SetOnlyOwnerSee(true);
-	FirstPersonEquipmentMesh->SetIsReplicated(false);
 
-	WorldEquipmentMesh =
-		CreateDefaultSubobject<UStaticMeshComponent>(
-			TEXT("WorldEquipmentMesh"));
+	FirstPersonHandEquipmentMesh->SetGenerateOverlapEvents(false);
+	FirstPersonHandEquipmentMesh->SetOnlyOwnerSee(true);
+	FirstPersonHandEquipmentMesh->SetCastShadow(false);
+	FirstPersonHandEquipmentMesh->SetIsReplicated(false);
 
-	WorldEquipmentMesh->SetupAttachment(
+	// 월드 손 장비
+	WorldHandEquipmentMesh =
+	CreateDefaultSubobject<UStaticMeshComponent>(
+		TEXT("WorldHandEquipmentMesh"));
+
+	WorldHandEquipmentMesh->SetupAttachment(
 		GetMesh(),
-		TEXT("hand_rSocket"));
+		TEXT("S_HandGrip_R"));
 
-	WorldEquipmentMesh->SetCollisionEnabled(
+	WorldHandEquipmentMesh->SetCollisionEnabled(
 		ECollisionEnabled::NoCollision);
-	WorldEquipmentMesh->SetOwnerNoSee(true);
 
-	// 자기 화면에서는 전신 스틱맨을 숨긴다.
-	// GetMesh()->SetOwnerNoSee(true);
+	WorldHandEquipmentMesh->SetGenerateOverlapEvents(false);
 
-	// 그림자 보이기
-	GetMesh()->SetCastHiddenShadow(true);
+	// 자기 화면에서는 1인칭 장비를 별도로 사용하므로 숨김
+	WorldHandEquipmentMesh->SetOwnerNoSee(true);
+	WorldHandEquipmentMesh->SetCastHiddenShadow(true);
+	WorldHandEquipmentMesh->SetIsReplicated(false);
+
+	// 등 뒤에 달릴 장비 - 제트팩
+	WorldBackEquipmentMesh =
+		CreateDefaultSubobject<UStaticMeshComponent>(
+			TEXT("WorldBackEquipmentMesh"));
+
+	WorldBackEquipmentMesh->SetupAttachment(
+		GetMesh(),
+		TEXT("S_Back"));
+
+	WorldBackEquipmentMesh->SetCollisionEnabled(
+		ECollisionEnabled::NoCollision);
+
+	WorldBackEquipmentMesh->SetGenerateOverlapEvents(false);
+
+	// 프로토타입에서는 자기 카메라에 제트팩이 끼어들지 않게 숨기는 편이 안전
+	WorldBackEquipmentMesh->SetOwnerNoSee(true);
+	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
+	WorldBackEquipmentMesh->SetIsReplicated(false);
 }
 
-void ADRCNPlayerCharacter::BeginPlay()
+void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
 }
 
-void ADRCNPlayerCharacter::SetupPlayerInputComponent(
+void ADRPlayerCharacter::SetupPlayerInputComponent(
 	UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -127,7 +161,7 @@ void ADRCNPlayerCharacter::SetupPlayerInputComponent(
 	}
 }
 
-void ADRCNPlayerCharacter::Move(const FInputActionValue& Value)
+void ADRPlayerCharacter::Move(const FInputActionValue& Value)
 {
 	if (!Controller)
 	{
@@ -152,7 +186,7 @@ void ADRCNPlayerCharacter::Move(const FInputActionValue& Value)
 	AddMovementInput(RightDirection, MoveInput.X);
 }
 
-void ADRCNPlayerCharacter::Look(const FInputActionValue& Value)
+void ADRPlayerCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D LookInput = Value.Get<FVector2D>();
 
@@ -160,7 +194,7 @@ void ADRCNPlayerCharacter::Look(const FInputActionValue& Value)
 	AddControllerPitchInput(LookInput.Y);
 }
 
-void ADRCNPlayerCharacter::HandleNetworkTest(
+void ADRPlayerCharacter::HandleNetworkTest(
 	const FInputActionValue& Value)
 {
 	/*
@@ -194,21 +228,21 @@ void ADRCNPlayerCharacter::HandleNetworkTest(
 	ServerToggleNetworkTest();
 }
 
-void ADRCNPlayerCharacter::PossessedBy(AController* NewController)
+void ADRPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
 	PrintNetworkState(TEXT("PossessedBy"));
 }
 
-void ADRCNPlayerCharacter::OnRep_Controller()
+void ADRPlayerCharacter::OnRep_Controller()
 {
 	Super::OnRep_Controller();
 
 	PrintNetworkState(TEXT("OnRep_Controller"));
 }
 
-void ADRCNPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
+void ADRPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
 {
 	const TCHAR* NetModeString = TEXT("Unknown");
 
@@ -246,7 +280,7 @@ void ADRCNPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
 	);
 }
 
-void ADRCNPlayerCharacter::PawnClientRestart()
+void ADRPlayerCharacter::PawnClientRestart()
 {
 	Super::PawnClientRestart();
 
@@ -307,75 +341,111 @@ void ADRCNPlayerCharacter::PawnClientRestart()
 		*GetNameSafe(MappingContext));
 }
 
-void ADRCNPlayerCharacter::GetLifetimeReplicatedProps(
+void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(
-		ADRCNPlayerCharacter,
+		ADRPlayerCharacter,
 		bNetworkTestActive);
 }
 
-void ADRCNPlayerCharacter::ServerToggleNetworkTest_Implementation()
+void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
 {
-	/*
-	 * 이 함수는 서버에서만 실행된다.
-	 * 따라서 여기에서 다시 HasAuthority()를 검사할 필요는 없다.
-	 */
-
 	bNetworkTestActive = !bNetworkTestActive;
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[ServerToggleNetworkTest] Name=%s "
-			"NewState=%d Authority=%d"
-		),
-		*GetName(),
-		bNetworkTestActive,
-		HasAuthority());
+	// 리슨 서버 월드의 외형 갱신
+	ApplyNetworkTestState();
 
-	/*
-	 * C++에서 서버가 값을 직접 변경해도
-	 * 서버 자신의 OnRep는 자동 호출되지 않는다.
-	 *
-	 * 리슨 서버 호스트 화면에도 효과를 적용하기 위해
-	 * 서버에서는 직접 호출한다.
-	 */
-	OnRep_NetworkTestActive();
-
-	/*
-	 * 다음 일반 네트워크 업데이트를 기다리지 않고
-	 * 해당 Actor의 복제를 가능한 한 빨리 요청한다.
-	 *
-	 * 필수는 아니지만 테스트 반응을 확인하기 편하다.
-	 */
 	ForceNetUpdate();
 }
 
-void ADRCNPlayerCharacter::OnRep_NetworkTestActive()
+void ADRPlayerCharacter::OnRep_NetworkTestActive()
 {
-	/*
-	 * 테스트 상태가 true일 때 Mesh 숨김.
-	 * 다시 F를 누르면 false가 되면서 Mesh가 나타난다.
-	 */
-	GetMesh()->SetVisibility(
-		!bNetworkTestActive,
-		true);
+	// 복제 값을 받은 클라이언트의 외형 갱신
+	ApplyNetworkTestState();
+}
+
+void ADRPlayerCharacter::ApplyNetworkTestState()
+{
+	if (bNetworkTestActive)
+	{
+		ApplyHandEquipmentVisual(
+			EquipmentTestMesh,
+			EquipmentTestMesh,
+			TestFirstPersonTransform,
+			TestWorldHandTransform);
+
+		ApplyBackEquipmentVisual(
+			EquipmentTestMesh,
+			TestWorldBackTransform);
+	}
+	else
+	{
+		ClearHandEquipmentVisual();
+		ClearBackEquipmentVisual();
+	}
 
 	UE_LOG(
 		LogTemp,
 		Warning,
 		TEXT(
-			"[OnRep_NetworkTestActive] "
-			"Name=%s State=%d "
-			"NetMode=%d Authority=%d Local=%d"
-		),
+			"[EquipmentVisualTest] "
+			"Name=%s Active=%d Authority=%d Local=%d"),
 		*GetName(),
 		bNetworkTestActive,
-		static_cast<int32>(GetNetMode()),
 		HasAuthority(),
 		IsLocallyControlled());
+}
+
+void ADRPlayerCharacter::ApplyHandEquipmentVisual(
+	UStaticMesh* FirstPersonMesh,
+	UStaticMesh* WorldMesh,
+	const FTransform& FirstPersonTransform,
+	const FTransform& WorldTransform)
+{
+	// 월드 전용 메시가 없으면 1인칭 메시를 대신 사용한다.
+	UStaticMesh* EffectiveWorldMesh =
+		IsValid(WorldMesh) ? WorldMesh : FirstPersonMesh;
+
+	FirstPersonHandEquipmentMesh->SetStaticMesh(FirstPersonMesh);
+	FirstPersonHandEquipmentMesh->SetRelativeTransform(
+		FirstPersonTransform);
+	FirstPersonHandEquipmentMesh->SetVisibility(
+		IsValid(FirstPersonMesh),
+		true);
+
+	WorldHandEquipmentMesh->SetStaticMesh(EffectiveWorldMesh);
+	WorldHandEquipmentMesh->SetRelativeTransform(WorldTransform);
+	WorldHandEquipmentMesh->SetVisibility(
+		IsValid(EffectiveWorldMesh),
+		true);
+}
+
+void ADRPlayerCharacter::ClearHandEquipmentVisual()
+{
+	FirstPersonHandEquipmentMesh->SetStaticMesh(nullptr);
+	FirstPersonHandEquipmentMesh->SetVisibility(false, true);
+
+	WorldHandEquipmentMesh->SetStaticMesh(nullptr);
+	WorldHandEquipmentMesh->SetVisibility(false, true);
+}
+
+void ADRPlayerCharacter::ApplyBackEquipmentVisual(
+	UStaticMesh* BackMesh,
+	const FTransform& BackTransform)
+{
+	WorldBackEquipmentMesh->SetStaticMesh(BackMesh);
+	WorldBackEquipmentMesh->SetRelativeTransform(BackTransform);
+
+	WorldBackEquipmentMesh->SetVisibility(
+		IsValid(BackMesh),
+		true);
+}
+
+void ADRPlayerCharacter::ClearBackEquipmentVisual()
+{
+	WorldBackEquipmentMesh->SetStaticMesh(nullptr);
+	WorldBackEquipmentMesh->SetVisibility(false, true);
 }
