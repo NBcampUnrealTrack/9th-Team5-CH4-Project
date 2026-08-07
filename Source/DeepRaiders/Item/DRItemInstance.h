@@ -29,6 +29,8 @@ public:
 	
 	bool IsValid() const
 	{
-		return ::IsValid(Definition) && Quantity > 0;
+		return ::IsValid(Definition) 
+		&& InstanceId.IsValid()
+		&& Quantity > 0;
 	}
 };

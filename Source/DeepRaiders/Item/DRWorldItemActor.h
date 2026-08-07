@@ -17,16 +17,12 @@ public:
 	
 	virtual void BeginPlay() override;
 	
-	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
-	void InitializeItem(const FDRItemInstance& InItemInstance);
-	
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Item")
-	void InitializeItemFromDefinition(UDRItemDefinition* InDefinition, int32 InQuantity = 1);
-	
 	const FDRItemInstance& GetItemInstance() const
 	{
 		return ItemInstance;
 	}
+	
+	bool SetInitialItemInstance(FDRItemInstance InItemInstance);
 	
 protected:	
 	UFUNCTION()
@@ -38,12 +34,6 @@ protected:
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ItemInstance)
 	FDRItemInstance ItemInstance;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
-	TObjectPtr<UDRItemDefinition> DefaultItemDefinition = nullptr;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
-	int32 DefaultItemQuantity = 1;
 	
 private:
 	// ItemInstance 갱신 시마다 호출
