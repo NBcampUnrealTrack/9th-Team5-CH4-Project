@@ -21,12 +21,6 @@ ADRWorldItemActor::ADRWorldItemActor()
 	StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	StaticMeshComponent->SetSimulatePhysics(true);
 	StaticMeshComponent->BodyInstance.bStartAwake = false;
-	
-	ConstructorHelpers::FObjectFinder<UDRItemDefinition> ItemDefinitionAssetRef(TEXT("/Script/DeepRaiders.DRItemDefinition'/Game/DeepRaiders/Data/DataAssets/DA_DRTestItemDefinition.DA_DRTestItemDefinition'"));
-	if (ItemDefinitionAssetRef.Object)
-	{
-		DefaultItemDefinition = ItemDefinitionAssetRef.Object;
-	}
 }
 
 void ADRWorldItemActor::BeginPlay()
@@ -35,22 +29,24 @@ void ADRWorldItemActor::BeginPlay()
 	
 	if (!HasAuthority())
 	{
+		// 클라이언트는 OnRep_ItemInstance에서 초기화 됨
 		return;
 	}
 	
-	if (ItemInstance.IsValid())
+	if (!ItemInstance.IsValid())
 	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] Spawned without Iteminstance"), *GetName());
+
+		Destroy();
 		return;
 	}
 	
-	if (!IsValid(DefaultItemDefinition))
+	RefreshItemPresentation();
+	
+	if (StaticMeshComponent->IsSimulatingPhysics())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[%s] DefaultItemDefinition is null"), *GetName());
-		
-		return;
+		StaticMeshComponent->PutRigidBodyToSleep();
 	}
-	
-	InitializeItemFromDefinition(DefaultItemDefinition, DefaultItemQuantity);
 }
 
 void ADRWorldItemActor::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -60,69 +56,51 @@ void ADRWorldItemActor::GetLifetimeReplicatedProps(TArray<class FLifetimePropert
 	DOREPLIFETIME(ThisClass, ItemInstance);
 }
 
-void ADRWorldItemActor::InitializeItem(const FDRItemInstance& InItemInstance)
+bool ADRWorldItemActor::SetInitialItemInstance(FDRItemInstance InItemInstance)
 {
 	if (!HasAuthority())
 	{
-		return;
+		return false;
+	}
+	
+	// ItemInstance 설정은 BeginPlay 전에 완료되어야 함.
+	if (HasActorBegunPlay())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] ItemInstance must be assigned before BeginPlay"), *GetName());
+		
+		return false;
+	}
+	
+	if (ItemInstance.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] ItemInstance is already assigned."), *GetName());
+		
+		return false;
+	}
+	
+	if (!InItemInstance.IsValid()
+		|| !InItemInstance.InstanceId.IsValid())
+	{
+		return false;
 	}
 	
 	ItemInstance = InItemInstance;
-	RefreshItemPresentation();
 	
-	if (const UDRItemDefinition* ItemDefinition = ItemInstance.Definition)
-	{
-		const FTransform FinalTransform = ItemDefinition->OffsetTransform * GetActorTransform();
-		SetActorTransform(FinalTransform, false, nullptr, ETeleportType::TeleportPhysics);
-	}
-	
-	StaticMeshComponent->PutRigidBodyToSleep();
-	
-	ForceNetUpdate();
-	
-	UE_LOG(LogTemp, Error, TEXT("[InitializeItem] Actor=%s Definition=%s Quantity=%d")
-		, *GetName(), *GetNameSafe(ItemInstance.Definition), ItemInstance.Quantity);
-}
-
-void ADRWorldItemActor::InitializeItemFromDefinition(UDRItemDefinition* InDefinition, int32 InQuantity)
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-	
-	if (!IsValid(InDefinition))
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] Invalid Item Definition"), *GetName());
-		
-		return;
-	}
-	
-	if (InQuantity <= 0)
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] Invalid Item Quantity : %d"), *GetName(), InQuantity);
-		
-		return;
-	}
-	
-	FDRItemInstance NewItemInstance;
-	NewItemInstance.Definition = InDefinition;
-	NewItemInstance.InstanceId = FGuid::NewGuid();
-	NewItemInstance.Quantity = FMath::Min(InQuantity, InDefinition->MaxStackSize);
-	
-	ItemInstance = NewItemInstance;
-	InitializeItem(ItemInstance);
-
-	UE_LOG(LogTemp, Error, TEXT("[InitializeItemFromDefinition] Actor=%s Definition=%s Quantity=%d")
-		, *GetName(), *GetNameSafe(ItemInstance.Definition), ItemInstance.Quantity);
+	return true;
 }
 
 void ADRWorldItemActor::OnRep_ItemInstance()
 {
 	RefreshItemPresentation();
 	
-	UE_LOG(LogTemp, Error, TEXT("[OnRep_ItemInstance] Actor=%s Definition=%s Quantity=%d")
-	, *GetName(), *GetNameSafe(ItemInstance.Definition), ItemInstance.Quantity);
+	const FRepMovement& RepMovement = GetReplicatedMovement();
+	
+	if (RepMovement.bRepPhysics 
+		&& RepMovement.bSimulatedPhysicSleep
+		&& StaticMeshComponent->IsSimulatingPhysics())
+	{
+		StaticMeshComponent->PutRigidBodyToSleep();
+	}
 }
 
 void ADRWorldItemActor::RefreshItemPresentation()
