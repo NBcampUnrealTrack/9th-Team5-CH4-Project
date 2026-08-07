@@ -2,11 +2,11 @@
 
 #include "Components/Button.h"
 #include "Components/ScrollBox.h"
-#include "DeepRaiders/Shop/Data/DRShopCatalogData.h"
+#include "DeepRaiders/Shop/Data/DRShopTestData.h"
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeItems(
-	const UDRShopCatalogData* ShopCatalog)
+	const UDRShopTestData* ShopCatalog)
 {
 	if (!IsValid(ShopCatalog))
 	{

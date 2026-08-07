@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "DeepRaiders/Shop/Data/DRShopCatalogData.h"
+#include "DeepRaiders/Shop/Data/DRShopTestData.h"
 #include "DRShopItemWidget.generated.h"
 
 class UImage;

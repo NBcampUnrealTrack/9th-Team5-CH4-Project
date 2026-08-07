@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "DRShopCatalogData.generated.h"
+#include "DRShopTestData.generated.h"
 
 class UTexture2D;
 
@@ -25,7 +25,7 @@ struct FDRShopItemData
 };
 
 UCLASS(BlueprintType)
-class DEEPRAIDERS_API UDRShopCatalogData : public UPrimaryDataAsset
+class DEEPRAIDERS_API UDRShopTestData : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 

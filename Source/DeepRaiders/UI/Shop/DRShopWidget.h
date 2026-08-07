@@ -5,7 +5,7 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
-class UDRShopCatalogData;
+class UDRShopTestData;
 class UDRShopItemWidget;
 class UScrollBox;
 
@@ -17,7 +17,7 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeItems(const UDRShopCatalogData* ShopCatalog);
+	void InitializeItems(const UDRShopTestData* ShopCatalog);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;

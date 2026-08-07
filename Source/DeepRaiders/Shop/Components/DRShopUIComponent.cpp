@@ -1,7 +1,7 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
-#include "DeepRaiders/Shop/Data/DRShopCatalogData.h"
+#include "DeepRaiders/Shop/Data/DRShopTestData.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
