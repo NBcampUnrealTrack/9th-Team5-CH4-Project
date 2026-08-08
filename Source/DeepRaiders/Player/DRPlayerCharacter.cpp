@@ -120,6 +120,14 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 	{
 		StopJetpackFromServer();
 	}
+
+	ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (IsValid(DRPlayerState))
+	{
+		DRPlayerState->RefillJetpackFuel();
+	}
 }
 void ADRPlayerCharacter::RequestMine()
 {
