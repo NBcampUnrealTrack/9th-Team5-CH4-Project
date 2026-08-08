@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
@@ -261,6 +262,8 @@ void ADRPlayerCharacter::PossessedBy(
 {
 	Super::PossessedBy(NewController);
 
+	RestoreControllerInput();
+
 	if (HasAuthority())
 	{
 		ADRPlayerState* DRPlayerState =
@@ -279,6 +282,8 @@ void ADRPlayerCharacter::PossessedBy(
 void ADRPlayerCharacter::OnRep_Controller()
 {
 	Super::OnRep_Controller();
+
+	RestoreControllerInput();
 
 	PrintNetworkState(TEXT("OnRep_Controller"));
 }
@@ -658,6 +663,12 @@ void ADRPlayerCharacter::HandleDeath()
 		return;
 	}
 
+	/*
+	 * 래그돌은 이후 물리에 의해 이동하므로,
+	 * 래그돌 적용 전에 Capsule 기준 위치를 저장한다.
+	 */
+	RespawnTransform = GetActorTransform();
+
 	// 사망 직전에 예약된 공격 판정이 실행되지 않게 정리
 	GetWorldTimerManager().ClearTimer(
 		MeleeHitTimerHandle);
@@ -670,7 +681,7 @@ void ADRPlayerCharacter::HandleDeath()
 	// 제트팩 종료
 	StopJetpackFromServer();
 
-	// 제트팩용 Character Tick도 종료
+	// 제트팩용 Character Tick 종료
 	SetActorTickEnabled(false);
 
 	/*
@@ -679,13 +690,23 @@ void ADRPlayerCharacter::HandleDeath()
 	 */
 	ApplyDeathRagdoll();
 
+	// 일정 시간 뒤 같은 위치에서 새 Pawn 생성
+	GetWorldTimerManager().SetTimer(
+		RespawnTimerHandle,
+		this,
+		&ThisClass::RespawnAtDeathLocation,
+		RespawnDelay,
+		false);
+
 	ForceNetUpdate();
 
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("[Death] Character=%s"),
-		*GetName());
+		TEXT(
+			"[Death] Character=%s RespawnDelay=%.1f"),
+		*GetName(),
+		RespawnDelay);
 }
 
 void ADRPlayerCharacter::ApplyDeathRagdoll()
@@ -761,10 +782,127 @@ void ADRPlayerCharacter::ApplyDeathRagdoll()
 	{
 		GEngine->AddOnScreenDebugMessage(
 			-1,
-			5.f,
+			RespawnDelay,
 			FColor::Red,
 			TEXT("YOU DIED"));
 	}
+}
+
+void ADRPlayerCharacter::RespawnAtDeathLocation()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+
+    if (!IsValid(World))
+    {
+        return;
+    }
+
+    AController* RespawnController =
+        GetController();
+
+    AGameModeBase* GameMode =
+        World->GetAuthGameMode();
+
+    if (!IsValid(RespawnController) ||
+        !IsValid(GameMode))
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT(
+                "[Respawn] Invalid Controller or GameMode. "
+                "Character=%s Controller=%s GameMode=%s"),
+            *GetName(),
+            *GetNameSafe(RespawnController),
+            *GetNameSafe(GameMode));
+
+        return;
+    }
+
+    /*
+     * 새 Pawn이 같은 위치에 생성될 때
+     * 기존 래그돌 Mesh가 Spawn Collision을 방해하지 않게 제거한다.
+     */
+    USkeletalMeshComponent* CharacterMesh =
+        GetMesh();
+
+    if (IsValid(CharacterMesh))
+    {
+        CharacterMesh->SetAllBodiesSimulatePhysics(false);
+        CharacterMesh->SetSimulatePhysics(false);
+
+        CharacterMesh->SetCollisionEnabled(
+            ECollisionEnabled::NoCollision);
+
+        CharacterMesh->SetVisibility(
+            false,
+            true);
+    }
+
+    /*
+     * 사망할 때 Controller의 입력을 막았으므로
+     * 새 Pawn을 조종할 수 있도록 서버 쪽 상태를 먼저 복구한다.
+     */
+    RespawnController->SetIgnoreMoveInput(false);
+    RespawnController->SetIgnoreLookInput(false);
+
+    /*
+     * RestartPlayerAtTransform은 Controller가 기존 Pawn을
+     * 계속 소유하고 있으면 새 Pawn을 생성하지 않을 수 있다.
+     */
+    RespawnController->UnPossess();
+
+    GameMode->RestartPlayerAtTransform(
+        RespawnController,
+        RespawnTransform);
+
+    APawn* NewPawn =
+        RespawnController->GetPawn();
+
+    if (!IsValid(NewPawn) ||
+        NewPawn == this)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT(
+                "[Respawn] Failed to create new Pawn. "
+                "Controller=%s"),
+            *GetNameSafe(RespawnController));
+
+        return;
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT(
+            "[Respawn] OldPawn=%s NewPawn=%s Location=%s"),
+        *GetName(),
+        *GetNameSafe(NewPawn),
+        *RespawnTransform.GetLocation().ToString());
+
+    // 새 Pawn 생성이 성공한 뒤 기존 래그돌 Pawn 제거
+    Destroy();
+}
+
+void ADRPlayerCharacter::RestoreControllerInput()
+{
+	AController* OwningController =
+		GetController();
+
+	if (!IsValid(OwningController))
+	{
+		return;
+	}
+
+	OwningController->SetIgnoreMoveInput(false);
+	OwningController->SetIgnoreLookInput(false);
 }
 
 void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()

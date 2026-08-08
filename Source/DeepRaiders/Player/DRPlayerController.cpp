@@ -123,7 +123,8 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleMine);
     }
-    if (IsValid(MineAction.Get()))
+    
+    if (IsValid(MeleeAttackAction.Get()))
     {
         EnhancedInput->BindAction(
             MeleeAttackAction,

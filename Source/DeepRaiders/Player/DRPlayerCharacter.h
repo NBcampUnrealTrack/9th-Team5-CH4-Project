@@ -215,8 +215,17 @@ private:
     /** 현재 인스턴스에서 래그돌 사망 표현을 적용한다. */
     void ApplyDeathRagdoll();
 
+    /** 서버에서 저장된 사망 위치에 새 Pawn을 생성한다. */
+    void RespawnAtDeathLocation();
+
+    /** 새 Pawn이 Possess되었을 때 Controller 입력 제한을 해제한다. */
+    void RestoreControllerInput();
+
     /** 동일 인스턴스에서 래그돌이 중복 적용되는 것을 방지한다. */
     bool bDeathRagdollApplied = false;
+
+    FTimerHandle RespawnTimerHandle;
+    FTransform RespawnTransform;
     
 protected:
     UPROPERTY(
@@ -366,4 +375,14 @@ protected:
         Category = "Player|Combat",
         meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeAttackRange = 200.f;
+    
+    // ===== Death / Respawn =====
+
+    /** 사망 후 같은 위치에 다시 생성되기까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "s"))
+    float RespawnDelay = 3.f;
 };
