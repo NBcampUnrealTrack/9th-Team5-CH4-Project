@@ -8,6 +8,10 @@
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
 
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
+#include "Kismet/GameplayStatics.h"
+
 ADRPlayerCharacter::ADRPlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -143,6 +147,20 @@ void ADRPlayerCharacter::RequestMine()
 	}
 
 	MiningComponent->TryMine();
+}
+
+void ADRPlayerCharacter::RequestMeleeAttack()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	// 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
+	PlayOwnerMeleeAttackPresentation();
+
+	// 실제 공격 승인과 판정은 서버가 담당한다.
+	ServerRequestMeleeAttack();
 }
 
 float ADRPlayerCharacter::TakeDamage(
@@ -473,6 +491,219 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 	 * 카메라 흔들림
 	 * 캐릭터 애니메이션
 	 */
+}
+
+void ADRPlayerCharacter::PlayOwnerMeleeAttackPresentation()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			0.8f,
+			FColor::Yellow,
+			TEXT("[Melee] 1인칭 공격 표현 실행"));
+	}
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT(
+			"[Melee] Owner presentation "
+			"Character=%s Authority=%d"),
+		*GetName(),
+		HasAuthority());
+	
+	// 향후
+	// FirstPersonEquipmentRoot Timeline
+	// 또는 1인칭 팔 Montage
+}
+
+bool ADRPlayerCharacter::CanStartMeleeAttack() const
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	if (bIsMeleeAttacking)
+	{
+		return false;
+	}
+
+	if (CurrentHealth <= 0.f)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+void ADRPlayerCharacter::PerformMeleeHitCheck()
+{
+	if (!HasAuthority() ||
+		!bIsMeleeAttacking)
+	{
+		return;
+	}
+
+	const FVector TraceStart =
+		GetPawnViewLocation();
+
+	const FRotator AimRotation =
+		GetBaseAimRotation();
+
+	const FVector TraceEnd =
+		TraceStart +
+		AimRotation.Vector() * MeleeAttackRange;
+
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(MeleeAttackTrace),
+		false,
+		this);
+
+	QueryParams.AddIgnoredActor(this);
+
+	FHitResult HitResult;
+
+	const bool bHit =
+		GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			TraceStart,
+			TraceEnd,
+			ECC_Visibility,
+			QueryParams);
+
+#if ENABLE_DRAW_DEBUG
+	DrawDebugLine(
+		GetWorld(),
+		TraceStart,
+		TraceEnd,
+		bHit ? FColor::Green : FColor::Red,
+		false,
+		1.5f,
+		0,
+		2.f);
+#endif
+
+	if (!bHit)
+	{
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("[Melee] Miss Character=%s"),
+			*GetName());
+
+		return;
+	}
+
+	ADRPlayerCharacter* HitPlayer =
+		Cast<ADRPlayerCharacter>(
+			HitResult.GetActor());
+
+	if (!IsValid(HitPlayer) ||
+		HitPlayer == this)
+	{
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT(
+				"[Melee] Hit non-player actor=%s"),
+			*GetNameSafe(HitResult.GetActor()));
+
+		return;
+	}
+
+	UGameplayStatics::ApplyDamage(
+		HitPlayer,
+		MeleeAttackDamage,
+		GetController(),
+		this,
+		UDamageType::StaticClass());
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[Melee] Attacker=%s Target=%s Damage=%.1f"),
+		*GetName(),
+		*GetNameSafe(HitPlayer),
+		MeleeAttackDamage);
+}
+
+void ADRPlayerCharacter::FinishMeleeAttack()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	bIsMeleeAttacking = false;
+}
+
+void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
+{
+	if (!CanStartMeleeAttack())
+	{
+		return;
+	}
+
+	bIsMeleeAttacking = true;
+
+	// 다른 플레이어가 보는 3인칭 공격 연출
+	MulticastPlayWorldMeleeAttack();
+
+	// 공격 애니메이션의 타격 시점에 서버 판정
+	GetWorldTimerManager().SetTimer(
+		MeleeHitTimerHandle,
+		this,
+		&ThisClass::PerformMeleeHitCheck,
+		MeleeAttackHitTime,
+		false);
+
+	// 공격 종료 후 다시 공격 가능
+	GetWorldTimerManager().SetTimer(
+		MeleeFinishTimerHandle,
+		this,
+		&ThisClass::FinishMeleeAttack,
+		MeleeAttackDuration,
+		false);
+}
+
+void ADRPlayerCharacter::MulticastPlayWorldMeleeAttack_Implementation()
+{
+	/*
+	 * 공격한 본인은 1인칭 표현을 사용한다.
+	 * 본인 클라이언트에서는 월드 Manny 몽타주를 생략한다.
+	 */
+	if (IsLocallyControlled())
+	{
+		return;
+	}
+
+	PlayWorldMeleeAttackPresentation();
+}
+
+void ADRPlayerCharacter::PlayWorldMeleeAttackPresentation()
+{
+	if (!IsValid(WorldMeleeAttackMontage))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[Melee] WorldMeleeAttackMontage "
+				"is invalid. Character=%s"),
+			*GetName());
+
+		return;
+	}
+
+	PlayAnimMontage(WorldMeleeAttackMontage);
 }
 
 void ADRPlayerCharacter::OnRep_CurrentHealth()

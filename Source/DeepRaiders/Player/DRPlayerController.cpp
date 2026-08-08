@@ -123,6 +123,14 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleMine);
     }
+    if (IsValid(MineAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            MeleeAttackAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleMeleeAttack);
+    }
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -239,4 +247,16 @@ void ADRPlayerController::HandleSelectQuickSlot(
      *
      * QuickSlotComponent->RequestSelectSlot(SlotIndex);
      */
+}
+
+void ADRPlayerController::HandleMeleeAttack(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        Cast<ADRPlayerCharacter>(GetPawn());
+
+    if (IsValid(PlayerCharacter))
+    {
+        PlayerCharacter->RequestMeleeAttack();
+    }
 }

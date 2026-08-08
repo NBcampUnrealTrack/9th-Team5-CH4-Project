@@ -11,6 +11,7 @@ class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
+class UAnimMontage;
 
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
@@ -37,6 +38,9 @@ public:
     
     /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
     void RequestMine();
+    
+    /** 로컬 플레이어가 근접 공격을 요청한다. */
+    void RequestMeleeAttack();
     
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
@@ -111,6 +115,7 @@ public:
         AController* EventInstigator,
         AActor* DamageCauser) override;
     
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -169,6 +174,35 @@ private:
 
     void RefreshJetpackActivePresentation();
     
+    // ===== Melee Attack =====
+
+    /** 소유 플레이어의 1인칭 공격 표현을 실행한다. */
+    void PlayOwnerMeleeAttackPresentation();
+
+    /** 다른 플레이어에게 보이는 월드 공격 몽타주를 재생한다. */
+    void PlayWorldMeleeAttackPresentation();
+
+    /** 서버에서 공격 가능 여부를 검사한다. */
+    bool CanStartMeleeAttack() const;
+
+    /** 서버에서 실제 공격 판정을 수행한다. */
+    void PerformMeleeHitCheck();
+
+    /** 서버에서 공격 상태를 종료한다. */
+    void FinishMeleeAttack();
+
+    /** 소유 클라이언트의 공격 요청을 서버에서 처리한다. */
+    UFUNCTION(Server, Reliable)
+    void ServerRequestMeleeAttack();
+
+    /** 공격자의 월드 공격 표현을 모든 클라이언트에 전달한다. */
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayWorldMeleeAttack();
+
+    bool bIsMeleeAttacking = false;
+
+    FTimerHandle MeleeHitTimerHandle;
+    FTimerHandle MeleeFinishTimerHandle;
 protected:
     UPROPERTY(
         VisibleAnywhere,
@@ -233,6 +267,8 @@ protected:
         Category = "Player|Equipment|Test")
     FTransform TestWorldBackTransform;
     
+    // ===== Jetpack =====
+    
     UPROPERTY(
         EditDefaultsOnly,
         Category = "Player|Equipment|Jetpack")
@@ -274,4 +310,45 @@ protected:
         Category = "Player|Jetpack",
         meta = (ClampMin = "0.0"))
     float JetpackFuelConsumptionPerSecond = 20.f;
+    
+    // ===== Melee Attack =====
+
+    /** 다른 플레이어에게 보이는 Manny 공격 몽타주 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat")
+    TObjectPtr<UAnimMontage> WorldMeleeAttackMontage;
+
+    /** 공격 시작 후 실제 판정까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0"))
+    float MeleeAttackHitTime = 0.25f;
+
+    /** 다음 공격이 가능해질 때까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.01"))
+    float MeleeAttackDuration = 0.7f;
+
+    /** 공격 피해량 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0"))
+    float MeleeAttackDamage = 20.f;
+
+    /** 시선 정면으로 검사할 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float MeleeAttackRange = 200.f;
 };

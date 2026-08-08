@@ -29,6 +29,7 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
+	void HandleMeleeAttack(const FInputActionValue&);
 
 	// 임시 네트워크 검증 입력
 	void HandleNetworkTest(const FInputActionValue& Value);
@@ -78,4 +79,9 @@ protected:
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> MineAction;
 	
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Player|Input")
+	TObjectPtr<UInputAction> MeleeAttackAction;
 };
