@@ -6,10 +6,12 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
+#include "DRPlayerState.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	// 이 Actor가 서버에서 클라이언트로 복제되도록 설정
 	bReplicates = true;
@@ -98,6 +100,35 @@ ADRPlayerCharacter::ADRPlayerCharacter()
 	WorldBackEquipmentMesh->SetIsReplicated(false);
 }
 
+void ADRPlayerCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!HasAuthority() || !bIsJetpackActive)
+	{
+		return;
+	}
+
+	UpdateJetpack(DeltaSeconds);
+}
+
+void ADRPlayerCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	if (HasAuthority())
+	{
+		StopJetpackFromServer();
+	}
+
+	ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (IsValid(DRPlayerState))
+	{
+		DRPlayerState->RefillJetpackFuel();
+	}
+}
 void ADRPlayerCharacter::RequestMine()
 {
 	if (!IsValid(MiningComponent))
@@ -112,6 +143,37 @@ void ADRPlayerCharacter::RequestMine()
 	}
 
 	MiningComponent->TryMine();
+}
+
+float ADRPlayerCharacter::TakeDamage(
+	float DamageAmount,
+	const FDamageEvent& DamageEvent,
+	AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	if (!HasAuthority() ||
+		DamageAmount <= 0.f ||
+		CurrentHealth <= 0.f)
+	{
+		return 0.f;
+	}
+
+	const float AppliedDamage =
+		FMath::Min(DamageAmount, CurrentHealth);
+
+	CurrentHealth = FMath::Clamp(
+		CurrentHealth - AppliedDamage,
+		0.f,
+		MaxHealth);
+
+	if (CurrentHealth <= 0.f)
+	{
+		// TODO: 사망 처리
+	}
+
+	ForceNetUpdate();
+
+	return AppliedDamage;
 }
 
 void ADRPlayerCharacter::BeginPlay()
@@ -171,9 +233,22 @@ void ADRPlayerCharacter::RequestNetworkTest()
 	ServerToggleNetworkTest();
 }
 
-void ADRPlayerCharacter::PossessedBy(AController* NewController)
+void ADRPlayerCharacter::PossessedBy(
+	AController* NewController)
 {
 	Super::PossessedBy(NewController);
+
+	if (HasAuthority())
+	{
+		ADRPlayerState* DRPlayerState =
+			GetPlayerState<ADRPlayerState>();
+
+		if (IsValid(DRPlayerState))
+		{
+			// 임시 테스트: 스폰 즉시 제트팩 지급
+			DRPlayerState->GrantJetpack();
+		}
+	}
 
 	PrintNetworkState(TEXT("PossessedBy"));
 }
@@ -183,6 +258,13 @@ void ADRPlayerCharacter::OnRep_Controller()
 	Super::OnRep_Controller();
 
 	PrintNetworkState(TEXT("OnRep_Controller"));
+}
+
+void ADRPlayerCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	
+	RefreshJetpackVisual();
 }
 
 void ADRPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
@@ -231,6 +313,14 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		bNetworkTestActive);
+
+	DOREPLIFETIME(
+		ADRPlayerCharacter,
+		bIsJetpackActive);
+	
+	DOREPLIFETIME(
+		ADRPlayerCharacter,
+		CurrentHealth);
 }
 
 void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
@@ -247,6 +337,150 @@ void ADRPlayerCharacter::OnRep_NetworkTestActive()
 {
 	// 복제 값을 받은 클라이언트의 외형 갱신
 	ApplyNetworkTestState();
+}
+
+void ADRPlayerCharacter::OnRep_JetpackActive()
+{
+	RefreshJetpackActivePresentation();
+}
+
+bool ADRPlayerCharacter::CanStartJetpack() const
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	const UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+
+	if (!IsValid(MovementComponent) || !MovementComponent->IsFalling())
+	{
+		return false;
+	}
+
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return false;
+	}
+
+	return DRPlayerState->HasJetpack() && DRPlayerState->GetJetpackFuel() > 0.f;
+}
+
+void ADRPlayerCharacter::ServerStartJetpack_Implementation()
+{
+	if (!CanStartJetpack())
+	{
+		return;
+	}
+
+	StartJetpackFromServer();
+}
+
+void ADRPlayerCharacter::ServerStopJetpack_Implementation()
+{
+	StopJetpackFromServer();
+}
+
+void ADRPlayerCharacter::StartJetpackFromServer()
+{
+	if (!HasAuthority() || bIsJetpackActive)
+	{
+		return;
+	}
+
+	bIsJetpackActive = true;
+
+	// 서버에서 상승력과 연료를 처리한다.
+	SetActorTickEnabled(true);
+
+	// 서버에서는 RepNotify가 자동 실행되지 않으므로 직접 반영
+	RefreshJetpackActivePresentation();
+
+	ForceNetUpdate();
+}
+
+void ADRPlayerCharacter::StopJetpackFromServer()
+{
+	if (!HasAuthority() || !bIsJetpackActive)
+	{
+		return;
+	}
+
+	bIsJetpackActive = false;
+
+	SetActorTickEnabled(false);
+
+	RefreshJetpackActivePresentation();
+
+	ForceNetUpdate();
+}
+
+void ADRPlayerCharacter::UpdateJetpack(
+	float DeltaSeconds)
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+
+	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(MovementComponent) ||
+		!IsValid(DRPlayerState) ||
+		!MovementComponent->IsFalling() ||
+		!DRPlayerState->HasJetpack())
+	{
+		StopJetpackFromServer();
+		return;
+	}
+
+	const float FuelCost = JetpackFuelConsumptionPerSecond * DeltaSeconds;
+
+	if (!DRPlayerState->ConsumeJetpackFuel(FuelCost))
+	{
+		StopJetpackFromServer();
+		return;
+	}
+
+	MovementComponent->Velocity.Z =
+		FMath::Min(
+			MovementComponent->Velocity.Z + JetpackAcceleration * DeltaSeconds,
+			MaxJetpackRiseSpeed);
+
+	if (DRPlayerState->GetJetpackFuel() <= KINDA_SMALL_NUMBER)
+	{
+		StopJetpackFromServer();
+	}
+}
+
+void ADRPlayerCharacter::RefreshJetpackActivePresentation()
+{
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[Jetpack] Character=%s Active=%d "
+			"Authority=%d Local=%d"),
+		*GetName(),
+		bIsJetpackActive,
+		HasAuthority(),
+		IsLocallyControlled());
+
+	/*
+	 * 이후 추가할 항목:
+	 *
+	 * 제트팩 불꽃 Niagara 활성화
+	 * 제트팩 사운드 재생
+	 * 카메라 흔들림
+	 * 캐릭터 애니메이션
+	 */
+}
+
+void ADRPlayerCharacter::OnRep_CurrentHealth()
+{
+	/*
+	 * ProgressBar 바인딩 방식이면 비어 있어도 된다.
+	 * 나중에는 HUD 갱신 델리게이트를 호출할 수 있다.
+	 */
 }
 
 void ADRPlayerCharacter::ApplyNetworkTestState()
@@ -330,4 +564,69 @@ void ADRPlayerCharacter::ClearBackEquipmentVisual()
 {
 	WorldBackEquipmentMesh->SetStaticMesh(nullptr);
 	WorldBackEquipmentMesh->SetVisibility(false, true);
+}
+
+void ADRPlayerCharacter::RefreshJetpackVisual()
+{
+	const ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		ClearBackEquipmentVisual();
+		return;
+	}
+
+	if (DRPlayerState->HasJetpack())
+	{
+		ApplyBackEquipmentVisual(
+			JetpackMesh,
+			JetpackRelativeTransform);
+	}
+	else
+	{
+		ClearBackEquipmentVisual();
+	}
+}
+
+void ADRPlayerCharacter::HandleJumpPressed()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* MovementComponent =
+		GetCharacterMovement();
+
+	if (!IsValid(MovementComponent))
+	{
+		return;
+	}
+
+	// 지상에서 처음 누르면 일반 점프
+	if (MovementComponent->IsMovingOnGround())
+	{
+		Jump();
+		return;
+	}
+
+	// 공중에서 다시 누르면 제트팩 요청
+	if (MovementComponent->IsFalling())
+	{
+		ServerStartJetpack();
+	}
+}
+
+void ADRPlayerCharacter::HandleJumpReleased()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	StopJumping();
+
+	// 활성 여부와 관계없이 서버에 중지 요청해도 안전하다.
+	ServerStopJetpack();
 }
