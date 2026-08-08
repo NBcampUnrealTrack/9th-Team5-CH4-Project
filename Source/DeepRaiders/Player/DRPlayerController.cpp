@@ -161,26 +161,26 @@ void ADRPlayerController::HandleLook(
 }
 
 void ADRPlayerController::HandleJumpStarted(
-    const FInputActionValue& Value)
+    const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
         GetDRPlayerCharacter();
 
     if (IsValid(PlayerCharacter))
     {
-        PlayerCharacter->Jump();
+        PlayerCharacter->HandleJumpPressed();
     }
 }
 
 void ADRPlayerController::HandleJumpCompleted(
-    const FInputActionValue& Value)
+    const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
         GetDRPlayerCharacter();
 
     if (IsValid(PlayerCharacter))
     {
-        PlayerCharacter->StopJumping();
+        PlayerCharacter->HandleJumpReleased();
     }
 }
 
