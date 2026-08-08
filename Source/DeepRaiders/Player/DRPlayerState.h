@@ -15,19 +15,36 @@ public:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
 	bool HasJetpack() const
 	{
 		return bHasJetpack;
 	}
 
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
 	float GetJetpackFuel() const
 	{
 		return CurrentJetpackFuel;
 	}
 
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
 	float GetMaxJetpackFuel() const
 	{
 		return MaxJetpackFuel;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
+	float GetJetpackFuelRatio() const
+	{
+		if (MaxJetpackFuel <= 0.f)
+		{
+			return 0.f;
+		}
+
+		return FMath::Clamp(
+			CurrentJetpackFuel / MaxJetpackFuel,
+			0.f,
+			1.f);
 	}
 
 	/** 서버에서 플레이어에게 제트팩을 지급한다. */

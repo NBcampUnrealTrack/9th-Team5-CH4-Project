@@ -79,6 +79,38 @@ public:
     // 임시 네트워크 테스트 진입점
     void RequestNetworkTest();
     
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    float GetCurrentHealth() const
+    {
+        return CurrentHealth;
+    }
+
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    float GetMaxHealth() const
+    {
+        return MaxHealth;
+    }
+
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    float GetHealthRatio() const
+    {
+        if (MaxHealth <= 0.f)
+        {
+            return 0.f;
+        }
+
+        return FMath::Clamp(
+            CurrentHealth / MaxHealth,
+            0.f,
+            1.f);
+    }
+
+    virtual float TakeDamage(
+        float DamageAmount,
+        const FDamageEvent& DamageEvent,
+        AController* EventInstigator,
+        AActor* DamageCauser) override;
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -87,6 +119,22 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Mining")
     TObjectPtr<UDRMiningComponent> MiningComponent;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Health")
+    float MaxHealth = 100.f;
+
+    UPROPERTY(
+        ReplicatedUsing = OnRep_CurrentHealth,
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Health")
+    float CurrentHealth = 100.f;
+
+    UFUNCTION()
+    void OnRep_CurrentHealth();
     
 private:
 

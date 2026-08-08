@@ -137,6 +137,37 @@ void ADRPlayerCharacter::RequestMine()
 	MiningComponent->TryMine();
 }
 
+float ADRPlayerCharacter::TakeDamage(
+	float DamageAmount,
+	const FDamageEvent& DamageEvent,
+	AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	if (!HasAuthority() ||
+		DamageAmount <= 0.f ||
+		CurrentHealth <= 0.f)
+	{
+		return 0.f;
+	}
+
+	const float AppliedDamage =
+		FMath::Min(DamageAmount, CurrentHealth);
+
+	CurrentHealth = FMath::Clamp(
+		CurrentHealth - AppliedDamage,
+		0.f,
+		MaxHealth);
+
+	if (CurrentHealth <= 0.f)
+	{
+		// TODO: 사망 처리
+	}
+
+	ForceNetUpdate();
+
+	return AppliedDamage;
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -278,6 +309,10 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		bIsJetpackActive);
+	
+	DOREPLIFETIME(
+		ADRPlayerCharacter,
+		CurrentHealth);
 }
 
 void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
@@ -429,6 +464,14 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 	 * 제트팩 사운드 재생
 	 * 카메라 흔들림
 	 * 캐릭터 애니메이션
+	 */
+}
+
+void ADRPlayerCharacter::OnRep_CurrentHealth()
+{
+	/*
+	 * ProgressBar 바인딩 방식이면 비어 있어도 된다.
+	 * 나중에는 HUD 갱신 델리게이트를 호출할 수 있다.
 	 */
 }
 
