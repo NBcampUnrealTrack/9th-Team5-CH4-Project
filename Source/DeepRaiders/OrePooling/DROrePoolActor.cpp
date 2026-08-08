@@ -82,7 +82,7 @@ void ADROrePoolActor::ApplyPoolState()
     SetActorEnableCollision(bPoolActive);
     SetActorTickEnabled(bPoolActive);
 
-    StaticMeshComponent->SetSimulatePhysics(false);
+    StaticMeshComponent->SetSimulatePhysics(true);
 
     if (bPoolActive)
     {
