@@ -58,6 +58,29 @@ bool ADRPlayerState::ConsumeJetpackFuel(float Amount)
 	return true;
 }
 
+bool ADRPlayerState::RefillJetpackFuel()
+{
+	if (!HasAuthority() || !bHasJetpack)
+	{
+		return false;
+	}
+
+	// 이미 가득 차 있으면 값을 다시 변경하지 않는다.
+	if (FMath::IsNearlyEqual(
+			CurrentJetpackFuel,
+			MaxJetpackFuel))
+	{
+		return false;
+	}
+
+	CurrentJetpackFuel = MaxJetpackFuel;
+
+	// 착지는 일회성 이벤트이므로 즉시 복제를 요청한다.
+	ForceNetUpdate();
+
+	return true;
+}
+
 void ADRPlayerState::OnRep_HasJetpack()
 {
 	RefreshJetpackVisualOnPawn();

@@ -52,6 +52,9 @@ public:
 
 	/** 서버에서 연료를 소비한다. */
 	bool ConsumeJetpackFuel(float Amount);
+	
+	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
+	bool RefillJetpackFuel();
 
 protected:
 	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
