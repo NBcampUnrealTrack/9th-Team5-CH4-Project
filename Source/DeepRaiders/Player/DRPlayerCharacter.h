@@ -115,6 +115,11 @@ public:
         AController* EventInstigator,
         AActor* DamageCauser) override;
     
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    bool IsDead() const
+    {
+        return CurrentHealth <= KINDA_SMALL_NUMBER;
+    }
     
 protected:
     virtual void BeginPlay() override;
@@ -203,6 +208,16 @@ private:
 
     FTimerHandle MeleeHitTimerHandle;
     FTimerHandle MeleeFinishTimerHandle;
+    
+    /** 서버에서 사망 상태를 확정하고 진행 중인 기능을 정리한다. */
+    void HandleDeath();
+
+    /** 현재 인스턴스에서 래그돌 사망 표현을 적용한다. */
+    void ApplyDeathRagdoll();
+
+    /** 동일 인스턴스에서 래그돌이 중복 적용되는 것을 방지한다. */
+    bool bDeathRagdollApplied = false;
+    
 protected:
     UPROPERTY(
         VisibleAnywhere,

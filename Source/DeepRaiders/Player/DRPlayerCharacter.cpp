@@ -135,6 +135,11 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 }
 void ADRPlayerCharacter::RequestMine()
 {
+	if (IsDead())
+	{
+		return;
+	}
+	
 	if (!IsValid(MiningComponent))
 	{
 		UE_LOG(
@@ -151,11 +156,11 @@ void ADRPlayerCharacter::RequestMine()
 
 void ADRPlayerCharacter::RequestMeleeAttack()
 {
-	if (!IsLocallyControlled())
+	if (!IsLocallyControlled() || IsDead())
 	{
 		return;
 	}
-
+	
 	// 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
 	PlayOwnerMeleeAttackPresentation();
 
@@ -171,7 +176,7 @@ float ADRPlayerCharacter::TakeDamage(
 {
 	if (!HasAuthority() ||
 		DamageAmount <= 0.f ||
-		CurrentHealth <= 0.f)
+		IsDead())
 	{
 		return 0.f;
 	}
@@ -184,9 +189,9 @@ float ADRPlayerCharacter::TakeDamage(
 		0.f,
 		MaxHealth);
 
-	if (CurrentHealth <= 0.f)
+	if (IsDead())
 	{
-		// TODO: 사망 처리
+		HandleDeath();
 	}
 
 	ForceNetUpdate();
@@ -364,7 +369,7 @@ void ADRPlayerCharacter::OnRep_JetpackActive()
 
 bool ADRPlayerCharacter::CanStartJetpack() const
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || IsDead())
 	{
 		return false;
 	}
@@ -645,6 +650,123 @@ void ADRPlayerCharacter::FinishMeleeAttack()
 	bIsMeleeAttacking = false;
 }
 
+void ADRPlayerCharacter::HandleDeath()
+{
+	if (!HasAuthority() ||
+		!IsDead())
+	{
+		return;
+	}
+
+	// 사망 직전에 예약된 공격 판정이 실행되지 않게 정리
+	GetWorldTimerManager().ClearTimer(
+		MeleeHitTimerHandle);
+
+	GetWorldTimerManager().ClearTimer(
+		MeleeFinishTimerHandle);
+
+	bIsMeleeAttacking = false;
+
+	// 제트팩 종료
+	StopJetpackFromServer();
+
+	// 제트팩용 Character Tick도 종료
+	SetActorTickEnabled(false);
+
+	/*
+	 * 서버에서는 CurrentHealth의 RepNotify가 자동 실행되지 않으므로
+	 * 리슨 서버와 서버 인스턴스에는 직접 적용한다.
+	 */
+	ApplyDeathRagdoll();
+
+	ForceNetUpdate();
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[Death] Character=%s"),
+		*GetName());
+}
+
+void ADRPlayerCharacter::ApplyDeathRagdoll()
+{
+	if (bDeathRagdollApplied)
+	{
+		return;
+	}
+
+	bDeathRagdollApplied = true;
+
+	// 공격 몽타주를 포함한 현재 몽타주 정지
+	StopAnimMontage();
+
+	UCharacterMovementComponent* MovementComponent =
+		GetCharacterMovement();
+
+	if (IsValid(MovementComponent))
+	{
+		MovementComponent->StopMovementImmediately();
+		MovementComponent->DisableMovement();
+	}
+
+	UCapsuleComponent* CapsuleComp = GetCapsuleComponent();
+
+	if (IsValid(CapsuleComp))
+	{
+		CapsuleComp->SetCollisionEnabled(
+			ECollisionEnabled::NoCollision);
+	}
+
+	USkeletalMeshComponent* CharacterMesh =
+		GetMesh();
+
+	if (IsValid(CharacterMesh))
+	{
+		/*
+		 * Character Mesh는 원래 Capsule에 붙어 있으므로,
+		 * 월드 위치를 유지하면서 분리한 뒤 물리를 활성화한다.
+		 */
+		CharacterMesh->DetachFromComponent(
+			FDetachmentTransformRules::KeepWorldTransform);
+
+		CharacterMesh->SetCollisionProfileName(
+			TEXT("Ragdoll"));
+
+		CharacterMesh->SetCollisionEnabled(
+			ECollisionEnabled::QueryAndPhysics);
+
+		CharacterMesh->SetAllBodiesSimulatePhysics(true);
+		CharacterMesh->SetSimulatePhysics(true);
+		CharacterMesh->WakeAllRigidBodies();
+	}
+
+	// 본인 화면의 1인칭 장비는 숨김
+	if (IsValid(FirstPersonHandEquipmentMesh))
+	{
+		FirstPersonHandEquipmentMesh->SetVisibility(
+			false,
+			true);
+	}
+
+	// 자신의 입력 차단
+	if (AController* OwningController =
+			GetController())
+	{
+		OwningController->SetIgnoreMoveInput(true);
+		OwningController->SetIgnoreLookInput(true);
+	}
+
+	if (IsLocallyControlled() &&
+		GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			5.f,
+			FColor::Red,
+			TEXT("YOU DIED"));
+	}
+}
+
 void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 {
 	if (!CanStartMeleeAttack())
@@ -712,6 +834,11 @@ void ADRPlayerCharacter::OnRep_CurrentHealth()
 	 * ProgressBar 바인딩 방식이면 비어 있어도 된다.
 	 * 나중에는 HUD 갱신 델리게이트를 호출할 수 있다.
 	 */
+	
+	if (IsDead())
+	{
+		ApplyDeathRagdoll();
+	}
 }
 
 void ADRPlayerCharacter::ApplyNetworkTestState()
@@ -822,7 +949,7 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::HandleJumpPressed()
 {
-	if (!IsLocallyControlled())
+	if (!IsLocallyControlled() || IsDead())
 	{
 		return;
 	}
