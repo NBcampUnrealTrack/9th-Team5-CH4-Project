@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter()
 {
@@ -181,6 +182,7 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
+	
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -473,6 +475,39 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 	 * 카메라 흔들림
 	 * 캐릭터 애니메이션
 	 */
+}
+
+void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
+{
+	if (!HasAuthority()
+		|| HeldItemDefinition == NewItemDefinition)
+	{
+		return;
+	}
+	
+	HeldItemDefinition = NewItemDefinition;
+	RefreshHeldItemVisual();
+	ForceNetUpdate();
+}
+
+void ADRPlayerCharacter::OnRep_HeldItemDefinition()
+{
+	RefreshHeldItemVisual();
+}
+
+void ADRPlayerCharacter::RefreshHeldItemVisual()
+{
+	if (!IsValid(HeldItemDefinition))
+	{
+		ClearHandEquipmentVisual();
+		return;
+	}
+	
+	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
+	FTransform VisualOffset = HeldItemDefinition->OffsetTransform;
+	
+	ApplyHandEquipmentVisual(VisualMesh, VisualMesh, VisualOffset, VisualOffset);
+	
 }
 
 void ADRPlayerCharacter::OnRep_CurrentHealth()

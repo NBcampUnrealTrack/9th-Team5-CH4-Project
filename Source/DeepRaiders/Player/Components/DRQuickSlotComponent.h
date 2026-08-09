@@ -101,8 +101,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	UDRItemDefinition* GetSelectedItemDefinition() const
 	{
-		return HandedItemDefinition;
+		return HeldItemDefinition;
 	}	
+	
+	// Character에게 SelectedItem 외형 반영
+	void ApplySelectedItemToCharacter();
 	
 protected:
 	UFUNCTION(Server, Reliable)
@@ -180,5 +183,5 @@ private:
 	// 실제로 손에 쥐어질 아이템의 Definition
 	// 수량이 0인 경우 nullptr
 	UPROPERTY(Transient)
-	TObjectPtr<UDRItemDefinition> HandedItemDefinition;
+	TObjectPtr<UDRItemDefinition> HeldItemDefinition;
 };

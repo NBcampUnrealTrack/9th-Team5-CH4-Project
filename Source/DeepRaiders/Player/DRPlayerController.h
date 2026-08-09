@@ -9,6 +9,8 @@
 class ADRPlayerCharacter;
 class UInputAction;
 class UInputMappingContext;
+class UDRInventoryComponent;
+class UDRQuickSlotComponent;
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController
@@ -16,9 +18,14 @@ class DEEPRAIDERS_API ADRPlayerController
 {
 	GENERATED_BODY()
 
+public:
+	ADRPlayerController();
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	
+	virtual void OnPossess(APawn* InPawn) override;
 
 private:
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
@@ -89,4 +96,14 @@ private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
 #pragma endregion
 	
+#pragma region QuickSlot
+	
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
+	TObjectPtr<UDRInventoryComponent> QuickSlotInventoryComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
+	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
+
+#pragma endregion 
 };

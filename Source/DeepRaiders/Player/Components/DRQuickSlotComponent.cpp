@@ -5,6 +5,7 @@
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
@@ -178,7 +179,7 @@ int32 UDRQuickSlotComponent::GetSlotItemCount(int32 SlotIndex) const
 		return 0;
 	}
 	
-	const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get()();
+	const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	
 	if (!IsValid(Definition)
@@ -235,7 +236,7 @@ void UDRQuickSlotComponent::HandleInventoryChanged()
 	// 실제 Inventory 내의 보유 정보가 변하는 경우
 	OnQuickSlotsChangedDelegate.Broadcast();
 	
-	RefreshHandedItem()();
+	RefreshHandedItem();
 }
 
 bool UDRQuickSlotComponent::CacheInventoryComponent()
@@ -274,7 +275,7 @@ bool UDRQuickSlotComponent::HasQuickSlotAuthority() const
 	const AActor* OwnerActor = GetOwner();
 	
 	return IsValid(OwnerActor)
-		&& OwnerActor->HasAuthority()();
+		&& OwnerActor->HasAuthority();
 }
 
 bool UDRQuickSlotComponent::IsLocalPlayer() const
@@ -392,14 +393,17 @@ void UDRQuickSlotComponent::RefreshHandedItem()
 	UDRItemDefinition* NewHandedItem = ResolveHandedItemDefinition(SelectedSlotIndex);
 	
 	// 이미 쥐고 있는 아이템과 동일한 Definition
-	if (HandedItemDefinition == NewHandedItem)
+	if (HeldItemDefinition == NewHandedItem)
 	{
 		return;
 	}
 	
-	HandedItemDefinition = NewHandedItem;
+	HeldItemDefinition = NewHandedItem;
 	
-	OnSelectedQuickSlotItemChangedDelegate.Broadcast(HandedItemDefinition.Get());	
+	// 캐릭터 외형에 반영
+	ApplySelectedItemToCharacter();
+	
+	OnSelectedQuickSlotItemChangedDelegate.Broadcast(HeldItemDefinition.Get());	
 }
 
 void UDRQuickSlotComponent::RequestReplicationUpdate() const
@@ -414,4 +418,21 @@ void UDRQuickSlotComponent::RequestReplicationUpdate() const
 	
 	OwnerActor->FlushNetDormancy();
 	OwnerActor->ForceNetUpdate();
+}
+
+void UDRQuickSlotComponent::ApplySelectedItemToCharacter()
+{
+	if (!HasQuickSlotAuthority())
+	{
+		return;
+	}
+	
+	const APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	ADRPlayerCharacter* Character = IsValid(PlayerController) 
+		? Cast<ADRPlayerCharacter>(PlayerController->GetPawn()) : nullptr; 
+	
+	if (IsValid(Character))
+	{
+		Character->SetHeldItemDefinition(HeldItemDefinition);
+	}
 }
