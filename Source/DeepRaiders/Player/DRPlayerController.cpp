@@ -8,6 +8,7 @@
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
+#include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -141,6 +142,15 @@ void ADRPlayerController::SetupInputComponent()
             ETriggerEvent::Started,
             this,
             &ThisClass::HandleMeleeAttack);
+    }
+    
+    if (IsValid(InteractAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            InteractAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleInteract);
     }
 }
 
@@ -307,5 +317,99 @@ bool ADRPlayerController::ApplyTerrainDigOnce(
 
     // VoxelWorld가 아직 생성되지 않았다면 Subsystem이 delegate 기반 pending으로 보관한다.
     return TerrainSubsystem->ApplyOrQueueDig(Operation);
+}
+#pragma endregion
+
+#pragma region Interact
+void ADRPlayerController::HandleInteract(const FInputActionValue&)
+{
+    UE_LOG(LogTemp, Log, TEXT("Interact Called"));
+    
+    FHitResult Hit;
+    
+    // 상호작용 가능한 액터 탐색
+    if (!IsLocalController()
+        || !TraceInteractable(Hit))
+    {
+        return;
+    }
+    
+    // Interface 구현 여부 확인
+    AActor* Target = Hit.GetActor();
+    if (!IsValid(Target)
+        || !Target->Implements<UDRInteractableInterface>())
+    {
+        return;
+    }
+    
+    // 클라에서 Trace된 액터 전달
+    ServerRequestInteract(Target);
+}
+
+bool ADRPlayerController::TraceInteractable(FHitResult& OutHit)
+{
+    const APawn* CachedPawn = GetPawn();
+    UWorld* World = GetWorld();
+    
+    if (!IsValid(CachedPawn)
+        ||!IsValid(World))
+    {
+        return false;
+    }
+    
+    const FVector Start = CachedPawn->GetPawnViewLocation();
+    const FVector End = Start + CachedPawn->GetBaseAimRotation().Vector() * InteractionRange;
+    
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(InteracterTrace));
+    Params.AddIgnoredActor(CachedPawn);
+    
+    return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params);
+}
+
+void ADRPlayerController::ServerRequestInteract_Implementation(AActor* ExpectedTarget)
+{
+    APawn* CachedPawn = GetPawn();
+    FHitResult ServerHit;
+    
+    // ExpectedTarget = 클라이언트에서 전달한 상호작용 액터
+    // 서버에서 유효한 동작인지 검증
+    if (!IsValid(CachedPawn)
+        || !IsValid(ExpectedTarget)
+        || !ExpectedTarget->Implements<UDRInteractableInterface>()
+        || !TraceInteractable(ServerHit)
+        || ServerHit.GetActor() != ExpectedTarget)
+    {
+        return;
+    }
+    
+    if (!IDRInteractableInterface::Execute_CanInteract(ExpectedTarget, CachedPawn))
+    {
+        return;
+    }
+    
+    IDRInteractableInterface::Execute_Interact(ExpectedTarget, CachedPawn);
+}
+
+bool ADRPlayerController::CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const
+{
+    return HasAuthority() && IsValid(QuickSlotInventoryComponent) 
+        && QuickSlotInventoryComponent->CanAddItem(Definition, Quantity);
+}
+
+bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity)
+{
+    // 퀵슬롯 여부와는 상관없이 아이템은 추가될 수 있다.
+    if (!CanReceiveItem(Definition,Quantity) 
+        || !QuickSlotInventoryComponent->TryAddItem(Definition, Quantity))
+    {
+        return false;
+    }
+    
+    if (IsValid(QuickSlotComponent))
+    {
+        QuickSlotComponent->TryBindFirstEmptySlot(Definition);
+    }
+    
+    return true;
 }
 #pragma endregion

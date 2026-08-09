@@ -72,4 +72,7 @@ private:
                                   FRandomStream& Random) const;
     const FDROreWeight* ChooseOre(const FDROreDepthSector& Sector,
                                   FRandomStream& Random) const;
+    
+public:
+    bool HandleOreCollected(ADROrePoolActor* OreActor);
 };

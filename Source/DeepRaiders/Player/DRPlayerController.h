@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRItemDefinition;
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController
@@ -102,7 +103,7 @@ public:
 private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
 #pragma endregion
-	
+
 #pragma region QuickSlot
 public:
 	UDRInventoryComponent* GetQuickSlotInventoryComponent() { return QuickSlotInventoryComponent;}
@@ -115,5 +116,27 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
 	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 
-#pragma endregion 
+#pragma endregion
+
+#pragma region Interact
+private:
+	void HandleInteract(const FInputActionValue&);	
+	bool TraceInteractable(FHitResult& OutHit);
+	
+	UFUNCTION(Server, Reliable)
+	void ServerRequestInteract(AActor* ExpectedTarget);
+	
+public:
+	bool CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const;
+	bool TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity);
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InteractAction;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Interaction", meta = (ClampMin = "0.0", UIMin ="0.0", Units = "cm"))
+	float InteractionRange = 300.0f;
+	
+#pragma endregion
+	
 };

@@ -142,6 +142,12 @@ void ADROreFieldActor::SetSectorActive(FDROreRuntimeSector& Sector, bool bNewAct
             Point.ActiveActor =
                 Pool->AcquireOre(Point.ItemDefinition, Point.OreActorClass,
                                  Point.Transform, Point.SpawnPointId);
+            
+            if(IsValid(Point.ActiveActor))
+            {
+                // 생성된 액터가 제거될 때 연결 정보를 지우기 위해서 캐싱
+                Point.ActiveActor->AssignSourceField(this);
+            }
         }
         else if (Point.ActiveActor)
         {
@@ -264,4 +270,39 @@ const FDROreWeight* ADROreFieldActor::ChooseOre(const FDROreDepthSector& Sector,
     }
 
     return nullptr;
+}
+
+bool ADROreFieldActor::HandleOreCollected(ADROrePoolActor* OreActor)
+{
+    if (!HasAuthority()
+        || !IsValid(OreActor))
+    {
+        return false;
+    }
+    
+    // 필드 내의 광석이 수집된 경우 비활성화 처리하며 연결을 끊는다.    
+    for (FDROreRuntimeSector& Sector : RuntimeSectors)
+    {
+        for (FDROreSpawnPoint& Point : Sector.SpawnPoints)
+        {
+            if (Point.ActiveActor != OreActor)
+            {
+                continue;
+            }
+            
+            Point.ActiveActor = nullptr;
+            
+            UDROrePoolSubsystem* Pool = GetWorld()->GetSubsystem<UDROrePoolSubsystem>();
+            
+            if (!IsValid(Pool))
+            {
+                return false;
+            }
+            
+            Pool->ReleaseOre(OreActor);
+            return !OreActor->IsPoolActive();
+        }
+    }
+    
+    return false;
 }

@@ -1,6 +1,9 @@
 #include "DROrePoolActor.h"
 
+#include "DROreFieldActor.h"
+#include "DROrePoolSubsystem.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "Net/UnrealNetwork.h"
 
 ADROrePoolActor::ADROrePoolActor()
@@ -46,6 +49,9 @@ void ADROrePoolActor::ActivateFromPool(const FTransform& SpawnTransform,
         ApplyPoolState();
         ForceNetUpdate();
     }
+    
+    SourceField.Reset();
+    bInteractionInProgress = false;
 }
 
 void ADROrePoolActor::DeactivateToPool()
@@ -71,6 +77,16 @@ int32 ADROrePoolActor::GetSpawnPointId() const
     return SpawnPointId;
 }
 
+void ADROrePoolActor::AssignSourceField(ADROreFieldActor* InSourceField)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+    
+    SourceField = InSourceField;
+}
+
 void ADROrePoolActor::OnRep_PoolState()
 {
     ApplyPoolState();
@@ -92,4 +108,46 @@ void ADROrePoolActor::ApplyPoolState()
     {
         OnDeactivatedToPool();
     }
+}
+
+bool ADROrePoolActor::CanInteract_Implementation(APawn* Interactor) const
+{
+    const ADRPlayerController* Controller = IsValid(Interactor) ? Cast<ADRPlayerController>(Interactor->GetController()) : nullptr;
+    
+    return HasAuthority() && bPoolActive && !bInteractionInProgress &&  ItemInstance.IsValid()
+        && IsValid(Controller) && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
+}
+
+bool ADROrePoolActor::Interact_Implementation(APawn* Interactor)
+{
+    if (!CanInteract_Implementation(Interactor))
+    {
+        return false;
+    }
+    
+    ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
+    bInteractionInProgress = true;
+    
+    if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
+    {
+        bInteractionInProgress = false;
+        return false;
+    }
+    
+    // Field 와의 연결을 끊어주어야 한다.
+    if (ADROreFieldActor* Field = SourceField.Get())
+    {
+        return Field->HandleOreCollected(this);
+    }
+    
+    // 광석은 반드시 OrePoolSubsystem을 통해서 반환
+    UDROrePoolSubsystem* Pool = GetWorld()->GetSubsystem<UDROrePoolSubsystem>();
+    
+    if (IsValid(Pool))
+    {
+        Pool->ReleaseOre(this);
+        return !IsPoolActive();
+    }
+        
+    return false;
 }
