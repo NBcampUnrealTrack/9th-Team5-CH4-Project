@@ -72,8 +72,6 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 		NewEntry.Quantity = NewStackQuantity;
 		
 		RemainingQuantity -= NewStackQuantity;
-		
-		CachedEntryId = NewEntry.EntryId;
 	}
 	
 	HandleInventoryChangedOnServer();
@@ -178,7 +176,7 @@ bool UDRInventoryComponent::TryRemoveItemByDefinition(UDRItemDefinition* Definit
 
 bool UDRInventoryComponent::FindEntry(FGuid EntryId, FDRInventoryEntry& OutEntry) const
 {
-	UE_LOG(LogTemp, Log, TEXT("[%s] FindEntry Start, Quantity : %d"), *GetName(), OutEntry.Quantity);
+	UE_LOG(LogTemp, Log, TEXT("[%s] FindEntry Start"), *GetName());
 	
 	if (!EntryId.IsValid())
 	{
@@ -242,7 +240,7 @@ int32 UDRInventoryComponent::GetAddableQuantity(UDRItemDefinition* Definition) c
 	return AvailableQuantity;
 }
 
-int32 UDRInventoryComponent::GetItemCount(UDRItemDefinition* Definition) const
+int32 UDRInventoryComponent::GetItemCount(const UDRItemDefinition* Definition) const
 {
 	if (!IsValid(Definition))
 	{

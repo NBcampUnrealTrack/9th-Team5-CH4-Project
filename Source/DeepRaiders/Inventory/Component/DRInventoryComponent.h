@@ -9,7 +9,7 @@
 
 class UDRItemDefinition;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRInventoryChangedSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRInventoryChanged);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DEEPRAIDERS_API UDRInventoryComponent : public UActorComponent
@@ -49,7 +49,7 @@ public:
 	
 	// 특정 Definition의 보유 수량을 반환
 	UFUNCTION(BlueprintPure, Category = "Inventory")
-	int32 GetItemCount(UDRItemDefinition* Definition) const;
+	int32 GetItemCount(const UDRItemDefinition* Definition) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	TArray<FDRInventoryEntry> GetEntries() const
@@ -91,12 +91,8 @@ private:
 
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
-	FDRInventoryChangedSignature OnInventoryChangedDelegate;
-	
-	// 테스트용
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
-	FGuid CachedEntryId;
-	
+	FDRInventoryChanged OnInventoryChangedDelegate;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Inventory", meta = (ClampMin = "1", UIMin = "1"))
 	int32 MaxSlots = 5;
