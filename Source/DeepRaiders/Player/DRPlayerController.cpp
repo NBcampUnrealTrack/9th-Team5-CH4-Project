@@ -123,6 +123,15 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleMine);
     }
+    
+    if (IsValid(MeleeAttackAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            MeleeAttackAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleMeleeAttack);
+    }
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -241,6 +250,17 @@ void ADRPlayerController::HandleSelectQuickSlot(
      */
 }
 
+void ADRPlayerController::HandleMeleeAttack(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        Cast<ADRPlayerCharacter>(GetPawn());
+
+    if (IsValid(PlayerCharacter))
+    {
+        PlayerCharacter->RequestMeleeAttack();
+    }
+}
 #pragma region Terrain Dig
 void ADRPlayerController::Client_ApplyTerrainDigHistory_Implementation(
     const TArray<FDRTerrainDigOperation>& DigHistory)
