@@ -3,6 +3,7 @@
 #include "DRInteractionComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -10,6 +11,27 @@
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+}
+
+void UDRShopUIComponent::LoadItemDefinitions()
+{
+	ItemDefinitions.Reset();
+
+	if (!IsValid(ItemTable))
+	{
+		return;
+	}
+
+	TArray<FDRShopItemTableRow*> ItemRows;
+	ItemTable->GetAllRows(TEXT("LoadItemDefinitions"), ItemRows);
+
+	for (const FDRShopItemTableRow* ItemRow : ItemRows)
+	{
+		if (ItemRow && IsValid(ItemRow->ItemDefinition))
+		{
+			ItemDefinitions.AddUnique(ItemRow->ItemDefinition);
+		}
+	}
 }
 
 bool UDRShopUIComponent::IsItemAvailable(
@@ -33,6 +55,7 @@ bool UDRShopUIComponent::CanPurchase(
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	LoadItemDefinitions();
 
 	InteractionComponent =
 		GetOwner()->FindComponentByClass<UDRInteractionComponent>();

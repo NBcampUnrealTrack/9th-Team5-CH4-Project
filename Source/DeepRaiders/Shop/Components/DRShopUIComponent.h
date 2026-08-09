@@ -9,6 +9,7 @@ class ADRPlayerState;
 class UDRInteractionComponent;
 class UDRItemDefinition;
 class UDRShopWidget;
+class UDataTable;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
@@ -27,6 +28,8 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void LoadItemDefinitions();
+
 	UFUNCTION()
 	void HandleInteractionEntered(APawn* Interactor);
 
@@ -42,7 +45,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shop|Data")
+	UPROPERTY(
+		EditDefaultsOnly,
+		Category = "Shop|Data",
+		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRShopItemTableRow"))
+	TObjectPtr<UDataTable> ItemTable;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UDRItemDefinition>> ItemDefinitions;
 
 	UPROPERTY(Transient)
