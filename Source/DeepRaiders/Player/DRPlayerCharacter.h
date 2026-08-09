@@ -209,6 +209,14 @@ private:
     FTimerHandle MeleeHitTimerHandle;
     FTimerHandle MeleeFinishTimerHandle;
     
+    // ===== Fall Damage =====
+
+    /** 착지 속도를 기준으로 낙하 피해량을 계산한다. */
+    float CalculateFallDamage(float LandingSpeed) const;
+
+    /** 서버에서 낙하 피해를 적용한다. */
+    void ApplyFallDamage(float LandingSpeed);
+    
     /** 서버에서 사망 상태를 확정하고 진행 중인 기능을 정리한다. */
     void HandleDeath();
 
@@ -434,5 +442,44 @@ protected:
         Category = "Player|Respawn",
         meta = (ClampMin = "0", ClampMax = "10"))
     int32 RespawnSearchRingCount = 3;
-    
+  
+    // ===== Fall Damage =====
+
+    /** 이 속도 이하로 착지하면 피해를 받지 않는다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", Units = "cm/s"))
+    float MinFallDamageSpeed = 1000.f;
+
+    /** 이 속도 이상으로 착지하면 최대 낙하 피해를 받는다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", Units = "cm/s"))
+    float MaxFallDamageSpeed = 2500.f;
+
+    /** 최대 체력에 대한 최대 낙하 피해 비율이다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MaxFallDamageRatio = 0.8f;
+
+    /**
+     * 낙하 피해 증가 곡선의 지수다.
+     *
+     * 1.0: 선형
+     * 2.0: 제곱 곡선
+     * 3.0: 초반 피해가 더 완만하고 후반부에 급격히 증가
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.01"))
+    float FallDamageExponent = 2.f;
 };
