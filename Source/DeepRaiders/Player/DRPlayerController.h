@@ -104,6 +104,9 @@ private:
 #pragma endregion
 	
 #pragma region QuickSlot
+public:
+	UDRInventoryComponent* GetQuickSlotInventoryComponent() { return QuickSlotInventoryComponent;}
+	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")

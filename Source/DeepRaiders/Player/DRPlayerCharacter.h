@@ -492,7 +492,6 @@ protected:
     UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
     TObjectPtr<UDRItemDefinition> HeldItemDefinition;
     
-    
     UFUNCTION()
     void OnRep_HeldItemDefinition();
     

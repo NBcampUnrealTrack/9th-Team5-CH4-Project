@@ -495,6 +495,10 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		CurrentHealth);
+	
+	DOREPLIFETIME(
+		ADRPlayerCharacter,
+		HeldItemDefinition);
 }
 
 void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
