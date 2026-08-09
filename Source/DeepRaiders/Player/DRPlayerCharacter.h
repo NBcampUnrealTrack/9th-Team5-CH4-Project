@@ -214,10 +214,13 @@ private:
 
     /** 현재 인스턴스에서 래그돌 사망 표현을 적용한다. */
     void ApplyDeathRagdoll();
+    
+    /** 서버에서 리스폰 직전 래그돌 위치를 기준으로 새 Pawn을 생성한다. */
+    void RespawnAtRagdollLocation();
 
-    /** 서버에서 저장된 사망 위치에 새 Pawn을 생성한다. */
-    void RespawnAtDeathLocation();
-
+    /** 서버 래그돌 주변에서 캐릭터 캡슐이 들어갈 수 있는 위치를 탐색한다. */
+    bool TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const;
+    
     /** 새 Pawn이 Possess되었을 때 Controller 입력 제한을 해제한다. */
     void RestoreControllerInput();
 
@@ -225,7 +228,6 @@ private:
     bool bDeathRagdollApplied = false;
 
     FTimerHandle RespawnTimerHandle;
-    FTransform RespawnTransform;
     
 protected:
     UPROPERTY(
@@ -385,4 +387,52 @@ protected:
         Category = "Player|Respawn",
         meta = (ClampMin = "0.0", Units = "s"))
     float RespawnDelay = 3.f;
+    
+    /** 리스폰 위치를 가져올 래그돌 기준 본 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn")
+    FName RespawnRagdollBoneName = TEXT("pelvis");
+
+    /** 래그돌 위치에서 아래쪽 바닥을 탐색할 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnGroundTraceDistance = 2000.f;
+
+    /** Capsule이 바닥에 박히지 않도록 추가로 띄우는 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnGroundClearance = 5.f;
+    
+    /** 래그돌 위쪽에서 Capsule Sweep을 시작할 높이 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnSweepStartHeight = 300.f;
+
+    /** 주변 리스폰 위치를 탐색할 때의 간격 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "1.0", Units = "cm"))
+    float RespawnSearchStep = 120.f;
+
+    /** 래그돌 주변을 몇 단계까지 탐색할지 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0", ClampMax = "10"))
+    int32 RespawnSearchRingCount = 3;
+    
 };

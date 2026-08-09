@@ -8,6 +8,7 @@
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
+#include "Components/SkeletalMeshComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -663,13 +664,6 @@ void ADRPlayerCharacter::HandleDeath()
 		return;
 	}
 
-	/*
-	 * 래그돌은 이후 물리에 의해 이동하므로,
-	 * 래그돌 적용 전에 Capsule 기준 위치를 저장한다.
-	 */
-	RespawnTransform = GetActorTransform();
-
-	// 사망 직전에 예약된 공격 판정이 실행되지 않게 정리
 	GetWorldTimerManager().ClearTimer(
 		MeleeHitTimerHandle);
 
@@ -678,23 +672,18 @@ void ADRPlayerCharacter::HandleDeath()
 
 	bIsMeleeAttacking = false;
 
-	// 제트팩 종료
 	StopJetpackFromServer();
 
-	// 제트팩용 Character Tick 종료
-	SetActorTickEnabled(false);
-
 	/*
-	 * 서버에서는 CurrentHealth의 RepNotify가 자동 실행되지 않으므로
-	 * 리슨 서버와 서버 인스턴스에는 직접 적용한다.
+	 * 사망 순간의 Actor 위치는 저장하지 않는다.
+	 * 리스폰 직전에 서버 래그돌 위치를 조회한다.
 	 */
 	ApplyDeathRagdoll();
 
-	// 일정 시간 뒤 같은 위치에서 새 Pawn 생성
 	GetWorldTimerManager().SetTimer(
 		RespawnTimerHandle,
 		this,
-		&ThisClass::RespawnAtDeathLocation,
+		&ThisClass::RespawnAtRagdollLocation,
 		RespawnDelay,
 		false);
 
@@ -788,7 +777,7 @@ void ADRPlayerCharacter::ApplyDeathRagdoll()
 	}
 }
 
-void ADRPlayerCharacter::RespawnAtDeathLocation()
+void ADRPlayerCharacter::RespawnAtRagdollLocation()
 {
     if (!HasAuthority())
     {
@@ -825,9 +814,15 @@ void ADRPlayerCharacter::RespawnAtDeathLocation()
     }
 
     /*
-     * 새 Pawn이 같은 위치에 생성될 때
-     * 기존 래그돌 Mesh가 Spawn Collision을 방해하지 않게 제거한다.
+     * 래그돌 물리를 끄기 전에 서버 래그돌 주변에서
+     * 실제 Capsule이 들어갈 위치를 탐색한다.
      */
+    FTransform RagdollRespawnTransform;
+
+    const bool bFoundRagdollRespawnLocation =
+        TryFindRagdollRespawnTransform(
+            RagdollRespawnTransform);
+
     USkeletalMeshComponent* CharacterMesh =
         GetMesh();
 
@@ -844,25 +839,61 @@ void ADRPlayerCharacter::RespawnAtDeathLocation()
             true);
     }
 
-    /*
-     * 사망할 때 Controller의 입력을 막았으므로
-     * 새 Pawn을 조종할 수 있도록 서버 쪽 상태를 먼저 복구한다.
-     */
     RespawnController->SetIgnoreMoveInput(false);
     RespawnController->SetIgnoreLookInput(false);
 
-    /*
-     * RestartPlayerAtTransform은 Controller가 기존 Pawn을
-     * 계속 소유하고 있으면 새 Pawn을 생성하지 않을 수 있다.
-     */
     RespawnController->UnPossess();
 
-    GameMode->RestartPlayerAtTransform(
-        RespawnController,
-        RespawnTransform);
+    if (bFoundRagdollRespawnLocation)
+    {
+        GameMode->RestartPlayerAtTransform(
+            RespawnController,
+            RagdollRespawnTransform);
+    }
+    else
+    {
+        /*
+         * 래그돌 주변에 안전한 공간이 없으면
+         * 공중의 래그돌 위치에 억지로 생성하지 않는다.
+         * GameMode의 기본 PlayerStart를 사용한다.
+         */
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT(
+                "[Respawn] Safe ragdoll location not found. "
+                "Fallback to PlayerStart. Character=%s"),
+            *GetName());
+
+        GameMode->RestartPlayer(
+            RespawnController);
+    }
 
     APawn* NewPawn =
         RespawnController->GetPawn();
+
+    /*
+     * 안전하다고 판단한 위치에서도 Spawn Collision 설정 등에
+     * 의해 실패할 가능성이 있으므로 PlayerStart를 한 번 더 시도한다.
+     */
+    if ((!IsValid(NewPawn) ||
+         NewPawn == this) &&
+        bFoundRagdollRespawnLocation)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT(
+                "[Respawn] Ragdoll location spawn failed. "
+                "Retrying at PlayerStart. Controller=%s"),
+            *GetNameSafe(RespawnController));
+
+        GameMode->RestartPlayer(
+            RespawnController);
+
+        NewPawn =
+            RespawnController->GetPawn();
+    }
 
     if (!IsValid(NewPawn) ||
         NewPawn == this)
@@ -871,10 +902,14 @@ void ADRPlayerCharacter::RespawnAtDeathLocation()
             LogTemp,
             Error,
             TEXT(
-                "[Respawn] Failed to create new Pawn. "
+                "[Respawn] All respawn attempts failed. "
                 "Controller=%s"),
             *GetNameSafe(RespawnController));
 
+        /*
+         * 새 Pawn 생성에 성공하지 않았으므로
+         * 기존 Pawn을 Destroy하지 않는다.
+         */
         return;
     }
 
@@ -882,13 +917,213 @@ void ADRPlayerCharacter::RespawnAtDeathLocation()
         LogTemp,
         Warning,
         TEXT(
-            "[Respawn] OldPawn=%s NewPawn=%s Location=%s"),
+            "[Respawn] OldPawn=%s NewPawn=%s "
+            "UsedRagdollLocation=%d Location=%s"),
         *GetName(),
         *GetNameSafe(NewPawn),
-        *RespawnTransform.GetLocation().ToString());
+        bFoundRagdollRespawnLocation,
+        *NewPawn->GetActorLocation().ToString());
 
-    // 새 Pawn 생성이 성공한 뒤 기존 래그돌 Pawn 제거
     Destroy();
+}
+
+bool ADRPlayerCharacter::TryFindRagdollRespawnTransform(
+    FTransform& OutRespawnTransform) const
+{
+    const UWorld* World = GetWorld();
+
+    const USkeletalMeshComponent* CharacterMesh =
+        GetMesh();
+
+    const UCapsuleComponent* CharacterCapsule =
+        GetCapsuleComponent();
+
+    const UCharacterMovementComponent* MovementComponent =
+        GetCharacterMovement();
+
+    if (!IsValid(World) ||
+        !IsValid(CharacterMesh) ||
+        !IsValid(CharacterCapsule) ||
+        !IsValid(MovementComponent))
+    {
+        return false;
+    }
+
+    FVector RagdollLocation =
+        CharacterMesh->GetComponentLocation();
+
+    if (CharacterMesh->DoesSocketExist(
+            RespawnRagdollBoneName))
+    {
+        RagdollLocation =
+            CharacterMesh->GetSocketLocation(
+                RespawnRagdollBoneName);
+    }
+
+    const float CapsuleRadius =
+        CharacterCapsule->GetScaledCapsuleRadius();
+
+    const float CapsuleHalfHeight =
+        CharacterCapsule->GetScaledCapsuleHalfHeight();
+
+    const FCollisionShape CapsuleShape =
+        FCollisionShape::MakeCapsule(
+            CapsuleRadius,
+            CapsuleHalfHeight);
+
+    const FName CapsuleCollisionProfile =
+        CharacterCapsule->GetCollisionProfileName();
+
+    FCollisionQueryParams QueryParams(
+        SCENE_QUERY_STAT(RagdollRespawnCapsuleSweep),
+        false,
+        this);
+
+    // 기존 래그돌과 캡슐은 탐색에서 제외한다.
+    QueryParams.AddIgnoredActor(this);
+
+    /*
+     * 0번은 래그돌 바로 아래다.
+     * 이후에는 8방향으로 탐색 반경을 넓힌다.
+     */
+    TArray<FVector2D> SearchOffsets;
+    SearchOffsets.Add(FVector2D::ZeroVector);
+
+    constexpr int32 DirectionCount = 8;
+
+    for (int32 RingIndex = 1; RingIndex <= RespawnSearchRingCount; ++RingIndex)
+    {
+        const float SearchDistance =
+            RespawnSearchStep * RingIndex;
+
+        for (int32 DirectionIndex = 0; DirectionIndex < DirectionCount; ++DirectionIndex)
+        {
+            const float AngleRadians =
+                2.f *
+                PI *
+                static_cast<float>(DirectionIndex) / static_cast<float>(DirectionCount);
+
+            SearchOffsets.Add(
+                FVector2D(
+                    FMath::Cos(AngleRadians),
+                    FMath::Sin(AngleRadians)) * SearchDistance);
+        }
+    }
+
+    for (const FVector2D& Offset : SearchOffsets)
+    {
+        const FVector SearchCenter(
+            RagdollLocation.X + Offset.X,
+            RagdollLocation.Y + Offset.Y,
+            RagdollLocation.Z);
+
+        /*
+         * 전체 캐릭터 Capsule을 위에서 아래로 Sweep한다.
+         * 따라서 절벽 모서리처럼 Capsule 일부가 걸치는 위치를
+         * LineTrace보다 먼저 걸러낼 수 있다.
+         */
+        const FVector SweepStart =
+            SearchCenter +
+            FVector(
+                0.f,
+                0.f,
+                RespawnSweepStartHeight);
+
+        const FVector SweepEnd =
+            SearchCenter -
+            FVector(
+                0.f,
+                0.f,
+                RespawnGroundTraceDistance);
+
+        FHitResult GroundHit;
+
+        const bool bHitGround =
+            World->SweepSingleByProfile(
+                GroundHit,
+                SweepStart,
+                SweepEnd,
+                FQuat::Identity,
+                CapsuleCollisionProfile,
+                CapsuleShape,
+                QueryParams);
+
+        if (!bHitGround ||
+            GroundHit.bStartPenetrating)
+        {
+            continue;
+        }
+
+        // 벽이나 너무 가파른 경사면은 바닥으로 사용하지 않는다.
+        if (!MovementComponent->IsWalkable(GroundHit))
+        {
+            continue;
+        }
+
+        /*
+         * Capsule Sweep의 Location은 충돌 당시 Capsule 중심점이다.
+         * ImpactPoint에 HalfHeight를 다시 더하지 않는다.
+         */
+        const FVector CandidateLocation =
+            GroundHit.Location +
+            FVector(
+                0.f,
+                0.f,
+                RespawnGroundClearance);
+
+        /*
+         * 최종 위치에서 실제 Capsule 전체가 다른 지형이나
+         * 다른 플레이어와 겹치지 않는지 다시 확인한다.
+         */
+        const bool bBlocked =
+            World->OverlapBlockingTestByProfile(
+                CandidateLocation,
+                FQuat::Identity,
+                CapsuleCollisionProfile,
+                CapsuleShape,
+                QueryParams);
+
+        if (bBlocked)
+        {
+            continue;
+        }
+
+        OutRespawnTransform =
+            FTransform(
+                FRotator(
+                    0.f,
+                    GetActorRotation().Yaw,
+                    0.f),
+                CandidateLocation,
+                FVector::OneVector);
+
+#if ENABLE_DRAW_DEBUG
+        DrawDebugCapsule(
+            World,
+            CandidateLocation,
+            CapsuleHalfHeight,
+            CapsuleRadius,
+            FQuat::Identity,
+            FColor::Green,
+            false,
+            5.f);
+#endif
+
+        return true;
+    }
+
+#if ENABLE_DRAW_DEBUG
+    DrawDebugSphere(
+        World,
+        RagdollLocation,
+        30.f,
+        16,
+        FColor::Red,
+        false,
+        5.f);
+#endif
+
+    return false;
 }
 
 void ADRPlayerCharacter::RestoreControllerInput()
