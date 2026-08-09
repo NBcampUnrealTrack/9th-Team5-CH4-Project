@@ -11,6 +11,7 @@ class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
+class UAnimMontage;
 class UDRItemDefinition;
 
 /**
@@ -38,6 +39,9 @@ public:
     
     /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
     void RequestMine();
+    
+    /** 로컬 플레이어가 근접 공격을 요청한다. */
+    void RequestMeleeAttack();
     
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
@@ -112,6 +116,12 @@ public:
         AController* EventInstigator,
         AActor* DamageCauser) override;
     
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    bool IsDead() const
+    {
+        return CurrentHealth <= KINDA_SMALL_NUMBER;
+    }
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -169,6 +179,64 @@ private:
     void UpdateJetpack(float DeltaSeconds);
 
     void RefreshJetpackActivePresentation();
+    
+    // ===== Melee Attack =====
+
+    /** 소유 플레이어의 1인칭 공격 표현을 실행한다. */
+    void PlayOwnerMeleeAttackPresentation();
+
+    /** 다른 플레이어에게 보이는 월드 공격 몽타주를 재생한다. */
+    void PlayWorldMeleeAttackPresentation();
+
+    /** 서버에서 공격 가능 여부를 검사한다. */
+    bool CanStartMeleeAttack() const;
+
+    /** 서버에서 실제 공격 판정을 수행한다. */
+    void PerformMeleeHitCheck();
+
+    /** 서버에서 공격 상태를 종료한다. */
+    void FinishMeleeAttack();
+
+    /** 소유 클라이언트의 공격 요청을 서버에서 처리한다. */
+    UFUNCTION(Server, Reliable)
+    void ServerRequestMeleeAttack();
+
+    /** 공격자의 월드 공격 표현을 모든 클라이언트에 전달한다. */
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayWorldMeleeAttack();
+
+    bool bIsMeleeAttacking = false;
+
+    FTimerHandle MeleeHitTimerHandle;
+    FTimerHandle MeleeFinishTimerHandle;
+    
+    // ===== Fall Damage =====
+
+    /** 착지 속도를 기준으로 낙하 피해량을 계산한다. */
+    float CalculateFallDamage(float LandingSpeed) const;
+
+    /** 서버에서 낙하 피해를 적용한다. */
+    void ApplyFallDamage(float LandingSpeed);
+    
+    /** 서버에서 사망 상태를 확정하고 진행 중인 기능을 정리한다. */
+    void HandleDeath();
+
+    /** 현재 인스턴스에서 래그돌 사망 표현을 적용한다. */
+    void ApplyDeathRagdoll();
+    
+    /** 서버에서 리스폰 직전 래그돌 위치를 기준으로 새 Pawn을 생성한다. */
+    void RespawnAtRagdollLocation();
+
+    /** 서버 래그돌 주변에서 캐릭터 캡슐이 들어갈 수 있는 위치를 탐색한다. */
+    bool TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const;
+    
+    /** 새 Pawn이 Possess되었을 때 Controller 입력 제한을 해제한다. */
+    void RestoreControllerInput();
+
+    /** 동일 인스턴스에서 래그돌이 중복 적용되는 것을 방지한다. */
+    bool bDeathRagdollApplied = false;
+
+    FTimerHandle RespawnTimerHandle;
     
 protected:
     UPROPERTY(
@@ -234,6 +302,8 @@ protected:
         Category = "Player|Equipment|Test")
     FTransform TestWorldBackTransform;
     
+    // ===== Jetpack =====
+    
     UPROPERTY(
         EditDefaultsOnly,
         Category = "Player|Equipment|Jetpack")
@@ -275,6 +345,144 @@ protected:
         Category = "Player|Jetpack",
         meta = (ClampMin = "0.0"))
     float JetpackFuelConsumptionPerSecond = 20.f;
+    
+    // ===== Melee Attack =====
+
+    /** 다른 플레이어에게 보이는 Manny 공격 몽타주 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat")
+    TObjectPtr<UAnimMontage> WorldMeleeAttackMontage;
+
+    /** 공격 시작 후 실제 판정까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0"))
+    float MeleeAttackHitTime = 0.25f;
+
+    /** 다음 공격이 가능해질 때까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.01"))
+    float MeleeAttackDuration = 0.7f;
+
+    /** 공격 피해량 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0"))
+    float MeleeAttackDamage = 20.f;
+
+    /** 시선 정면으로 검사할 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float MeleeAttackRange = 200.f;
+    
+    // ===== Death / Respawn =====
+
+    /** 사망 후 같은 위치에 다시 생성되기까지의 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "s"))
+    float RespawnDelay = 3.f;
+    
+    /** 리스폰 위치를 가져올 래그돌 기준 본 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn")
+    FName RespawnRagdollBoneName = TEXT("pelvis");
+
+    /** 래그돌 위치에서 아래쪽 바닥을 탐색할 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnGroundTraceDistance = 2000.f;
+
+    /** Capsule이 바닥에 박히지 않도록 추가로 띄우는 거리 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnGroundClearance = 5.f;
+    
+    /** 래그돌 위쪽에서 Capsule Sweep을 시작할 높이 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float RespawnSweepStartHeight = 300.f;
+
+    /** 주변 리스폰 위치를 탐색할 때의 간격 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "1.0", Units = "cm"))
+    float RespawnSearchStep = 120.f;
+
+    /** 래그돌 주변을 몇 단계까지 탐색할지 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Respawn",
+        meta = (ClampMin = "0", ClampMax = "10"))
+    int32 RespawnSearchRingCount = 3;
+  
+    // ===== Fall Damage =====
+
+    /** 이 속도 이하로 착지하면 피해를 받지 않는다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", Units = "cm/s"))
+    float MinFallDamageSpeed = 1000.f;
+
+    /** 이 속도 이상으로 착지하면 최대 낙하 피해를 받는다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", Units = "cm/s"))
+    float MaxFallDamageSpeed = 2500.f;
+
+    /** 최대 체력에 대한 최대 낙하 피해 비율이다. */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MaxFallDamageRatio = 0.8f;
+
+    /**
+     * 낙하 피해 증가 곡선의 지수다.
+     *
+     * 1.0: 선형
+     * 2.0: 제곱 곡선
+     * 3.0: 초반 피해가 더 완만하고 후반부에 급격히 증가
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Fall Damage",
+        meta = (ClampMin = "0.01"))
+    float FallDamageExponent = 2.f;
     
 #pragma region QuickSlot
 public:
