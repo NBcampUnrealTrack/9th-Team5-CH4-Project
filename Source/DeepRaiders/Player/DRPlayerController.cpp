@@ -261,3 +261,34 @@ void ADRPlayerController::HandleMeleeAttack(
         PlayerCharacter->RequestMeleeAttack();
     }
 }
+#pragma region Terrain Dig
+void ADRPlayerController::Client_ApplyTerrainDigHistory_Implementation(
+    const TArray<FDRTerrainDigOperation>& DigHistory)
+{
+    // PostLogin 이후 받은 서버 지형 이력은 순서대로 TerrainSubsystem에 위임한다.
+    for (const FDRTerrainDigOperation& Operation : DigHistory)
+    {
+        ApplyTerrainDigOnce(Operation);
+    }
+}
+
+bool ADRPlayerController::ApplyTerrainDigOnce(
+    const FDRTerrainDigOperation& Operation)
+{
+    UWorld* World = GetWorld();
+    if (!IsValid(World))
+    {
+        return false;
+    }
+
+    UDRVoxelTerrainSubsystem* TerrainSubsystem =
+        World->GetSubsystem<UDRVoxelTerrainSubsystem>();
+    if (!IsValid(TerrainSubsystem))
+    {
+        return false;
+    }
+
+    // VoxelWorld가 아직 생성되지 않았다면 Subsystem이 delegate 기반 pending으로 보관한다.
+    return TerrainSubsystem->ApplyOrQueueDig(Operation);
+}
+#pragma endregion

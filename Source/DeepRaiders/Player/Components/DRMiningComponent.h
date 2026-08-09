@@ -44,13 +44,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mining")
 	void PreviewMineTarget();
 
+	float GetMineTraceDistance() const { return MineTraceDistance; }
+	float GetMineRadius() const { return MineRadius; }
+	float GetMineSurfaceDepthRatio() const { return MineSurfaceDepthRatio; }
+	EDRMiningTraceMode GetTraceMode() const { return TraceMode; }
+
 protected:
 	// 클라이언트 입력 요청을 서버로 전달하기 위한 자리다.
 	// 현재 단계에서는 서버 구현을 비워 두고 로컬 채굴 흐름을 먼저 검증한다.
 	UFUNCTION(Server, Reliable)
 	void Server_RequestMine(
 		FVector_NetQuantize TraceStart,
-		FVector_NetQuantize TraceEnd);
+		FVector_NetQuantize TraceEnd,
+		FVector_NetQuantize RequestedMinePosition);
+
+	bool HandleMineRequestOnServer(
+		const FVector_NetQuantize& TraceStart,
+		const FVector_NetQuantize& TraceEnd,
+		const FVector_NetQuantize& RequestedMinePosition);
 
 	// 채굴 입력을 받아도 되는 상태인지 확인한다.
 	// 로컬 플레이어 소유 여부와 쿨타임을 함께 검사한다.

@@ -1,6 +1,8 @@
 #include "DRMiningComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
+#include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
@@ -42,13 +44,38 @@ void UDRMiningComponent::TryMine()
 		return;
 	}
 
-	if (!MineLocal(HitResult))
+	FVector RequestedMinePosition;
+	if (!GetMinePositionFromHit(HitResult, RequestedMinePosition))
 	{
 		return;
 	}
 
-	// 현재는 로컬 테스트용 채굴이므로 성공한 시점에 바로 쿨타임을 갱신한다.
-	LastMineTime = GetWorld()->GetTimeSeconds();
+	// 클라 preview에 표시한 중심점을 서버에 함께 보내 서버 확정 위치와 시각 피드백을 맞춘다.
+	FVector TraceStart;
+	FRotator TraceRotation;
+	GetTraceViewPoint(TraceStart, TraceRotation);
+
+	const FVector TraceEnd =
+		TraceStart + (TraceRotation.Vector() * MineTraceDistance);
+
+	bool bMineRequested = false;
+	if (OwnerCharacter->HasAuthority())
+	{
+		bMineRequested = HandleMineRequestOnServer(
+			TraceStart,
+			TraceEnd,
+			RequestedMinePosition);
+	}
+	else
+	{
+		Server_RequestMine(TraceStart, TraceEnd, RequestedMinePosition);
+		bMineRequested = true;
+	}
+
+	if (bMineRequested)
+	{
+		LastMineTime = GetWorld()->GetTimeSeconds();
+	}
 }
 
 void UDRMiningComponent::PreviewMineTarget()
@@ -64,7 +91,7 @@ void UDRMiningComponent::PreviewMineTarget()
 
 	if (!OwnerCharacter->IsLocallyControlled())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Mining] Preview blocked: not locally controlled"));
+		// UE_LOG(LogTemp, Warning, TEXT("[Mining] Preview blocked: not locally controlled"));
 		return;
 	}
 
@@ -89,12 +116,140 @@ void UDRMiningComponent::PreviewMineTarget()
 
 void UDRMiningComponent::Server_RequestMine_Implementation(
 	FVector_NetQuantize TraceStart,
-	FVector_NetQuantize TraceEnd)
+	FVector_NetQuantize TraceEnd,
+	FVector_NetQuantize RequestedMinePosition)
 {
-	// TODO: 서버 권한 채굴로 전환할 때 TraceStart/TraceEnd를 검증하고 Voxel 편집을 처리한다.
-	// 지금은 로컬 단독 동작 확인 단계라 요청 데이터만 명시적으로 소비한다.
-	(void)TraceStart;
-	(void)TraceEnd;
+	CacheOwnerCharacter();
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(OwnerCharacter.Get()))
+	{
+		return;
+	}
+
+	if (HandleMineRequestOnServer(TraceStart, TraceEnd, RequestedMinePosition))
+	{
+		LastMineTime = World->GetTimeSeconds();
+	}
+}
+
+bool UDRMiningComponent::HandleMineRequestOnServer(
+	const FVector_NetQuantize& TraceStart,
+	const FVector_NetQuantize& TraceEnd,
+	const FVector_NetQuantize& RequestedMinePosition)
+{
+	CacheOwnerCharacter();
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(OwnerCharacter.Get()))
+	{
+		return false;
+	}
+
+	AActor* RequestOwner = GetOwner();
+	if (!IsValid(RequestOwner))
+	{
+		return false;
+	}
+
+	if (IsMineOnCooldown())
+	{
+		return false;
+	}
+
+	if (FVector::Distance(TraceStart, TraceEnd) > MineTraceDistance + 50.f)
+	{
+		return false;
+	}
+
+	if (FVector::Distance(TraceStart, RequestedMinePosition) > MineTraceDistance + MineRadius + 50.f)
+	{
+		return false;
+	}
+
+	// 서버도 같은 trace를 수행해 요청이 실제 채굴 가능한 지형을 향했는지 검증한다.
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(ServerMineTrace), false);
+	QueryParams.bTraceComplex = true;
+	QueryParams.AddIgnoredActor(RequestOwner);
+
+	FHitResult HitResult;
+	bool bHit = false;
+
+	switch (TraceMode)
+	{
+	case EDRMiningTraceMode::LineTrace:
+		bHit = World->LineTraceSingleByChannel(
+			HitResult,
+			TraceStart,
+			TraceEnd,
+			ECC_Visibility,
+			QueryParams);
+		break;
+
+	case EDRMiningTraceMode::SphereSweep:
+		bHit = World->SweepSingleByChannel(
+			HitResult,
+			TraceStart,
+			TraceEnd,
+			FQuat::Identity,
+			ECC_Visibility,
+			FCollisionShape::MakeSphere(MineRadius),
+			QueryParams);
+		break;
+
+	default:
+		break;
+	}
+
+	if (!bHit)
+	{
+		return false;
+	}
+
+	AVoxelWorld* HitVoxelWorld = GetVoxelWorldFromHit(HitResult);
+	if (!IsValid(HitVoxelWorld))
+	{
+		return false;
+	}
+
+	FVector ServerMinePosition;
+	if (!GetMinePositionFromHit(HitResult, ServerMinePosition))
+	{
+		return false;
+	}
+
+	if (FVector::Distance(ServerMinePosition, RequestedMinePosition) > MineRadius + 50.f)
+	{
+		return false;
+	}
+
+	// 실제 지형 상태와 변경 이력의 원본은 TerrainSubsystem이 관리한다.
+	UDRVoxelTerrainSubsystem* TerrainSubsystem =
+		World->GetSubsystem<UDRVoxelTerrainSubsystem>();
+	if (!IsValid(TerrainSubsystem))
+	{
+		return false;
+	}
+
+	FDRTerrainDigOperation Operation;
+	if (!TerrainSubsystem->RequestDig(
+		HitVoxelWorld,
+		RequestedMinePosition,
+		MineRadius,
+		&Operation))
+	{
+		return false;
+	}
+
+	ADRMiningGameStateBase* MiningGameState =
+		World->GetGameState<ADRMiningGameStateBase>();
+	if (IsValid(MiningGameState))
+	{
+		// 기존 접속자에게 확정 이벤트를 전파한다. 중도난입자는 GameMode PostLogin에서 이력을 받는다.
+		MiningGameState->RegisterTerrainDig(Operation);
+	}
+
+	return true;
 }
 
 bool UDRMiningComponent::CanMine() const

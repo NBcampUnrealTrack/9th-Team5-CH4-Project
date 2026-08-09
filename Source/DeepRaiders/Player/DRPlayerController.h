@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
+#include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
@@ -78,10 +79,21 @@ protected:
 		BlueprintReadOnly,
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> MineAction;
-	
+
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> MeleeAttackAction;
+	
+#pragma region Terrain Dig
+public:
+	UFUNCTION(Client, Reliable)
+	void Client_ApplyTerrainDigHistory(
+		const TArray<FDRTerrainDigOperation>& DigHistory);
+
+private:
+	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
+#pragma endregion
+	
 };
