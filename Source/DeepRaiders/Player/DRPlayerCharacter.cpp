@@ -9,12 +9,14 @@
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 
-ADRPlayerCharacter::ADRPlayerCharacter()
+ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -110,12 +112,24 @@ void ADRPlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!HasAuthority() || !bIsJetpackActive)
+	/*
+	 * 제트팩 이동은 CharacterMovementComponent가
+	 * 소유 클라이언트와 서버에서 예측 처리한다.
+	 *
+	 * Character Tick은 서버의 연료 소비에만 사용한다.
+	 */
+	if (!HasAuthority() ||
+		!bIsJetpackActive)
 	{
 		return;
 	}
 
-	UpdateJetpack(DeltaSeconds);
+	UpdateJetpackFuel(DeltaSeconds);
+}
+
+UDRCharacterMovementComponent* ADRPlayerCharacter::GetDRCharacterMovementComponent() const
+{
+	return Cast<UDRCharacterMovementComponent>(GetCharacterMovement());
 }
 
 void ADRPlayerCharacter::Landed(const FHitResult& Hit)
@@ -134,6 +148,19 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 	Super::Landed(Hit);
 
+	if (IsLocallyControlled())
+	{
+		UDRCharacterMovementComponent* Movement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(Movement))
+		{
+			Movement->SetWantsJetpack(false);
+		}
+
+		RefreshJetpackActivePresentation();
+	}
+	
 	/*
 	 * 낙하 피해와 제트팩 연료는 서버에서만 처리한다.
 	 */
@@ -511,8 +538,36 @@ void ADRPlayerCharacter::OnRep_NetworkTestActive()
 	ApplyNetworkTestState();
 }
 
+void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
+{
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	RefreshJetpackActivePresentation();
+}
+
 void ADRPlayerCharacter::OnRep_JetpackActive()
 {
+	/*
+	 * 연료 소진, 착지, 사망 등 서버가 강제로 종료한 경우
+	 * 소유 클라이언트의 예측 상태도 정리한다.
+	 */
+	if (!bIsJetpackActive && IsLocallyControlled())
+	{
+		UDRCharacterMovementComponent* Movement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(Movement))
+		{
+			Movement->SetWantsJetpack(false);
+		}
+	}
+
 	RefreshJetpackActivePresentation();
 }
 
@@ -544,6 +599,7 @@ void ADRPlayerCharacter::ServerStartJetpack_Implementation()
 {
 	if (!CanStartJetpack())
 	{
+		ClientRejectJetpack();
 		return;
 	}
 
@@ -562,43 +618,67 @@ void ADRPlayerCharacter::StartJetpackFromServer()
 		return;
 	}
 
+	UDRCharacterMovementComponent* Movement = GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(true);
+	}
+
 	bIsJetpackActive = true;
 
-	// 서버에서 상승력과 연료를 처리한다.
+	// 서버에서는 연료 소비를 위해 Character Tick 사용
 	SetActorTickEnabled(true);
 
-	// 서버에서는 RepNotify가 자동 실행되지 않으므로 직접 반영
 	RefreshJetpackActivePresentation();
-
 	ForceNetUpdate();
 }
 
 void ADRPlayerCharacter::StopJetpackFromServer()
 {
-	if (!HasAuthority() || !bIsJetpackActive)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	bIsJetpackActive = false;
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
 
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	if (!bIsJetpackActive)
+	{
+		SetActorTickEnabled(false);
+		return;
+	}
+
+	bIsJetpackActive = false;
 	SetActorTickEnabled(false);
 
 	RefreshJetpackActivePresentation();
-
 	ForceNetUpdate();
 }
 
-void ADRPlayerCharacter::UpdateJetpack(
-	float DeltaSeconds)
+void ADRPlayerCharacter::UpdateJetpackFuel(float DeltaSeconds)
 {
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!HasAuthority())
+	{
+		return;
+	}
 
-	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
 
-	if (!IsValid(MovementComponent) ||
+	ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(Movement) ||
 		!IsValid(DRPlayerState) ||
-		!MovementComponent->IsFalling() ||
+		!Movement->IsFalling() ||
+		!Movement->WantsJetpack() ||
 		!DRPlayerState->HasJetpack())
 	{
 		StopJetpackFromServer();
@@ -610,40 +690,49 @@ void ADRPlayerCharacter::UpdateJetpack(
 	if (!DRPlayerState->ConsumeJetpackFuel(FuelCost))
 	{
 		StopJetpackFromServer();
+		ClientRejectJetpack();
 		return;
 	}
-
-	MovementComponent->Velocity.Z =
-		FMath::Min(
-			MovementComponent->Velocity.Z + JetpackAcceleration * DeltaSeconds,
-			MaxJetpackRiseSpeed);
 
 	if (DRPlayerState->GetJetpackFuel() <= KINDA_SMALL_NUMBER)
 	{
 		StopJetpackFromServer();
+		ClientRejectJetpack();
 	}
 }
 
 void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 {
+	const UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	const bool bPresentationActive =
+		IsLocallyControlled()
+			? IsValid(Movement) &&
+				Movement->WantsJetpack()
+			: bIsJetpackActive;
+
 	UE_LOG(
 		LogTemp,
 		Warning,
 		TEXT(
-			"[Jetpack] Character=%s Active=%d "
+			"[Jetpack] Character=%s "
+			"PresentationActive=%d "
+			"ServerActive=%d "
 			"Authority=%d Local=%d"),
 		*GetName(),
+		bPresentationActive,
 		bIsJetpackActive,
 		HasAuthority(),
 		IsLocallyControlled());
 
 	/*
-	 * 이후 추가할 항목:
+	 * 이후 bPresentationActive를 기준으로:
 	 *
-	 * 제트팩 불꽃 Niagara 활성화
+	 * Niagara 불꽃 활성화
 	 * 제트팩 사운드 재생
 	 * 카메라 흔들림
-	 * 캐릭터 애니메이션
+	 * 장비 흔들림
 	 */
 }
 
@@ -1488,6 +1577,30 @@ void ADRPlayerCharacter::HandleJumpPressed()
 	// 공중에서 다시 누르면 제트팩 요청
 	if (MovementComponent->IsFalling())
 	{
+		ADRPlayerState* DRPlayerState =
+			GetPlayerState<ADRPlayerState>();
+
+		if (!IsValid(DRPlayerState) ||
+			!DRPlayerState->HasJetpack() ||
+			DRPlayerState->GetJetpackFuel() <=
+				KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		/*
+		 * 서버 응답을 기다리지 않고 소유 클라이언트에서
+		 * CharacterMovement 예측을 즉시 시작한다.
+		 */
+		UDRCharacterMovementComponent* DRMovement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(DRMovement))
+		{
+			DRMovement->SetWantsJetpack(true);
+		}
+
+		RefreshJetpackActivePresentation();
 		ServerStartJetpack();
 	}
 }
@@ -1501,6 +1614,14 @@ void ADRPlayerCharacter::HandleJumpReleased()
 
 	StopJumping();
 
-	// 활성 여부와 관계없이 서버에 중지 요청해도 안전하다.
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	RefreshJetpackActivePresentation();
 	ServerStopJetpack();
 }
