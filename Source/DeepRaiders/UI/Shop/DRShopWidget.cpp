@@ -2,18 +2,13 @@
 
 #include "Components/Button.h"
 #include "Components/ScrollBox.h"
-#include "Components/TextBlock.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Shop/DRShopTestPlayerState.h"
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeShop(
-	const TArray<TObjectPtr<UDRItemDefinition>>& NewItemDefinitions,
-	ADRShopTestPlayerState* NewPlayerState)
+	const TArray<TObjectPtr<UDRItemDefinition>>& NewItemDefinitions)
 {
-	// 상점 목록과 코인 정보를 초기화합니다.
 	ItemDefinitions = NewItemDefinitions;
-	SetPlayerState(NewPlayerState);
 	SelectCategory(EItemCategory::Equipment);
 }
 
@@ -103,8 +98,6 @@ void UDRShopWidget::NativeOnInitialized()
 
 void UDRShopWidget::NativeDestruct()
 {
-	SetPlayerState(nullptr);
-
 	if (IsValid(CloseButton))
 	{
 		CloseButton->OnClicked.RemoveDynamic(
@@ -135,35 +128,6 @@ void UDRShopWidget::HandleEquipmentButtonClicked()
 void UDRShopWidget::HandleConsumableButtonClicked()
 {
 	SelectCategory(EItemCategory::Consumable);
-}
-
-void UDRShopWidget::SetPlayerState(ADRShopTestPlayerState* NewPlayerState)
-{
-	// 코인 변경 이벤트가 중복 등록되지 않도록 관리합니다.
-	if (IsValid(PlayerState))
-	{
-		PlayerState->OnCoinsChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
-	}
-
-	PlayerState = NewPlayerState;
-
-	if (IsValid(PlayerState))
-	{
-		PlayerState->OnCoinsChanged.AddUniqueDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
-		HandleCoinsChanged(PlayerState->GetCoins());
-	}
-}
-
-void UDRShopWidget::HandleCoinsChanged(int32 NewCoins)
-{
-	if (IsValid(CoinsText))
-	{
-		CoinsText->SetText(FText::AsNumber(NewCoins));
-	}
 }
 
 void UDRShopWidget::HandlePurchaseRequested(

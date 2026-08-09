@@ -5,7 +5,7 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
-class ADRShopTestPlayerState;
+class ADRPlayerState;
 class UDRInteractionComponent;
 class UDRItemDefinition;
 class UDRShopWidget;
@@ -52,5 +52,5 @@ private:
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<ADRShopTestPlayerState> TestPlayerState;
+	TObjectPtr<ADRPlayerState> PlayerState;
 };

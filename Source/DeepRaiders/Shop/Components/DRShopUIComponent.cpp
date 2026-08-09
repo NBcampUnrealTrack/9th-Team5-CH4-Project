@@ -2,7 +2,7 @@
 
 #include "DRInteractionComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Shop/DRShopTestPlayerState.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -86,8 +86,8 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		return;
 	}
 
-	TestPlayerState =
-		PlayerController->GetPlayerState<ADRShopTestPlayerState>();
+	PlayerState =
+		PlayerController->GetPlayerState<ADRPlayerState>();
 
 	ShopWidget = CreateWidget<UDRShopWidget>(
 		PlayerController,
@@ -95,8 +95,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 
 	if (IsValid(ShopWidget))
 	{
-		// 상점 목록과 로컬 플레이어의 코인 정보를 전달합니다.
-		ShopWidget->InitializeShop(ItemDefinitions, TestPlayerState);
+		ShopWidget->InitializeShop(ItemDefinitions);
 		// 위젯을 표시하고 입력을 UI로 전환합니다.
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,
@@ -141,7 +140,7 @@ void UDRShopUIComponent::HideShopWidget()
 		&ThisClass::HandlePurchaseRequested);
 	ShopWidget->RemoveFromParent();
 	ShopWidget = nullptr;
-	TestPlayerState = nullptr;
+	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -155,9 +154,9 @@ void UDRShopUIComponent::HideShopWidget()
 void UDRShopUIComponent::HandlePurchaseRequested(
 	UDRItemDefinition* ItemDefinition)
 {
-	if (IsValid(TestPlayerState))
+	if (IsValid(PlayerState))
 	{
 		// 로컬 UI의 구매 요청을 PlayerState의 서버 RPC로 전달합니다.
-		TestPlayerState->RequestPurchase(GetOwner(), ItemDefinition);
+		PlayerState->RequestPurchase(GetOwner(), ItemDefinition);
 	}
 }

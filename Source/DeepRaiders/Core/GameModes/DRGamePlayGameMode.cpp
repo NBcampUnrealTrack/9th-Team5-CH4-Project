@@ -2,12 +2,12 @@
 
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/DeepRaiders.h"
-#include "DeepRaiders/Shop/DRShopTestPlayerState.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 ADRGamePlayGameMode::ADRGamePlayGameMode()
 {
 	DefaultPawnClass = nullptr;
-	PlayerStateClass = ADRShopTestPlayerState::StaticClass();
+	PlayerStateClass = ADRPlayerState::StaticClass();
 	HostOrJoinWidgetInstance = nullptr;
 }
 

@@ -5,6 +5,12 @@
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
+class UDRItemDefinition;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRCoinsChangedSignature,
+	int32,
+	NewCoins);
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerState : public APlayerState
@@ -56,6 +62,19 @@ public:
 	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
 	bool RefillJetpackFuel();
 
+	UFUNCTION(BlueprintPure, Category = "Player|Coin")
+	int32 GetCoins() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
+	void SetCoins(int32 NewCoins);
+
+	void RequestPurchase(
+		AActor* ShopActor,
+		UDRItemDefinition* ItemDefinition);
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
+	FDRCoinsChangedSignature OnCoinsChanged;
+
 protected:
 	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
 	UPROPERTY(
@@ -85,6 +104,21 @@ protected:
 
 	UFUNCTION()
 	void OnRep_JetpackFuel();
+
+	UFUNCTION()
+	void OnRep_Coins(int32 PreviousCoins);
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerPurchase(
+		AActor* ShopActor,
+		UDRItemDefinition* ItemDefinition);
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		ReplicatedUsing = OnRep_Coins,
+		Category = "Player|Coin",
+		meta = (ClampMin = "0"))
+	int32 Coins = 1000;
 
 private:
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */

@@ -1,6 +1,8 @@
 #include "DRPlayerState.h"
 
 #include "DRPlayerCharacter.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 #include "Net/UnrealNetwork.h"
 
 void ADRPlayerState::GetLifetimeReplicatedProps(
@@ -18,6 +20,8 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 		ADRPlayerState,
 		CurrentJetpackFuel,
 		COND_OwnerOnly);
+
+	DOREPLIFETIME(ADRPlayerState, Coins);
 }
 
 void ADRPlayerState::GrantJetpack()
@@ -79,6 +83,92 @@ bool ADRPlayerState::RefillJetpackFuel()
 	ForceNetUpdate();
 
 	return true;
+}
+
+int32 ADRPlayerState::GetCoins() const
+{
+	return Coins;
+}
+
+void ADRPlayerState::SetCoins(int32 NewCoins)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const int32 PreviousCoins = Coins;
+	const int32 ClampedCoins = FMath::Max(0, NewCoins);
+
+	if (PreviousCoins == ClampedCoins)
+	{
+		return;
+	}
+
+	Coins = ClampedCoins;
+	OnRep_Coins(PreviousCoins);
+	ForceNetUpdate();
+}
+
+void ADRPlayerState::RequestPurchase(
+	AActor* ShopActor,
+	UDRItemDefinition* ItemDefinition)
+{
+	if (IsValid(ShopActor) && IsValid(ItemDefinition))
+	{
+		ServerPurchase(ShopActor, ItemDefinition);
+	}
+}
+
+void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
+{
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Coins changed: Previous=%d New=%d"),
+		PreviousCoins,
+		Coins);
+
+	OnCoinsChanged.Broadcast(Coins);
+}
+
+bool ADRPlayerState::ServerPurchase_Validate(
+	AActor* ShopActor,
+	UDRItemDefinition* ItemDefinition)
+{
+	if (!IsValid(ShopActor) || !IsValid(ItemDefinition))
+	{
+		return false;
+	}
+
+	const UDRShopUIComponent* ShopUIComponent =
+		ShopActor->FindComponentByClass<UDRShopUIComponent>();
+
+	return IsValid(ShopUIComponent)
+		&& ShopUIComponent->IsItemAvailable(ItemDefinition);
+}
+
+void ADRPlayerState::ServerPurchase_Implementation(
+	AActor* ShopActor,
+	UDRItemDefinition* ItemDefinition)
+{
+	if (!IsValid(ShopActor) || !IsValid(ItemDefinition)
+		|| ItemDefinition->Price <= 0)
+	{
+		return;
+	}
+
+	const UDRShopUIComponent* ShopUIComponent =
+		ShopActor->FindComponentByClass<UDRShopUIComponent>();
+
+	if (!IsValid(ShopUIComponent)
+		|| !ShopUIComponent->CanPurchase(GetPawn(), ItemDefinition)
+		|| Coins < ItemDefinition->Price)
+	{
+		return;
+	}
+
+	SetCoins(Coins - ItemDefinition->Price);
 }
 
 void ADRPlayerState::OnRep_HasJetpack()
