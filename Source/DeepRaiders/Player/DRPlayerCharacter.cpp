@@ -504,10 +504,14 @@ void ADRPlayerCharacter::RefreshHeldItemVisual()
 	}
 	
 	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
-	FTransform VisualOffset = HeldItemDefinition->OffsetTransform;
+	FTransform FirstPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform 
+		* HeldItemDefinition->FirstPersonVisualOffsetTransform;
 	
-	ApplyHandEquipmentVisual(VisualMesh, VisualMesh, VisualOffset, VisualOffset);
+	// 당장은 특별한 처리 없이 기본 크기 적용.
+	FTransform ThirdPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform;
 	
+	ApplyHandEquipmentVisual(VisualMesh, VisualMesh
+		, FirstPersonVisualTransform, ThirdPersonVisualTransform);	
 }
 
 void ADRPlayerCharacter::OnRep_CurrentHealth()

@@ -40,7 +40,7 @@ ADROrePoolActor* UDROrePoolSubsystem::AcquireOre(UDRItemDefinition* ItemDefiniti
         return CreateOre(ItemDefinition, OreActorClass, SpawnTransform, SpawnPointId);
     }
 
-    const FTransform FinalTransform = ItemDefinition->OffsetTransform * SpawnTransform;
+    const FTransform FinalTransform = ItemDefinition->SpawnOffsetTransform * SpawnTransform;
     OreActor->ActivateFromPool(FinalTransform, SpawnPointId);
     return OreActor;
 }
@@ -73,7 +73,7 @@ ADROrePoolActor* UDROrePoolSubsystem::CreateOre(UDRItemDefinition* ItemDefinitio
     const FTransform& SpawnTransform, int32 SpawnPointId)
 {
     UWorld* World = GetWorld();
-    const FTransform FinalTransform = ItemDefinition->OffsetTransform * SpawnTransform;
+    const FTransform FinalTransform = ItemDefinition->SpawnOffsetTransform * SpawnTransform;
 
     ADROrePoolActor* OreActor = World->SpawnActorDeferred<ADROrePoolActor>(
         OreActorClass, FinalTransform, nullptr, nullptr,

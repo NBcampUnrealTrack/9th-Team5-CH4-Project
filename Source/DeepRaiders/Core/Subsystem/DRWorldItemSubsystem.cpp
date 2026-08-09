@@ -69,7 +69,7 @@ ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItem(const FDRItemInstance& 
 	
 	// ItemDefinition에 작성된 OffsetTransform 적용
 	const UDRItemDefinition* Definition = ItemInstance.Definition;
-	const FTransform FinalSpawnTransform = Definition->OffsetTransform * BaseSpawnTransform;
+	const FTransform FinalSpawnTransform = Definition->SpawnOffsetTransform * BaseSpawnTransform;
 	
 	// 충돌에도 항상 생성하도록 설정
 	// 추후 플러그인 추가되면 생성 방식 조정 필요할 수 있음
