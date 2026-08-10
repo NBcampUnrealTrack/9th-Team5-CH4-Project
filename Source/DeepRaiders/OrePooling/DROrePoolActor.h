@@ -59,6 +59,9 @@ protected:
     UFUNCTION()
     void OnRep_PoolState();
 
+    virtual bool IsPickupAvailable() const override;
+    virtual bool FinalizePickup() override;
+
     UFUNCTION(BlueprintImplementableEvent, Category = "Ore Pool")
     void OnActivatedFromPool();
 

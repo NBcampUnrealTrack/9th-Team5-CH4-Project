@@ -309,3 +309,20 @@ bool ADRPlayerController::ApplyTerrainDigOnce(
     return TerrainSubsystem->ApplyOrQueueDig(Operation);
 }
 #pragma endregion
+
+bool ADRPlayerController::CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const
+{
+    return HasAuthority() && IsValid(QuickSlotInventoryComponent) &&
+        QuickSlotInventoryComponent->CanAddItem(Definition, Quantity);
+}
+
+bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity)
+{
+    if (!CanReceiveItem(Definition, Quantity) ||
+        !QuickSlotInventoryComponent->TryAddItem(Definition, Quantity))
+    {
+        return false;
+    }
+
+    return true;
+}

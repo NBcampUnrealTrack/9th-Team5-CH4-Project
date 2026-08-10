@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRItemDefinition;
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController
@@ -107,6 +108,8 @@ private:
 public:
 	UDRInventoryComponent* GetQuickSlotInventoryComponent() { return QuickSlotInventoryComponent;}
 	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
+	bool CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const;
+	bool TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity);
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
