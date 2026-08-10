@@ -13,7 +13,6 @@ class UDRInventoryComponent;
 class UDRQuickSlotComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
-class UDRItemDefinition;
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController
@@ -41,12 +40,13 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-	void HandleMeleeAttack(const FInputActionValue&);
+	void HandlePrimaryAction(const FInputActionValue& value);
+	void HandleSecondaryAction(const FInputActionValue& Value);
 
 	// 임시 네트워크 검증 입력
 	void HandleNetworkTest(const FInputActionValue& Value);
-
-	void HandleMine(const FInputActionValue& Value);
+	
+	void InitializeStartingQuickSlot();
 	
 protected:
 	UPROPERTY(
@@ -89,13 +89,13 @@ protected:
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "Player|Input")
-	TObjectPtr<UInputAction> MineAction;
+	TObjectPtr<UInputAction> PrimaryAction;
 
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "Player|Input")
-	TObjectPtr<UInputAction> MeleeAttackAction;
+	TObjectPtr<UInputAction> SecondaryAction;
 	
 #pragma region Terrain Dig
 public:
@@ -118,6 +118,13 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
 	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
+	
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
+#pragma endregion 
 
 #pragma endregion
 

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "InputActionValue.h"
+#include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -122,6 +122,18 @@ public:
     {
         return CurrentHealth <= KINDA_SMALL_NUMBER;
     }
+    
+    /** 현재 장착 아이템의 Primary Action을 요청한다. */
+    void RequestPrimaryItemAction();
+
+    /** 현재 장착 아이템의 Secondary Action을 요청한다. */
+    void RequestSecondaryItemAction();
+
+    /**
+     * 현재 장착 아이템에 해당 Action이 할당되어 있는지 확인한다.
+     * 클라이언트 UX 검사와 서버 권한 검증 양쪽에서 사용한다.
+     */
+    bool HasHeldItemAction(EDRItemActionType ActionType) const;
     
 protected:
     virtual void BeginPlay() override;
@@ -246,6 +258,8 @@ private:
     bool bDeathRagdollApplied = false;
 
     FTimerHandle RespawnTimerHandle;
+    
+    void ExecuteHeldItemAction(EDRItemActionType ActionType);
     
 protected:
     UPROPERTY(
