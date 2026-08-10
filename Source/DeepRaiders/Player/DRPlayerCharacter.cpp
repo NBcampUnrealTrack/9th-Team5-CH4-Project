@@ -120,21 +120,164 @@ void ADRPlayerCharacter::Tick(float DeltaSeconds)
 
 void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 {
+	/*
+	 * 착지 처리 이후에는 CharacterMovement의 수직 속도가
+	 * 바뀔 수 있으므로 Super 호출 전에 저장한다.
+	 *
+	 * 하강 속도는 음수이므로 부호를 반대로 바꿔
+	 * 양수 형태의 LandingSpeed로 사용한다.
+	 */
+	const float LandingSpeed =
+		FMath::Max(
+			0.f,
+			-GetVelocity().Z);
+
 	Super::Landed(Hit);
 
-	if (HasAuthority())
+	/*
+	 * 낙하 피해와 제트팩 연료는 서버에서만 처리한다.
+	 */
+	if (!HasAuthority())
 	{
-		StopJetpackFromServer();
+		return;
 	}
 
-	ADRPlayerState* DRPlayerState =
-		GetPlayerState<ADRPlayerState>();
+	StopJetpackFromServer();
+
+	ApplyFallDamage(LandingSpeed);
+
+	/*
+	 * 낙하 피해로 사망했다면
+	 * 사망 처리 중인 Pawn의 연료를 충전하지 않는다.
+	 */
+	if (IsDead())
+	{
+		return;
+	}
+
+	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 
 	if (IsValid(DRPlayerState))
 	{
 		DRPlayerState->RefillJetpackFuel();
 	}
 }
+
+float ADRPlayerCharacter::CalculateFallDamage(float LandingSpeed) const
+{
+	if (LandingSpeed <= MinFallDamageSpeed ||
+		MaxHealth <= 0.f)
+	{
+		return 0.f;
+	}
+
+	/*
+	 * 잘못된 설정으로 0 나누기가 발생하지 않도록 방지한다.
+	 */
+	if (MaxFallDamageSpeed <= MinFallDamageSpeed + KINDA_SMALL_NUMBER)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[FallDamage] Invalid speed range. "
+				"Character=%s MinSpeed=%.1f MaxSpeed=%.1f"),
+			*GetName(),
+			MinFallDamageSpeed,
+			MaxFallDamageSpeed);
+
+		return 0.f;
+	}
+
+	/*
+	 * MinFallDamageSpeed부터 MaxFallDamageSpeed까지를
+	 * 0~1 범위로 정규화한다.
+	 */
+	const float NormalizedSpeed =
+		FMath::Clamp(
+			(LandingSpeed - MinFallDamageSpeed) / (MaxFallDamageSpeed - MinFallDamageSpeed),
+			0.f,
+			1.f);
+
+	/*
+	 * 기본값이 2이므로 제곱 곡선이 적용된다.
+	 *
+	 * 0.25 -> 0.0625
+	 * 0.50 -> 0.25
+	 * 0.75 -> 0.5625
+	 * 1.00 -> 1.0
+	 */
+	const float DamageAlpha =
+		FMath::Pow(
+			NormalizedSpeed,
+			FMath::Max(FallDamageExponent,0.01f));
+
+	const float MaximumFallDamage =
+		MaxHealth *
+		FMath::Clamp(MaxFallDamageRatio, 0.f, 1.f);
+
+	return MaximumFallDamage * DamageAlpha;
+}
+
+void ADRPlayerCharacter::ApplyFallDamage(
+	float LandingSpeed)
+{
+	if (!HasAuthority() || IsDead())
+	{
+		return;
+	}
+
+	const float CalculatedDamage = CalculateFallDamage(LandingSpeed);
+
+	/*
+	 * 테스트 중 모든 착지 속도를 확인할 수 있도록
+	 * 피해 여부와 관계없이 로그를 남긴다.
+	 */
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT(
+			"[FallDamage] Character=%s "
+			"LandingSpeed=%.1f "
+			"CalculatedDamage=%.1f"),
+		*GetName(),
+		LandingSpeed,
+		CalculatedDamage);
+
+	if (CalculatedDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float HealthBeforeDamage = CurrentHealth;
+
+	/*
+	 * 기존 공격 피해와 동일한 TakeDamage 경로를 사용한다.
+	 * 실제 체력 감소와 사망 판정은 TakeDamage가 담당한다.
+	 */
+	const float AppliedDamage =
+		UGameplayStatics::ApplyDamage(
+			this,
+			CalculatedDamage,
+			GetController(),
+			this,
+			UDamageType::StaticClass());
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[FallDamage] Applied Character=%s "
+			"LandingSpeed=%.1f "
+			"Damage=%.1f "
+			"Health=%.1f->%.1f"),
+		*GetName(),
+		LandingSpeed,
+		AppliedDamage,
+		HealthBeforeDamage,
+		CurrentHealth);
+}
+
 void ADRPlayerCharacter::RequestMine()
 {
 	if (IsDead())
