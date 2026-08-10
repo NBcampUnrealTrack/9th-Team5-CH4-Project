@@ -2,14 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
-#include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DROrePoolActor.generated.h"
 
 class FLifetimeProperty;
 
 // 서버에서 풀링되며 활성 상태가 복제된다.
 UCLASS(Blueprintable)
-class DEEPRAIDERS_API ADROrePoolActor : public ADRWorldItemActor, public IDRInteractableInterface
+class DEEPRAIDERS_API ADROrePoolActor : public ADRWorldItemActor
 {
     GENERATED_BODY()
 
@@ -49,13 +48,9 @@ private:
     int32 SpawnPointId = INDEX_NONE;
 
     void ApplyPoolState();
+
+protected:
+    virtual bool IsPickupAvailable() const override;
+    virtual bool FinalizePickup() override;
     
-#pragma region Interactable
-public:
-    bool CanInteract_Implementation(APawn* Interactor) const override;
-    bool Interact_Implementation(APawn* Interactor) override;
-   
-private:
-    uint8 bInteractionInProgress:1 = false;
-#pragma endregion
 };

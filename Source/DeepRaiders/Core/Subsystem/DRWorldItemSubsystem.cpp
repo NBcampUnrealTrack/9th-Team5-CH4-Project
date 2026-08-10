@@ -78,7 +78,7 @@ ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItem(const FDRItemInstance& 
 	}
 
 	// 충돌에도 항상 생성하도록 설정
-	ADRWorldItemActor* ItemActor = World->SpawnActorDeferred<ADRWorldItemActor>(ADRWorldItemActor::StaticClass(),
+	ADRWorldItemActor* ItemActor = World->SpawnActorDeferred<ADRWorldItemActor>(SpawnActorClass,
 	FinalSpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	
 	if (!ItemActor)

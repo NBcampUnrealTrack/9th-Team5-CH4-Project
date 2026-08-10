@@ -35,7 +35,9 @@ void ADROrePoolActor::ActivateFromPool(const FTransform& SpawnTransform,
     {
         return;
     }
-
+    
+    ResetInteractionState();
+    
     // 재사용 전 Dormancy를 깨워 변경값을 복제한다.
     SetNetDormancy(DORM_Awake);
     SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
@@ -99,38 +101,22 @@ void ADROrePoolActor::ApplyPoolState()
     }
 }
 
-bool ADROrePoolActor::CanInteract_Implementation(APawn* Interactor) const
+bool ADROrePoolActor::IsPickupAvailable() const
 {
-    const ADRPlayerController* Controller = IsValid(Interactor) ? Cast<ADRPlayerController>(Interactor->GetController()) : nullptr;
+    const UWorld* World = GetWorld();
     
-    return HasAuthority() && bPoolActive && !bInteractionInProgress &&  ItemInstance.IsValid()
-        && IsValid(Controller) && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
+    return bPoolActive && IsValid(World) && IsValid(World->GetSubsystem<UDROrePoolSubsystem>());
 }
 
-bool ADROrePoolActor::Interact_Implementation(APawn* Interactor)
+bool ADROrePoolActor::FinalizePickup()
 {
-    if (!CanInteract_Implementation(Interactor))
-    {
-        return false;
-    }
-    
-    ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
-    bInteractionInProgress = true;
-    
-    if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
-    {
-        bInteractionInProgress = false;
-        return false;
-    }
-    
-    // 광석은 반드시 OrePoolSubsystem을 통해서 반환
     UDROrePoolSubsystem* Pool = GetWorld()->GetSubsystem<UDROrePoolSubsystem>();
     
-    if (IsValid(Pool))
+    if (!IsValid(Pool))
     {
-        Pool->ReleaseOre(this);
-        return !IsPoolActive();
+        return false;
     }
-        
-    return false;
+    
+    Pool->ReleaseOre(this);
+    return !IsPoolActive();
 }
