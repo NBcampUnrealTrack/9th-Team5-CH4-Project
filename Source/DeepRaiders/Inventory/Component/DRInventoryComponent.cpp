@@ -174,6 +174,42 @@ bool UDRInventoryComponent::TryRemoveItemByDefinition(UDRItemDefinition* Definit
 	return true;
 }
 
+bool UDRInventoryComponent::TryRemoveEntries(const TArray<FGuid>& EntryIds)
+{
+	if (!HasInventoryAuthority()
+		|| EntryIds.IsEmpty())
+	{
+		return false;
+	}
+
+	TSet<FGuid> UniqueEntryIds;
+
+	for (const FGuid& EntryId : EntryIds)
+	{
+		if (!EntryId.IsValid()
+			|| UniqueEntryIds.Contains(EntryId)
+			|| !Entries.ContainsByPredicate(
+				[&EntryId](const FDRInventoryEntry& Entry)
+				{
+					return Entry.EntryId == EntryId;
+				}))
+		{
+			return false;
+		}
+
+		UniqueEntryIds.Add(EntryId);
+	}
+
+	Entries.RemoveAll(
+		[&UniqueEntryIds](const FDRInventoryEntry& Entry)
+		{
+			return UniqueEntryIds.Contains(Entry.EntryId);
+		});
+
+	HandleInventoryChangedOnServer();
+	return true;
+}
+
 bool UDRInventoryComponent::FindEntry(FGuid EntryId, FDRInventoryEntry& OutEntry) const
 {
 	UE_LOG(LogTemp, Log, TEXT("[%s] FindEntry Start"), *GetName());

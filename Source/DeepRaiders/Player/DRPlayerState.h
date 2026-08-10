@@ -5,6 +5,13 @@
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
+class UDRInventoryComponent;
+class UDRItemDefinition;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRCoinsChangedSignature,
+	int32,
+	NewCoins);
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerState : public APlayerState
@@ -56,6 +63,23 @@ public:
 	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
 	bool RefillJetpackFuel();
 
+	UFUNCTION(BlueprintPure, Category = "Player|Coin")
+	int32 GetCoins() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
+	void SetCoins(int32 NewCoins);
+
+	/** 로컬 구매 요청을 서버 거래 처리로 전달한다. */
+	void RequestPurchase(
+		AActor* ShopActor,
+		UDRItemDefinition* ItemDefinition);
+
+	/** 로컬 전체 판매 요청을 서버 거래 처리로 전달한다. */
+	void RequestSellAllOres(AActor* ShopActor);
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
+	FDRCoinsChangedSignature OnCoinsChanged;
+
 protected:
 	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
 	UPROPERTY(
@@ -86,7 +110,36 @@ protected:
 	UFUNCTION()
 	void OnRep_JetpackFuel();
 
+	UFUNCTION()
+	void OnRep_Coins(int32 PreviousCoins);
+
+	/** 구매 요청 값이 실제 상점 상품인지 검증한다. */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerPurchase(
+		AActor* ShopActor,
+		UDRItemDefinition* ItemDefinition);
+
+	/** 판매 가능한 광석을 일괄 제거하고 판매 금액을 지급한다. */
+	UFUNCTION(Server, Reliable)
+	void ServerSellAllOres(AActor* ShopActor);
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		ReplicatedUsing = OnRep_Coins,
+		Category = "Player|Coin",
+		meta = (ClampMin = "0"))
+	int32 Coins = 1000;
+
 private:
+	/** 소유 PlayerController의 인벤토리를 반환한다. */
+	UDRInventoryComponent* GetInventoryComponent() const;
+
+	/** 판매 가능한 광석 엔트리와 총수량을 수집하고 총금액을 반환한다. */
+	int64 CollectSellableOreEntries(
+		const UDRInventoryComponent* Inventory,
+		TArray<FGuid>& OutEntryIds,
+		int32& OutTotalQuantity) const;
+
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
 };

@@ -1,12 +1,29 @@
 #include "DRShopWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRShopItemWidget.h"
 
-void UDRShopWidget::InitializeItems(
-	const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions)
+void UDRShopWidget::InitializeShop(
+	const TArray<TObjectPtr<UDRItemDefinition>>& NewItemDefinitions)
+{
+	ItemDefinitions = NewItemDefinitions;
+	SelectCategory(EItemCategory::Equipment);
+}
+
+void UDRShopWidget::SelectCategory(EItemCategory Category)
+{
+	// 비활성화 버튼 스타일로 현재 선택된 탭을 표시합니다.
+	EquipmentButton->SetIsEnabled(Category != EItemCategory::Equipment);
+	ConsumableButton->SetIsEnabled(Category != EItemCategory::Consumable);
+	RefreshItems(Category);
+}
+
+void UDRShopWidget::RefreshItems(EItemCategory Category)
 {
 	if (!ItemWidgetClass)
 	{
@@ -24,12 +41,14 @@ void UDRShopWidget::InitializeItems(
 		return;
 	}
 
+	// 선택한 카테고리에 해당하는 아이템 위젯만 다시 생성합니다.
 	ItemScrollBox->ClearChildren();
 	int32 CreatedItemCount = 0;
 
 	for (UDRItemDefinition* ItemDefinition : ItemDefinitions)
 	{
-		if (!IsValid(ItemDefinition))
+		if (!IsValid(ItemDefinition)
+			|| ItemDefinition->Category != Category)
 		{
 			continue;
 		}
@@ -48,26 +67,70 @@ void UDRShopWidget::InitializeItems(
 		}
 
 		ItemWidget->SetItemDefinition(ItemDefinition);
+		ItemWidget->OnPurchaseRequested.AddDynamic(
+			this,
+			&ThisClass::HandlePurchaseRequested);
 		ItemScrollBox->AddChild(ItemWidget);
 		++CreatedItemCount;
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("Shop items created successfully: %d/%d items."),
-		CreatedItemCount,
-		ItemDefinitions.Num());
+		TEXT("Shop category items created successfully: %d items."),
+		CreatedItemCount);
 }
 
 void UDRShopWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	InitializeSellAllOresButton();
 
+	// 위젯 수명 동안 한 번만 버튼 이벤트를 연결합니다.
 	if (IsValid(CloseButton))
 	{
 		CloseButton->OnClicked.AddDynamic(
 			this,
 			&ThisClass::HandleCloseButtonClicked);
 	}
+
+	EquipmentButton->OnClicked.AddDynamic(
+		this,
+		&ThisClass::HandleEquipmentButtonClicked);
+	ConsumableButton->OnClicked.AddDynamic(
+		this,
+		&ThisClass::HandleConsumableButtonClicked);
+
+	if (IsValid(SellAllOresButton))
+	{
+		SellAllOresButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleSellAllOresButtonClicked);
+	}
+}
+
+void UDRShopWidget::InitializeSellAllOresButton()
+{
+	if (IsValid(SellAllOresButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(WidgetTree))
+	{
+		return;
+	}
+
+	UPanelWidget* ButtonContainer =
+		Cast<UPanelWidget>(ConsumableButton->GetParent());
+
+	if (!IsValid(ButtonContainer))
+	{
+		return;
+	}
+
+	SellAllOresButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(),
+		TEXT("SellAllOresButton"));
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>();
+	ButtonText->SetText(FText::FromString(TEXT("광석 전체 판매")));
+	SellAllOresButton->SetContent(ButtonText);
+	ButtonContainer->AddChild(SellAllOresButton);
 }
 
 void UDRShopWidget::NativeDestruct()
@@ -79,10 +142,45 @@ void UDRShopWidget::NativeDestruct()
 			&ThisClass::HandleCloseButtonClicked);
 	}
 
+	EquipmentButton->OnClicked.RemoveDynamic(
+		this,
+		&ThisClass::HandleEquipmentButtonClicked);
+	ConsumableButton->OnClicked.RemoveDynamic(
+		this,
+		&ThisClass::HandleConsumableButtonClicked);
+
+	if (IsValid(SellAllOresButton))
+	{
+		SellAllOresButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleSellAllOresButtonClicked);
+	}
+
 	Super::NativeDestruct();
 }
 
 void UDRShopWidget::HandleCloseButtonClicked()
 {
 	OnCloseRequested.Broadcast();
+}
+
+void UDRShopWidget::HandleEquipmentButtonClicked()
+{
+	SelectCategory(EItemCategory::Equipment);
+}
+
+void UDRShopWidget::HandleConsumableButtonClicked()
+{
+	SelectCategory(EItemCategory::Consumable);
+}
+
+void UDRShopWidget::HandleSellAllOresButtonClicked()
+{
+	OnSellAllOresRequested.Broadcast();
+}
+
+void UDRShopWidget::HandlePurchaseRequested(
+	UDRItemDefinition* ItemDefinition)
+{
+	OnPurchaseRequested.Broadcast(ItemDefinition);
 }
