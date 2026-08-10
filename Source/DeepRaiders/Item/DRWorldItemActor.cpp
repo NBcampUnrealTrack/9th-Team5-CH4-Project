@@ -5,7 +5,8 @@
 #include "DRItemInstance.h"
 #include "DRItemDefinition.h"
 #include "Net/UnrealNetwork.h"
-
+#include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -89,6 +90,35 @@ bool ADRWorldItemActor::SetInitialItemInstance(FDRItemInstance InItemInstance)
 	return true;
 }
 
+void ADRWorldItemActor::ApplyDropImpulse(const FVector& Impulse)
+{
+	if (!HasAuthority()
+		|| !IsValid(StaticMeshComponent)
+		|| !StaticMeshComponent->IsSimulatingPhysics())
+	{
+		return;
+	}
+	
+	StaticMeshComponent->WakeAllRigidBodies();
+	StaticMeshComponent->AddImpulse(Impulse, NAME_None, true);
+}
+
+bool ADRWorldItemActor::IsPickupAvailable() const
+{
+	// 기본적으로 모든 WorldItemActor는 인벤토리에 넣을 수 있다.
+	return true;
+}
+
+bool ADRWorldItemActor::FinalizePickup()
+{
+	return Destroy();
+}
+
+void ADRWorldItemActor::ResetInteractionState()
+{
+	bInteractionInProgress = false;
+}
+
 void ADRWorldItemActor::OnRep_ItemInstance()
 {
 	RefreshItemPresentation();
@@ -122,3 +152,41 @@ void ADRWorldItemActor::RefreshItemPresentation()
 	
 	SetActorHiddenInGame(false);	
 }
+
+#pragma region Interactable
+bool ADRWorldItemActor::CanInteract_Implementation(APawn* Interactor) const
+{
+	const ADRPlayerController* Controller = IsValid(Interactor) ? Cast<ADRPlayerController>(Interactor->GetController()) : nullptr;
+	
+	return HasAuthority() && !bInteractionInProgress &&  ItemInstance.IsValid()
+		&& IsValid(Controller) && IsPickupAvailable() && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
+}
+
+bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
+{
+	if (!CanInteract_Implementation(Interactor))
+	{
+		return false;
+	}
+	
+	ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
+	
+	bInteractionInProgress = true;
+	if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
+	{
+		bInteractionInProgress = false;
+		return false;
+	}
+	
+	if (!FinalizePickup())
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] Failed to finalize pickup."), *GetName());
+		
+		// 이미 인벤토리에 추가되었기 때문에 상호작용은 그대로 불가능
+		return false;
+	}
+	
+	return true;
+}
+#pragma endregion
+

@@ -48,4 +48,9 @@ private:
     int32 SpawnPointId = INDEX_NONE;
 
     void ApplyPoolState();
+
+protected:
+    virtual bool IsPickupAvailable() const override;
+    virtual bool FinalizePickup() override;
+    
 };
