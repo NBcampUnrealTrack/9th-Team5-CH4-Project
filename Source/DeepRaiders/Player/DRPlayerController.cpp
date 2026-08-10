@@ -6,6 +6,16 @@
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "Components/DRQuickSlotComponent.h"
+
+ADRPlayerController::ADRPlayerController()
+{
+    // QuickSlot Initialize
+    QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
+    QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
+}
+
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
@@ -134,6 +144,17 @@ void ADRPlayerController::SetupInputComponent()
     }
 }
 
+void ADRPlayerController::OnPossess(APawn* InPawn)
+{
+    Super::OnPossess(InPawn);
+    
+    if (QuickSlotComponent)
+    {
+        // Possess 되는 시점에 외형 초기화
+        QuickSlotComponent->ApplySelectedItemToCharacter();        
+    }
+}
+
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
 {
     return Cast<ADRPlayerCharacter>(GetPawn());
@@ -242,12 +263,8 @@ void ADRPlayerController::HandleSelectQuickSlot(
             "InputNumber=%d SlotIndex=%d"),
         InputSlotNumber,
         SlotIndex);
-
-    /*
-     * QuickSlotComponent가 머지되면 여기서 호출
-     *
-     * QuickSlotComponent->RequestSelectSlot(SlotIndex);
-     */
+    
+    QuickSlotComponent->RequestSelectSlot(SlotIndex);
 }
 
 void ADRPlayerController::HandleMeleeAttack(
