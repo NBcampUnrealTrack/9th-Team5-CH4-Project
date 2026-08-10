@@ -1,6 +1,9 @@
 #include "DROrePoolActor.h"
 
+#include "DROreFieldActor.h"
+#include "DROrePoolSubsystem.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "Net/UnrealNetwork.h"
 
 ADROrePoolActor::ADROrePoolActor()
@@ -32,7 +35,9 @@ void ADROrePoolActor::ActivateFromPool(const FTransform& SpawnTransform,
     {
         return;
     }
-
+    
+    ResetInteractionState();
+    
     // 재사용 전 Dormancy를 깨워 변경값을 복제한다.
     SetNetDormancy(DORM_Awake);
     SetActorTransform(SpawnTransform, false, nullptr, ETeleportType::TeleportPhysics);
@@ -46,6 +51,8 @@ void ADROrePoolActor::ActivateFromPool(const FTransform& SpawnTransform,
         ApplyPoolState();
         ForceNetUpdate();
     }
+    
+    bInteractionInProgress = false;
 }
 
 void ADROrePoolActor::DeactivateToPool()
@@ -92,4 +99,24 @@ void ADROrePoolActor::ApplyPoolState()
     {
         OnDeactivatedToPool();
     }
+}
+
+bool ADROrePoolActor::IsPickupAvailable() const
+{
+    const UWorld* World = GetWorld();
+    
+    return bPoolActive && IsValid(World) && IsValid(World->GetSubsystem<UDROrePoolSubsystem>());
+}
+
+bool ADROrePoolActor::FinalizePickup()
+{
+    UDROrePoolSubsystem* Pool = GetWorld()->GetSubsystem<UDROrePoolSubsystem>();
+    
+    if (!IsValid(Pool))
+    {
+        return false;
+    }
+    
+    Pool->ReleaseOre(this);
+    return !IsPoolActive();
 }

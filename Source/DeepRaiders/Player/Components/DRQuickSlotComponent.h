@@ -48,6 +48,10 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 public:
+	// 서버에서 빈 퀵슬롯에 아이템 등록 시도
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
+	bool TryBindFirstEmptySlot(UDRItemDefinition* Definition);
+	
 	// 로컬 플레이어가 특정 슬롯에 아이템 바인딩 요청
 	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
