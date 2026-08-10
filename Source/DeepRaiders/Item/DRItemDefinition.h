@@ -49,6 +49,9 @@ public:
 	TObjectPtr<UStaticMesh> WorldMesh;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
-	FTransform OffsetTransform;
+	FTransform SpawnOffsetTransform;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
+	FTransform FirstPersonVisualOffsetTransform;
 };
 
