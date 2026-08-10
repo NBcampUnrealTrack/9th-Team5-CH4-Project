@@ -22,6 +22,15 @@ public:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// 서버에서 더 깊은 채굴 위치만 갱신
+	bool UpdateDeepestDigLocation(const FVector& Location);
+
+	UFUNCTION(BlueprintPure, Category = "Player|Mining")
+	bool HasDeepestDigLocation() const { return bHasDeepestDigLocation; }
+
+	UFUNCTION(BlueprintPure, Category = "Player|Mining")
+	FVector GetDeepestDigLocation() const { return DeepestDigLocation; }
+
 	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
 	bool HasJetpack() const
 	{
@@ -81,6 +90,12 @@ public:
 	FDRCoinsChangedSignature OnCoinsChanged;
 
 protected:
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
+	bool bHasDeepestDigLocation = false;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
+	FVector_NetQuantize DeepestDigLocation = FVector::ZeroVector;
+
 	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
 	UPROPERTY(
 		ReplicatedUsing = OnRep_HasJetpack,

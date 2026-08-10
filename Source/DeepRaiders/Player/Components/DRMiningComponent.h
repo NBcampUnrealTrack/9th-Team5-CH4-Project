@@ -6,6 +6,7 @@
 
 class ADRPlayerCharacter;
 class AVoxelWorld;
+class UDRVoxelInvokerControlComponent;
 
 UENUM(BlueprintType)
 enum class EDRMiningTraceMode : uint8
@@ -94,6 +95,7 @@ protected:
 	// Owner를 플레이어 캐릭터로 캐싱한다.
 	// BeginPlay 이전이나 BP 구성 직후처럼 Owner가 늦게 잡히는 상황을 대비해 필요 시 다시 호출한다.
 	void CacheOwnerCharacter();
+	void CacheVoxelInvokerControl();
 
 protected:
 	// 땅파기 최대 거리
@@ -179,6 +181,9 @@ private:
 	// 채굴 컴포넌트를 소유한 플레이어 캐릭터 캐시
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerCharacter> OwnerCharacter;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRVoxelInvokerControlComponent> VoxelInvokerControl;
 
 	// 마지막 채굴 성공 시각. 쿨타임 계산에 사용한다.
 	float LastMineTime = -BIG_NUMBER;
