@@ -12,6 +12,7 @@ class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
 class UAnimMontage;
+class UDRCharacterMovementComponent;
 class UDRItemDefinition;
 
 /**
@@ -26,7 +27,7 @@ class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter
     GENERATED_BODY()
 
 public:
-    ADRPlayerCharacter();
+    ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
     virtual void Tick(float DeltaSeconds) override;
     virtual void Landed(const FHitResult& Hit) override;
@@ -168,15 +169,23 @@ private:
     UFUNCTION(Server, Reliable)
     void ServerStopJetpack();
 
+    /** 서버가 입력을 거절하거나 연료가 소진된 경우 로컬 예측을 취소한다. */
+    UFUNCTION(Client, Reliable)
+    void ClientRejectJetpack();
+
     UFUNCTION()
     void OnRep_JetpackActive();
 
     bool CanStartJetpack() const;
 
+    UDRCharacterMovementComponent*
+        GetDRCharacterMovementComponent() const;
+
     void StartJetpackFromServer();
     void StopJetpackFromServer();
 
-    void UpdateJetpack(float DeltaSeconds);
+    /** 서버에서 연료만 소비한다. 이동은 MovementComponent가 담당한다. */
+    void UpdateJetpackFuel(float DeltaSeconds);
 
     void RefreshJetpackActivePresentation();
     
@@ -321,22 +330,6 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Jetpack")
     bool bIsJetpackActive = false;
-
-    /** 초당 상승 가속도 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Jetpack",
-        meta = (ClampMin = "0.0", Units = "cm/s^2"))
-    float JetpackAcceleration = 2500.f;
-
-    /** 제트팩 사용 중 최대 상승 속도 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Jetpack",
-        meta = (ClampMin = "0.0", Units = "cm/s"))
-    float MaxJetpackRiseSpeed = 900.f;
 
     /** 초당 연료 소비량 */
     UPROPERTY(
