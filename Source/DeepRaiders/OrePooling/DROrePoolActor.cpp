@@ -50,7 +50,6 @@ void ADROrePoolActor::ActivateFromPool(const FTransform& SpawnTransform,
         ForceNetUpdate();
     }
     
-    SourceField.Reset();
     bInteractionInProgress = false;
 }
 
@@ -75,16 +74,6 @@ bool ADROrePoolActor::IsPoolActive() const
 int32 ADROrePoolActor::GetSpawnPointId() const
 {
     return SpawnPointId;
-}
-
-void ADROrePoolActor::AssignSourceField(ADROreFieldActor* InSourceField)
-{
-    if (!HasAuthority())
-    {
-        return;
-    }
-    
-    SourceField = InSourceField;
 }
 
 void ADROrePoolActor::OnRep_PoolState()
@@ -132,12 +121,6 @@ bool ADROrePoolActor::Interact_Implementation(APawn* Interactor)
     {
         bInteractionInProgress = false;
         return false;
-    }
-    
-    // Field 와의 연결을 끊어주어야 한다.
-    if (ADROreFieldActor* Field = SourceField.Get())
-    {
-        return Field->HandleOreCollected(this);
     }
     
     // 광석은 반드시 OrePoolSubsystem을 통해서 반환
