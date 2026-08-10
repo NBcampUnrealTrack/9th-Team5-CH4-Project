@@ -6,6 +6,8 @@
 #include "Engine/DataAsset.h"
 #include "DRItemDefinition.generated.h"
 
+class ADRWorldItemActor;
+
 UENUM(BlueprintType)
 enum class EItemCategory : uint8
 {
@@ -53,5 +55,8 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
 	FTransform FirstPersonVisualOffsetTransform;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
+	TSubclassOf<ADRWorldItemActor> ActorClass;
 };
 
