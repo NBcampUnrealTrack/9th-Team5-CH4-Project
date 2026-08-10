@@ -9,6 +9,8 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 
+#include "DeepRaiders/Item/DRItemDefinition.h"
+
 ADRPlayerController::ADRPlayerController()
 {
     // QuickSlot Initialize
@@ -19,7 +21,19 @@ ADRPlayerController::ADRPlayerController()
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-
+    
+    /*
+     * 서버에서 모든 플레이어의 시작 장비를 초기화.
+     *
+     * Super::BeginPlay()가 끝난 시점에는
+     * 소유 ActorComponent들의 BeginPlay도 진행된 상태이므로
+     * QuickSlots 배열도 준비되어 있다.
+     */
+    if (HasAuthority())
+    {
+        InitializeStartingQuickSlot();
+    }
+    
     // 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
     if (!IsLocalController())
     {
@@ -125,33 +139,33 @@ void ADRPlayerController::SetupInputComponent()
             &ThisClass::HandleNetworkTest);
     }
     
-    if (IsValid(MineAction.Get()))
+    if (IsValid(PrimaryAction.Get()))
     {
         EnhancedInput->BindAction(
-            MineAction.Get(),
+            PrimaryAction.Get(),
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandleMine);
+            &ThisClass::HandlePrimaryAction);
     }
     
-    if (IsValid(MeleeAttackAction.Get()))
+    if (IsValid(SecondaryAction.Get()))
     {
         EnhancedInput->BindAction(
-            MeleeAttackAction,
+            SecondaryAction,
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandleMeleeAttack);
+            &ThisClass::HandleSecondaryAction);
     }
 }
 
-void ADRPlayerController::OnPossess(APawn* InPawn)
+void ADRPlayerController::OnPossess(
+    APawn* InPawn)
 {
     Super::OnPossess(InPawn);
-    
-    if (QuickSlotComponent)
+
+    if (IsValid(QuickSlotComponent))
     {
-        // Possess 되는 시점에 외형 초기화
-        QuickSlotComponent->ApplySelectedItemToCharacter();        
+        QuickSlotComponent->ApplySelectedItemToCharacter();
     }
 }
 
@@ -226,7 +240,78 @@ void ADRPlayerController::HandleNetworkTest(
     }
 }
 
-void ADRPlayerController::HandleMine(
+void ADRPlayerController::InitializeStartingQuickSlot()
+{
+    if (!HasAuthority() ||
+        !IsValid(QuickSlotInventoryComponent) ||
+        !IsValid(QuickSlotComponent) ||
+        !IsValid(StartingShovelDefinition))
+    {
+        return;
+    }
+
+    // QuickSlotComponent::BeginPlay가 정상적으로
+    // 완료됐는지 방어적으로 확인
+    if (QuickSlotComponent->GetSlotCount() <= 0)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT(
+                "[StartingItem] QuickSlot is not initialized. "
+                "Controller=%s"),
+            *GetName());
+
+        return;
+    }
+
+    // 1. 인벤토리에 시작 삽 지급
+    if (QuickSlotInventoryComponent->GetItemCount(
+            StartingShovelDefinition) <= 0)
+    {
+        const bool bAdded =
+            QuickSlotInventoryComponent->TryAddItem(
+                StartingShovelDefinition,
+                1);
+
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT(
+                "[StartingItem] Shovel Add=%d"),
+            bAdded);
+    }
+
+    // 2. 1번 퀵슬롯(배열 0번)에 삽 바인딩
+    if (!QuickSlotComponent->IsSlotBound(0))
+    {
+        QuickSlotComponent->RequestBindSlot(
+            0,
+            StartingShovelDefinition);
+    }
+
+    // 3. 아무 슬롯도 선택되지 않았다면 1번 선택
+    if (QuickSlotComponent->GetSelectedSlotIndex()
+        == INDEX_NONE)
+    {
+        QuickSlotComponent->RequestSelectSlot(0);
+    }
+}
+
+void ADRPlayerController::HandlePrimaryAction(const FInputActionValue& value)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        Cast<ADRPlayerCharacter>(GetPawn());
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+    
+    PlayerCharacter->RequestPrimaryItemAction();
+}
+
+void ADRPlayerController::HandleSecondaryAction(
     const FInputActionValue& Value)
 {
     ADRPlayerCharacter* PlayerCharacter =
@@ -237,7 +322,7 @@ void ADRPlayerController::HandleMine(
         return;
     }
 
-    PlayerCharacter->RequestMine();
+    PlayerCharacter->RequestSecondaryItemAction();
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(
@@ -267,17 +352,6 @@ void ADRPlayerController::HandleSelectQuickSlot(
     QuickSlotComponent->RequestSelectSlot(SlotIndex);
 }
 
-void ADRPlayerController::HandleMeleeAttack(
-    const FInputActionValue&)
-{
-    ADRPlayerCharacter* PlayerCharacter =
-        Cast<ADRPlayerCharacter>(GetPawn());
-
-    if (IsValid(PlayerCharacter))
-    {
-        PlayerCharacter->RequestMeleeAttack();
-    }
-}
 #pragma region Terrain Dig
 void ADRPlayerController::Client_ApplyTerrainDigHistory_Implementation(
     const TArray<FDRTerrainDigOperation>& DigHistory)

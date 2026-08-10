@@ -324,12 +324,15 @@ void ADRPlayerCharacter::RequestMine()
 		return;
 	}
 
-	MiningComponent->TryMine();
+	if (HasHeldItemAction(EDRItemActionType::Dig))
+	{
+		MiningComponent->TryMine();
+	}
 }
 
 void ADRPlayerCharacter::RequestMeleeAttack()
 {
-	if (!IsLocallyControlled() || IsDead())
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::MeleeAttack))
 	{
 		return;
 	}
@@ -370,6 +373,40 @@ float ADRPlayerCharacter::TakeDamage(
 	ForceNetUpdate();
 
 	return AppliedDamage;
+}
+
+void ADRPlayerCharacter::RequestPrimaryItemAction()
+{
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
+}
+
+void ADRPlayerCharacter::RequestSecondaryItemAction()
+{
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	ExecuteHeldItemAction(HeldItemDefinition->SecondaryAction);
+}
+
+bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
+{
+	if (!IsValid(HeldItemDefinition) || ActionType == EDRItemActionType::None)
+	{
+		return false;
+	}
+
+	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
 }
 
 void ADRPlayerCharacter::BeginPlay()
@@ -779,6 +816,11 @@ bool ADRPlayerCharacter::CanStartMeleeAttack() const
 		return false;
 	}
 
+	if (!HasHeldItemAction(EDRItemActionType::MeleeAttack))
+	{
+		return false;
+	}
+	
 	if (bIsMeleeAttacking)
 	{
 		return false;
@@ -1376,6 +1418,35 @@ void ADRPlayerCharacter::RestoreControllerInput()
 
 	OwningController->SetIgnoreMoveInput(false);
 	OwningController->SetIgnoreLookInput(false);
+}
+
+void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		RequestMine();
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		RequestMeleeAttack();
+		break;
+
+	case EDRItemActionType::Throw:
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ItemAction] Throw not implemented. "
+				"Character=%s Item=%s"),
+			*GetName(),
+			*GetNameSafe(HeldItemDefinition));
+		break;
+
+	case EDRItemActionType::None:
+	default:
+		break;
+	}
 }
 
 void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()

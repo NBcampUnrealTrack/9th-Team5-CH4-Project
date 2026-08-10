@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "DRItemActionTypes.h"
 #include "DRItemDefinition.generated.h"
 
 UENUM(BlueprintType)
@@ -45,6 +46,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade", meta = (ClampMin = 1, UIMin = 1))
 	int32 Price = 0;
 
+	// ===== Action =====
+
+	/** 좌클릭으로 실행할 기본 행동 */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Item|Action")
+	EDRItemActionType PrimaryAction =
+		EDRItemActionType::None;
+
+	/** 우클릭으로 실행할 보조 행동 */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Item|Action")
+	EDRItemActionType SecondaryAction =
+		EDRItemActionType::None;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")
 	TObjectPtr<UStaticMesh> WorldMesh;
 	
