@@ -3,42 +3,73 @@
 #include "Components/BoxComponent.h"
 #include "DROrePoolActor.h"
 #include "DROrePoolSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
-#include "GameFramework/Pawn.h"
-#include "TimerManager.h"
 
 ADROreFieldActor::ADROreFieldActor()
 {
     PrimaryActorTick.bCanEverTick = false;
-    bReplicates = false;
+    bReplicates = false; // 필드는 서버에서만 사용
 
     Bounds = CreateDefaultSubobject<UBoxComponent>(TEXT("Bounds"));
     SetRootComponent(Bounds);
+    Bounds->SetBoxExtent(BoundSize);
+
     Bounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Bounds->SetGenerateOverlapEvents(false);
-    Bounds->SetBoxExtent(FVector(2000.f, 2000.f, 2000.f));
+}
+
+void ADROreFieldActor::HandleOreReleased(int32 SpawnPointId, ADROrePoolActor* ReleasedActor)
+{
+    if (!HasAuthority() || !IsValid(ReleasedActor)) return;
+
+    for (FDROreRuntimeSector& Sector : RuntimeSectors)
+    {
+        for (FDROreSpawnPoint& Point : Sector.SpawnPoints)
+        {
+            if (Point.SpawnPointId != SpawnPointId || Point.ActiveActor != ReleasedActor)
+            {
+                continue;
+            }
+
+            Point.ActiveActor = nullptr;
+            Point.bDepleted = true;
+            return;
+        }
+    }
 }
 
 void ADROreFieldActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    if (!HasAuthority() || !Definition)
-    {
-        return;
-    }
-
     // 클라이언트에는 위치 목록을 만들지 않는다.
+    if (!HasAuthority() || !Definition) return;
+
     BuildSpawnPoints();
+    PrewarmPool();
     UpdateActiveSectors();
-    GetWorldTimerManager().SetTimer(UpdateTimer, this, &ThisClass::UpdateActiveSectors,
-                                    Definition->UpdateInterval, true);
+
+    if (UDRVoxelTerrainSubsystem* Terrain = GetWorld()->GetSubsystem<UDRVoxelTerrainSubsystem>())
+    {
+        Terrain->OnTerrainDug.AddUObject(this, &ThisClass::ReportTerrainDig);
+
+        // Field 생성 전에 적용된 서버 채굴 이력 반영
+        for (const FDRTerrainDigOperation& Operation : Terrain->GetDigHistory())
+        {
+            ReportTerrainDig(Operation.Location, Operation.Radius);
+        }
+    }
 }
 
 void ADROreFieldActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    GetWorldTimerManager().ClearTimer(UpdateTimer);
+    if (UDRVoxelTerrainSubsystem* Terrain =
+        GetWorld()->GetSubsystem<UDRVoxelTerrainSubsystem>())
+    {
+        Terrain->OnTerrainDug.RemoveAll(this);
+    }
 
     if (HasAuthority())
     {
@@ -51,15 +82,77 @@ void ADROreFieldActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void ADROreFieldActor::ReportTerrainDig(const FVector& Location, float Radius)
+{
+    if (!HasAuthority() || Radius < 0.f) return;
+
+    const FVector LocalLocation = Bounds->GetComponentTransform().InverseTransformPosition(Location);
+    const FVector Extent = Bounds->GetUnscaledBoxExtent();
+    if (FMath::Abs(LocalLocation.X) > Extent.X + Radius || FMath::Abs(LocalLocation.Y) > Extent.Y + Radius)
+    {
+        return;
+    }
+
+    const float DugDepth = FMath::Clamp(Extent.Z - (LocalLocation.Z - Radius),
+        0.f, Extent.Z * 2.f);
+    if (DugDepth > DeepestDugDepth)
+    {
+        DeepestDugDepth = DugDepth;
+        UpdateActiveSectors();
+    }
+
+    CheckNearbyOreGround(Location, Radius);
+}
+
+void ADROreFieldActor::CheckNearbyOreGround(const FVector& Location, float Radius)
+{
+    // RequestDig에 전달된 구보다 10% 넓게 광물 검색
+    const float CheckRadius = Radius * 1.1f;
+    TArray<FOverlapResult> Overlaps;
+    FCollisionObjectQueryParams ObjectQuery;
+    ObjectQuery.AddObjectTypesToQuery(ECC_WorldStatic);
+    ObjectQuery.AddObjectTypesToQuery(ECC_WorldDynamic);
+    ObjectQuery.AddObjectTypesToQuery(ECC_PhysicsBody);
+
+    const bool bHasOverlap = GetWorld()->OverlapMultiByObjectType(Overlaps, Location,
+        FQuat::Identity, ObjectQuery, FCollisionShape::MakeSphere(CheckRadius));
+    if (!bHasOverlap) return;
+
+    TSet<ADROrePoolActor*> CheckedActors;
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        ADROrePoolActor* OreActor = Cast<ADROrePoolActor>(Overlap.GetActor());
+        if (!IsValid(OreActor) || CheckedActors.Contains(OreActor)) continue;
+
+        CheckedActors.Add(OreActor);
+        OreActor->ScheduleGroundCheck(Location);
+    }
+}
+
+// 전체 스폰 수량을 풀에 등록하고 분할 생성 시작
+void ADROreFieldActor::PrewarmPool()
+{
+    UDROrePoolSubsystem* Pool = GetWorld()->GetSubsystem<UDROrePoolSubsystem>();
+    if (!Pool) return;
+
+    for (const FDROreRuntimeSector& Sector : RuntimeSectors)
+    {
+        for (const FDROreSpawnPoint& Point : Sector.SpawnPoints)
+        {
+            Pool->QueuePrewarmOre(Point.ItemDefinition, Point.OreActorClass, 1);
+        }
+    }
+
+    Pool->StartPrewarm(Definition->InitialPrewarmCount, Definition->PrewarmBatchSize);
+}
+
+// 시드와 섹터 설정으로 모든 스폰 위치 선계산
 void ADROreFieldActor::BuildSpawnPoints()
 {
     RuntimeSectors.Reset();
     NextSpawnPointId = 0;
 
-    if (!Definition->SectorTable)
-    {
-        return;
-    }
+    if (!Definition->SectorTable) return;
 
     FRandomStream Random(Definition->RandomSeed);
     TArray<FName> RowNames = Definition->SectorTable->GetRowNames();
@@ -70,8 +163,8 @@ void ADROreFieldActor::BuildSpawnPoints()
 
     for (const FName& RowName : RowNames)
     {
-        const FDROreDepthSector* Config = Definition->SectorTable->FindRow<
-            FDROreDepthSector>(RowName, TEXT("BuildSpawnPoints"));
+        const FDROreDepthSector* Config = Definition->SectorTable->FindRow<FDROreDepthSector>(
+            RowName, TEXT("BuildSpawnPoints"));
         if (!Config || Config->SpawnCount <= 0 || Config->EndDepth <= Config->StartDepth)
         {
             continue;
@@ -79,7 +172,6 @@ void ADROreFieldActor::BuildSpawnPoints()
 
         FDROreRuntimeSector& Runtime = RuntimeSectors.AddDefaulted_GetRef();
         Runtime.StartDepth = Config->StartDepth;
-        Runtime.EndDepth = Config->EndDepth;
         Runtime.SpawnPoints.Reserve(Config->SpawnCount);
 
         for (int32 Index = 0; Index < Config->SpawnCount; ++Index)
@@ -99,17 +191,12 @@ void ADROreFieldActor::BuildSpawnPoints()
     }
 }
 
+// 실제로 파인 최심도에 도달한 섹터 활성화
 void ADROreFieldActor::UpdateActiveSectors()
 {
-    if (!HasAuthority() || !Definition)
-    {
-        return;
-    }
+    if (!HasAuthority() || !Definition) return;
 
-    // 다시 올라가도 이미 도달한 깊이는 유지한다.
-    DeepestReachedDepth = FMath::Max(DeepestReachedDepth, FindDeepestPlayerDepth());
-
-    const float MaximumDepth = DeepestReachedDepth + Definition->LoadAheadDistance;
+    const float MaximumDepth = DeepestDugDepth + Definition->LoadAheadDistance;
 
     for (FDROreRuntimeSector& Sector : RuntimeSectors)
     {
@@ -139,9 +226,13 @@ void ADROreFieldActor::SetSectorActive(FDROreRuntimeSector& Sector, bool bNewAct
     {
         if (bNewActive)
         {
-            Point.ActiveActor =
-                Pool->AcquireOre(Point.ItemDefinition, Point.OreActorClass,
-                                 Point.Transform, Point.SpawnPointId);
+            if (Point.bDepleted)
+            {
+                continue;
+            }
+
+            Point.ActiveActor = Pool->AcquireOre(Point.ItemDefinition, Point.OreActorClass,
+                Point.Transform, this, Point.SpawnPointId);
         }
         else if (Point.ActiveActor)
         {
@@ -149,37 +240,6 @@ void ADROreFieldActor::SetSectorActive(FDROreRuntimeSector& Sector, bool bNewAct
             Point.ActiveActor = nullptr;
         }
     }
-}
-
-float ADROreFieldActor::FindDeepestPlayerDepth() const
-{
-    const float TopZ = Bounds->GetComponentLocation().Z + Bounds->GetScaledBoxExtent().Z;
-    float DeepestDepth = 0.f;
-
-    for (TActorIterator<APawn> Iterator(GetWorld()); Iterator; ++Iterator)
-    {
-        const APawn* Pawn = *Iterator;
-        if (!Pawn || !Pawn->IsPlayerControlled() ||
-            !IsPlayerInsideField(Pawn->GetActorLocation()))
-        {
-            continue;
-        }
-
-        DeepestDepth = FMath::Max(DeepestDepth, TopZ - Pawn->GetActorLocation().Z);
-    }
-
-    return DeepestDepth;
-}
-
-bool ADROreFieldActor::IsPlayerInsideField(const FVector& WorldLocation) const
-{
-    const FVector LocalLocation =
-        Bounds->GetComponentTransform().InverseTransformPosition(WorldLocation);
-    const FVector Extent = Bounds->GetUnscaledBoxExtent();
-
-    return FMath::Abs(LocalLocation.X) <= Extent.X &&
-           FMath::Abs(LocalLocation.Y) <= Extent.Y &&
-           FMath::Abs(LocalLocation.Z) <= Extent.Z;
 }
 
 FTransform ADROreFieldActor::MakeSpawnTransform(const FDROreDepthSector& Sector,
@@ -204,15 +264,13 @@ FTransform ADROreFieldActor::MakeSpawnTransform(const FDROreDepthSector& Sector,
         if (Side < 2)
         {
             const float Sign = Side == 0 ? -1.f : 1.f;
-            LocalLocation =
-                FVector(Sign * XExtent, Random.FRandRange(-YExtent, YExtent), LocalZ);
+            LocalLocation = FVector(Sign * XExtent, Random.FRandRange(-YExtent, YExtent), LocalZ);
             LocalRotation = FRotator(0.f, Sign < 0.f ? 0.f : 180.f, 0.f);
         }
         else
         {
             const float Sign = Side == 2 ? -1.f : 1.f;
-            LocalLocation =
-                FVector(Random.FRandRange(-XExtent, XExtent), Sign * YExtent, LocalZ);
+            LocalLocation = FVector(Random.FRandRange(-XExtent, XExtent), Sign * YExtent, LocalZ);
             LocalRotation = FRotator(0.f, Sign < 0.f ? 90.f : -90.f, 0.f);
         }
     }
@@ -220,19 +278,20 @@ FTransform ADROreFieldActor::MakeSpawnTransform(const FDROreDepthSector& Sector,
     {
         LocalLocation = FVector(Random.FRandRange(-XExtent, XExtent),
                                 Random.FRandRange(-YExtent, YExtent), LocalZ);
-        LocalRotation =
-            FRotator(Random.FRandRange(-180.f, 180.f), Random.FRandRange(-180.f, 180.f),
-                     Random.FRandRange(-180.f, 180.f));
+        LocalRotation = FRotator(Random.FRandRange(-180.f, 180.f),
+            Random.FRandRange(-180.f, 180.f),
+            Random.FRandRange(-180.f, 180.f));
     }
 
     const FTransform BoundsTransform = Bounds->GetComponentTransform();
     return FTransform(BoundsTransform.TransformRotation(LocalRotation.Quaternion()),
-                      BoundsTransform.TransformPosition(LocalLocation));
+        BoundsTransform.TransformPosition(LocalLocation));
 }
 
 const FDROreWeight* ADROreFieldActor::ChooseOre(const FDROreDepthSector& Sector,
-                                                FRandomStream& Random) const
+    FRandomStream& Random) const
 {
+    // 가중치 세팅
     float TotalWeight = 0.f;
     for (const FDROreWeight& Ore : Sector.Ores)
     {
