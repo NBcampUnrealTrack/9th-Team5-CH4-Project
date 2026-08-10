@@ -8,6 +8,9 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME(ADRPlayerState, bHasDeepestDigLocation);
+	DOREPLIFETIME(ADRPlayerState, DeepestDigLocation);
+
 	// 제트팩 보유 여부는 다른 플레이어도 알아야 한다.
 	DOREPLIFETIME(
 		ADRPlayerState,
@@ -18,6 +21,20 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 		ADRPlayerState,
 		CurrentJetpackFuel,
 		COND_OwnerOnly);
+}
+
+bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)
+{
+	if (!HasAuthority() ||
+		(bHasDeepestDigLocation && Location.Z >= DeepestDigLocation.Z))
+	{
+		return false;
+	}
+
+	bHasDeepestDigLocation = true;
+	DeepestDigLocation = Location;
+	ForceNetUpdate();
+	return true;
 }
 
 void ADRPlayerState::GrantJetpack()

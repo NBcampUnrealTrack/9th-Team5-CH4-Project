@@ -3,6 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
+#include "DRVoxelInvokerControlComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
@@ -26,6 +27,7 @@ void UDRMiningComponent::BeginPlay()
 	Super::BeginPlay();
 
 	CacheOwnerCharacter();
+	CacheVoxelInvokerControl();
 }
 
 void UDRMiningComponent::TryMine()
@@ -249,6 +251,12 @@ bool UDRMiningComponent::HandleMineRequestOnServer(
 		MiningGameState->RegisterTerrainDig(Operation);
 	}
 
+	CacheVoxelInvokerControl();
+	if (IsValid(VoxelInvokerControl.Get()))
+	{
+		VoxelInvokerControl->ReportDigLocation(Operation.Location);
+	}
+
 	return true;
 }
 
@@ -436,6 +444,18 @@ void UDRMiningComponent::CacheOwnerCharacter()
 
 	// 컴포넌트 Owner가 플레이어 캐릭터일 때만 채굴 기능을 활성화한다.
 	OwnerCharacter = Cast<ADRPlayerCharacter>(GetOwner());
+}
+
+void UDRMiningComponent::CacheVoxelInvokerControl()
+{
+	if (IsValid(VoxelInvokerControl.Get()) || !IsValid(OwnerCharacter.Get())) return;
+
+	AController* Controller = OwnerCharacter->GetController();
+	if (IsValid(Controller))
+	{
+		VoxelInvokerControl =
+			Controller->FindComponentByClass<UDRVoxelInvokerControlComponent>();
+	}
 }
 
 void UDRMiningComponent::DrawMineArea(
