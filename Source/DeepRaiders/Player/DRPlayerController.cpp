@@ -9,6 +9,11 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRWorldItemActor.h"
+#include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
+#include "DeepRaiders/OrePooling/DROrePoolActor.h"
+#include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -151,6 +156,15 @@ void ADRPlayerController::SetupInputComponent()
             ETriggerEvent::Started,
             this,
             &ThisClass::HandleInteract);
+    }
+    
+    if (IsValid(DropHeldItemAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            DropHeldItemAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleDropHeldItem);
     }
 }
 
@@ -320,7 +334,6 @@ bool ADRPlayerController::ApplyTerrainDigOnce(
 }
 #pragma endregion
 
-#pragma region Interact
 void ADRPlayerController::HandleInteract(const FInputActionValue&)
 {
     UE_LOG(LogTemp, Log, TEXT("Interact Called"));
@@ -412,4 +425,136 @@ bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Qu
     
     return true;
 }
-#pragma endregion
+
+void ADRPlayerController::HandleDropHeldItem(const FInputActionValue& Value)
+{
+    if (IsLocalController())
+    {
+        ServerRequestDropHeldItem();
+    }
+}
+
+void ADRPlayerController::ServerRequestDropHeldItem_Implementation()
+{
+    // 버리기 초기 구현은 1개로 제한
+    constexpr int32 DropQuantity = 1;
+    
+    APawn* CachedPawn = GetPawn();
+    
+    if (!HasAuthority()
+        || !IsValid(CachedPawn)
+        || !IsValid(QuickSlotComponent)
+        || !IsValid(QuickSlotInventoryComponent))
+    {
+        return;
+    }
+    
+    UDRItemDefinition* Definition = QuickSlotComponent->GetSelectedItemDefinition();
+    
+    if (!IsValid(Definition)
+        || QuickSlotInventoryComponent->GetItemCount(Definition) < DropQuantity)
+    {
+        return;
+    }
+    
+    const FVector Forward = CachedPawn->GetActorForwardVector();
+    
+    const FVector DropLocation = CachedPawn->GetActorLocation() + Forward * DropForwardDistance + FVector::UpVector * DropVerticalOffset;
+    const FRotator DropRotation(0.0f, CachedPawn->GetActorRotation().Yaw, 0.0f);
+    
+    const FTransform BaseSpawnTransform(DropRotation, DropLocation);
+    ADRWorldItemActor* DroppedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, DropQuantity);
+    
+    if (!IsValid(DroppedItem))
+    {
+        return;
+    }
+    
+    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, DropQuantity))
+    {
+        // 아이템 차감 실패 시 롤백
+        RollbackDroppedItem(DroppedItem);
+        return;
+    }
+    
+    DroppedItem->ApplyDropImpulse(Forward * DropImpulseStrength);
+}
+
+ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const
+{
+    if (!HasAuthority() || !IsValid(Definition))
+    {
+        return nullptr;
+    }
+    
+    UWorld* World = GetWorld();
+    
+    if (!IsValid(World))
+    {
+        return nullptr;
+    }
+    
+    if (Definition->Category == EItemCategory::Ore)
+    {
+        UClass* ActorClass = Definition->ActorClass.Get();
+        
+        if (!IsValid(ActorClass)
+            || !ActorClass->IsChildOf(ADROrePoolActor::StaticClass()))
+        {
+            UE_LOG(LogTemp, Error, TEXT("[%s] Invalid ore ActorClass: %s"), *GetName(), *GetNameSafe(ActorClass));
+            
+            return nullptr;
+        }
+        
+        TSubclassOf<ADROrePoolActor> OreActorClass = ActorClass;
+        
+        UDROrePoolSubsystem* OrePoolSubsystem = World->GetSubsystem<UDROrePoolSubsystem>();
+        if (!IsValid(OrePoolSubsystem))
+        {
+            return nullptr;
+        }
+        
+        return OrePoolSubsystem->AcquireOre(Definition, OreActorClass, BaseSpawnTransform, INDEX_NONE);
+    }
+    
+    UDRWorldItemSubsystem* WorldItemSubsystem = World->GetSubsystem<UDRWorldItemSubsystem>();
+    if (!IsValid(WorldItemSubsystem))
+    {
+        return nullptr;
+    }
+    
+    return WorldItemSubsystem->SpawnWorldItemFromDefinition(Definition, BaseSpawnTransform, Quantity);    
+}
+
+void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const
+{
+    if (!IsValid(DroppedItem))
+    {
+        return;
+    }
+    
+    ADROrePoolActor* DroppedOre = Cast<ADROrePoolActor>(DroppedItem);
+    if (IsValid(DroppedOre))
+    {
+        UWorld* World = DroppedOre->GetWorld();
+    
+        if (!IsValid(World))
+        {
+            return;
+        }
+
+        UDROrePoolSubsystem* OrePoolSubsystem = World->GetSubsystem<UDROrePoolSubsystem>();
+
+        if (!IsValid(OrePoolSubsystem))
+        {
+            UE_LOG(LogTemp, Error, TEXT("[%s] OrePoolSubsystem is invalid."), *GetName());
+
+            DroppedOre->Destroy();
+            return;
+        }
+    
+        OrePoolSubsystem->ReleaseOre(DroppedOre);
+    }
+    
+    DroppedItem->Destroy();
+}
