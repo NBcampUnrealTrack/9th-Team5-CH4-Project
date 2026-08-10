@@ -14,6 +14,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -376,6 +377,7 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
+	
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -520,6 +522,10 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		CurrentHealth);
+	
+	DOREPLIFETIME(
+		ADRPlayerCharacter,
+		HeldItemDefinition);
 }
 
 void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
@@ -1431,6 +1437,43 @@ void ADRPlayerCharacter::PlayWorldMeleeAttackPresentation()
 	}
 
 	PlayAnimMontage(WorldMeleeAttackMontage);
+}
+
+void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
+{
+	if (!HasAuthority()
+		|| HeldItemDefinition == NewItemDefinition)
+	{
+		return;
+	}
+	
+	HeldItemDefinition = NewItemDefinition;
+	RefreshHeldItemVisual();
+	ForceNetUpdate();
+}
+
+void ADRPlayerCharacter::OnRep_HeldItemDefinition()
+{
+	RefreshHeldItemVisual();
+}
+
+void ADRPlayerCharacter::RefreshHeldItemVisual()
+{
+	if (!IsValid(HeldItemDefinition))
+	{
+		ClearHandEquipmentVisual();
+		return;
+	}
+	
+	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
+	FTransform FirstPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform 
+		* HeldItemDefinition->FirstPersonVisualOffsetTransform;
+	
+	// 당장은 특별한 처리 없이 기본 크기 적용.
+	FTransform ThirdPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform;
+	
+	ApplyHandEquipmentVisual(VisualMesh, VisualMesh
+		, FirstPersonVisualTransform, ThirdPersonVisualTransform);	
 }
 
 void ADRPlayerCharacter::OnRep_CurrentHealth()

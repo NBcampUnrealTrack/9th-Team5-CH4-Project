@@ -13,6 +13,7 @@ class FLifetimeProperty;
 class UDRMiningComponent;
 class UAnimMontage;
 class UDRCharacterMovementComponent;
+class UDRItemDefinition;
 
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
@@ -475,4 +476,18 @@ protected:
         Category = "Player|Fall Damage",
         meta = (ClampMin = "0.01"))
     float FallDamageExponent = 2.f;
+    
+#pragma region QuickSlot
+public:
+    void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
+    
+protected:
+    UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
+    TObjectPtr<UDRItemDefinition> HeldItemDefinition;
+    
+    UFUNCTION()
+    void OnRep_HeldItemDefinition();
+    
+    void RefreshHeldItemVisual();    
+#pragma endregion
 };
