@@ -18,6 +18,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Teleport")
 	void RequestRegisterCurrentTeleport();
 
+	UFUNCTION(BlueprintCallable, Category = "Teleport")
+	void RequestTeleportTo(ADRTeleportPoint* DestinationTeleportPoint);
+
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	ADRTeleportPoint* GetCurrentInteractableTeleport() const { return CurrentInteractableTeleport; }
 
@@ -27,6 +30,9 @@ public:
 private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRegisterTeleport(ADRTeleportPoint* TeleportPoint);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestTeleportTo(ADRTeleportPoint* DestinationTeleportPoint);
 
 	int32 GetTemporaryTeamId() const { return 0; }
 

@@ -41,12 +41,18 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	bool IsRegistered() const { return bRegistered; }
-
+	
+	UFUNCTION(BlueprintCallable, Category = "Teleport")
+	FText GetTeleportDisplayName() const;
+	
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	int32 GetOwnerTeamId() const { return OwnerTeamId; }
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	EDRTeleportAccessType GetAccessType() const { return AccessType; }
+
+	UFUNCTION(BlueprintPure, Category = "Teleport")
+	FTransform GetTeleportArrivalTransform() const;
 
 	bool CanRegisterForTeam(int32 TeamId, APawn* Interactor) const;
 	bool TryRegisterForTeam(int32 TeamId, APawn* Interactor);
@@ -110,7 +116,13 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
 	EDRTeleportAccessType AccessType = EDRTeleportAccessType::Public;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
+	FText TeleportDisplayName = FText::FromString("Teleport Point");
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
+	FVector TeleportArrivalOffset = FVector(0.f, 0.f, 120.f);
+	
 	// false인 텔레포트는 이후 단계에서 즉시 사용 가능한 포인트로 다룬다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
 	bool bRequiresRegistration = true;

@@ -23,6 +23,17 @@ void UDRTeleportComponent::RequestRegisterCurrentTeleport()
 	ServerRequestRegisterTeleport(CurrentInteractableTeleport);
 }
 
+void UDRTeleportComponent::RequestTeleportTo(ADRTeleportPoint* DestinationTeleportPoint)
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!IsValid(OwnerPawn) || !OwnerPawn->IsLocallyControlled() || !IsValid(DestinationTeleportPoint))
+	{
+		return;
+	}
+
+	ServerRequestTeleportTo(DestinationTeleportPoint);
+}
+
 void UDRTeleportComponent::SetCurrentInteractableTeleport(ADRTeleportPoint* TeleportPoint)
 {
 	if (!IsValid(TeleportPoint))
@@ -74,4 +85,34 @@ void UDRTeleportComponent::ServerRequestRegisterTeleport_Implementation(ADRTelep
 
 	// Team system is not wired yet, so TeamId 0 verifies only the registration path.
 	TeleportSubsystem->TryRegisterTeleportPoint(TargetTeleportPoint, OwnerPawn, GetTemporaryTeamId());
+}
+
+void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoint* DestinationTeleportPoint)
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!IsValid(OwnerPawn) || !IsValid(DestinationTeleportPoint) || DestinationTeleportPoint == CurrentInteractableTeleport)
+	{
+		return;
+	}
+
+	const ADRPlayerCharacter* PlayerCharacter = Cast<ADRPlayerCharacter>(OwnerPawn);
+	if (IsValid(PlayerCharacter) && PlayerCharacter->IsDead())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	UDRTeleportSubsystem* TeleportSubsystem = World->GetSubsystem<UDRTeleportSubsystem>();
+	if (!IsValid(TeleportSubsystem) || !TeleportSubsystem->CanUseRegisteredTeleportPoint(GetTemporaryTeamId(), DestinationTeleportPoint))
+	{
+		return;
+	}
+
+	const FTransform ArrivalTransform = DestinationTeleportPoint->GetTeleportArrivalTransform();
+	OwnerPawn->TeleportTo(ArrivalTransform.GetLocation(), ArrivalTransform.Rotator(), false, true);
 }

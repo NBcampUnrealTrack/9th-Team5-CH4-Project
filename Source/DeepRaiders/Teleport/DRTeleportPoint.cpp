@@ -76,6 +76,16 @@ void ADRTeleportPoint::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(ADRTeleportPoint, OwnerTeamId);
 }
 
+FText ADRTeleportPoint::GetTeleportDisplayName() const
+{
+	return TeleportDisplayName.IsEmpty() ? FText::FromString(GetName()) : TeleportDisplayName;
+}
+
+FTransform ADRTeleportPoint::GetTeleportArrivalTransform() const
+{
+	return FTransform(GetActorRotation(), GetActorLocation() + GetActorRotation().RotateVector(TeleportArrivalOffset));
+}
+
 void ADRTeleportPoint::OnRep_Registered()
 {
 	if (bRegistered)
