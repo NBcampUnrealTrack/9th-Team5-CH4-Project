@@ -114,6 +114,14 @@ bool UDRVoxelTerrainSubsystem::ApplyDig(const FDRTerrainDigOperation& Operation)
 		AppliedDigOperationIds.Add(Operation.OperationId);
 	}
 
+	// 파인 땅 위치 브로드캐스트
+	// OrePoolingSubsystem이 땅이 패인 위치를 통한 깊이별 풀링 작업을 진행함
+	UWorld* World = GetWorld();
+	if (IsValid(World) && World->GetNetMode() != NM_Client)
+	{
+		OnTerrainDug.Broadcast(Operation.Location, Operation.Radius);
+	}
+
 	return true;
 }
 
