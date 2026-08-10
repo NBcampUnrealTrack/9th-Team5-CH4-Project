@@ -21,7 +21,6 @@ ADRPlayerController::ADRPlayerController()
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 }
-
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();

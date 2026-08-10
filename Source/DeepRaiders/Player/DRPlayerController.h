@@ -31,6 +31,7 @@ protected:
 	virtual void OnPossess(APawn* InPawn) override;
 
 private:
+	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
 
 	void HandleMove(const FInputActionValue& Value);
@@ -108,7 +109,7 @@ private:
 
 #pragma region QuickSlot
 public:
-	UDRInventoryComponent* GetQuickSlotInventoryComponent() { return QuickSlotInventoryComponent;}
+	UDRInventoryComponent* GetQuickSlotInventoryComponent() const { return QuickSlotInventoryComponent;}
 	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
 	
 protected:
