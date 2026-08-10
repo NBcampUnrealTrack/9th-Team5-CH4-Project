@@ -34,6 +34,10 @@ public:
 	// 동일한 Definition을 가진 여러 엔트리에서 요청 수량을 제거
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryRemoveItemByDefinition(UDRItemDefinition* Definition, int32 Quantity);
+
+	/** 지정된 엔트리를 모두 검증하고 변경 알림 한 번으로 일괄 제거한다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
+	bool TryRemoveEntries(const TArray<FGuid>& EntryIds);
 	
 	// EntryId에 해당하는 엔트리를 탐색
 	UFUNCTION(BlueprintPure, Category = "Inventory")

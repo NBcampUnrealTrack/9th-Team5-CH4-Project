@@ -52,6 +52,13 @@ bool UDRShopUIComponent::CanPurchase(
 		&& InteractionComponent->IsOverlappingActor(Interactor);
 }
 
+bool UDRShopUIComponent::IsSellAllowed(const APawn* Interactor) const
+{
+	return IsValid(InteractionComponent)
+		&& IsValid(Interactor)
+		&& InteractionComponent->IsOverlappingActor(Interactor);
+}
+
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -126,6 +133,9 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		ShopWidget->OnPurchaseRequested.AddDynamic(
 			this,
 			&ThisClass::HandlePurchaseRequested);
+		ShopWidget->OnSellAllOresRequested.AddDynamic(
+			this,
+			&ThisClass::HandleSellAllOresRequested);
 		ShopWidget->AddToViewport();
 
 		FInputModeUIOnly InputMode;
@@ -161,6 +171,9 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopWidget->OnPurchaseRequested.RemoveDynamic(
 		this,
 		&ThisClass::HandlePurchaseRequested);
+	ShopWidget->OnSellAllOresRequested.RemoveDynamic(
+		this,
+		&ThisClass::HandleSellAllOresRequested);
 	ShopWidget->RemoveFromParent();
 	ShopWidget = nullptr;
 	PlayerState = nullptr;
@@ -181,5 +194,13 @@ void UDRShopUIComponent::HandlePurchaseRequested(
 	{
 		// 로컬 UI의 구매 요청을 PlayerState의 서버 RPC로 전달합니다.
 		PlayerState->RequestPurchase(GetOwner(), ItemDefinition);
+	}
+}
+
+void UDRShopUIComponent::HandleSellAllOresRequested()
+{
+	if (IsValid(PlayerState))
+	{
+		PlayerState->RequestSellAllOres(GetOwner());
 	}
 }

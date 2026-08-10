@@ -1,7 +1,10 @@
 #include "DRShopWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRShopItemWidget.h"
 
@@ -79,6 +82,7 @@ void UDRShopWidget::RefreshItems(EItemCategory Category)
 void UDRShopWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	InitializeSellAllOresButton();
 
 	// 위젯 수명 동안 한 번만 버튼 이벤트를 연결합니다.
 	if (IsValid(CloseButton))
@@ -94,6 +98,39 @@ void UDRShopWidget::NativeOnInitialized()
 	ConsumableButton->OnClicked.AddDynamic(
 		this,
 		&ThisClass::HandleConsumableButtonClicked);
+
+	if (IsValid(SellAllOresButton))
+	{
+		SellAllOresButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleSellAllOresButtonClicked);
+	}
+}
+
+void UDRShopWidget::InitializeSellAllOresButton()
+{
+	if (IsValid(SellAllOresButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(WidgetTree))
+	{
+		return;
+	}
+
+	UPanelWidget* ButtonContainer =
+		Cast<UPanelWidget>(ConsumableButton->GetParent());
+
+	if (!IsValid(ButtonContainer))
+	{
+		return;
+	}
+
+	SellAllOresButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(),
+		TEXT("SellAllOresButton"));
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>();
+	ButtonText->SetText(FText::FromString(TEXT("광석 전체 판매")));
+	SellAllOresButton->SetContent(ButtonText);
+	ButtonContainer->AddChild(SellAllOresButton);
 }
 
 void UDRShopWidget::NativeDestruct()
@@ -112,6 +149,13 @@ void UDRShopWidget::NativeDestruct()
 		this,
 		&ThisClass::HandleConsumableButtonClicked);
 
+	if (IsValid(SellAllOresButton))
+	{
+		SellAllOresButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleSellAllOresButtonClicked);
+	}
+
 	Super::NativeDestruct();
 }
 
@@ -128,6 +172,11 @@ void UDRShopWidget::HandleEquipmentButtonClicked()
 void UDRShopWidget::HandleConsumableButtonClicked()
 {
 	SelectCategory(EItemCategory::Consumable);
+}
+
+void UDRShopWidget::HandleSellAllOresButtonClicked()
+{
+	OnSellAllOresRequested.Broadcast();
 }
 
 void UDRShopWidget::HandlePurchaseRequested(
