@@ -126,8 +126,6 @@ protected:
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
 #pragma endregion 
 
-#pragma endregion
-
 #pragma region Interact
 private:
 	void HandleInteract(const FInputActionValue& Value);	
@@ -152,6 +150,9 @@ public:
 #pragma endregion
 	
 #pragma region Drop Item
+public:
+	void RequestThrowHeldItem();
+
 private:
 	void HandleDropHeldItem(const FInputActionValue& Value);
 	
@@ -160,6 +161,7 @@ private:
 	void ServerRequestDropHeldItem();
 	
 	ADRWorldItemActor* SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const;
+	void ActivateUsableDiggingItem(ADRWorldItemActor* SpawnedItem) const;
 	
 	// 아이템 드랍 실패 롤백
 	void RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const;
@@ -176,6 +178,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Drop", meta = (ClampMin = "0.0"))
 	float DropImpulseStrength = 300.0f;
+#pragma endregion
 	
-#pragma region endregion
 };

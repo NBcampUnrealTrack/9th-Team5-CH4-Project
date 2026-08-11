@@ -11,6 +11,7 @@
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
+#include "DeepRaiders/Item/Components/DRUsableDiggingComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
@@ -501,6 +502,11 @@ bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Qu
 
 void ADRPlayerController::HandleDropHeldItem(const FInputActionValue& Value)
 {
+    RequestThrowHeldItem();
+}
+
+void ADRPlayerController::RequestThrowHeldItem()
+{
     if (IsLocalController())
     {
         ServerRequestDropHeldItem();
@@ -551,6 +557,7 @@ void ADRPlayerController::ServerRequestDropHeldItem_Implementation()
     }
     
     DroppedItem->ApplyDropImpulse(Forward * DropImpulseStrength);
+    ActivateUsableDiggingItem(DroppedItem);
 }
 
 ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const
@@ -597,6 +604,21 @@ ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Defi
     }
     
     return WorldItemSubsystem->SpawnWorldItemFromDefinition(Definition, BaseSpawnTransform, Quantity);    
+}
+
+void ADRPlayerController::ActivateUsableDiggingItem(
+    ADRWorldItemActor* SpawnedItem) const
+{
+    if (!HasAuthority() || !IsValid(SpawnedItem))
+    {
+        return;
+    }
+    
+    UDRUsableDiggingComponent* DiggingComponent = SpawnedItem->FindComponentByClass<UDRUsableDiggingComponent>();
+    if (IsValid(DiggingComponent))
+    {
+        DiggingComponent->StartDigging();
+    }
 }
 
 void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const

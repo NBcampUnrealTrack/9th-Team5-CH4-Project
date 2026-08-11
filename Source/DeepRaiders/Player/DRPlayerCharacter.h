@@ -43,6 +43,9 @@ public:
     
     /** 로컬 플레이어가 근접 공격을 요청한다. */
     void RequestMeleeAttack();
+
+    /** 로컬 플레이어가 손에 든 아이템 던지기를 요청한다. */
+    void RequestThrowHeldItem();
     
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;

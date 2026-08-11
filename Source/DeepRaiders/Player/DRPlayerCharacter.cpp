@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -342,6 +343,19 @@ void ADRPlayerCharacter::RequestMeleeAttack()
 
 	// 실제 공격 승인과 판정은 서버가 담당한다.
 	ServerRequestMeleeAttack();
+}
+
+void ADRPlayerCharacter::RequestThrowHeldItem()
+{
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::Throw))
+	{
+		return;
+	}
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
+	{
+		PlayerController->RequestThrowHeldItem();
+	}
 }
 
 float ADRPlayerCharacter::TakeDamage(
@@ -1433,14 +1447,7 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
 		break;
 
 	case EDRItemActionType::Throw:
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[ItemAction] Throw not implemented. "
-				"Character=%s Item=%s"),
-			*GetName(),
-			*GetNameSafe(HeldItemDefinition));
+		RequestThrowHeldItem();
 		break;
 
 	case EDRItemActionType::None:
