@@ -17,6 +17,15 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 
+#include "Components/TimelineComponent.h"
+#include "Curves/CurveFloat.h"
+
+namespace
+{
+	const FName FirstPersonSwingTrackName(
+		TEXT("FirstPersonSwing"));
+}
+
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
@@ -108,6 +117,10 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+	
+	FirstPersonItemSwingTimeline =
+		CreateDefaultSubobject<UTimelineComponent>(
+			TEXT("FirstPersonItemSwingTimeline"));
 }
 
 void ADRPlayerCharacter::Tick(float DeltaSeconds)
@@ -309,26 +322,34 @@ void ADRPlayerCharacter::ApplyFallDamage(
 
 void ADRPlayerCharacter::RequestMine()
 {
-	if (IsDead())
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!HasHeldItemAction(EDRItemActionType::Dig))
 	{
 		return;
 	}
-	
+
 	if (!IsValid(MiningComponent))
 	{
 		UE_LOG(
 			LogTemp,
 			Error,
-			TEXT("[%s] MiningComponent is invalid"),
+			TEXT(
+				"[Mining] MiningComponent is invalid. "
+				"Character=%s"),
 			*GetName());
 
 		return;
 	}
 
-	if (HasHeldItemAction(EDRItemActionType::Dig))
-	{
-		MiningComponent->TryMine();
-	}
+	/*
+	 * Dig 3인칭 Presentation 요청.
+	 *
+	 * 실제 채굴 권한 처리는 MiningComponent가 담당한다.
+	 */
+	ServerRequestDigPresentation();
+
+	MiningComponent->TryMine();
 }
 
 void ADRPlayerCharacter::RequestMeleeAttack()
@@ -338,8 +359,8 @@ void ADRPlayerCharacter::RequestMeleeAttack()
 		return;
 	}
 	
-	// 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
-	PlayOwnerMeleeAttackPresentation();
+	// // 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
+	// PlayOwnerMeleeAttackPresentation();
 
 	// 실제 공격 승인과 판정은 서버가 담당한다.
 	ServerRequestMeleeAttack();
@@ -440,7 +461,56 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
-	
+
+	// 장비 Root의 기본 위치 기억
+	if (IsValid(FirstPersonEquipmentRoot))
+	{
+		FirstPersonEquipmentRootBaseTransform =
+			FirstPersonEquipmentRoot->GetRelativeTransform();
+	}
+
+	UCurveFloat* InitialSwingCurve = nullptr;
+
+	if (IsValid(FirstPersonDigPresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonDigPresentation.Curve;
+	}
+	else if (IsValid(FirstPersonMeleePresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonMeleePresentation.Curve;
+	}
+
+	if (IsValid(FirstPersonItemSwingTimeline) &&
+		IsValid(InitialSwingCurve))
+	{
+		FOnTimelineFloat UpdateDelegate;
+
+		UpdateDelegate.BindUFunction(
+			this,
+			FName("UpdateFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->AddInterpFloat(
+			InitialSwingCurve,
+			UpdateDelegate,
+			NAME_None,
+			FirstPersonSwingTrackName);
+
+		FOnTimelineEvent FinishedDelegate;
+
+		FinishedDelegate.BindUFunction(
+			this,
+			FName("FinishFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->SetTimelineFinishedFunc(
+			FinishedDelegate);
+
+		FirstPersonItemSwingTimeline->SetLooping(false);
+
+		FirstPersonItemSwingTimeline->SetTimelineLengthMode(
+			TL_LastKeyFrame);
+	}
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -1446,15 +1516,22 @@ void ADRPlayerCharacter::RestoreControllerInput()
 	OwningController->SetIgnoreLookInput(false);
 }
 
-void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
+void ADRPlayerCharacter::ExecuteHeldItemAction(
+	EDRItemActionType ActionType)
 {
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
+		PlayFirstPersonItemActionPresentation(
+			EDRItemActionType::Dig);
+
 		RequestMine();
 		break;
 
 	case EDRItemActionType::MeleeAttack:
+		PlayFirstPersonItemActionPresentation(
+			EDRItemActionType::MeleeAttack);
+
 		RequestMeleeAttack();
 		break;
 
@@ -1477,9 +1554,10 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 
 	bIsMeleeAttacking = true;
 
-	// 다른 플레이어가 보는 3인칭 공격 연출
-	MulticastPlayWorldMeleeAttack();
-
+	// 서버에서 Melee가 승인됐으므로 3인칭 Melee 연출 실행
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::MeleeAttack);
+	
 	// 공격 애니메이션의 타격 시점에 서버 판정
 	GetWorldTimerManager().SetTimer(
 		MeleeHitTimerHandle,
@@ -1497,36 +1575,167 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		false);
 }
 
-void ADRPlayerCharacter::MulticastPlayWorldMeleeAttack_Implementation()
+void ADRPlayerCharacter::PlayFirstPersonItemSwing(
+	const FDRFirstPersonSwingPresentation& Presentation)
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonItemSwingTimeline) ||
+		!IsValid(FirstPersonEquipmentRoot) ||
+		!IsValid(Presentation.Curve))
+	{
+		return;
+	}
+
+	// 혹시 기존 스윙이 재생 중이었다면 정리
+	FirstPersonItemSwingTimeline->Stop();
+
+	// 항상 기본 위치에서 새 Action 시작
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
+
+	// 이번 Action에서 사용할 Transform 데이터 저장
+	ActiveFirstPersonSwingRotation =
+		Presentation.RotationOffset;
+
+	ActiveFirstPersonSwingLocation =
+		Presentation.LocationOffset;
+
+	// 이번 Action에 맞는 Curve로 교체
+	FirstPersonItemSwingTimeline->SetFloatCurve(
+		Presentation.Curve,
+		FirstPersonSwingTrackName);
+
+	FirstPersonItemSwingTimeline->PlayFromStart();
+}
+
+void ADRPlayerCharacter::UpdateFirstPersonItemSwing(
+	float CurveValue)
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	const FVector BaseLocation =
+		FirstPersonEquipmentRootBaseTransform.GetLocation();
+
+	const FRotator BaseRotation =
+		FirstPersonEquipmentRootBaseTransform.Rotator();
+
+	const FVector NewLocation =
+		BaseLocation +
+		ActiveFirstPersonSwingLocation * CurveValue;
+
+	const FRotator RotationOffset =
+		ActiveFirstPersonSwingRotation * CurveValue;
+
+	const FRotator NewRotation =
+		BaseRotation + RotationOffset;
+
+	FirstPersonEquipmentRoot->SetRelativeLocationAndRotation(
+		NewLocation,
+		NewRotation);
+}
+
+void ADRPlayerCharacter::FinishFirstPersonItemSwing()
+{
+	if (!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
+}
+
+void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
+	EDRItemActionType ActionType)
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		PlayFirstPersonItemSwing(
+			FirstPersonDigPresentation);
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		PlayFirstPersonItemSwing(
+			FirstPersonMeleePresentation);
+		break;
+
+	case EDRItemActionType::Throw:
+	case EDRItemActionType::None:
+	default:
+		break;
+	}
+}
+
+void ADRPlayerCharacter::PlayWorldItemActionPresentation(
+	EDRItemActionType ActionType)
+{
+	UAnimMontage* Montage =
+		ResolveWorldItemActionMontage(ActionType);
+
+	if (!IsValid(Montage))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ItemAction] World montage is invalid. "
+				"Character=%s Action=%s"),
+			*GetName(),
+			*UEnum::GetValueAsString(ActionType));
+
+		return;
+	}
+
+	PlayAnimMontage(Montage);
+}
+
+UAnimMontage* ADRPlayerCharacter::ResolveWorldItemActionMontage(
+	EDRItemActionType ActionType) const
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		return WorldDigMontage;
+
+	case EDRItemActionType::MeleeAttack:
+		return WorldMeleeAttackMontage;
+
+	case EDRItemActionType::Throw:
+	case EDRItemActionType::None:
+	default:
+		return nullptr;
+	}
+}
+
+void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
+{
+	if (IsDead() ||
+		!HasHeldItemAction(EDRItemActionType::Dig))
+	{
+		return;
+	}
+
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::Dig);
+}
+
+void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
+	EDRItemActionType ActionType)
 {
 	/*
-	 * 공격한 본인은 1인칭 표현을 사용한다.
-	 * 본인 클라이언트에서는 월드 Manny 몽타주를 생략한다.
+	 * 소유 플레이어는 별도의 1인칭 Presentation을 사용한다.
 	 */
 	if (IsLocallyControlled())
 	{
 		return;
 	}
 
-	PlayWorldMeleeAttackPresentation();
-}
-
-void ADRPlayerCharacter::PlayWorldMeleeAttackPresentation()
-{
-	if (!IsValid(WorldMeleeAttackMontage))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[Melee] WorldMeleeAttackMontage "
-				"is invalid. Character=%s"),
-			*GetName());
-
-		return;
-	}
-
-	PlayAnimMontage(WorldMeleeAttackMontage);
+	PlayWorldItemActionPresentation(ActionType);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
