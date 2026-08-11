@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -344,6 +345,19 @@ void ADRPlayerCharacter::RequestMeleeAttack()
 	ServerRequestMeleeAttack();
 }
 
+void ADRPlayerCharacter::RequestThrowHeldItem()
+{
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::Throw))
+	{
+		return;
+	}
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
+	{
+		PlayerController->RequestThrowHeldItem();
+	}
+}
+
 float ADRPlayerCharacter::TakeDamage(
 	float DamageAmount,
 	const FDamageEvent& DamageEvent,
@@ -375,7 +389,8 @@ float ADRPlayerCharacter::TakeDamage(
 	return AppliedDamage;
 }
 
-void ADRPlayerCharacter::RequestPrimaryItemAction()
+void ADRPlayerCharacter::RequestPrimaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
@@ -384,14 +399,25 @@ void ADRPlayerCharacter::RequestPrimaryItemAction()
 		return;
 	}
 
+	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
+	{
+		return;
+	}
+
 	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
 }
 
-void ADRPlayerCharacter::RequestSecondaryItemAction()
+void ADRPlayerCharacter::RequestSecondaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
 		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
@@ -1433,14 +1459,7 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
 		break;
 
 	case EDRItemActionType::Throw:
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[ItemAction] Throw not implemented. "
-				"Character=%s Item=%s"),
-			*GetName(),
-			*GetNameSafe(HeldItemDefinition));
+		RequestThrowHeldItem();
 		break;
 
 	case EDRItemActionType::None:

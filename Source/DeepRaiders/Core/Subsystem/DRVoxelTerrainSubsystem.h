@@ -60,6 +60,11 @@ public:
 		float Radius,
 		FDRTerrainDigOperation* OutOperation = nullptr);
 
+	bool RequestDigAtLocation(
+		const FVector& Location,
+		float Radius,
+		FDRTerrainDigOperation* OutOperation = nullptr);
+
 	// VoxelWorld가 이미 생성된 상태라면 즉시 지형 변경을 적용한다.
 	bool ApplyDig(const FDRTerrainDigOperation& Operation);
 
