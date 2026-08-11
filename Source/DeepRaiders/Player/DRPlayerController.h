@@ -14,6 +14,8 @@ class UDRQuickSlotComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
+class UDRInventoryUIComponent;
+class UDRQuickSlotUIComponent;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -209,6 +211,10 @@ public:
 		return CurrentStorage.Get();
 	}
 	
+	// CurrentStorage와 상호작용한 거리인지 검사
+	UFUNCTION(BlueprintPure, Category = "Player|Storage")
+	bool IsStorageWithinInteractionRange(const ADRStorage* Storage) const;
+	
 	// 테스트 명령
 	UFUNCTION(Exec)
 	void DRDepositFirstItem();
@@ -240,4 +246,19 @@ protected:
 	
 #pragma endregion
 	
+#pragma region UI
+private:
+	void HandleToggleInventory(const FInputActionValue& Value);
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InventoryAction;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
+
+#pragma endregion 
 };

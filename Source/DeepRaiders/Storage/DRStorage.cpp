@@ -4,7 +4,6 @@
 #include "DRStorage.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
-#include "DeepRaiders/Inventory/Component/DRInventoryUIComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "GameFramework/Pawn.h"
 

@@ -18,11 +18,18 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Storage/DRStorage.h"
 
+#include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
+
 ADRPlayerController::ADRPlayerController()
 {
     // QuickSlot Initialize
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
+    
+    // UI Component Initialize
+    InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+    QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -187,6 +194,15 @@ void ADRPlayerController::SetupInputComponent()
             ETriggerEvent::Started,
             this,
             &ThisClass::HandleDropHeldItem);
+    }
+    
+    if (IsValid(InventoryAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            InventoryAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleToggleInventory);
     }
 }
 
@@ -722,15 +738,8 @@ bool ADRPlayerController::CanAccessStorage(ADRStorage* Storage) const
 {
     APawn* ControlledPawn = GetPawn();
     
-    if (!HasAuthority() || !IsValid(ControlledPawn) || !IsValid(Storage))
-    {
-        return false;
-    }
-    
-    // 창고 근처에서 접근을 시도하는지 검사
-    const float DistanceSquared = FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation());
-    
-    if (DistanceSquared > FMath::Square(InteractionRange))
+    if (!HasAuthority() || !IsValid(ControlledPawn) 
+        || !IsStorageWithinInteractionRange(Storage))
     {
         return false;
     }
@@ -769,9 +778,34 @@ void ADRPlayerController::SetCurrentStorage(ADRStorage* NewStorage)
     ForceNetUpdate();    
 }
 
+void ADRPlayerController::HandleToggleInventory(const FInputActionValue& Value)
+{
+    if (IsValid(InventoryUIComponent))
+    {
+        InventoryUIComponent->TogglePlayerInventory();
+    }
+}
+
 void ADRPlayerController::OnRep_CurrentStorage()
 {
     OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
+}
+
+bool ADRPlayerController::IsStorageWithinInteractionRange(const ADRStorage* Storage) const
+{
+    const APawn* ControlledPawn = GetPawn();
+    
+    if (!IsValid(ControlledPawn) || !IsValid(Storage))
+    {
+        return false;
+    }
+    
+    // 상호작용 가능 여부 체크마다 범위 디버그 드로우
+    DrawDebugSphere(GetWorld(), GetOwner()->GetActorLocation(), InteractionRange
+    , 16, FColor::Red, false, 1.0f);
+    
+    return FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation()) 
+        <= FMath::Square(InteractionRange);
 }
 
 void ADRPlayerController::DRDepositFirstItem()
