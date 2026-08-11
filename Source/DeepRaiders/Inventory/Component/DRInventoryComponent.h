@@ -39,6 +39,12 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryRemoveEntries(const TArray<FGuid>& EntryIds);
 	
+	// SourceEntryId가 가리키는 Entry에서 DestinationInventory로 가능한 수량만큼 이동한다. (부분 이동 가능)
+	// 서버에서만 실행, 실제로 이동한 수량 반환
+	// 현재 1개의 슬롯 이동만 지원
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
+	int32 TransferUpToFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId, int32 RequestedQuantity);
+	
 	// EntryId에 해당하는 엔트리를 탐색
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool FindEntry(FGuid EntryId, FDRInventoryEntry& OutEntry) const;
@@ -93,6 +99,14 @@ private:
 	
 	void BroadcastInventoryChanged();
 
+	// 인벤토리 간 통신을 위한 변경 알림 없는 추가/제거 함수
+	// 기존 함수 활용 시, 제거 -> 알림 -> 추가 -> 알림 순서가 강제됨
+	// 검증은 호출 하기 전에 수행하도록
+	// 검증과 변경 알림 없이 아이템을 추가
+	void AddItemUnchecked(UDRItemDefinition* Definition, int32 Quantity);
+	// 검증과 변경 알림 없이 지정된 Entry의 아이템을 제거
+	void RemoveFromEntryUnchecked(int32 EntryIndex, int32 Quantity);
+	
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDRInventoryChanged OnInventoryChangedDelegate;
