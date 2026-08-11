@@ -218,7 +218,7 @@ void UDRInventoryUIComponent::CloseInventoryScreen()
 	ApplyInputMode(EDRInventoryInputMode::GameOnly);	
 }
 
-void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InputMode)
+void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InInputMode)
 {
 	if (!IsValid(PlayerController))
 	{
@@ -227,20 +227,24 @@ void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InputMode)
 	
 	PlayerController->FlushPressedKeys();
 
-	switch (InputMode)
+	switch (InInputMode)
 	{
 	case EDRInventoryInputMode::GameAndUI:
-		FInputModeGameAndUI InputMode;
-		InputMode.SetHideCursorDuringCapture(false);
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		{
+			FInputModeGameAndUI InputMode;
+			InputMode.SetHideCursorDuringCapture(false);
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	
-		PlayerController->SetInputMode(InputMode);
-		PlayerController->bShowMouseCursor = true;
-		break;
+			PlayerController->SetInputMode(InputMode);
+			PlayerController->bShowMouseCursor = true;
+			break;
+		}
 	case EDRInventoryInputMode::GameOnly:
-		PlayerController->SetInputMode(FInputModeGameOnly());
-		PlayerController->bShowMouseCursor = false;
-		break;
+		{
+			PlayerController->SetInputMode(FInputModeGameOnly());
+			PlayerController->bShowMouseCursor = false;
+			break;
+		}
 	}
 }
 

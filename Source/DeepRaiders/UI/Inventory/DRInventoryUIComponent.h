@@ -49,7 +49,7 @@ private:
 	
 	// 호출 시 UIState 및 InputMode 초기화
 	void CloseInventoryScreen();
-	void ApplyInputMode(EDRInventoryInputMode InputMode);
+	void ApplyInputMode(EDRInventoryInputMode InInputMode);
 	
 	// 창고와의 거리가 멀어지면 자동으로 UI가 닫히도록 타이머로 체크
 	void StartStorageDistanceCheck();
