@@ -5,6 +5,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "Net/UnrealNetwork.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
@@ -14,8 +15,8 @@
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
-
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Storage/DRStorage.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -23,6 +24,14 @@ ADRPlayerController::ADRPlayerController()
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 }
+
+void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(ThisClass, CurrentStorage);
+}
+
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
@@ -630,4 +639,174 @@ void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) co
     }
     
     DroppedItem->Destroy();
+}
+
+bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
+{
+    if (!HasAuthority() || !CanAccessStorage(Storage))
+    {
+        return false;
+    }
+    
+    SetCurrentStorage(Storage);
+    return true;    
+}
+
+void ADRPlayerController::RequestTransferStorageItem(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+{
+    if (!SourceEntryId.IsValid())
+    {
+        return;
+    }
+    
+    if (HasAuthority())
+    {
+        TryTransferStorageItemInternal(Direction, SourceEntryId);
+        return;
+    }
+    
+    if (IsLocalController())
+    {
+        ServerRequestTransferStorageItem(Direction,SourceEntryId);
+    }
+}
+
+void ADRPlayerController::ServerRequestTransferStorageItem_Implementation(EDRStorageTransferDirection Direction,
+    FGuid SourceEntryId)
+{
+    TryTransferStorageItemInternal(Direction, SourceEntryId);
+}
+
+bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+{
+    ADRStorage* Storage = CurrentStorage.Get();
+    
+    if (!CanAccessStorage(Storage))
+    {
+        SetCurrentStorage(nullptr);
+        return false;
+    }
+    
+    UDRInventoryComponent* StorageInventory = Storage->GetInventoryComponent();
+    
+    if (!IsValid(QuickSlotInventoryComponent) || !IsValid(StorageInventory))
+    {
+        return false;
+    }
+    
+    UDRInventoryComponent* SourceInventory = nullptr;
+    UDRInventoryComponent* DestinationInventory = nullptr;
+    
+    switch (Direction)
+    {
+    case EDRStorageTransferDirection::PlayerToStorage:
+        SourceInventory = QuickSlotInventoryComponent;
+        DestinationInventory = StorageInventory;
+        break;
+    case EDRStorageTransferDirection::StorageToPlayer:
+        SourceInventory = StorageInventory;
+        DestinationInventory = QuickSlotInventoryComponent;
+        break;
+    default:
+        return false;
+    }
+    
+    // 테스트 시점, 전달 수량을 1개로 제한
+    constexpr int32 TransferQuantity = 1;
+    
+    return SourceInventory->TryTransferFromEntry(DestinationInventory, SourceEntryId, TransferQuantity) 
+        == TransferQuantity;   
+}
+
+bool ADRPlayerController::CanAccessStorage(ADRStorage* Storage) const
+{
+    APawn* ControlledPawn = GetPawn();
+    
+    if (!HasAuthority() || !IsValid(ControlledPawn) || !IsValid(Storage))
+    {
+        return false;
+    }
+    
+    // 창고 근처에서 접근을 시도하는지 검사
+    const float DistanceSquared = FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation());
+    
+    if (DistanceSquared > FMath::Square(InteractionRange))
+    {
+        return false;
+    }
+    
+    return IDRInteractableInterface::Execute_CanInteract(Storage, ControlledPawn);
+}
+
+void ADRPlayerController::RequestCloseStorage()
+{
+    if (HasAuthority())
+    {
+        SetCurrentStorage(nullptr);
+        return;
+    }
+    
+    if (IsLocalController())
+    {
+        ServerRequestCloseStorage();
+    }
+}
+
+void ADRPlayerController::ServerRequestCloseStorage_Implementation()
+{
+    SetCurrentStorage(nullptr);
+}
+
+void ADRPlayerController::SetCurrentStorage(ADRStorage* NewStorage)
+{
+    if (!HasAuthority() || CurrentStorage == NewStorage)
+    {
+        return;
+    }
+
+    CurrentStorage = NewStorage;
+    OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
+    ForceNetUpdate();    
+}
+
+void ADRPlayerController::OnRep_CurrentStorage()
+{
+    OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
+}
+
+void ADRPlayerController::DRDepositFirstItem()
+{
+    if (!IsValid(QuickSlotInventoryComponent))
+    {
+        return;
+    }
+
+    const TArray<FDRInventoryEntry> Entries = QuickSlotInventoryComponent->GetEntries();
+
+    if (!Entries.IsEmpty())
+    {
+        RequestTransferStorageItem(
+            EDRStorageTransferDirection::PlayerToStorage,
+            Entries[0].EntryId);
+    }
+}
+
+void ADRPlayerController::DRWithDrawFirstItem()
+{
+    ADRStorage* Storage = CurrentStorage.Get();
+
+    if (!IsValid(Storage) || !IsValid(Storage->GetInventoryComponent()))
+    {
+        return;
+    }
+
+    const TArray<FDRInventoryEntry> Entries =
+        Storage->GetInventoryComponent()->GetEntries();
+
+    if (!Entries.IsEmpty())
+    {
+        RequestTransferStorageItem(
+            EDRStorageTransferDirection::StorageToPlayer,
+            Entries[0].EntryId);
+    }
 }

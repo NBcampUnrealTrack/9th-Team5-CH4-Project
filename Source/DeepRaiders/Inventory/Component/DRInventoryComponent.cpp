@@ -32,7 +32,7 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 		return false;
 	}
 	
-	AddItemUnchecked(Definition, Quantity);
+	AddItemInternal(Definition, Quantity);
 	HandleInventoryChangedOnServer();
 	
 	UE_LOG(LogTemp, Log, TEXT("[%s] TryAddItem End, Quantity : %d"), *GetName(), GetItemCount(Definition));
@@ -61,7 +61,7 @@ bool UDRInventoryComponent::TryRemoveFromEntry(FGuid EntryId, int32 Quantity)
 		return false;
 	}
 	
-	RemoveFromEntryUnchecked(EntryIndex, Quantity);	
+	RemoveFromEntryInternal(EntryIndex, Quantity);	
 	HandleInventoryChangedOnServer();
 	
 	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry End"), *GetName());
@@ -151,7 +151,7 @@ bool UDRInventoryComponent::TryRemoveEntries(const TArray<FGuid>& EntryIds)
 	return true;
 }
 
-int32 UDRInventoryComponent::TransferUpToFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId,
+int32 UDRInventoryComponent::TryTransferFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId,
 	int32 RequestedQuantity)
 {
 	if (!HasInventoryAuthority()
@@ -159,7 +159,7 @@ int32 UDRInventoryComponent::TransferUpToFromEntry(UDRInventoryComponent* Destin
 		|| DestinationInventory == this
 		|| !DestinationInventory->HasInventoryAuthority()
 		|| !SourceEntryId.IsValid()
-		|| RequestedQuantity)
+		|| RequestedQuantity <= 0)
 	{
 		return 0;
 	}
@@ -184,6 +184,13 @@ int32 UDRInventoryComponent::TransferUpToFromEntry(UDRInventoryComponent* Destin
 		return 0;
 	}
 	
+	// 요청한 수량의 처리가 불가능한 경우 항상 실패
+	if(SourceEntry.Quantity < RequestedQuantity
+		|| DestinationInventory->GetAddableQuantity(Definition) < RequestedQuantity)
+	{
+		return 0;
+	}
+	
 	const int32 AddableQuantity = DestinationInventory->GetAddableQuantity(Definition);
 	const int32 TransferQuantity = FMath::Min(RequestedQuantity, FMath::Min(SourceEntry.Quantity, AddableQuantity));
 	
@@ -192,8 +199,8 @@ int32 UDRInventoryComponent::TransferUpToFromEntry(UDRInventoryComponent* Destin
 		return 0;
 	}
 	
-	DestinationInventory->AddItemUnchecked(Definition, TransferQuantity);
-	RemoveFromEntryUnchecked(SourceEntryIndex, TransferQuantity);
+	DestinationInventory->AddItemInternal(Definition, TransferQuantity);
+	RemoveFromEntryInternal(SourceEntryIndex, TransferQuantity);
 	
 	HandleInventoryChangedOnServer();
 	DestinationInventory->HandleInventoryChangedOnServer();
@@ -332,8 +339,12 @@ void UDRInventoryComponent::BroadcastInventoryChanged()
 	OnInventoryChangedDelegate.Broadcast();
 }
 
-void UDRInventoryComponent::AddItemUnchecked(UDRItemDefinition* Definition, int32 Quantity)
+void UDRInventoryComponent::AddItemInternal(UDRItemDefinition* Definition, int32 Quantity)
 {
+	check(IsValid(Definition));
+	check(Quantity > 0);
+	check(CanAddItem(Definition, Quantity));
+	
 	const int32 MaxStackSize = GetMaxStackSize(Definition);
 	
 	int32 RemainingQuantity = Quantity;
@@ -377,8 +388,12 @@ void UDRInventoryComponent::AddItemUnchecked(UDRItemDefinition* Definition, int3
 	}
 }
 
-void UDRInventoryComponent::RemoveFromEntryUnchecked(int32 EntryIndex, int32 Quantity)
+void UDRInventoryComponent::RemoveFromEntryInternal(int32 EntryIndex, int32 Quantity)
 {
+	check(Entries.IsValidIndex(EntryIndex));
+	check(Quantity > 0);
+	check(Entries[EntryIndex].Quantity >= Quantity);
+	
 	FDRInventoryEntry& Entry = Entries[EntryIndex];
 
 	if (Entry.Quantity == Quantity)
