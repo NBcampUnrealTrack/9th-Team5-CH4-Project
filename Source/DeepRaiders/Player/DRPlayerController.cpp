@@ -22,6 +22,8 @@
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 
+#include "Debug/DebugDrawService.h"
+
 ADRPlayerController::ADRPlayerController()
 {
     // QuickSlot Initialize
@@ -953,8 +955,8 @@ bool ADRPlayerController::IsStorageWithinInteractionRange(const ADRStorage* Stor
     }
     
     // 상호작용 가능 여부 체크마다 범위 디버그 드로우
-    DrawDebugSphere(GetWorld(), GetOwner()->GetActorLocation(), InteractionRange
-    , 16, FColor::Red, false, 1.0f);
+     DrawDebugSphere(GetWorld(), GetPawn()->GetActorLocation(), InteractionRange
+     , 16, FColor::Red, false, 1.0f);
     
     return FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation()) 
         <= FMath::Square(InteractionRange);
