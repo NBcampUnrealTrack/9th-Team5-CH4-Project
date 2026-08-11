@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -22,6 +23,7 @@ ADRWorldItemActor::ADRWorldItemActor()
 	StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	StaticMeshComponent->SetSimulatePhysics(true);
 	StaticMeshComponent->BodyInstance.bStartAwake = false;
+	StaticMeshComponent->OnComponentHit.AddDynamic(this, &ThisClass::HandleStaticMeshHit);
 }
 
 void ADRWorldItemActor::BeginPlay()
@@ -99,8 +101,74 @@ void ADRWorldItemActor::ApplyDropImpulse(const FVector& Impulse)
 		return;
 	}
 	
+	ArmGroundHitEvent();
 	StaticMeshComponent->WakeAllRigidBodies();
 	StaticMeshComponent->AddImpulse(Impulse, NAME_None, true);
+}
+
+void ADRWorldItemActor::BroadcastMined()
+{
+	if (HasAuthority())
+	{
+		MulticastPlayActiveSound();
+	}
+}
+
+void ADRWorldItemActor::MulticastPlayActiveSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->ActiveSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->ActiveSound, GetActorLocation());
+	}
+}
+
+void ADRWorldItemActor::ArmGroundHitEvent()
+{
+	bGroundHitEventArmed = true;
+}
+
+void ADRWorldItemActor::BroadcastDropped()
+{
+	if (!HasAuthority() || !bGroundHitEventArmed)
+	{
+		return;
+	}
+
+	// 드랍 동작마다 최초 착지에서 한 번만 재생한다.
+	bGroundHitEventArmed = false;
+	MulticastPlayDroppedSound();
+}
+
+void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
+{
+	if (!HasAuthority() || !bGroundHitEventArmed || Hit.ImpactNormal.Z < 0.5f)
+	{
+		return;
+	}
+
+	BroadcastDropped();
+}
+
+void ADRWorldItemActor::MulticastPlayPickupSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->PickupSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->PickupSound, GetActorLocation());
+	}
+}
+
+void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->DroppedSound))
+	{
+		// 광물마다 별도의 Concurrency Owner를 사용한다.
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->DroppedSound, GetActorLocation(),
+			FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr, nullptr, this);
+	}
 }
 
 bool ADRWorldItemActor::IsPickupAvailable() const
@@ -177,6 +245,8 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 		bInteractionInProgress = false;
 		return false;
 	}
+
+	MulticastPlayPickupSound();
 	
 	if (!FinalizePickup())
 	{

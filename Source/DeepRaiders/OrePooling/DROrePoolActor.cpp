@@ -126,6 +126,7 @@ void ADROrePoolActor::MarkAsDropped()
     bPoolActive = true;
     SetWorldState(EDROreWorldState::Dropped);
     ApplyPoolState();
+    BroadcastDropped();
     ForceNetUpdate();
 }
 
@@ -159,8 +160,10 @@ void ADROrePoolActor::MarkAsDetached()
     const FVector DetachedLocation = DetachedStartLocation + MoveDirection * StaticMeshComponent->Bounds.SphereRadius;
     SetActorLocation(DetachedLocation, false, nullptr, ETeleportType::TeleportPhysics);
 
+    ArmGroundHitEvent();
     SetWorldState(EDROreWorldState::Detached);
     ApplyPoolState();
+    BroadcastMined();
     ForceNetUpdate();
 
     // 땅 위치 체크
