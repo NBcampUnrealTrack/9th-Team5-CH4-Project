@@ -40,8 +40,12 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-	void HandlePrimaryAction(const FInputActionValue& value);
-	void HandleSecondaryAction(const FInputActionValue& Value);
+	void HandlePrimaryActionStarted(const FInputActionValue& Value);
+	void HandlePrimaryActionTriggered(const FInputActionValue& Value);
+	void HandlePrimaryActionCompleted(const FInputActionValue& Value);
+	void HandleSecondaryActionStarted(const FInputActionValue& Value);
+	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
+	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
 
 	// 임시 네트워크 검증 입력
 	void HandleNetworkTest(const FInputActionValue& Value);

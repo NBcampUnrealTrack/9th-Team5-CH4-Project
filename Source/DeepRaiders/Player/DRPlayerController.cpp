@@ -151,16 +151,40 @@ void ADRPlayerController::SetupInputComponent()
             PrimaryAction.Get(),
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandlePrimaryAction);
+            &ThisClass::HandlePrimaryActionStarted);
+
+        EnhancedInput->BindAction(
+            PrimaryAction.Get(),
+            ETriggerEvent::Triggered,
+            this,
+            &ThisClass::HandlePrimaryActionTriggered);
+
+        EnhancedInput->BindAction(
+            PrimaryAction.Get(),
+            ETriggerEvent::Completed,
+            this,
+            &ThisClass::HandlePrimaryActionCompleted);
     }
     
     if (IsValid(SecondaryAction.Get()))
     {
         EnhancedInput->BindAction(
-            SecondaryAction,
+            SecondaryAction.Get(),
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandleSecondaryAction);
+            &ThisClass::HandleSecondaryActionStarted);
+
+        EnhancedInput->BindAction(
+            SecondaryAction.Get(),
+            ETriggerEvent::Triggered,
+            this,
+            &ThisClass::HandleSecondaryActionTriggered);
+
+        EnhancedInput->BindAction(
+            SecondaryAction.Get(),
+            ETriggerEvent::Completed,
+            this,
+            &ThisClass::HandleSecondaryActionCompleted);
     }
     
     if (IsValid(InteractAction.Get()))
@@ -322,21 +346,21 @@ void ADRPlayerController::InitializeStartingQuickSlot()
     }
 }
 
-void ADRPlayerController::HandlePrimaryAction(const FInputActionValue& value)
+void ADRPlayerController::HandlePrimaryActionStarted(const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
-        Cast<ADRPlayerCharacter>(GetPawn());
+        GetDRPlayerCharacter();
 
     if (!IsValid(PlayerCharacter))
     {
         return;
     }
     
-    PlayerCharacter->RequestPrimaryItemAction();
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Started);
 }
 
-void ADRPlayerController::HandleSecondaryAction(
-    const FInputActionValue& Value)
+void ADRPlayerController::HandlePrimaryActionTriggered(const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
         GetDRPlayerCharacter();
@@ -346,7 +370,67 @@ void ADRPlayerController::HandleSecondaryAction(
         return;
     }
 
-    PlayerCharacter->RequestSecondaryItemAction();
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Triggered);
+}
+
+void ADRPlayerController::HandlePrimaryActionCompleted(const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Completed);
+}
+
+void ADRPlayerController::HandleSecondaryActionStarted(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Started);
+}
+
+void ADRPlayerController::HandleSecondaryActionTriggered(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Triggered);
+}
+
+void ADRPlayerController::HandleSecondaryActionCompleted(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Completed);
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(

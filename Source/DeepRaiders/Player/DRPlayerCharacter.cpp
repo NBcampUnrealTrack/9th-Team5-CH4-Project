@@ -389,7 +389,8 @@ float ADRPlayerCharacter::TakeDamage(
 	return AppliedDamage;
 }
 
-void ADRPlayerCharacter::RequestPrimaryItemAction()
+void ADRPlayerCharacter::RequestPrimaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
@@ -398,14 +399,25 @@ void ADRPlayerCharacter::RequestPrimaryItemAction()
 		return;
 	}
 
+	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
+	{
+		return;
+	}
+
 	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
 }
 
-void ADRPlayerCharacter::RequestSecondaryItemAction()
+void ADRPlayerCharacter::RequestSecondaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
 		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
