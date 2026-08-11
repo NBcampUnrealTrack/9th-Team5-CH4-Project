@@ -500,6 +500,9 @@ protected:
     
     FTransform FirstPersonEquipmentRootBaseTransform;
 
+    bool CanStartLocalItemAction() const;
+    float GetItemActionCooldown(EDRItemActionType ActionType) const;
+
     void PlayFirstPersonItemSwing(
         const FDRFirstPersonSwingPresentation& Presentation);
 
@@ -511,6 +514,15 @@ protected:
     
     // ===== Item Action Presentation =====
 
+    float NextLocalItemActionTime = 0.f;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action",
+        meta = (AllowPrivateAccess = "true", ClampMin = "0.01"))
+    float DigActionCooldown = 0.6f;
+    
     /** 로컬 1인칭에서 Action에 맞는 연출을 재생한다. */
     void PlayFirstPersonItemActionPresentation(
         EDRItemActionType ActionType);

@@ -1489,6 +1489,17 @@ void ADRPlayerCharacter::RestoreControllerInput()
 void ADRPlayerCharacter::ExecuteHeldItemAction(
 	EDRItemActionType ActionType)
 {
+	if (!CanStartLocalItemAction())
+	{
+		return;
+	}
+
+	const float Cooldown =
+		GetItemActionCooldown(ActionType);
+
+	NextLocalItemActionTime =
+		GetWorld()->GetTimeSeconds() + Cooldown;
+	
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
@@ -1543,6 +1554,30 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		&ThisClass::FinishMeleeAttack,
 		MeleeAttackDuration,
 		false);
+}
+
+bool ADRPlayerCharacter::CanStartLocalItemAction() const
+{
+	const UWorld* World = GetWorld();
+
+	return IsValid(World) &&
+		World->GetTimeSeconds() >= NextLocalItemActionTime;
+}
+
+float ADRPlayerCharacter::GetItemActionCooldown(
+	EDRItemActionType ActionType) const
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		return DigActionCooldown;
+
+	case EDRItemActionType::MeleeAttack:
+		return MeleeAttackDuration;
+
+	default:
+		return 0.f;
+	}
 }
 
 void ADRPlayerCharacter::PlayFirstPersonItemSwing(
@@ -1905,3 +1940,4 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	RefreshJetpackActivePresentation();
 	ServerStopJetpack();
 }
+
