@@ -61,9 +61,6 @@ private:
 	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
 	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
 
-	// 임시 네트워크 검증 입력
-	void HandleNetworkTest(const FInputActionValue& Value);
-	
 	void InitializeStartingQuickSlot();
 	
 protected:
@@ -96,12 +93,6 @@ protected:
 		BlueprintReadOnly,
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> SelectQuickSlotAction;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Player|Input")
-	TObjectPtr<UInputAction> NetworkTestAction;
 	
 	UPROPERTY(
 		EditDefaultsOnly,

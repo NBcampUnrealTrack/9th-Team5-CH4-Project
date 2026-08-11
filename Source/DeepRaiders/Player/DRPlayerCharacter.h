@@ -113,9 +113,6 @@ public:
 
     void MoveInput(const FVector2D& MoveInput);
     void LookInput(const FVector2D& LookInput);
-
-    // 임시 네트워크 테스트 진입점
-    void RequestNetworkTest();
     
     UFUNCTION(BlueprintPure, Category = "Player|Health")
     float GetCurrentHealth() const
@@ -193,19 +190,7 @@ protected:
     void OnRep_CurrentHealth();
     
 private:
-
-    // 임시 네트워크 복제 검증용
-    void ApplyNetworkTestState();
-
     void PrintNetworkState(const TCHAR* Context) const;
-
-    /** 소유 클라이언트의 요청을 서버에서 처리한다. */
-    UFUNCTION(Server, Reliable)
-    void ServerToggleNetworkTest();
-
-    /** 복제된 테스트 상태를 클라이언트 외형에 반영한다. */
-    UFUNCTION()
-    void OnRep_NetworkTestActive();
 
     UFUNCTION(Server, Reliable)
     void ServerStartJetpack();
@@ -321,35 +306,6 @@ protected:
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
-    /** 서버가 관리하며, 클라이언트에서는 RepNotify로 외형을 갱신한다. */
-    UPROPERTY(
-        ReplicatedUsing = OnRep_NetworkTestActive,
-        VisibleAnywhere,
-        BlueprintReadOnly,
-        Category = "Player|Network Test")
-    bool bNetworkTestActive = false;
-    
-    /** F키 눌르면 테스트 해볼수있음 */
-    UPROPERTY(
-    EditDefaultsOnly,
-    Category = "Player|Equipment|Test")
-    TObjectPtr<UStaticMesh> EquipmentTestMesh;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestFirstPersonTransform;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestWorldHandTransform;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestWorldBackTransform;
-    
     // ===== Jetpack =====
     
     UPROPERTY(
