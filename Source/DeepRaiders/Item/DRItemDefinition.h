@@ -9,6 +9,7 @@
 
 class ADRWorldItemActor;
 class UTexture2D;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class EItemCategory : uint8
@@ -95,5 +96,17 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
+
+	/** 아이템이 활성화될 때 재생할 소리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
+	TObjectPtr<USoundBase> ActiveSound;
+
+	/** 아이템을 주웠을 때 재생할 소리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
+	TObjectPtr<USoundBase> PickupSound;
+
+	/** 아이템이 땅에 떨어졌을 때 재생할 소리 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
+	TObjectPtr<USoundBase> DroppedSound;
 };
 
