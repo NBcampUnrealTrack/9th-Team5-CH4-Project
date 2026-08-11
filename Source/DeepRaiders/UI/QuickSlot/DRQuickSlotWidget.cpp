@@ -63,9 +63,11 @@ void UDRQuickSlotWidget::RebuildSlots()
 	{
 		UDRQuickSlotSlotWidget* SlotWidget = CreateWidget<UDRQuickSlotSlotWidget>(GetOwningPlayer(), QuickSlotSlotWidgetClass);
 		
-		if (!IsValid(SlotWidget))
+		if (!ensureMsgf(IsValid(SlotWidget), TEXT("Failed to create QuickSlotWidget at index %d"), SlotIndex))
 		{
-			continue;
+			SlotPanel->ClearChildren();
+			SlotWidgets.Reset();
+			return;
 		}
 		
 		SlotWidget->OnQuickSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);

@@ -43,6 +43,15 @@ void UDRInventoryUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	HideStorageInventory();
 	HidePlayerInventory();
 	
+	if (IsValid(PlayerInventoryWidget))
+	{
+		PlayerInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandlePlayerEntryClicked);
+		PlayerInventoryWidget->OnCloseRequestedDelegate.RemoveDynamic(this, &ThisClass::HandleCloseRequested);
+		
+		PlayerInventoryWidget->RemoveFromParent();
+		PlayerInventoryWidget = nullptr;
+	}
+	
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -58,7 +67,7 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 	case EDRInventoryUIState::Closed:
 		UIState =  EDRInventoryUIState::PlayerOnly;
 		ShowPlayerInventory();
-		ApplyInputMode();
+		ApplyInputMode(EDRInventoryInputMode::GameOnly);
 		break;
 		
 	case EDRInventoryUIState::PlayerOnly:
@@ -81,7 +90,7 @@ void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage
 		ShowPlayerInventory();
 		ShowStorageInventory(NewStorage);
 		StartStorageDistanceCheck();
-		ApplyInputMode();
+		ApplyInputMode(EDRInventoryInputMode::GameAndUI);
 		return;
 	}
 	
@@ -93,8 +102,14 @@ void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage
 
 void UDRInventoryUIComponent::ShowPlayerInventory()
 {
-	if (IsValid(PlayerInventoryWidget)
-		|| !PlayerInventoryWidgetClass)
+	// 이미 존재하는 경우
+	if (IsValid(PlayerInventoryWidget))
+	{
+		PlayerInventoryWidget->SetVisibility(ESlateVisibility::Visible);
+		return;
+	}
+	
+	if (!PlayerInventoryWidgetClass)
 	{
 		return;
 	}
@@ -122,11 +137,9 @@ void UDRInventoryUIComponent::HidePlayerInventory()
 		return;
 	}
 	
-	PlayerInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandlePlayerEntryClicked);
-	PlayerInventoryWidget->OnCloseRequestedDelegate.RemoveDynamic(this, &ThisClass::HandleCloseRequested);
-	
-	PlayerInventoryWidget->RemoveFromParent();
-	PlayerInventoryWidget = nullptr;
+	// Player Inventory는 지우지 않고 캐싱
+	// Visibility만 조정
+	PlayerInventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
@@ -202,10 +215,10 @@ void UDRInventoryUIComponent::CloseInventoryScreen()
 	HideStorageInventory();
 	
 	UIState = EDRInventoryUIState::Closed;
-	ApplyInputMode();	
+	ApplyInputMode(EDRInventoryInputMode::GameOnly);	
 }
 
-void UDRInventoryUIComponent::ApplyInputMode()
+void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InputMode)
 {
 	if (!IsValid(PlayerController))
 	{
@@ -213,20 +226,22 @@ void UDRInventoryUIComponent::ApplyInputMode()
 	}
 	
 	PlayerController->FlushPressedKeys();
-	
-	if (UIState == EDRInventoryUIState::Closed)
+
+	switch (InputMode)
 	{
+	case EDRInventoryInputMode::GameAndUI:
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	
+		PlayerController->SetInputMode(InputMode);
+		PlayerController->bShowMouseCursor = true;
+		break;
+	case EDRInventoryInputMode::GameOnly:
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
-		return;
+		break;
 	}
-	
-	FInputModeGameAndUI InputMode;
-	InputMode.SetHideCursorDuringCapture(false);
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	
-	PlayerController->SetInputMode(InputMode);
-	PlayerController->bShowMouseCursor = true;
 }
 
 void UDRInventoryUIComponent::StartStorageDistanceCheck()

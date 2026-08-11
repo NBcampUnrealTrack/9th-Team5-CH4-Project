@@ -77,10 +77,11 @@ void UDRInventoryWidget::RebuildSlot()
 	{
 		UDRInventorySlotWidget* SlotWidget = CreateWidget<UDRInventorySlotWidget>(GetOwningPlayer(), InventorySlotWidgetClass);
 		
-		// 생성 실패 시 무시하고 진행
-		if (!IsValid(SlotWidget))
+		if (!ensureMsgf(IsValid(SlotWidget), TEXT("Failed to create InventorySlotWidget at index %d"), SlotIndex))
 		{
-			continue;
+			SlotPanel->ClearChildren();
+			SlotWidgets.Reset();
+			return;
 		}
 		
 		SlotWidget->OnSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);

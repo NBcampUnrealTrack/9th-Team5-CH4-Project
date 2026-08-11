@@ -17,6 +17,12 @@ enum class EDRInventoryUIState : uint8
 	PlayerAndStorage,
 };
 
+enum class EDRInventoryInputMode : uint8
+{
+	GameOnly,
+	GameAndUI
+};
+
 // 창고 인벤토리를 보여줄 UI와 플레이어 인벤토리 UI를 모두 관리
 // 필요 시 추후 변경 필요
 UCLASS()
@@ -43,7 +49,7 @@ private:
 	
 	// 호출 시 UIState 및 InputMode 초기화
 	void CloseInventoryScreen();
-	void ApplyInputMode();
+	void ApplyInputMode(EDRInventoryInputMode InputMode);
 	
 	// 창고와의 거리가 멀어지면 자동으로 UI가 닫히도록 타이머로 체크
 	void StartStorageDistanceCheck();
