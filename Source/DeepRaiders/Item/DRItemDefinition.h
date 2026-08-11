@@ -8,6 +8,7 @@
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
+class UTexture2D;
 class USoundBase;
 
 UENUM(BlueprintType)
@@ -37,6 +38,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|UI")
+	TObjectPtr<UTexture2D> Icon;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText Description;
 	
@@ -59,6 +63,13 @@ public:
 	EDRItemActionType PrimaryAction =
 		EDRItemActionType::None;
 
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Item|Action")
+	EDRItemActionTriggerEvent PrimaryActionTriggerEvent =
+		EDRItemActionTriggerEvent::Started;
+
 	/** 우클릭으로 실행할 보조 행동 */
 	UPROPERTY(
 		EditDefaultsOnly,
@@ -66,6 +77,13 @@ public:
 		Category = "Item|Action")
 	EDRItemActionType SecondaryAction =
 		EDRItemActionType::None;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Item|Action")
+	EDRItemActionTriggerEvent SecondaryActionTriggerEvent =
+		EDRItemActionTriggerEvent::Started;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")
 	TObjectPtr<UStaticMesh> WorldMesh;

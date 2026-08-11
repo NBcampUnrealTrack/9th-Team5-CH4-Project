@@ -32,50 +32,8 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 		return false;
 	}
 	
-	const int32 MaxStackSize = GetMaxStackSize(Definition);
-	
-	int32 RemainingQuantity = Quantity;
-	
-	// 기존 스택 먼저 채운다.
-	for (FDRInventoryEntry& Entry : Entries)
-	{
-		if (RemainingQuantity <= 0)
-		{
-			break;
-		}
-		
-		if (Entry.Definition != Definition)
-		{
-			continue;
-		}
-		
-		const int32 FreeQuantity = FMath::Max(0, MaxStackSize - Entry.Quantity);
-		const int32 AddedQuantity = FMath::Min(RemainingQuantity, FreeQuantity);
-		
-		if (AddedQuantity <= 0)
-		{
-			continue;
-		}
-		
-		Entry.Quantity += AddedQuantity;
-		RemainingQuantity -= AddedQuantity;		
-	}
-	
-	// 남은 수량은 새로운 스택을 만들어 넣는다.
-	while (RemainingQuantity > 0)
-	{
-		const int32 NewStackQuantity = FMath::Min(RemainingQuantity, MaxStackSize);
-		
-		FDRInventoryEntry& NewEntry = Entries.AddDefaulted_GetRef();
-		NewEntry.EntryId = FGuid::NewGuid();
-		NewEntry.Definition = Definition;
-		NewEntry.Quantity = NewStackQuantity;
-		
-		RemainingQuantity -= NewStackQuantity;
-	}
-	
+	AddItemInternal(Definition, Quantity);
 	HandleInventoryChangedOnServer();
-	
 	
 	UE_LOG(LogTemp, Log, TEXT("[%s] TryAddItem End, Quantity : %d"), *GetName(), GetItemCount(Definition));
 	return true;
@@ -94,33 +52,16 @@ bool UDRInventoryComponent::TryRemoveFromEntry(FGuid EntryId, int32 Quantity)
 	
 	const int32 EntryIndex = Entries.IndexOfByPredicate(
 		[&EntryId](const FDRInventoryEntry& Entry)
-	{
+		{
 			return Entry.EntryId == EntryId;
-	});
+		});
 	
-	if (!Entries.IsValidIndex(EntryIndex))
+	if (!Entries.IsValidIndex(EntryIndex) || Entries[EntryIndex].Quantity < Quantity)
 	{
 		return false;
 	}
 	
-	FDRInventoryEntry& Entry = Entries[EntryIndex];
-	
-	if (Entry.Quantity < Quantity)
-	{
-		// 수량만큼 가지고 있지 않다면 그냥 실패
-		return false;
-	}
-	
-	if (Entry.Quantity == Quantity)
-	{
-		Entries.RemoveAt(EntryIndex);
-	}
-	else
-	{
-		Entry.Quantity -= Quantity;
-		UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry process, Quantity : %d"), *GetName(), Entry.Quantity);
-	}
-	
+	RemoveFromEntryInternal(EntryIndex, Quantity);	
 	HandleInventoryChangedOnServer();
 	
 	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry End"), *GetName());
@@ -208,6 +149,63 @@ bool UDRInventoryComponent::TryRemoveEntries(const TArray<FGuid>& EntryIds)
 
 	HandleInventoryChangedOnServer();
 	return true;
+}
+
+int32 UDRInventoryComponent::TryTransferFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId,
+	int32 RequestedQuantity)
+{
+	if (!HasInventoryAuthority()
+		|| !IsValid(DestinationInventory)
+		|| DestinationInventory == this
+		|| !DestinationInventory->HasInventoryAuthority()
+		|| !SourceEntryId.IsValid()
+		|| RequestedQuantity <= 0)
+	{
+		return 0;
+	}
+	
+	const int32 SourceEntryIndex = Entries.IndexOfByPredicate(
+		[&SourceEntryId](const FDRInventoryEntry& Entry)
+		{
+			return Entry.EntryId == SourceEntryId;	
+		}
+		);
+	
+	if (!Entries.IsValidIndex(SourceEntryIndex))
+	{
+		return 0;
+	}
+	
+	const FDRInventoryEntry& SourceEntry = Entries[SourceEntryIndex];
+	UDRItemDefinition* Definition = SourceEntry.Definition;
+	
+	if (!IsValid(Definition) || SourceEntry.Quantity <= 0)
+	{
+		return 0;
+	}
+	
+	// 요청한 수량의 처리가 불가능한 경우 항상 실패
+	if(SourceEntry.Quantity < RequestedQuantity
+		|| DestinationInventory->GetAddableQuantity(Definition) < RequestedQuantity)
+	{
+		return 0;
+	}
+	
+	const int32 AddableQuantity = DestinationInventory->GetAddableQuantity(Definition);
+	const int32 TransferQuantity = FMath::Min(RequestedQuantity, FMath::Min(SourceEntry.Quantity, AddableQuantity));
+	
+	if (TransferQuantity <= 0)
+	{
+		return 0;
+	}
+	
+	DestinationInventory->AddItemInternal(Definition, TransferQuantity);
+	RemoveFromEntryInternal(SourceEntryIndex, TransferQuantity);
+	
+	HandleInventoryChangedOnServer();
+	DestinationInventory->HandleInventoryChangedOnServer();
+	
+	return TransferQuantity;	
 }
 
 bool UDRInventoryComponent::FindEntry(FGuid EntryId, FDRInventoryEntry& OutEntry) const
@@ -339,4 +337,71 @@ int32 UDRInventoryComponent::GetMaxStackSize(const UDRItemDefinition* Definition
 void UDRInventoryComponent::BroadcastInventoryChanged()
 {
 	OnInventoryChangedDelegate.Broadcast();
+}
+
+void UDRInventoryComponent::AddItemInternal(UDRItemDefinition* Definition, int32 Quantity)
+{
+	check(IsValid(Definition));
+	check(Quantity > 0);
+	check(CanAddItem(Definition, Quantity));
+	
+	const int32 MaxStackSize = GetMaxStackSize(Definition);
+	
+	int32 RemainingQuantity = Quantity;
+	
+	// 기존 스택 먼저 채운다.
+	for (FDRInventoryEntry& Entry : Entries)
+	{
+		if (RemainingQuantity <= 0)
+		{
+			break;
+		}
+		
+		if (Entry.Definition != Definition)
+		{
+			continue;
+		}
+		
+		const int32 FreeQuantity = FMath::Max(0, MaxStackSize - Entry.Quantity);
+		const int32 AddedQuantity = FMath::Min(RemainingQuantity, FreeQuantity);
+		
+		if (AddedQuantity <= 0)
+		{
+			continue;
+		}
+		
+		Entry.Quantity += AddedQuantity;
+		RemainingQuantity -= AddedQuantity;		
+	}
+	
+	// 남은 수량은 새로운 스택을 만들어 넣는다.
+	while (RemainingQuantity > 0)
+	{
+		const int32 NewStackQuantity = FMath::Min(RemainingQuantity, MaxStackSize);
+		
+		FDRInventoryEntry& NewEntry = Entries.AddDefaulted_GetRef();
+		NewEntry.EntryId = FGuid::NewGuid();
+		NewEntry.Definition = Definition;
+		NewEntry.Quantity = NewStackQuantity;
+		
+		RemainingQuantity -= NewStackQuantity;
+	}
+}
+
+void UDRInventoryComponent::RemoveFromEntryInternal(int32 EntryIndex, int32 Quantity)
+{
+	check(Entries.IsValidIndex(EntryIndex));
+	check(Quantity > 0);
+	check(Entries[EntryIndex].Quantity >= Quantity);
+	
+	FDRInventoryEntry& Entry = Entries[EntryIndex];
+
+	if (Entry.Quantity == Quantity)
+	{
+		Entries.RemoveAt(EntryIndex);
+		return;
+	}
+	
+	Entry.Quantity -= Quantity;
+	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry process, Quantity : %d"), *GetName(), Entry.Quantity);
 }

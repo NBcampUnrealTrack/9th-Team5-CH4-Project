@@ -5,24 +5,43 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "Net/UnrealNetwork.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
+#include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
-
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Storage/DRStorage.h"
+
+#include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
+
+#include "Debug/DebugDrawService.h"
 
 ADRPlayerController::ADRPlayerController()
 {
     // QuickSlot Initialize
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
+    
+    // UI Component Initialize
+    InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+    QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 }
+
+void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(ThisClass, CurrentStorage);
+}
+
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
@@ -150,16 +169,40 @@ void ADRPlayerController::SetupInputComponent()
             PrimaryAction.Get(),
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandlePrimaryAction);
+            &ThisClass::HandlePrimaryActionStarted);
+
+        EnhancedInput->BindAction(
+            PrimaryAction.Get(),
+            ETriggerEvent::Triggered,
+            this,
+            &ThisClass::HandlePrimaryActionTriggered);
+
+        EnhancedInput->BindAction(
+            PrimaryAction.Get(),
+            ETriggerEvent::Completed,
+            this,
+            &ThisClass::HandlePrimaryActionCompleted);
     }
     
     if (IsValid(SecondaryAction.Get()))
     {
         EnhancedInput->BindAction(
-            SecondaryAction,
+            SecondaryAction.Get(),
             ETriggerEvent::Started,
             this,
-            &ThisClass::HandleSecondaryAction);
+            &ThisClass::HandleSecondaryActionStarted);
+
+        EnhancedInput->BindAction(
+            SecondaryAction.Get(),
+            ETriggerEvent::Triggered,
+            this,
+            &ThisClass::HandleSecondaryActionTriggered);
+
+        EnhancedInput->BindAction(
+            SecondaryAction.Get(),
+            ETriggerEvent::Completed,
+            this,
+            &ThisClass::HandleSecondaryActionCompleted);
     }
     
     if (IsValid(InteractAction.Get()))
@@ -178,6 +221,15 @@ void ADRPlayerController::SetupInputComponent()
             ETriggerEvent::Started,
             this,
             &ThisClass::HandleDropHeldItem);
+    }
+    
+    if (IsValid(InventoryAction.Get()))
+    {
+        EnhancedInput->BindAction(
+            InventoryAction,
+            ETriggerEvent::Started,
+            this,
+            &ThisClass::HandleToggleInventory);
     }
 }
 
@@ -321,21 +373,21 @@ void ADRPlayerController::InitializeStartingQuickSlot()
     }
 }
 
-void ADRPlayerController::HandlePrimaryAction(const FInputActionValue& value)
+void ADRPlayerController::HandlePrimaryActionStarted(const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
-        Cast<ADRPlayerCharacter>(GetPawn());
+        GetDRPlayerCharacter();
 
     if (!IsValid(PlayerCharacter))
     {
         return;
     }
     
-    PlayerCharacter->RequestPrimaryItemAction();
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Started);
 }
 
-void ADRPlayerController::HandleSecondaryAction(
-    const FInputActionValue& Value)
+void ADRPlayerController::HandlePrimaryActionTriggered(const FInputActionValue&)
 {
     ADRPlayerCharacter* PlayerCharacter =
         GetDRPlayerCharacter();
@@ -345,7 +397,67 @@ void ADRPlayerController::HandleSecondaryAction(
         return;
     }
 
-    PlayerCharacter->RequestSecondaryItemAction();
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Triggered);
+}
+
+void ADRPlayerController::HandlePrimaryActionCompleted(const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestPrimaryItemAction(
+        EDRItemActionTriggerEvent::Completed);
+}
+
+void ADRPlayerController::HandleSecondaryActionStarted(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Started);
+}
+
+void ADRPlayerController::HandleSecondaryActionTriggered(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Triggered);
+}
+
+void ADRPlayerController::HandleSecondaryActionCompleted(
+    const FInputActionValue&)
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        return;
+    }
+
+    PlayerCharacter->RequestSecondaryItemAction(
+        EDRItemActionTriggerEvent::Completed);
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(
@@ -509,48 +621,53 @@ void ADRPlayerController::HandleDropHeldItem(const FInputActionValue& Value)
 
 void ADRPlayerController::ServerRequestDropHeldItem_Implementation()
 {
-    // 버리기 초기 구현은 1개로 제한
-    constexpr int32 DropQuantity = 1;
-    
     APawn* CachedPawn = GetPawn();
-    
-    if (!HasAuthority()
-        || !IsValid(CachedPawn)
-        || !IsValid(QuickSlotComponent)
-        || !IsValid(QuickSlotInventoryComponent))
+    if (!IsValid(CachedPawn))
     {
         return;
     }
-    
+
+    const FVector DropDirection = CachedPawn->GetActorForwardVector();
+    const FVector SpawnItemLocation = CachedPawn->GetActorLocation() + DropDirection * DropForwardDistance + FVector::UpVector * DropVerticalOffset;
+    const FRotator SpawnRotation(0.f, CachedPawn->GetActorRotation().Yaw, 0.f);
+    ADRWorldItemActor* DroppedItem = ConsumeAndSpawnHeldItem(FTransform(SpawnRotation, SpawnItemLocation), 1);
+
+    if (IsValid(DroppedItem) && !FMath::IsNearlyZero(DropImpulseStrength))
+    {
+        DroppedItem->ApplyDropImpulse(DropDirection * DropImpulseStrength);
+    }
+}
+
+ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform& BaseSpawnTransform, int32 Quantity) const
+{
+    APawn* CachedPawn = GetPawn();
+
+    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(QuickSlotInventoryComponent) || Quantity <= 0)
+    {
+        return nullptr;
+    }
+
     UDRItemDefinition* Definition = QuickSlotComponent->GetSelectedItemDefinition();
-    
-    if (!IsValid(Definition)
-        || QuickSlotInventoryComponent->GetItemCount(Definition) < DropQuantity)
+
+    if (!IsValid(Definition) || QuickSlotInventoryComponent->GetItemCount(Definition) < Quantity)
     {
-        return;
+        return nullptr;
     }
-    
-    const FVector Forward = CachedPawn->GetActorForwardVector();
-    
-    const FVector DropLocation = CachedPawn->GetActorLocation() + Forward * DropForwardDistance + FVector::UpVector * DropVerticalOffset;
-    const FRotator DropRotation(0.0f, CachedPawn->GetActorRotation().Yaw, 0.0f);
-    
-    const FTransform BaseSpawnTransform(DropRotation, DropLocation);
-    ADRWorldItemActor* DroppedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, DropQuantity);
-    
-    if (!IsValid(DroppedItem))
+
+    ADRWorldItemActor* SpawnedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, Quantity);
+
+    if (!IsValid(SpawnedItem))
     {
-        return;
+        return nullptr;
     }
-    
-    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, DropQuantity))
+
+    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
     {
-        // 아이템 차감 실패 시 롤백
-        RollbackDroppedItem(DroppedItem);
-        return;
+        RollbackDroppedItem(SpawnedItem);
+        return nullptr;
     }
-    
-    DroppedItem->ApplyDropImpulse(Forward * DropImpulseStrength);
+
+    return SpawnedItem;
 }
 
 ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const
@@ -630,4 +747,254 @@ void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) co
     }
     
     DroppedItem->Destroy();
+}
+
+void ADRPlayerController::RequestThrowHeldItem()
+{
+    if (IsLocalController())
+    {
+        ServerRequestThrowHeldItem();
+    }
+}
+
+void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
+{
+    FTransform SpawnTransform;
+    FVector ThrowDirection;
+
+    if (!BuildThrowAim(SpawnTransform, ThrowDirection))
+    {
+        return;
+    }
+
+    APawn* CachedPawn = GetPawn();
+    ADRWorldItemActor* ThrownItem = ConsumeAndSpawnHeldItem(SpawnTransform, 1);
+
+    if (IsValid(ThrownItem) && !FMath::IsNearlyZero(ThrowImpulseStrength))
+    {
+        ThrownItem->ApplyDropImpulse(ThrowDirection * ThrowImpulseStrength);
+    }
+
+    NotifyThrownItem(ThrownItem, CachedPawn);
+}
+
+bool ADRPlayerController::BuildThrowAim(FTransform& OutSpawnTransform, FVector& OutThrowDirection) const
+{
+    const APawn* CachedPawn = GetPawn();
+    if (!IsValid(CachedPawn))
+    {
+        return false;
+    }
+
+    const FRotator ViewRotation = CachedPawn->GetBaseAimRotation();
+    const FRotationMatrix ViewRotationMatrix(ViewRotation);
+    const FVector ViewForward = ViewRotation.Vector();
+    const FVector ViewRight = ViewRotationMatrix.GetUnitAxis(EAxis::Y);
+    const FVector ViewUp = ViewRotationMatrix.GetUnitAxis(EAxis::Z);
+    const FVector SpawnItemLocation = CachedPawn->GetPawnViewLocation() + ViewForward * ThrowForwardDistance + ViewRight * ThrowRightOffset + ViewUp * ThrowVerticalOffset;
+
+    OutSpawnTransform = FTransform(ViewRotation, SpawnItemLocation);
+    OutThrowDirection = ViewForward;
+    return true;
+}
+
+void ADRPlayerController::NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const
+{
+    if (!HasAuthority()
+        || !IsValid(ThrownItem)
+        || !ThrownItem->Implements<UDRThrowableItemInterface>())
+    {
+        return;
+    }
+
+    IDRThrowableItemInterface::Execute_NotifyThrown(ThrownItem, Thrower);
+}
+
+
+bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
+{
+    if (!HasAuthority() || !CanAccessStorage(Storage))
+    {
+        return false;
+    }
+    
+    SetCurrentStorage(Storage);
+    return true;    
+}
+
+void ADRPlayerController::RequestTransferStorageItem(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+{
+    if (!SourceEntryId.IsValid())
+    {
+        return;
+    }
+    
+    if (HasAuthority())
+    {
+        TryTransferStorageItemInternal(Direction, SourceEntryId);
+        return;
+    }
+    
+    if (IsLocalController())
+    {
+        ServerRequestTransferStorageItem(Direction,SourceEntryId);
+    }
+}
+
+void ADRPlayerController::ServerRequestTransferStorageItem_Implementation(EDRStorageTransferDirection Direction,
+    FGuid SourceEntryId)
+{
+    TryTransferStorageItemInternal(Direction, SourceEntryId);
+}
+
+bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+{
+    ADRStorage* Storage = CurrentStorage.Get();
+    
+    if (!CanAccessStorage(Storage))
+    {
+        SetCurrentStorage(nullptr);
+        return false;
+    }
+    
+    UDRInventoryComponent* StorageInventory = Storage->GetInventoryComponent();
+    
+    if (!IsValid(QuickSlotInventoryComponent) || !IsValid(StorageInventory))
+    {
+        return false;
+    }
+    
+    UDRInventoryComponent* SourceInventory = nullptr;
+    UDRInventoryComponent* DestinationInventory = nullptr;
+    
+    switch (Direction)
+    {
+    case EDRStorageTransferDirection::PlayerToStorage:
+        SourceInventory = QuickSlotInventoryComponent;
+        DestinationInventory = StorageInventory;
+        break;
+    case EDRStorageTransferDirection::StorageToPlayer:
+        SourceInventory = StorageInventory;
+        DestinationInventory = QuickSlotInventoryComponent;
+        break;
+    default:
+        return false;
+    }
+    
+    // 테스트 시점, 전달 수량을 1개로 제한
+    constexpr int32 TransferQuantity = 1;
+    
+    return SourceInventory->TryTransferFromEntry(DestinationInventory, SourceEntryId, TransferQuantity) 
+        == TransferQuantity;   
+}
+
+bool ADRPlayerController::CanAccessStorage(ADRStorage* Storage) const
+{
+    APawn* ControlledPawn = GetPawn();
+    
+    if (!HasAuthority() || !IsValid(ControlledPawn) 
+        || !IsStorageWithinInteractionRange(Storage))
+    {
+        return false;
+    }
+    
+    return IDRInteractableInterface::Execute_CanInteract(Storage, ControlledPawn);
+}
+
+void ADRPlayerController::RequestCloseStorage()
+{
+    if (HasAuthority())
+    {
+        SetCurrentStorage(nullptr);
+        return;
+    }
+    
+    if (IsLocalController())
+    {
+        ServerRequestCloseStorage();
+    }
+}
+
+void ADRPlayerController::ServerRequestCloseStorage_Implementation()
+{
+    SetCurrentStorage(nullptr);
+}
+
+void ADRPlayerController::SetCurrentStorage(ADRStorage* NewStorage)
+{
+    if (!HasAuthority() || CurrentStorage == NewStorage)
+    {
+        return;
+    }
+
+    CurrentStorage = NewStorage;
+    OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
+    ForceNetUpdate();    
+}
+
+void ADRPlayerController::HandleToggleInventory(const FInputActionValue& Value)
+{
+    if (IsValid(InventoryUIComponent))
+    {
+        InventoryUIComponent->TogglePlayerInventory();
+    }
+}
+
+void ADRPlayerController::OnRep_CurrentStorage()
+{
+    OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
+}
+
+bool ADRPlayerController::IsStorageWithinInteractionRange(const ADRStorage* Storage) const
+{
+    const APawn* ControlledPawn = GetPawn();
+    
+    if (!IsValid(ControlledPawn) || !IsValid(Storage))
+    {
+        return false;
+    }
+    
+    // 상호작용 가능 여부 체크마다 범위 디버그 드로우
+     DrawDebugSphere(GetWorld(), GetPawn()->GetActorLocation(), InteractionRange
+     , 16, FColor::Red, false, 1.0f);
+    
+    return FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation()) 
+        <= FMath::Square(InteractionRange);
+}
+
+void ADRPlayerController::DRDepositFirstItem()
+{
+    if (!IsValid(QuickSlotInventoryComponent))
+    {
+        return;
+    }
+
+    const TArray<FDRInventoryEntry> Entries = QuickSlotInventoryComponent->GetEntries();
+
+    if (!Entries.IsEmpty())
+    {
+        RequestTransferStorageItem(
+            EDRStorageTransferDirection::PlayerToStorage,
+            Entries[0].EntryId);
+    }
+}
+
+void ADRPlayerController::DRWithDrawFirstItem()
+{
+    ADRStorage* Storage = CurrentStorage.Get();
+
+    if (!IsValid(Storage) || !IsValid(Storage->GetInventoryComponent()))
+    {
+        return;
+    }
+
+    const TArray<FDRInventoryEntry> Entries =
+        Storage->GetInventoryComponent()->GetEntries();
+
+    if (!Entries.IsEmpty())
+    {
+        RequestTransferStorageItem(
+            EDRStorageTransferDirection::StorageToPlayer,
+            Entries[0].EntryId);
+    }
 }
