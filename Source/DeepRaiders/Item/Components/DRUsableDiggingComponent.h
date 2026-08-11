@@ -44,9 +44,6 @@ protected:
 	uint8 bDrawDebugDigRadius : 1 = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging|Debug", meta = (ClampMin = "0.0", Units = "s"))
-	float DebugPreviewDrawTime = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging|Debug", meta = (ClampMin = "0.0", Units = "s"))
 	float DebugExplosionDrawTime = 1.f;
 
 private:

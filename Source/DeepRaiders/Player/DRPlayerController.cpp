@@ -732,10 +732,31 @@ void ADRPlayerController::RequestThrowHeldItem()
 
 void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
 {
-    APawn* CachedPawn = GetPawn();
-    if (!IsValid(CachedPawn))
+    FTransform SpawnTransform;
+    FVector ThrowDirection;
+
+    if (!BuildThrowAim(SpawnTransform, ThrowDirection))
     {
         return;
+    }
+
+    APawn* CachedPawn = GetPawn();
+    ADRWorldItemActor* ThrownItem = ConsumeAndSpawnHeldItem(SpawnTransform, 1);
+
+    if (IsValid(ThrownItem) && !FMath::IsNearlyZero(ThrowImpulseStrength))
+    {
+        ThrownItem->ApplyDropImpulse(ThrowDirection * ThrowImpulseStrength);
+    }
+
+    NotifyThrownItem(ThrownItem, CachedPawn);
+}
+
+bool ADRPlayerController::BuildThrowAim(FTransform& OutSpawnTransform, FVector& OutThrowDirection) const
+{
+    const APawn* CachedPawn = GetPawn();
+    if (!IsValid(CachedPawn))
+    {
+        return false;
     }
 
     const FRotator ViewRotation = CachedPawn->GetBaseAimRotation();
@@ -744,14 +765,10 @@ void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
     const FVector ViewRight = ViewRotationMatrix.GetUnitAxis(EAxis::Y);
     const FVector ViewUp = ViewRotationMatrix.GetUnitAxis(EAxis::Z);
     const FVector SpawnItemLocation = CachedPawn->GetPawnViewLocation() + ViewForward * ThrowForwardDistance + ViewRight * ThrowRightOffset + ViewUp * ThrowVerticalOffset;
-    ADRWorldItemActor* ThrownItem = ConsumeAndSpawnHeldItem(FTransform(ViewRotation, SpawnItemLocation), 1);
 
-    if (IsValid(ThrownItem) && !FMath::IsNearlyZero(ThrowImpulseStrength))
-    {
-        ThrownItem->ApplyDropImpulse(ViewForward * ThrowImpulseStrength);
-    }
-
-    NotifyThrownItem(ThrownItem, CachedPawn);
+    OutSpawnTransform = FTransform(ViewRotation, SpawnItemLocation);
+    OutThrowDirection = ViewForward;
+    return true;
 }
 
 void ADRPlayerController::NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const

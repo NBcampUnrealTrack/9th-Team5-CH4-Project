@@ -51,17 +51,8 @@ void UDRUsableDiggingComponent::StartDigging()
 		return;
 	}
 
-	DrawDigRadiusDebug(
-		GetOwner()->GetActorLocation(),
-		FColor::Yellow,
-		DebugPreviewDrawTime);
-
-	World->GetTimerManager().SetTimer(
-		StartTimerHandle,
-		this,
-		&ThisClass::StartDiggingInternal,
-		DiggingDefinition->StartDelay,
-		false);
+	UE_LOG(LogTemp, Log, TEXT("[UsableDigging] Armed Owner=%s Location=%s Delay=%.2f Radius=%.1f"), *GetNameSafe(GetOwner()), *GetOwner()->GetActorLocation().ToString(), DiggingDefinition->StartDelay, DiggingDefinition->DigRadius);
+	World->GetTimerManager().SetTimer(StartTimerHandle, this, &ThisClass::StartDiggingInternal, DiggingDefinition->StartDelay, false);
 }
 
 void UDRUsableDiggingComponent::StopDigging()
@@ -110,12 +101,10 @@ void UDRUsableDiggingComponent::ExecuteDig()
 	}
 
 	const FVector DigLocation = GetOwner()->GetActorLocation();
-	DrawDigRadiusDebug(
-		DigLocation,
-		FColor::Red,
-		DebugExplosionDrawTime);
+	DrawDigRadiusDebug(DigLocation, FColor::Red, DebugExplosionDrawTime);
 
-	RequestDigAtLocation(DigLocation);
+	const bool bDigSucceeded = RequestDigAtLocation(DigLocation);
+	UE_LOG(LogTemp, Log, TEXT("[UsableDigging] Exploded Owner=%s Location=%s DigSucceeded=%d DestroyOwner=%d"), *GetNameSafe(GetOwner()), *DigLocation.ToString(), bDigSucceeded, DiggingDefinition->bDestroyOwnerOnFinished);
 	FinishDigging();
 }
 
@@ -193,6 +182,7 @@ void UDRUsableDiggingComponent::FinishDigging()
 	AActor* Owner = GetOwner();
 	if (IsValid(Owner) && Owner->HasAuthority())
 	{
+		UE_LOG(LogTemp, Log, TEXT("[UsableDigging] Destroy Owner=%s"), *GetNameSafe(Owner));
 		Owner->Destroy();
 	}
 }

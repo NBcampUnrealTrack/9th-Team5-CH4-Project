@@ -191,6 +191,7 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestThrowHeldItem();
 	
+	bool BuildThrowAim(FTransform& OutSpawnTransform, FVector& OutThrowDirection) const;
 	void NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const;
 	
 protected:
