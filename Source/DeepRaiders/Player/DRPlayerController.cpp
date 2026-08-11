@@ -5,6 +5,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "Net/UnrealNetwork.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
@@ -18,6 +19,12 @@
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Storage/DRStorage.h"
+
+#include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
+
+#include "Debug/DebugDrawService.h"
 
 ADRPlayerController::ADRPlayerController()
 {
@@ -25,7 +32,19 @@ ADRPlayerController::ADRPlayerController()
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
+    
+    // UI Component Initialize
+    InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+    QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 }
+
+void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(ThisClass, CurrentStorage);
+}
+
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
