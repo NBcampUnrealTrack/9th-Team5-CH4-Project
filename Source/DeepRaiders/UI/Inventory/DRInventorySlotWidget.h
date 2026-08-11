@@ -38,10 +38,10 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> SlotButton;
 	
-	UPROPERTY(meta = (BineWidget))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UImage> ItemIcon;
 	
-	UPROPERTY(meta = (BineWidget))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> QuantityText;
 	
 private:

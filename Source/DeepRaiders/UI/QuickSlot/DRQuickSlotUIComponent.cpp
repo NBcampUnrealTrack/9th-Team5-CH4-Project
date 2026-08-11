@@ -22,6 +22,12 @@ void UDRQuickSlotUIComponent::BeginPlay()
 		return;
 	}
 	
+	QuickSlotWidget = CreateWidget<UDRQuickSlotWidget>(PlayerController, QuickSlotWidgetClass);
+	if (!IsValid(QuickSlotWidget))
+	{
+		return;
+	}
+	
 	// 위젯에 QuickSlot을 연결
 	QuickSlotWidget->InitializeQuickSlot(PlayerController->GetQuickSlotComponent());
 	

@@ -58,7 +58,7 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UUniformGridPanel> SlotPanel;
 	
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 	
 private:

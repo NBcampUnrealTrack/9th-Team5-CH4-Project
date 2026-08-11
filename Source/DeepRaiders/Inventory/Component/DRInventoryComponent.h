@@ -39,8 +39,8 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryRemoveEntries(const TArray<FGuid>& EntryIds);
 	
-	// SourceEntryId가 가리키는 Entry에서 DestinationInventory로 가능한 수량만큼 이동한다. (부분 이동 가능)
-	// 서버에서만 실행, 실제로 이동한 수량 반환
+	// SourceEntryId가 가리키는 Entry에서 DestinationInventory로 이동시킨다.
+	// 서버에서만 실행, 실제로 이동한 수량 반환, 요청한 수량의 처리가 불가능한 경우 실패
 	// 현재 1개의 슬롯 이동만 지원
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	int32 TryTransferFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId, int32 RequestedQuantity);

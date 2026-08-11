@@ -65,9 +65,9 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 	switch (UIState)
 	{
 	case EDRInventoryUIState::Closed:
-		UIState =  EDRInventoryUIState::PlayerOnly;
+		UIState = EDRInventoryUIState::PlayerOnly;
 		ShowPlayerInventory();
-		ApplyInputMode(EDRInventoryInputMode::GameOnly);
+		ApplyInputMode(EDRInventoryInputMode::GameAndUI);
 		break;
 		
 	case EDRInventoryUIState::PlayerOnly:
@@ -159,7 +159,7 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 	{
 		return;
 	}
-	
+	StorageInventoryWidget->InitializeInventory(Storage->GetInventoryComponent());
 	StorageInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandleStorageEntryClicked);
 	StorageInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
 	
@@ -224,8 +224,6 @@ void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InInputMode)
 	{
 		return;
 	}
-	
-	PlayerController->FlushPressedKeys();
 
 	switch (InInputMode)
 	{

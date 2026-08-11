@@ -20,7 +20,6 @@ void UDRQuickSlotWidget::InitializeQuickSlot(UDRQuickSlotComponent* NewQuickSlot
 	QuickSlotComponent = NewQuickSlotComponent;
 	
 	BindQuickSlot();
-	UnbindQuickSlot();
 	RebuildSlots();
 	RefreshSlots();
 }
@@ -50,7 +49,7 @@ void UDRQuickSlotWidget::RebuildSlots()
 	UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get();
 	
 	if (!IsValid(QuickSlot)
-		|| IsValid(SlotPanel)
+		|| !IsValid(SlotPanel)
 		|| !QuickSlotSlotWidgetClass)
 	{
 		return;
