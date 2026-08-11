@@ -16,6 +16,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
+#include "Components/TimelineComponent.h"
+#include "Curves/CurveFloat.h"
+
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
@@ -107,6 +110,10 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+	
+	FirstPersonItemSwingTimeline =
+		CreateDefaultSubobject<UTimelineComponent>(
+			TEXT("FirstPersonItemSwingTimeline"));
 }
 
 void ADRPlayerCharacter::Tick(float DeltaSeconds)
@@ -337,8 +344,8 @@ void ADRPlayerCharacter::RequestMeleeAttack()
 		return;
 	}
 	
-	// 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
-	PlayOwnerMeleeAttackPresentation();
+	// // 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
+	// PlayOwnerMeleeAttackPresentation();
 
 	// 실제 공격 승인과 판정은 서버가 담당한다.
 	ServerRequestMeleeAttack();
@@ -414,7 +421,41 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
-	
+
+	// 장비 Root의 기본 위치 기억
+	if (IsValid(FirstPersonEquipmentRoot))
+	{
+		FirstPersonEquipmentRootBaseTransform =
+			FirstPersonEquipmentRoot->GetRelativeTransform();
+	}
+
+	if (IsValid(FirstPersonItemSwingTimeline) &&
+		IsValid(FirstPersonItemSwingCurve))
+	{
+		FOnTimelineFloat UpdateDelegate;
+
+		UpdateDelegate.BindUFunction(
+			this,
+			FName("UpdateFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->AddInterpFloat(
+			FirstPersonItemSwingCurve,
+			UpdateDelegate);
+
+		FOnTimelineEvent FinishedDelegate;
+
+		FinishedDelegate.BindUFunction(
+			this,
+			FName("FinishFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->SetTimelineFinishedFunc(
+			FinishedDelegate);
+
+		FirstPersonItemSwingTimeline->SetLooping(false);
+
+		FirstPersonItemSwingTimeline->SetTimelineLengthMode(
+			TL_LastKeyFrame);
+	}
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -1420,8 +1461,17 @@ void ADRPlayerCharacter::RestoreControllerInput()
 	OwningController->SetIgnoreLookInput(false);
 }
 
-void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
+void ADRPlayerCharacter::ExecuteHeldItemAction(
+	EDRItemActionType ActionType)
 {
+	if (ActionType == EDRItemActionType::None)
+	{
+		return;
+	}
+
+	// 모든 장비 사용 액션의 공통 1인칭 스윙
+	PlayFirstPersonItemSwing();
+
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
@@ -1436,11 +1486,7 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(EDRItemActionType ActionType)
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT(
-				"[ItemAction] Throw not implemented. "
-				"Character=%s Item=%s"),
-			*GetName(),
-			*GetNameSafe(HeldItemDefinition));
+			TEXT("[ItemAction] Throw not implemented."));
 		break;
 
 	case EDRItemActionType::None:
@@ -1508,6 +1554,59 @@ void ADRPlayerCharacter::PlayWorldMeleeAttackPresentation()
 	}
 
 	PlayAnimMontage(WorldMeleeAttackMontage);
+}
+
+void ADRPlayerCharacter::PlayFirstPersonItemSwing()
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonItemSwingTimeline) ||
+		!IsValid(FirstPersonItemSwingCurve))
+	{
+		return;
+	}
+
+	FirstPersonItemSwingTimeline->PlayFromStart();
+}
+
+void ADRPlayerCharacter::UpdateFirstPersonItemSwing(
+	float CurveValue)
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	const FVector BaseLocation =
+		FirstPersonEquipmentRootBaseTransform.GetLocation();
+
+	FRotator BaseRotation =
+		FirstPersonEquipmentRootBaseTransform.Rotator();
+
+	const FVector NewLocation =
+		BaseLocation +
+		FirstPersonItemSwingLocation * CurveValue;
+
+	const FRotator RotationOffset =
+		FirstPersonItemSwingRotation * CurveValue;
+
+	const FRotator NewRotation =
+		BaseRotation + RotationOffset;
+
+	FirstPersonEquipmentRoot->SetRelativeLocationAndRotation(
+		NewLocation,
+		NewRotation);
+}
+
+void ADRPlayerCharacter::FinishFirstPersonItemSwing()
+{
+	if (!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)

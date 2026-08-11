@@ -14,6 +14,8 @@ class UDRMiningComponent;
 class UAnimMontage;
 class UDRCharacterMovementComponent;
 class UDRItemDefinition;
+class UTimelineComponent;
+class UCurveFloat;
 
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
@@ -490,6 +492,52 @@ protected:
         Category = "Player|Fall Damage",
         meta = (ClampMin = "0.01"))
     float FallDamageExponent = 2.f;
+    
+    // ===== First Person Item Action =====
+
+    /** 1인칭 장비 스윙 Timeline */
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Equipment|FirstPerson",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UTimelineComponent> FirstPersonItemSwingTimeline;
+
+    /** 시간에 따른 스윙 진행값 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Equipment|FirstPerson",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UCurveFloat> FirstPersonItemSwingCurve;
+
+    /** Curve 값이 1일 때 적용할 최대 회전량 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Equipment|FirstPerson",
+        meta = (AllowPrivateAccess = "true"))
+    FRotator FirstPersonItemSwingRotation =
+        FRotator(-80.f, 0.f, 0.f);
+
+    /** 스윙하면서 살짝 이동시키고 싶을 때 사용 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Equipment|FirstPerson",
+        meta = (AllowPrivateAccess = "true"))
+    FVector FirstPersonItemSwingLocation =
+        FVector(-5.f, 0.f, -3.f);
+
+    FTransform FirstPersonEquipmentRootBaseTransform;
+
+    void PlayFirstPersonItemSwing();
+
+    UFUNCTION()
+    void UpdateFirstPersonItemSwing(float CurveValue);
+
+    UFUNCTION()
+    void FinishFirstPersonItemSwing();
     
 #pragma region QuickSlot
 public:
