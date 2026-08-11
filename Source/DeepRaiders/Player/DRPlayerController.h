@@ -13,6 +13,19 @@ class UDRInventoryComponent;
 class UDRQuickSlotComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
+class ADRStorage;
+class UDRInventoryUIComponent;
+class UDRQuickSlotUIComponent;
+
+// 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
+
+UENUM(BlueprintType)
+enum class EDRStorageTransferDirection : uint8
+{	
+	PlayerToStorage,
+	StorageToPlayer
+};
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController
@@ -23,6 +36,7 @@ class DEEPRAIDERS_API ADRPlayerController
 public:
 	ADRPlayerController();
 	
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
@@ -144,7 +158,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Interaction", meta = (ClampMin = "0.0", UIMin ="0.0", Units = "cm"))
 	float InteractionRange = 300.0f;
-	
 #pragma endregion
 	
 #pragma region Receive Item
@@ -206,6 +219,76 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
 	float ThrowImpulseStrength = 600.f;
+
+#pragma endregion 
+	
+#pragma region Interact Storage
+public:
+	// 서버에서 검증된 Storage 접근 시도
+	bool TryOpenStorage(ADRStorage* Storage);
+	
+	// 현재 Storage와 플레이어 인벤토리 사이의 아이템 이동을 요청
+	UFUNCTION(BlueprintCallable, Category = "Player|Storage")
+	void RequestTransferStorageItem(EDRStorageTransferDirection Direction, FGuid SourceEntryId);
+	
+	// 현재 Storage 접근 종료
+	UFUNCTION(BlueprintCallable, Category = "Player|Storage")
+	void RequestCloseStorage();
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Storage")
+	ADRStorage* GetCurrentStorage() const
+	{
+		return CurrentStorage.Get();
+	}
+	
+	// CurrentStorage와 상호작용한 거리인지 검사
+	UFUNCTION(BlueprintPure, Category = "Player|Storage")
+	bool IsStorageWithinInteractionRange(const ADRStorage* Storage) const;
+	
+	// 테스트 명령
+	UFUNCTION(Exec)
+	void DRDepositFirstItem();
+	
+	UFUNCTION(Exec)
+	void DRWithDrawFirstItem();
+	
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestTransferStorageItem(EDRStorageTransferDirection Direction, FGuid SourceEntryId);
+	
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCloseStorage();
+	
+	UFUNCTION()
+	void OnRep_CurrentStorage();
+	
+	bool TryTransferStorageItemInternal(EDRStorageTransferDirection Direction, FGuid SourceEntryId);
+	bool CanAccessStorage(ADRStorage* Storage) const;
+	void SetCurrentStorage(ADRStorage* NewStorage);
+	
+public:
+	UPROPERTY(BlueprintAssignable, Category = "Player|Storage")
+	FDRCurrentStorageChanged OnCurrentStorageChangedDelegate;
+	
+protected:
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentStorage, VisibleInstanceOnly, Category = "Player|Storage")
+	TObjectPtr<ADRStorage> CurrentStorage;
+	
+#pragma endregion
+	
+#pragma region UI
+private:
+	void HandleToggleInventory(const FInputActionValue& Value);
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InventoryAction;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
 #pragma endregion 
 };
