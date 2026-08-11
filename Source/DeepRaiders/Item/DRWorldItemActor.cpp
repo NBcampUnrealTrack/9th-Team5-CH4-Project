@@ -128,6 +128,18 @@ void ADRWorldItemActor::ArmGroundHitEvent()
 	bGroundHitEventArmed = true;
 }
 
+void ADRWorldItemActor::BroadcastDropped()
+{
+	if (!HasAuthority() || !bGroundHitEventArmed)
+	{
+		return;
+	}
+
+	// 드랍 동작마다 최초 착지에서 한 번만 재생한다.
+	bGroundHitEventArmed = false;
+	MulticastPlayDroppedSound();
+}
+
 void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
@@ -136,8 +148,7 @@ void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, A
 		return;
 	}
 
-	bGroundHitEventArmed = false;
-	MulticastPlayDroppedSound();
+	BroadcastDropped();
 }
 
 void ADRWorldItemActor::MulticastPlayPickupSound_Implementation()
@@ -154,7 +165,9 @@ void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
 	if (IsValid(Definition) && IsValid(Definition->DroppedSound))
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Definition->DroppedSound, GetActorLocation());
+		// 광물마다 별도의 Concurrency Owner를 사용한다.
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->DroppedSound, GetActorLocation(),
+			FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr, nullptr, this);
 	}
 }
 

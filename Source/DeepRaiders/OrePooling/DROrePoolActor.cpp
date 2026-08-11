@@ -126,6 +126,7 @@ void ADROrePoolActor::MarkAsDropped()
     bPoolActive = true;
     SetWorldState(EDROreWorldState::Dropped);
     ApplyPoolState();
+    BroadcastDropped();
     ForceNetUpdate();
 }
 

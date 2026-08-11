@@ -41,6 +41,7 @@ protected:
 	
 	void ResetInteractionState();
 	void BroadcastMined();
+	void BroadcastDropped();
 	void ArmGroundHitEvent();
 	
 	UFUNCTION()
