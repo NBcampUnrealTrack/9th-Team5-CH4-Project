@@ -17,6 +17,33 @@ class UDRItemDefinition;
 class UTimelineComponent;
 class UCurveFloat;
 
+USTRUCT(BlueprintType)
+struct FDRFirstPersonSwingPresentation
+{
+    GENERATED_BODY()
+
+    /** 스윙의 시간 흐름을 결정하는 Curve */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "First Person")
+    TObjectPtr<UCurveFloat> Curve = nullptr;
+
+    /** Curve 값이 1일 때 적용할 회전 오프셋 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "First Person")
+    FRotator RotationOffset = FRotator::ZeroRotator;
+
+    /** Curve 값이 1일 때 적용할 위치 오프셋 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "First Person")
+    FVector LocationOffset = FVector::ZeroVector;
+};
+
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
  *
@@ -488,36 +515,34 @@ protected:
         Category = "Player|Equipment|FirstPerson",
         meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UTimelineComponent> FirstPersonItemSwingTimeline;
-
-    /** 시간에 따른 스윙 진행값 */
+    
+    /** 채굴 시 사용하는 1인칭 연출 */
     UPROPERTY(
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Equipment|FirstPerson",
         meta = (AllowPrivateAccess = "true"))
-    TObjectPtr<UCurveFloat> FirstPersonItemSwingCurve;
+    FDRFirstPersonSwingPresentation FirstPersonDigPresentation;
 
-    /** Curve 값이 1일 때 적용할 최대 회전량 */
+    /** 근접 공격 시 사용하는 1인칭 연출 */
     UPROPERTY(
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Equipment|FirstPerson",
         meta = (AllowPrivateAccess = "true"))
-    FRotator FirstPersonItemSwingRotation =
-        FRotator(-80.f, 0.f, 0.f);
+    FDRFirstPersonSwingPresentation FirstPersonMeleePresentation;
 
-    /** 스윙하면서 살짝 이동시키고 싶을 때 사용 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Equipment|FirstPerson",
-        meta = (AllowPrivateAccess = "true"))
-    FVector FirstPersonItemSwingLocation =
-        FVector(-5.f, 0.f, -3.f);
+    /** 현재 재생 중인 스윙의 실제 오프셋 */
+    FRotator ActiveFirstPersonSwingRotation =
+        FRotator::ZeroRotator;
 
+    FVector ActiveFirstPersonSwingLocation =
+        FVector::ZeroVector;
+    
     FTransform FirstPersonEquipmentRootBaseTransform;
 
-    void PlayFirstPersonItemSwing();
+    void PlayFirstPersonItemSwing(
+        const FDRFirstPersonSwingPresentation& Presentation);
 
     UFUNCTION()
     void UpdateFirstPersonItemSwing(float CurveValue);

@@ -19,6 +19,12 @@
 #include "Components/TimelineComponent.h"
 #include "Curves/CurveFloat.h"
 
+namespace
+{
+	const FName FirstPersonSwingTrackName(
+		TEXT("FirstPersonSwing"));
+}
+
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
@@ -437,8 +443,21 @@ void ADRPlayerCharacter::BeginPlay()
 			FirstPersonEquipmentRoot->GetRelativeTransform();
 	}
 
+	UCurveFloat* InitialSwingCurve = nullptr;
+
+	if (IsValid(FirstPersonDigPresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonDigPresentation.Curve;
+	}
+	else if (IsValid(FirstPersonMeleePresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonMeleePresentation.Curve;
+	}
+
 	if (IsValid(FirstPersonItemSwingTimeline) &&
-		IsValid(FirstPersonItemSwingCurve))
+		IsValid(InitialSwingCurve))
 	{
 		FOnTimelineFloat UpdateDelegate;
 
@@ -447,8 +466,10 @@ void ADRPlayerCharacter::BeginPlay()
 			FName("UpdateFirstPersonItemSwing"));
 
 		FirstPersonItemSwingTimeline->AddInterpFloat(
-			FirstPersonItemSwingCurve,
-			UpdateDelegate);
+			InitialSwingCurve,
+			UpdateDelegate,
+			NAME_None,
+			FirstPersonSwingTrackName);
 
 		FOnTimelineEvent FinishedDelegate;
 
@@ -1530,14 +1551,35 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		false);
 }
 
-void ADRPlayerCharacter::PlayFirstPersonItemSwing()
+void ADRPlayerCharacter::PlayFirstPersonItemSwing(
+	const FDRFirstPersonSwingPresentation& Presentation)
 {
 	if (!IsLocallyControlled() ||
 		!IsValid(FirstPersonItemSwingTimeline) ||
-		!IsValid(FirstPersonItemSwingCurve))
+		!IsValid(FirstPersonEquipmentRoot) ||
+		!IsValid(Presentation.Curve))
 	{
 		return;
 	}
+
+	// 혹시 기존 스윙이 재생 중이었다면 정리
+	FirstPersonItemSwingTimeline->Stop();
+
+	// 항상 기본 위치에서 새 Action 시작
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
+
+	// 이번 Action에서 사용할 Transform 데이터 저장
+	ActiveFirstPersonSwingRotation =
+		Presentation.RotationOffset;
+
+	ActiveFirstPersonSwingLocation =
+		Presentation.LocationOffset;
+
+	// 이번 Action에 맞는 Curve로 교체
+	FirstPersonItemSwingTimeline->SetFloatCurve(
+		Presentation.Curve,
+		FirstPersonSwingTrackName);
 
 	FirstPersonItemSwingTimeline->PlayFromStart();
 }
@@ -1554,15 +1596,15 @@ void ADRPlayerCharacter::UpdateFirstPersonItemSwing(
 	const FVector BaseLocation =
 		FirstPersonEquipmentRootBaseTransform.GetLocation();
 
-	FRotator BaseRotation =
+	const FRotator BaseRotation =
 		FirstPersonEquipmentRootBaseTransform.Rotator();
 
 	const FVector NewLocation =
 		BaseLocation +
-		FirstPersonItemSwingLocation * CurveValue;
+		ActiveFirstPersonSwingLocation * CurveValue;
 
 	const FRotator RotationOffset =
-		FirstPersonItemSwingRotation * CurveValue;
+		ActiveFirstPersonSwingRotation * CurveValue;
 
 	const FRotator NewRotation =
 		BaseRotation + RotationOffset;
@@ -1589,11 +1631,13 @@ void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
-		PlayFirstPersonItemSwing();
+		PlayFirstPersonItemSwing(
+			FirstPersonDigPresentation);
 		break;
 
 	case EDRItemActionType::MeleeAttack:
-		PlayFirstPersonItemSwing();
+		PlayFirstPersonItemSwing(
+			FirstPersonMeleePresentation);
 		break;
 
 	case EDRItemActionType::Throw:
