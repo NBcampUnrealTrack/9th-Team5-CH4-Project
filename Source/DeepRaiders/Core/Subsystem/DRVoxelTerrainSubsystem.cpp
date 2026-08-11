@@ -78,6 +78,14 @@ bool UDRVoxelTerrainSubsystem::RequestDig(
 	return true;
 }
 
+bool UDRVoxelTerrainSubsystem::RequestDigAtLocation(
+	const FVector& Location,
+	float Radius,
+	FDRTerrainDigOperation* OutOperation)
+{
+	return RequestDig(ResolveVoxelWorld(), Location, Radius, OutOperation);
+}
+
 bool UDRVoxelTerrainSubsystem::ApplyDig(const FDRTerrainDigOperation& Operation)
 {
 	if (Operation.OperationId > 0 &&
