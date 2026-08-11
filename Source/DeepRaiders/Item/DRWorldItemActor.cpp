@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -22,6 +23,7 @@ ADRWorldItemActor::ADRWorldItemActor()
 	StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	StaticMeshComponent->SetSimulatePhysics(true);
 	StaticMeshComponent->BodyInstance.bStartAwake = false;
+	StaticMeshComponent->OnComponentHit.AddDynamic(this, &ThisClass::HandleStaticMeshHit);
 }
 
 void ADRWorldItemActor::BeginPlay()
@@ -99,8 +101,61 @@ void ADRWorldItemActor::ApplyDropImpulse(const FVector& Impulse)
 		return;
 	}
 	
+	ArmGroundHitEvent();
 	StaticMeshComponent->WakeAllRigidBodies();
 	StaticMeshComponent->AddImpulse(Impulse, NAME_None, true);
+}
+
+void ADRWorldItemActor::BroadcastMined()
+{
+	if (HasAuthority())
+	{
+		MulticastPlayMinedSound();
+	}
+}
+
+void ADRWorldItemActor::MulticastPlayMinedSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->MinedSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->MinedSound, GetActorLocation());
+	}
+}
+
+void ADRWorldItemActor::ArmGroundHitEvent()
+{
+	bGroundHitEventArmed = true;
+}
+
+void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
+{
+	if (!HasAuthority() || !bGroundHitEventArmed || Hit.ImpactNormal.Z < 0.5f)
+	{
+		return;
+	}
+
+	bGroundHitEventArmed = false;
+	MulticastPlayDroppedSound();
+}
+
+void ADRWorldItemActor::MulticastPlayPickupSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->PickupSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->PickupSound, GetActorLocation());
+	}
+}
+
+void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
+{
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && IsValid(Definition->DroppedSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->DroppedSound, GetActorLocation());
+	}
 }
 
 bool ADRWorldItemActor::IsPickupAvailable() const
@@ -177,6 +232,8 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 		bInteractionInProgress = false;
 		return false;
 	}
+
+	MulticastPlayPickupSound();
 	
 	if (!FinalizePickup())
 	{
