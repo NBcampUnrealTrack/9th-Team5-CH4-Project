@@ -6,6 +6,7 @@
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Item/DRUsableDiggingDefinition.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 
 UDRUsableDiggingComponent::UDRUsableDiggingComponent()
@@ -49,6 +50,11 @@ void UDRUsableDiggingComponent::StartDigging()
 		StartDiggingInternal();
 		return;
 	}
+
+	DrawDigRadiusDebug(
+		GetOwner()->GetActorLocation(),
+		FColor::Yellow,
+		DebugPreviewDrawTime);
 
 	World->GetTimerManager().SetTimer(
 		StartTimerHandle,
@@ -103,7 +109,13 @@ void UDRUsableDiggingComponent::ExecuteDig()
 		return;
 	}
 
-	RequestDigAtLocation(GetOwner()->GetActorLocation());
+	const FVector DigLocation = GetOwner()->GetActorLocation();
+	DrawDigRadiusDebug(
+		DigLocation,
+		FColor::Red,
+		DebugExplosionDrawTime);
+
+	RequestDigAtLocation(DigLocation);
 	FinishDigging();
 }
 
@@ -139,6 +151,34 @@ bool UDRUsableDiggingComponent::RequestDigAtLocation(const FVector& DigLocation)
 	}
 
 	return true;
+}
+
+void UDRUsableDiggingComponent::DrawDigRadiusDebug(
+	const FVector& Center,
+	const FColor& Color,
+	float DrawTime) const
+{
+	if (!bDrawDebugDigRadius || !IsValid(DiggingDefinition))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	DrawDebugSphere(
+		World,
+		Center,
+		DiggingDefinition->DigRadius,
+		32,
+		Color,
+		false,
+		DrawTime,
+		0,
+		2.f);
 }
 
 void UDRUsableDiggingComponent::FinishDigging()

@@ -31,6 +31,7 @@ protected:
 	void StartDiggingInternal();
 	void ExecuteDig();
 	bool RequestDigAtLocation(const FVector& DigLocation) const;
+	void DrawDigRadiusDebug(const FVector& Center, const FColor& Color, float DrawTime) const;
 	void FinishDigging();
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging")
@@ -38,6 +39,15 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging")
 	uint8 bAutoStartOnBeginPlay : 1 = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging|Debug")
+	uint8 bDrawDebugDigRadius : 1 = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging|Debug", meta = (ClampMin = "0.0", Units = "s"))
+	float DebugPreviewDrawTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Digging|Debug", meta = (ClampMin = "0.0", Units = "s"))
+	float DebugExplosionDrawTime = 1.f;
 
 private:
 	FTimerHandle StartTimerHandle;
