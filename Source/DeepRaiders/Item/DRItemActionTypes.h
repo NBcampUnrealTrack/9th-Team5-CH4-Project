@@ -17,3 +17,11 @@ enum class EDRItemActionType : uint8
 	/** 투척 */
 	Throw UMETA(DisplayName = "Throw")
 };
+
+UENUM(BlueprintType)
+enum class EDRItemActionTriggerEvent : uint8
+{
+	Started UMETA(DisplayName = "Started"),
+	Triggered UMETA(DisplayName = "Triggered"),
+	Completed UMETA(DisplayName = "Completed")
+};
