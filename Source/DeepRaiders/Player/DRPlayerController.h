@@ -161,7 +161,7 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestDropHeldItem();
 	
-	ADRWorldItemActor* SpawnHeldItemToWorld(float ForwardDistance, float VerticalOffset, float ImpulseStrength) const;
+	ADRWorldItemActor* ConsumeAndSpawnHeldItem(const FTransform& BaseSpawnTransform, int32 Quantity) const;
 	
 	ADRWorldItemActor* SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const;
 	
@@ -198,7 +198,10 @@ protected:
 	float ThrowForwardDistance = 120.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
-	float ThrowVerticalOffset = 60.f;
+	float ThrowRightOffset = 20.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowVerticalOffset = -15.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
 	float ThrowImpulseStrength = 600.f;

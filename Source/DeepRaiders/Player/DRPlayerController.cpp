@@ -594,22 +594,28 @@ void ADRPlayerController::HandleDropHeldItem(const FInputActionValue& Value)
 
 void ADRPlayerController::ServerRequestDropHeldItem_Implementation()
 {
-    SpawnHeldItemToWorld(DropForwardDistance, DropVerticalOffset, DropImpulseStrength);
+    APawn* CachedPawn = GetPawn();
+    if (!IsValid(CachedPawn))
+    {
+        return;
+    }
+
+    const FVector DropDirection = CachedPawn->GetActorForwardVector();
+    const FVector SpawnItemLocation = CachedPawn->GetActorLocation() + DropDirection * DropForwardDistance + FVector::UpVector * DropVerticalOffset;
+    const FRotator SpawnRotation(0.f, CachedPawn->GetActorRotation().Yaw, 0.f);
+    ADRWorldItemActor* DroppedItem = ConsumeAndSpawnHeldItem(FTransform(SpawnRotation, SpawnItemLocation), 1);
+
+    if (IsValid(DroppedItem) && !FMath::IsNearlyZero(DropImpulseStrength))
+    {
+        DroppedItem->ApplyDropImpulse(DropDirection * DropImpulseStrength);
+    }
 }
 
-ADRWorldItemActor* ADRPlayerController::SpawnHeldItemToWorld(
-    float ForwardDistance,
-    float VerticalOffset,
-    float ImpulseStrength) const
+ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform& BaseSpawnTransform, int32 Quantity) const
 {
-    constexpr int32 Quantity = 1;
-
     APawn* CachedPawn = GetPawn();
 
-    if (!HasAuthority()
-        || !IsValid(CachedPawn)
-        || !IsValid(QuickSlotComponent)
-        || !IsValid(QuickSlotInventoryComponent))
+    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(QuickSlotInventoryComponent) || Quantity <= 0)
     {
         return nullptr;
     }
@@ -620,14 +626,6 @@ ADRWorldItemActor* ADRPlayerController::SpawnHeldItemToWorld(
     {
         return nullptr;
     }
-
-    const FVector Forward = CachedPawn->GetActorForwardVector();
-
-    const FVector SpawnItemLocation = CachedPawn->GetActorLocation() + Forward * ForwardDistance + FVector::UpVector * VerticalOffset;
-
-    const FRotator SpawnRotation(0.f, CachedPawn->GetActorRotation().Yaw, 0.f);
-
-    const FTransform BaseSpawnTransform(SpawnRotation, SpawnItemLocation);
 
     ADRWorldItemActor* SpawnedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, Quantity);
 
@@ -640,11 +638,6 @@ ADRWorldItemActor* ADRPlayerController::SpawnHeldItemToWorld(
     {
         RollbackDroppedItem(SpawnedItem);
         return nullptr;
-    }
-
-    if (!FMath::IsNearlyZero(ImpulseStrength))
-    {
-        SpawnedItem->ApplyDropImpulse(Forward * ImpulseStrength);
     }
 
     return SpawnedItem;
@@ -740,7 +733,24 @@ void ADRPlayerController::RequestThrowHeldItem()
 void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
 {
     APawn* CachedPawn = GetPawn();
-    ADRWorldItemActor* ThrownItem = SpawnHeldItemToWorld(ThrowForwardDistance, ThrowVerticalOffset, ThrowImpulseStrength);
+    if (!IsValid(CachedPawn))
+    {
+        return;
+    }
+
+    const FRotator ViewRotation = CachedPawn->GetBaseAimRotation();
+    const FRotationMatrix ViewRotationMatrix(ViewRotation);
+    const FVector ViewForward = ViewRotation.Vector();
+    const FVector ViewRight = ViewRotationMatrix.GetUnitAxis(EAxis::Y);
+    const FVector ViewUp = ViewRotationMatrix.GetUnitAxis(EAxis::Z);
+    const FVector SpawnItemLocation = CachedPawn->GetPawnViewLocation() + ViewForward * ThrowForwardDistance + ViewRight * ThrowRightOffset + ViewUp * ThrowVerticalOffset;
+    ADRWorldItemActor* ThrownItem = ConsumeAndSpawnHeldItem(FTransform(ViewRotation, SpawnItemLocation), 1);
+
+    if (IsValid(ThrownItem) && !FMath::IsNearlyZero(ThrowImpulseStrength))
+    {
+        ThrownItem->ApplyDropImpulse(ViewForward * ThrowImpulseStrength);
+    }
+
     NotifyThrownItem(ThrownItem, CachedPawn);
 }
 
