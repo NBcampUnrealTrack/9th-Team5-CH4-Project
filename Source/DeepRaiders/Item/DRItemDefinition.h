@@ -8,6 +8,7 @@
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class EItemCategory : uint8
@@ -35,6 +36,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|UI")
+	TObjectPtr<UTexture2D> Icon;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText Description;
