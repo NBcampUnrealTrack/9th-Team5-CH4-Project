@@ -15,6 +15,7 @@
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
+#include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
@@ -23,6 +24,7 @@ ADRPlayerController::ADRPlayerController()
     // QuickSlot Initialize
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
+	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 }
 void ADRPlayerController::BeginPlay()
 {

@@ -5,6 +5,7 @@
 #include "DRShop.generated.h"
 
 class UDRInteractionComponent;
+class UDRShopComponent;
 class UDRShopUIComponent;
 class UDRUpgradeComponent;
 class USceneComponent;
@@ -23,6 +24,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "Shop")
+	TObjectPtr<UDRShopComponent> ShopComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;

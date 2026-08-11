@@ -7,7 +7,7 @@
 
 class UDRInventoryComponent;
 class UDRItemDefinition;
-class UDRShopUIComponent;
+class UDRShopComponent;
 
 USTRUCT()
 struct FDRUpgradeOperation
@@ -36,7 +36,7 @@ public:
 	UDRUpgradeComponent();
 
 	TArray<FDRShopItemOffer> GetNextUpgradeOffers(
-		const UDRShopUIComponent* ShopUIComponent,
+		const UDRShopComponent* ShopComponent,
 		const UDRInventoryComponent* Inventory) const;
 
 	bool BuildUpgradeOperation(
@@ -52,13 +52,13 @@ public:
 private:
 	int32 GetOwnedUpgradeLevel(
 		FName RowName,
-		const UDRShopUIComponent* ShopUIComponent,
+		const UDRShopComponent* ShopComponent,
 		const UDRInventoryComponent* Inventory) const;
 
 	const FDRShopItemOffer* FindUpgradeOffer(
 		FName RowName,
 		int32 TargetLevel,
-		const UDRShopUIComponent* ShopUIComponent) const;
+		const UDRShopComponent* ShopComponent) const;
 
 	bool HasAnyItemInUpgradeChain(
 		const FDRShopItemTableRow& ItemRow,

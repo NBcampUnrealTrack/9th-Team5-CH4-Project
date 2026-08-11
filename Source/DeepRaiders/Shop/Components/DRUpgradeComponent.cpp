@@ -1,6 +1,6 @@
 #include "DRUpgradeComponent.h"
 
-#include "DRShopUIComponent.h"
+#include "DRShopComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
@@ -10,19 +10,19 @@ UDRUpgradeComponent::UDRUpgradeComponent()
 }
 
 TArray<FDRShopItemOffer> UDRUpgradeComponent::GetNextUpgradeOffers(
-	const UDRShopUIComponent* ShopUIComponent,
+	const UDRShopComponent* ShopComponent,
 	const UDRInventoryComponent* Inventory) const
 {
 	TArray<FDRShopItemOffer> UpgradeOffers;
 
-	if (!IsValid(ShopUIComponent) || !IsValid(Inventory))
+	if (!IsValid(ShopComponent) || !IsValid(Inventory))
 	{
 		return UpgradeOffers;
 	}
 
 	TSet<FName> ProcessedRows;
 
-	for (const FDRShopItemOffer& ItemOffer : ShopUIComponent->GetItemOffers())
+	for (const FDRShopItemOffer& ItemOffer : ShopComponent->GetItemOffers())
 	{
 		if (!ItemOffer.IsUpgrade()
 			|| ProcessedRows.Contains(ItemOffer.RowName))
@@ -33,17 +33,17 @@ TArray<FDRShopItemOffer> UDRUpgradeComponent::GetNextUpgradeOffers(
 		ProcessedRows.Add(ItemOffer.RowName);
 		const int32 TargetLevel = GetOwnedUpgradeLevel(
 			ItemOffer.RowName,
-			ShopUIComponent,
+			ShopComponent,
 			Inventory) + 1;
 		const FDRShopItemOffer* NextOffer = FindUpgradeOffer(
 			ItemOffer.RowName,
 			TargetLevel,
-			ShopUIComponent);
+			ShopComponent);
 		FDRShopItemTableRow ItemRow;
 		FDRUpgradeOperation Operation;
 
 		if (NextOffer
-			&& ShopUIComponent->GetItemRow(ItemOffer.RowName, ItemRow)
+			&& ShopComponent->GetItemRow(ItemOffer.RowName, ItemRow)
 			&& BuildUpgradeOperation(
 				ItemRow,
 				TargetLevel,
@@ -130,17 +130,17 @@ bool UDRUpgradeComponent::ApplyUpgrade(
 
 int32 UDRUpgradeComponent::GetOwnedUpgradeLevel(
 	FName RowName,
-	const UDRShopUIComponent* ShopUIComponent,
+	const UDRShopComponent* ShopComponent,
 	const UDRInventoryComponent* Inventory) const
 {
 	int32 OwnedLevel = 0;
 
-	if (!IsValid(ShopUIComponent) || !IsValid(Inventory))
+	if (!IsValid(ShopComponent) || !IsValid(Inventory))
 	{
 		return OwnedLevel;
 	}
 
-	for (const FDRShopItemOffer& ItemOffer : ShopUIComponent->GetItemOffers())
+	for (const FDRShopItemOffer& ItemOffer : ShopComponent->GetItemOffers())
 	{
 		if (ItemOffer.IsUpgrade()
 			&& ItemOffer.RowName == RowName
@@ -156,14 +156,14 @@ int32 UDRUpgradeComponent::GetOwnedUpgradeLevel(
 const FDRShopItemOffer* UDRUpgradeComponent::FindUpgradeOffer(
 	FName RowName,
 	int32 TargetLevel,
-	const UDRShopUIComponent* ShopUIComponent) const
+	const UDRShopComponent* ShopComponent) const
 {
-	if (!IsValid(ShopUIComponent))
+	if (!IsValid(ShopComponent))
 	{
 		return nullptr;
 	}
 
-	return ShopUIComponent->GetItemOffers().FindByPredicate(
+	return ShopComponent->GetItemOffers().FindByPredicate(
 		[RowName, TargetLevel](const FDRShopItemOffer& ItemOffer)
 		{
 			return ItemOffer.IsUpgrade()

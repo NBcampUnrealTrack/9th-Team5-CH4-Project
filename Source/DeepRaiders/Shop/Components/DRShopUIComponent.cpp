@@ -1,76 +1,32 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
+#include "DRShopComponent.h"
+#include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
-#include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-const TArray<FDRShopItemOffer>& UDRShopUIComponent::GetItemOffers() const
-{
-	return ItemOffers;
-}
-
-bool UDRShopUIComponent::GetItemRow(
-	FName RowName,
-	FDRShopItemTableRow& OutItemRow) const
-{
-	if (!IsValid(ItemTable) || RowName.IsNone())
-	{
-		return false;
-	}
-
-	const FDRShopItemTableRow* ItemRow =
-		ItemTable->FindRow<FDRShopItemTableRow>(RowName, TEXT("GetItemRow"));
-
-	if (!ItemRow || !IsValid(ItemRow->ItemDefinition))
-	{
-		return false;
-	}
-
-	OutItemRow = *ItemRow;
-	return true;
-}
-
-bool UDRShopUIComponent::IsItemAvailable(
-	const UDRItemDefinition* ItemDefinition) const
-{
-	return IsValid(ItemDefinition)
-		&& ItemOffers.ContainsByPredicate(
-			[ItemDefinition](const FDRShopItemOffer& ItemOffer)
-			{
-				return !ItemOffer.IsUpgrade()
-					&& ItemOffer.ItemDefinition == ItemDefinition;
-			});
-}
-
-bool UDRShopUIComponent::IsTransactionAllowed(const APawn* Interactor) const
-{
-	return IsValid(InteractionComponent)
-		&& IsValid(Interactor)
-		&& InteractionComponent->IsOverlappingActor(Interactor);
-}
-
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	LoadItemOffers();
 
 	InteractionComponent =
 		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
-	UpgradeComponent =
-		GetOwner()->FindComponentByClass<UDRUpgradeComponent>();
+	ShopComponent = GetOwner()->FindComponentByClass<UDRShopComponent>();
+	UpgradeComponent = GetOwner()->FindComponentByClass<UDRUpgradeComponent>();
 
-	if (!IsValid(InteractionComponent) || !IsValid(UpgradeComponent))
+	if (!IsValid(InteractionComponent)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(UpgradeComponent))
 	{
 		return;
 	}
@@ -100,71 +56,13 @@ void UDRShopUIComponent::EndPlay(
 	Super::EndPlay(EndPlayReason);
 }
 
-void UDRShopUIComponent::LoadItemOffers()
-{
-	ItemOffers.Reset();
-
-	if (!IsValid(ItemTable))
-	{
-		return;
-	}
-
-	for (const FName RowName : ItemTable->GetRowNames())
-	{
-		const FDRShopItemTableRow* ItemRow =
-			ItemTable->FindRow<FDRShopItemTableRow>(
-				RowName,
-				TEXT("LoadItemOffers"));
-
-		if (ItemRow && IsValid(ItemRow->ItemDefinition))
-		{
-			AddItemOffers(RowName, *ItemRow);
-		}
-	}
-}
-
-void UDRShopUIComponent::AddItemOffers(
-	FName RowName,
-	const FDRShopItemTableRow& ItemRow)
-{
-	if (!ItemRow.IsUpgradeRow())
-	{
-		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();
-		ItemOffer.RowName = RowName;
-		ItemOffer.ItemDefinition = ItemRow.ItemDefinition;
-		return;
-	}
-
-	for (int32 TargetLevel = 1;
-		TargetLevel <= ItemRow.GetMaxUpgradeLevel();
-		++TargetLevel)
-	{
-		UDRItemDefinition* SourceDefinition =
-			ItemRow.GetUpgradeSourceDefinition(TargetLevel);
-		UDRItemDefinition* TargetDefinition =
-			ItemRow.GetUpgradeTargetDefinition(TargetLevel);
-
-		if (!IsValid(TargetDefinition)
-			|| (TargetLevel > 1 && !IsValid(SourceDefinition)))
-		{
-			continue;
-		}
-
-		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();
-		ItemOffer.RowName = RowName;
-		ItemOffer.OfferType = EDRShopOfferType::Upgrade;
-		ItemOffer.ItemDefinition = TargetDefinition;
-		ItemOffer.UpgradeSourceDefinition = SourceDefinition;
-		ItemOffer.TargetLevel = TargetLevel;
-	}
-}
-
 void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 {
 	if (!IsValid(Interactor)
 		|| !Interactor->IsLocallyControlled()
 		|| IsValid(ShopWidget)
 		|| !ShopWidgetClass
+		|| !IsValid(ShopComponent)
 		|| !IsValid(UpgradeComponent))
 	{
 		return;
@@ -178,24 +76,30 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		return;
 	}
 
-	PlayerState = PlayerController->GetPlayerState<ADRPlayerState>();
-	InventoryComponent = PlayerController->GetQuickSlotInventoryComponent();
+	ShopTransactionComponent =
+		PlayerController->GetShopTransactionComponent();
+	InventoryComponent = PlayerController->GetInventoryComponent();
 
-	if (!IsValid(PlayerState) || !IsValid(InventoryComponent))
+	if (!IsValid(ShopTransactionComponent)
+		|| !IsValid(InventoryComponent))
 	{
 		return;
 	}
 
-	ShopWidget = CreateWidget<UDRShopWidget>(PlayerController, ShopWidgetClass);
+	ShopWidget = CreateWidget<UDRShopWidget>(
+		PlayerController,
+		ShopWidgetClass);
 
 	if (!IsValid(ShopWidget))
 	{
 		return;
 	}
 
-	ShopWidget->InitializeShop(ItemOffers);
+	ShopWidget->InitializeShop(ShopComponent->GetItemOffers());
 	RefreshUpgradeOffers();
-	ShopWidget->OnCloseRequested.AddDynamic(this, &ThisClass::HideShopWidget);
+	ShopWidget->OnCloseRequested.AddDynamic(
+		this,
+		&ThisClass::HideShopWidget);
 	ShopWidget->OnOfferRequested.AddDynamic(
 		this,
 		&ThisClass::HandleOfferRequested);
@@ -251,7 +155,7 @@ void UDRShopUIComponent::HideShopWidget()
 
 	ShopWidget = nullptr;
 	InventoryComponent = nullptr;
-	PlayerState = nullptr;
+	ShopTransactionComponent = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -263,17 +167,17 @@ void UDRShopUIComponent::HideShopWidget()
 
 void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 {
-	if (IsValid(PlayerState))
+	if (IsValid(ShopTransactionComponent))
 	{
-		PlayerState->RequestOffer(GetOwner(), Request);
+		ShopTransactionComponent->RequestOffer(GetOwner(), Request);
 	}
 }
 
 void UDRShopUIComponent::HandleSellAllOresRequested()
 {
-	if (IsValid(PlayerState))
+	if (IsValid(ShopTransactionComponent))
 	{
-		PlayerState->RequestSellAllOres(GetOwner());
+		ShopTransactionComponent->RequestSellAllOres(GetOwner());
 	}
 }
 
@@ -285,6 +189,7 @@ void UDRShopUIComponent::HandleInventoryChanged()
 void UDRShopUIComponent::RefreshUpgradeOffers()
 {
 	if (!IsValid(ShopWidget)
+		|| !IsValid(ShopComponent)
 		|| !IsValid(UpgradeComponent)
 		|| !IsValid(InventoryComponent))
 	{
@@ -292,5 +197,7 @@ void UDRShopUIComponent::RefreshUpgradeOffers()
 	}
 
 	ShopWidget->SetUpgradeOffers(
-		UpgradeComponent->GetNextUpgradeOffers(this, InventoryComponent));
+		UpgradeComponent->GetNextUpgradeOffers(
+			ShopComponent,
+			InventoryComponent));
 }

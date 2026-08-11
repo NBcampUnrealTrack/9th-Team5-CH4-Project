@@ -6,11 +6,10 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
-class ADRPlayerState;
-class UDataTable;
 class UDRInteractionComponent;
 class UDRInventoryComponent;
-class UDRItemDefinition;
+class UDRShopComponent;
+class UDRShopTransactionComponent;
 class UDRShopWidget;
 class UDRUpgradeComponent;
 
@@ -22,20 +21,11 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 public:
 	UDRShopUIComponent();
 
-	const TArray<FDRShopItemOffer>& GetItemOffers() const;
-	bool GetItemRow(FName RowName, FDRShopItemTableRow& OutItemRow) const;
-	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;
-	bool IsTransactionAllowed(const APawn* Interactor) const;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	void LoadItemOffers();
-	void AddItemOffers(FName RowName, const FDRShopItemTableRow& ItemRow);
-	void RefreshUpgradeOffers();
-
 	UFUNCTION()
 	void HandleInteractionEntered(APawn* Interactor);
 
@@ -54,17 +44,10 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
+	void RefreshUpgradeOffers();
+
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		Category = "Shop|Data",
-		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRShopItemTableRow"))
-	TObjectPtr<UDataTable> ItemTable;
-
-	UPROPERTY(Transient)
-	TArray<FDRShopItemOffer> ItemOffers;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopWidget> ShopWidget;
@@ -76,8 +59,11 @@ private:
 	TObjectPtr<UDRInventoryComponent> InventoryComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
+	TObjectPtr<UDRShopComponent> ShopComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<ADRPlayerState> PlayerState;
+	TObjectPtr<UDRShopTransactionComponent> ShopTransactionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
 };
