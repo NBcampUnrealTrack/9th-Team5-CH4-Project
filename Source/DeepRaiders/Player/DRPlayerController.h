@@ -150,9 +150,6 @@ public:
 #pragma endregion
 	
 #pragma region Drop Item
-public:
-	void RequestThrowHeldItem();
-
 private:
 	void HandleDropHeldItem(const FInputActionValue& Value);
 	
@@ -160,8 +157,9 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestDropHeldItem();
 	
+	ADRWorldItemActor* SpawnHeldItemToWorld(float ForwardDistance, float VerticalOffset, float ImpulseStrength) const;
+	
 	ADRWorldItemActor* SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const;
-	void ActivateUsableDiggingItem(ADRWorldItemActor* SpawnedItem) const;
 	
 	// 아이템 드랍 실패 롤백
 	void RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const;
@@ -180,4 +178,26 @@ protected:
 	float DropImpulseStrength = 300.0f;
 #pragma endregion
 	
+#pragma region Throw Item
+	
+public:
+	void RequestThrowHeldItem();
+	
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestThrowHeldItem();
+	
+	void NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const;
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowForwardDistance = 120.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowVerticalOffset = 60.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowImpulseStrength = 600.f;
+
+#pragma endregion 
 };

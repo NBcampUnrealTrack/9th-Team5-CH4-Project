@@ -9,9 +9,9 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
+#include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
-#include "DeepRaiders/Item/Components/DRUsableDiggingComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
@@ -502,11 +502,6 @@ bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Qu
 
 void ADRPlayerController::HandleDropHeldItem(const FInputActionValue& Value)
 {
-    RequestThrowHeldItem();
-}
-
-void ADRPlayerController::RequestThrowHeldItem()
-{
     if (IsLocalController())
     {
         ServerRequestDropHeldItem();
@@ -515,49 +510,60 @@ void ADRPlayerController::RequestThrowHeldItem()
 
 void ADRPlayerController::ServerRequestDropHeldItem_Implementation()
 {
-    // 버리기 초기 구현은 1개로 제한
-    constexpr int32 DropQuantity = 1;
-    
+    SpawnHeldItemToWorld(DropForwardDistance, DropVerticalOffset, DropImpulseStrength);
+}
+
+ADRWorldItemActor* ADRPlayerController::SpawnHeldItemToWorld(
+    float ForwardDistance,
+    float VerticalOffset,
+    float ImpulseStrength) const
+{
+    constexpr int32 Quantity = 1;
+
     APawn* CachedPawn = GetPawn();
-    
+
     if (!HasAuthority()
         || !IsValid(CachedPawn)
         || !IsValid(QuickSlotComponent)
         || !IsValid(QuickSlotInventoryComponent))
     {
-        return;
+        return nullptr;
     }
-    
+
     UDRItemDefinition* Definition = QuickSlotComponent->GetSelectedItemDefinition();
-    
-    if (!IsValid(Definition)
-        || QuickSlotInventoryComponent->GetItemCount(Definition) < DropQuantity)
+
+    if (!IsValid(Definition) || QuickSlotInventoryComponent->GetItemCount(Definition) < Quantity)
     {
-        return;
+        return nullptr;
     }
-    
+
     const FVector Forward = CachedPawn->GetActorForwardVector();
-    
-    const FVector DropLocation = CachedPawn->GetActorLocation() + Forward * DropForwardDistance + FVector::UpVector * DropVerticalOffset;
-    const FRotator DropRotation(0.0f, CachedPawn->GetActorRotation().Yaw, 0.0f);
-    
-    const FTransform BaseSpawnTransform(DropRotation, DropLocation);
-    ADRWorldItemActor* DroppedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, DropQuantity);
-    
-    if (!IsValid(DroppedItem))
+
+    const FVector SpawnItemLocation = CachedPawn->GetActorLocation() + Forward * ForwardDistance + FVector::UpVector * VerticalOffset;
+
+    const FRotator SpawnRotation(0.f, CachedPawn->GetActorRotation().Yaw, 0.f);
+
+    const FTransform BaseSpawnTransform(SpawnRotation, SpawnItemLocation);
+
+    ADRWorldItemActor* SpawnedItem = SpawnDroppedItem(Definition, BaseSpawnTransform, Quantity);
+
+    if (!IsValid(SpawnedItem))
     {
-        return;
+        return nullptr;
     }
-    
-    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, DropQuantity))
+
+    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
     {
-        // 아이템 차감 실패 시 롤백
-        RollbackDroppedItem(DroppedItem);
-        return;
+        RollbackDroppedItem(SpawnedItem);
+        return nullptr;
     }
-    
-    DroppedItem->ApplyDropImpulse(Forward * DropImpulseStrength);
-    ActivateUsableDiggingItem(DroppedItem);
+
+    if (!FMath::IsNearlyZero(ImpulseStrength))
+    {
+        SpawnedItem->ApplyDropImpulse(Forward * ImpulseStrength);
+    }
+
+    return SpawnedItem;
 }
 
 ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const
@@ -606,21 +612,6 @@ ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Defi
     return WorldItemSubsystem->SpawnWorldItemFromDefinition(Definition, BaseSpawnTransform, Quantity);    
 }
 
-void ADRPlayerController::ActivateUsableDiggingItem(
-    ADRWorldItemActor* SpawnedItem) const
-{
-    if (!HasAuthority() || !IsValid(SpawnedItem))
-    {
-        return;
-    }
-    
-    UDRUsableDiggingComponent* DiggingComponent = SpawnedItem->FindComponentByClass<UDRUsableDiggingComponent>();
-    if (IsValid(DiggingComponent))
-    {
-        DiggingComponent->StartDigging();
-    }
-}
-
 void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const
 {
     if (!IsValid(DroppedItem))
@@ -652,4 +643,31 @@ void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) co
     }
     
     DroppedItem->Destroy();
+}
+
+void ADRPlayerController::RequestThrowHeldItem()
+{
+    if (IsLocalController())
+    {
+        ServerRequestThrowHeldItem();
+    }
+}
+
+void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
+{
+    APawn* CachedPawn = GetPawn();
+    ADRWorldItemActor* ThrownItem = SpawnHeldItemToWorld(ThrowForwardDistance, ThrowVerticalOffset, ThrowImpulseStrength);
+    NotifyThrownItem(ThrownItem, CachedPawn);
+}
+
+void ADRPlayerController::NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const
+{
+    if (!HasAuthority()
+        || !IsValid(ThrownItem)
+        || !ThrownItem->Implements<UDRThrowableItemInterface>())
+    {
+        return;
+    }
+
+    IDRThrowableItemInterface::Execute_NotifyThrown(ThrownItem, Thrower);
 }
