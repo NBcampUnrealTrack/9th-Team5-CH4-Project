@@ -40,8 +40,12 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-	void HandlePrimaryAction(const FInputActionValue& value);
-	void HandleSecondaryAction(const FInputActionValue& Value);
+	void HandlePrimaryActionStarted(const FInputActionValue& Value);
+	void HandlePrimaryActionTriggered(const FInputActionValue& Value);
+	void HandlePrimaryActionCompleted(const FInputActionValue& Value);
+	void HandleSecondaryActionStarted(const FInputActionValue& Value);
+	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
+	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
 
 	// 임시 네트워크 검증 입력
 	void HandleNetworkTest(const FInputActionValue& Value);
@@ -126,8 +130,6 @@ protected:
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
 #pragma endregion 
 
-#pragma endregion
-
 #pragma region Interact
 private:
 	void HandleInteract(const FInputActionValue& Value);	
@@ -159,6 +161,8 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestDropHeldItem();
 	
+	ADRWorldItemActor* ConsumeAndSpawnHeldItem(const FTransform& BaseSpawnTransform, int32 Quantity) const;
+	
 	ADRWorldItemActor* SpawnDroppedItem(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity) const;
 	
 	// 아이템 드랍 실패 롤백
@@ -176,6 +180,32 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Drop", meta = (ClampMin = "0.0"))
 	float DropImpulseStrength = 300.0f;
+#pragma endregion
 	
-#pragma region endregion
+#pragma region Throw Item
+	
+public:
+	void RequestThrowHeldItem();
+	
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestThrowHeldItem();
+	
+	bool BuildThrowAim(FTransform& OutSpawnTransform, FVector& OutThrowDirection) const;
+	void NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn* Thrower) const;
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowForwardDistance = 120.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowRightOffset = 20.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowVerticalOffset = -15.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Throw")
+	float ThrowImpulseStrength = 600.f;
+
+#pragma endregion 
 };

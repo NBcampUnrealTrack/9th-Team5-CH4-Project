@@ -14,8 +14,8 @@ bool UDRVoxelTerrainSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	{
 		return false;
 	}
-
-	return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
+	return true;
+	// return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
 }
 
 void UDRVoxelTerrainSubsystem::OnWorldBeginPlay(UWorld& InWorld)
@@ -76,6 +76,14 @@ bool UDRVoxelTerrainSubsystem::RequestDig(
 		*OutOperation = Operation;
 	}
 	return true;
+}
+
+bool UDRVoxelTerrainSubsystem::RequestDigAtLocation(
+	const FVector& Location,
+	float Radius,
+	FDRTerrainDigOperation* OutOperation)
+{
+	return RequestDig(ResolveVoxelWorld(), Location, Radius, OutOperation);
 }
 
 bool UDRVoxelTerrainSubsystem::ApplyDig(const FDRTerrainDigOperation& Operation)

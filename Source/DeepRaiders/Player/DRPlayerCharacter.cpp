@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 
 #include "Components/TimelineComponent.h"
 #include "Curves/CurveFloat.h"
@@ -365,6 +366,19 @@ void ADRPlayerCharacter::RequestMeleeAttack()
 	ServerRequestMeleeAttack();
 }
 
+void ADRPlayerCharacter::RequestThrowHeldItem()
+{
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::Throw))
+	{
+		return;
+	}
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
+	{
+		PlayerController->RequestThrowHeldItem();
+	}
+}
+
 float ADRPlayerCharacter::TakeDamage(
 	float DamageAmount,
 	const FDamageEvent& DamageEvent,
@@ -396,7 +410,8 @@ float ADRPlayerCharacter::TakeDamage(
 	return AppliedDamage;
 }
 
-void ADRPlayerCharacter::RequestPrimaryItemAction()
+void ADRPlayerCharacter::RequestPrimaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
@@ -405,14 +420,25 @@ void ADRPlayerCharacter::RequestPrimaryItemAction()
 		return;
 	}
 
+	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
+	{
+		return;
+	}
+
 	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
 }
 
-void ADRPlayerCharacter::RequestSecondaryItemAction()
+void ADRPlayerCharacter::RequestSecondaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
 		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
@@ -1510,9 +1536,7 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(
 		break;
 
 	case EDRItemActionType::Throw:
-		// 추후:
-		// PlayFirstPersonItemActionPresentation(Throw);
-		// RequestThrowHeldItem();
+		RequestThrowHeldItem();
 		break;
 
 	case EDRItemActionType::None:
