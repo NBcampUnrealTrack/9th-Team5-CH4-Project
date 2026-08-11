@@ -22,6 +22,7 @@ TArray<FDRShopItemOffer> UDRUpgradeComponent::GetNextUpgradeOffers(
 
 	TSet<FName> ProcessedRows;
 
+	// 동일 체인은 한 번만 처리하고 현재 보유 단계의 다음 Offer만 노출한다.
 	for (const FDRShopItemOffer& ItemOffer : ShopComponent->GetItemOffers())
 	{
 		if (!ItemOffer.IsUpgrade()
@@ -76,6 +77,7 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 	UDRItemDefinition* TargetDefinition =
 		ItemRow.GetUpgradeTargetDefinition(TargetLevel);
 
+	// 1단계는 신규 지급, 이후 단계는 직전 Definition을 가진 Entry 교체로 처리한다.
 	if (!IsValid(TargetDefinition)
 		|| TargetDefinition->Category != EItemCategory::Equipment)
 	{

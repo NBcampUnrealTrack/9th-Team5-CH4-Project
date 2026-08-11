@@ -47,6 +47,7 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	UDRInventoryComponent* Inventory = GetInventoryComponent();
 	FDRShopItemTableRow ItemRow;
 
+	// 클라이언트 요청을 신뢰하지 않고 상점 접근 상태와 Row를 서버에서 다시 확인한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
@@ -98,6 +99,7 @@ void UDRShopTransactionComponent::ServerSellAllOres_Implementation(
 		EntryIds,
 		TotalQuantity);
 
+	// 인벤토리 제거가 완료된 경우에만 판매 금액을 지급한다.
 	if (EntryIds.IsEmpty()
 		|| TotalPrice <= 0
 		|| TotalPrice > static_cast<int64>(MAX_int32) - PlayerState->GetCoins()
@@ -138,6 +140,7 @@ bool UDRShopTransactionComponent::TryPurchase(
 {
 	UDRItemDefinition* ItemDefinition = ItemRow.ItemDefinition;
 
+	// 가격, 판매 목록, 코인, 인벤토리 공간을 모두 검증한 뒤 아이템을 추가한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
@@ -165,6 +168,7 @@ bool UDRShopTransactionComponent::TryUpgrade(
 {
 	FDRUpgradeOperation Operation;
 
+	// 현재 인벤토리를 기준으로 작업을 다시 만들고 성공한 경우에만 비용을 차감한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(UpgradeComponent)
 		|| !IsValid(Inventory)

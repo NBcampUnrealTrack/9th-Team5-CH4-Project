@@ -24,16 +24,19 @@ struct FDRShopItemTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shop")
 	TArray<TObjectPtr<UDRItemDefinition>> UpgradeDefinitions;
 
+	/** 단계별 Definition이 설정된 업그레이드 Row인지 확인한다. */
 	bool IsUpgradeRow() const
 	{
 		return !UpgradeDefinitions.IsEmpty();
 	}
 
+	/** 기본 아이템을 포함한 전체 업그레이드 단계 수를 반환한다. */
 	int32 GetMaxUpgradeLevel() const
 	{
 		return IsUpgradeRow() ? UpgradeDefinitions.Num() + 1 : 0;
 	}
 
+	/** 지정한 단계의 아이템 Definition을 반환한다. */
 	UDRItemDefinition* GetDefinitionForLevel(int32 Level) const
 	{
 		if (Level <= 0 || Level > UpgradeDefinitions.Num() + 1)
@@ -46,6 +49,7 @@ struct FDRShopItemTableRow : public FTableRowBase
 			: UpgradeDefinitions[Level - 2].Get();
 	}
 
+	/** 요청 단계가 업그레이드 체인 범위 안에 있는지 확인한다. */
 	bool IsValidUpgradeLevel(int32 TargetLevel) const
 	{
 		return TargetLevel > 0
@@ -53,6 +57,7 @@ struct FDRShopItemTableRow : public FTableRowBase
 			&& GetDefinitionForLevel(TargetLevel) != nullptr;
 	}
 
+	/** 목표 단계 바로 이전의 Definition을 반환한다. */
 	UDRItemDefinition* GetUpgradeSourceDefinition(int32 TargetLevel) const
 	{
 		return TargetLevel > 1 && IsValidUpgradeLevel(TargetLevel)
@@ -60,6 +65,7 @@ struct FDRShopItemTableRow : public FTableRowBase
 			: nullptr;
 	}
 
+	/** 목표 단계에서 지급할 Definition을 반환한다. */
 	UDRItemDefinition* GetUpgradeTargetDefinition(int32 TargetLevel) const
 	{
 		return IsValidUpgradeLevel(TargetLevel)
@@ -108,6 +114,7 @@ struct FDRShopItemOffer
 		return OfferType == EDRShopOfferType::Upgrade;
 	}
 
+	/** UI Offer를 서버에 전달할 최소 요청 데이터로 변환한다. */
 	FDRShopOfferRequest MakeRequest() const
 	{
 		FDRShopOfferRequest Request;
