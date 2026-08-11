@@ -49,7 +49,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade")
 	uint8 bCanBeSold:1 = false;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade", meta = (ClampMin = 1, UIMin = 1))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade", meta = (ClampMin = 0, UIMin = 0))
 	int32 Price = 0;
 
 	// ===== Action =====

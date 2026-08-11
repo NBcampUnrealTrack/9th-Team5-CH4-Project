@@ -143,7 +143,7 @@ bool UDRShopTransactionComponent::TryPurchase(
 		|| !IsValid(Inventory)
 		|| ItemRow.IsUpgradeRow()
 		|| !IsValid(ItemDefinition)
-		|| ItemDefinition->Price <= 0
+		|| ItemDefinition->Price < 0
 		|| !ShopComponent->IsItemAvailable(ItemDefinition)
 		|| PlayerState->GetCoins() < ItemDefinition->Price
 		|| !Inventory->CanAddItem(ItemDefinition, 1)
