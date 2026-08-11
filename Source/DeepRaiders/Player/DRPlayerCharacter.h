@@ -505,6 +505,7 @@ protected:
     UFUNCTION()
     void OnRep_HeldItemDefinition();
     
-    void RefreshHeldItemVisual();    
+    void RefreshHeldItemVisual();
+    void RefreshHeldItemMiningSettings();
 #pragma endregion
 };

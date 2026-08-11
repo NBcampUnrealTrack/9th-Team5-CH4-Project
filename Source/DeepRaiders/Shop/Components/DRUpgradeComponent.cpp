@@ -1,0 +1,219 @@
+#include "DRUpgradeComponent.h"
+
+#include "DRShopUIComponent.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+
+UDRUpgradeComponent::UDRUpgradeComponent()
+{
+	PrimaryComponentTick.bCanEverTick = false;
+}
+
+TArray<FDRShopItemOffer> UDRUpgradeComponent::GetNextUpgradeOffers(
+	const UDRShopUIComponent* ShopUIComponent,
+	const UDRInventoryComponent* Inventory) const
+{
+	TArray<FDRShopItemOffer> UpgradeOffers;
+
+	if (!IsValid(ShopUIComponent) || !IsValid(Inventory))
+	{
+		return UpgradeOffers;
+	}
+
+	TSet<FName> ProcessedRows;
+
+	for (const FDRShopItemOffer& ItemOffer : ShopUIComponent->GetItemOffers())
+	{
+		if (!ItemOffer.IsUpgrade()
+			|| ProcessedRows.Contains(ItemOffer.RowName))
+		{
+			continue;
+		}
+
+		ProcessedRows.Add(ItemOffer.RowName);
+		const int32 TargetLevel = GetOwnedUpgradeLevel(
+			ItemOffer.RowName,
+			ShopUIComponent,
+			Inventory) + 1;
+		const FDRShopItemOffer* NextOffer = FindUpgradeOffer(
+			ItemOffer.RowName,
+			TargetLevel,
+			ShopUIComponent);
+		FDRShopItemTableRow ItemRow;
+		FDRUpgradeOperation Operation;
+
+		if (NextOffer
+			&& ShopUIComponent->GetItemRow(ItemOffer.RowName, ItemRow)
+			&& BuildUpgradeOperation(
+				ItemRow,
+				TargetLevel,
+				Inventory,
+				Operation))
+		{
+			UpgradeOffers.Add(*NextOffer);
+		}
+	}
+
+	return UpgradeOffers;
+}
+
+bool UDRUpgradeComponent::BuildUpgradeOperation(
+	const FDRShopItemTableRow& ItemRow,
+	int32 TargetLevel,
+	const UDRInventoryComponent* Inventory,
+	FDRUpgradeOperation& OutOperation) const
+{
+	OutOperation = FDRUpgradeOperation();
+
+	if (!IsValid(Inventory)
+		|| !ItemRow.IsValidUpgradeLevel(TargetLevel))
+	{
+		return false;
+	}
+
+	UDRItemDefinition* SourceDefinition =
+		ItemRow.GetUpgradeSourceDefinition(TargetLevel);
+	UDRItemDefinition* TargetDefinition =
+		ItemRow.GetUpgradeTargetDefinition(TargetLevel);
+
+	if (!IsValid(TargetDefinition)
+		|| TargetDefinition->Category != EItemCategory::Equipment)
+	{
+		return false;
+	}
+
+	if (TargetLevel == 1)
+	{
+		if (HasAnyItemInUpgradeChain(ItemRow, Inventory))
+		{
+			return false;
+		}
+	}
+	else if (!IsValid(SourceDefinition)
+		|| SourceDefinition == TargetDefinition
+		|| SourceDefinition->Category != EItemCategory::Equipment
+		|| !FindUpgradeSourceEntryId(
+			Inventory,
+			SourceDefinition,
+			OutOperation.SourceEntryId))
+	{
+		return false;
+	}
+
+	OutOperation.SourceDefinition = SourceDefinition;
+	OutOperation.TargetDefinition = TargetDefinition;
+	OutOperation.TargetLevel = TargetLevel;
+	return true;
+}
+
+bool UDRUpgradeComponent::ApplyUpgrade(
+	UDRInventoryComponent* Inventory,
+	const FDRUpgradeOperation& Operation) const
+{
+	if (!IsValid(Inventory)
+		|| !IsValid(Operation.TargetDefinition)
+		|| Operation.TargetLevel <= 0)
+	{
+		return false;
+	}
+
+	if (Operation.TargetLevel == 1)
+	{
+		return Inventory->TryAddItem(Operation.TargetDefinition, 1);
+	}
+
+	return Inventory->TryReplaceEntryDefinition(
+		Operation.SourceEntryId,
+		Operation.SourceDefinition,
+		Operation.TargetDefinition);
+}
+
+int32 UDRUpgradeComponent::GetOwnedUpgradeLevel(
+	FName RowName,
+	const UDRShopUIComponent* ShopUIComponent,
+	const UDRInventoryComponent* Inventory) const
+{
+	int32 OwnedLevel = 0;
+
+	if (!IsValid(ShopUIComponent) || !IsValid(Inventory))
+	{
+		return OwnedLevel;
+	}
+
+	for (const FDRShopItemOffer& ItemOffer : ShopUIComponent->GetItemOffers())
+	{
+		if (ItemOffer.IsUpgrade()
+			&& ItemOffer.RowName == RowName
+			&& Inventory->GetItemCount(ItemOffer.ItemDefinition) > 0)
+		{
+			OwnedLevel = FMath::Max(OwnedLevel, ItemOffer.TargetLevel);
+		}
+	}
+
+	return OwnedLevel;
+}
+
+const FDRShopItemOffer* UDRUpgradeComponent::FindUpgradeOffer(
+	FName RowName,
+	int32 TargetLevel,
+	const UDRShopUIComponent* ShopUIComponent) const
+{
+	if (!IsValid(ShopUIComponent))
+	{
+		return nullptr;
+	}
+
+	return ShopUIComponent->GetItemOffers().FindByPredicate(
+		[RowName, TargetLevel](const FDRShopItemOffer& ItemOffer)
+		{
+			return ItemOffer.IsUpgrade()
+				&& ItemOffer.RowName == RowName
+				&& ItemOffer.TargetLevel == TargetLevel;
+		});
+}
+
+bool UDRUpgradeComponent::HasAnyItemInUpgradeChain(
+	const FDRShopItemTableRow& ItemRow,
+	const UDRInventoryComponent* Inventory) const
+{
+	if (!IsValid(Inventory))
+	{
+		return false;
+	}
+
+	for (int32 Level = 1; Level <= ItemRow.GetMaxUpgradeLevel(); ++Level)
+	{
+		if (Inventory->GetItemCount(ItemRow.GetDefinitionForLevel(Level)) > 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UDRUpgradeComponent::FindUpgradeSourceEntryId(
+	const UDRInventoryComponent* Inventory,
+	const UDRItemDefinition* SourceDefinition,
+	FGuid& OutEntryId) const
+{
+	OutEntryId.Invalidate();
+
+	if (!IsValid(Inventory) || !IsValid(SourceDefinition))
+	{
+		return false;
+	}
+
+	for (const FDRInventoryEntry& Entry : Inventory->GetEntries())
+	{
+		if (Entry.IsValid()
+			&& Entry.Quantity == 1
+			&& Entry.Definition == SourceDefinition)
+		{
+			OutEntryId = Entry.EntryId;
+			return true;
+		}
+	}
+
+	return false;
+}

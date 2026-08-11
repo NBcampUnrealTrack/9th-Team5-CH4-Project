@@ -38,6 +38,9 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (UDRInventoryComponent* Inventory = InventoryComponent.Get())
 	{
 		Inventory->OnInventoryChangedDelegate.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
+		Inventory->OnEntryDefinitionReplacedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleInventoryEntryDefinitionReplaced);
 	}
 	
 	Super::EndPlay(EndPlayReason);
@@ -178,6 +181,40 @@ bool UDRQuickSlotComponent::SetSlotCount(int32 NewSlotCount)
 	return true;	
 }
 
+bool UDRQuickSlotComponent::ReplaceBoundDefinition(
+	UDRItemDefinition* SourceDefinition,
+	UDRItemDefinition* TargetDefinition)
+{
+	if (!HasQuickSlotAuthority()
+		|| !IsValid(SourceDefinition)
+		|| !IsValid(TargetDefinition)
+		|| SourceDefinition == TargetDefinition)
+	{
+		return false;
+	}
+
+	bool IsReplaced = false;
+
+	for (FDRQuickSlotEntry& QuickSlot : QuickSlots)
+	{
+		if (QuickSlot.Definition == SourceDefinition)
+		{
+			QuickSlot.Definition = TargetDefinition;
+			IsReplaced = true;
+		}
+	}
+
+	if (!IsReplaced)
+	{
+		return false;
+	}
+
+	OnQuickSlotsChangedDelegate.Broadcast();
+	RefreshHandedItem();
+	RequestReplicationUpdate();
+	return true;
+}
+
 bool UDRQuickSlotComponent::GetQuickSlot(int32 SlotIndex, FDRQuickSlotEntry& OutSlot) const
 {
 	if (!QuickSlots.IsValidIndex(SlotIndex))
@@ -269,6 +306,21 @@ void UDRQuickSlotComponent::HandleInventoryChanged()
 	RefreshHandedItem();
 }
 
+void UDRQuickSlotComponent::HandleInventoryEntryDefinitionReplaced(
+	UDRItemDefinition* SourceDefinition,
+	UDRItemDefinition* TargetDefinition)
+{
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+
+	if (!IsValid(Inventory)
+		|| Inventory->GetItemCount(SourceDefinition) > 0)
+	{
+		return;
+	}
+
+	ReplaceBoundDefinition(SourceDefinition, TargetDefinition);
+}
+
 bool UDRQuickSlotComponent::CacheInventoryComponent()
 {
 	// 이미 캐시된 경우 캐시된 InventoryComponent 반환
@@ -296,6 +348,9 @@ bool UDRQuickSlotComponent::CacheInventoryComponent()
 	InventoryComponent = FoundInventory;
 	
 	FoundInventory->OnInventoryChangedDelegate.AddDynamic(this, &ThisClass::HandleInventoryChanged);
+	FoundInventory->OnEntryDefinitionReplacedDelegate.AddDynamic(
+		this,
+		&ThisClass::HandleInventoryEntryDefinitionReplaced);
 	
 	return true;	
 }

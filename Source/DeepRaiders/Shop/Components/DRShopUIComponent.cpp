@@ -1,58 +1,59 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
+#include "DRUpgradeComponent.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
-#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
+#include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
 
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDRShopUIComponent::LoadItemDefinitions()
+const TArray<FDRShopItemOffer>& UDRShopUIComponent::GetItemOffers() const
 {
-	ItemDefinitions.Reset();
+	return ItemOffers;
+}
 
-	if (!IsValid(ItemTable))
+bool UDRShopUIComponent::GetItemRow(
+	FName RowName,
+	FDRShopItemTableRow& OutItemRow) const
+{
+	if (!IsValid(ItemTable) || RowName.IsNone())
 	{
-		return;
+		return false;
 	}
 
-	TArray<FDRShopItemTableRow*> ItemRows;
-	ItemTable->GetAllRows(TEXT("LoadItemDefinitions"), ItemRows);
+	const FDRShopItemTableRow* ItemRow =
+		ItemTable->FindRow<FDRShopItemTableRow>(RowName, TEXT("GetItemRow"));
 
-	for (const FDRShopItemTableRow* ItemRow : ItemRows)
+	if (!ItemRow || !IsValid(ItemRow->ItemDefinition))
 	{
-		if (ItemRow && IsValid(ItemRow->ItemDefinition))
-		{
-			ItemDefinitions.AddUnique(ItemRow->ItemDefinition);
-		}
+		return false;
 	}
+
+	OutItemRow = *ItemRow;
+	return true;
 }
 
 bool UDRShopUIComponent::IsItemAvailable(
 	const UDRItemDefinition* ItemDefinition) const
 {
 	return IsValid(ItemDefinition)
-		&& ItemDefinitions.Contains(ItemDefinition);
+		&& ItemOffers.ContainsByPredicate(
+			[ItemDefinition](const FDRShopItemOffer& ItemOffer)
+			{
+				return !ItemOffer.IsUpgrade()
+					&& ItemOffer.ItemDefinition == ItemDefinition;
+			});
 }
 
-bool UDRShopUIComponent::CanPurchase(
-	const APawn* Interactor,
-	const UDRItemDefinition* ItemDefinition) const
-{
-	// 상점 상품 여부와 플레이어의 상호작용 범위를 함께 검증합니다.
-	return IsItemAvailable(ItemDefinition)
-		&& IsValid(InteractionComponent)
-		&& IsValid(Interactor)
-		&& InteractionComponent->IsOverlappingActor(Interactor);
-}
-
-bool UDRShopUIComponent::IsSellAllowed(const APawn* Interactor) const
+bool UDRShopUIComponent::IsTransactionAllowed(const APawn* Interactor) const
 {
 	return IsValid(InteractionComponent)
 		&& IsValid(Interactor)
@@ -62,17 +63,18 @@ bool UDRShopUIComponent::IsSellAllowed(const APawn* Interactor) const
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	LoadItemDefinitions();
+	LoadItemOffers();
 
 	InteractionComponent =
 		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
+	UpgradeComponent =
+		GetOwner()->FindComponentByClass<UDRUpgradeComponent>();
 
-	if (!IsValid(InteractionComponent))
+	if (!IsValid(InteractionComponent) || !IsValid(UpgradeComponent))
 	{
 		return;
 	}
 
-	// 상호작용 범위 진입 및 이탈 이벤트를 구독합니다.
 	InteractionComponent->OnInteractionEntered.AddDynamic(
 		this,
 		&ThisClass::HandleInteractionEntered);
@@ -86,7 +88,6 @@ void UDRShopUIComponent::EndPlay(
 {
 	if (IsValid(InteractionComponent))
 	{
-		// EndPlay 이후 이벤트가 호출되지 않도록 구독을 해제합니다.
 		InteractionComponent->OnInteractionEntered.RemoveDynamic(
 			this,
 			&ThisClass::HandleInteractionEntered);
@@ -99,53 +100,118 @@ void UDRShopUIComponent::EndPlay(
 	Super::EndPlay(EndPlayReason);
 }
 
-void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
+void UDRShopUIComponent::LoadItemOffers()
 {
-	// 로컬 플레이어의 중복 UI 생성을 방지합니다.
-	if (!IsValid(Interactor) || !Interactor->IsLocallyControlled()
-		|| IsValid(ShopWidget) || !ShopWidgetClass)
+	ItemOffers.Reset();
+
+	if (!IsValid(ItemTable))
 	{
 		return;
 	}
 
-	APlayerController* PlayerController =
-		Cast<APlayerController>(Interactor->GetController());
+	for (const FName RowName : ItemTable->GetRowNames())
+	{
+		const FDRShopItemTableRow* ItemRow =
+			ItemTable->FindRow<FDRShopItemTableRow>(
+				RowName,
+				TEXT("LoadItemOffers"));
+
+		if (ItemRow && IsValid(ItemRow->ItemDefinition))
+		{
+			AddItemOffers(RowName, *ItemRow);
+		}
+	}
+}
+
+void UDRShopUIComponent::AddItemOffers(
+	FName RowName,
+	const FDRShopItemTableRow& ItemRow)
+{
+	if (!ItemRow.IsUpgradeRow())
+	{
+		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();
+		ItemOffer.RowName = RowName;
+		ItemOffer.ItemDefinition = ItemRow.ItemDefinition;
+		return;
+	}
+
+	for (int32 TargetLevel = 1;
+		TargetLevel <= ItemRow.GetMaxUpgradeLevel();
+		++TargetLevel)
+	{
+		UDRItemDefinition* SourceDefinition =
+			ItemRow.GetUpgradeSourceDefinition(TargetLevel);
+		UDRItemDefinition* TargetDefinition =
+			ItemRow.GetUpgradeTargetDefinition(TargetLevel);
+
+		if (!IsValid(TargetDefinition)
+			|| (TargetLevel > 1 && !IsValid(SourceDefinition)))
+		{
+			continue;
+		}
+
+		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();
+		ItemOffer.RowName = RowName;
+		ItemOffer.OfferType = EDRShopOfferType::Upgrade;
+		ItemOffer.ItemDefinition = TargetDefinition;
+		ItemOffer.UpgradeSourceDefinition = SourceDefinition;
+		ItemOffer.TargetLevel = TargetLevel;
+	}
+}
+
+void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
+{
+	if (!IsValid(Interactor)
+		|| !Interactor->IsLocallyControlled()
+		|| IsValid(ShopWidget)
+		|| !ShopWidgetClass
+		|| !IsValid(UpgradeComponent))
+	{
+		return;
+	}
+
+	ADRPlayerController* PlayerController =
+		Cast<ADRPlayerController>(Interactor->GetController());
 
 	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
 	{
 		return;
 	}
 
-	PlayerState =
-		PlayerController->GetPlayerState<ADRPlayerState>();
+	PlayerState = PlayerController->GetPlayerState<ADRPlayerState>();
+	InventoryComponent = PlayerController->GetQuickSlotInventoryComponent();
 
-	ShopWidget = CreateWidget<UDRShopWidget>(
-		PlayerController,
-		ShopWidgetClass);
-
-	if (IsValid(ShopWidget))
+	if (!IsValid(PlayerState) || !IsValid(InventoryComponent))
 	{
-		ShopWidget->InitializeShop(ItemDefinitions);
-		// 위젯을 표시하고 입력을 UI로 전환합니다.
-		ShopWidget->OnCloseRequested.AddDynamic(
-			this,
-			&ThisClass::HideShopWidget);
-		ShopWidget->OnPurchaseRequested.AddDynamic(
-			this,
-			&ThisClass::HandlePurchaseRequested);
-		ShopWidget->OnSellAllOresRequested.AddDynamic(
-			this,
-			&ThisClass::HandleSellAllOresRequested);
-		ShopWidget->AddToViewport();
-
-		FInputModeUIOnly InputMode;
-		InputMode.SetLockMouseToViewportBehavior(
-			EMouseLockMode::DoNotLock);
-		// 상호작용 키가 UI에 남아 있는 상태를 초기화합니다.
-		PlayerController->FlushPressedKeys();
-		PlayerController->SetInputMode(InputMode);
-		PlayerController->bShowMouseCursor = true;
+		return;
 	}
+
+	ShopWidget = CreateWidget<UDRShopWidget>(PlayerController, ShopWidgetClass);
+
+	if (!IsValid(ShopWidget))
+	{
+		return;
+	}
+
+	ShopWidget->InitializeShop(ItemOffers);
+	RefreshUpgradeOffers();
+	ShopWidget->OnCloseRequested.AddDynamic(this, &ThisClass::HideShopWidget);
+	ShopWidget->OnOfferRequested.AddDynamic(
+		this,
+		&ThisClass::HandleOfferRequested);
+	ShopWidget->OnSellAllOresRequested.AddDynamic(
+		this,
+		&ThisClass::HandleSellAllOresRequested);
+	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
+		this,
+		&ThisClass::HandleInventoryChanged);
+	ShopWidget->AddToViewport();
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PlayerController->FlushPressedKeys();
+	PlayerController->SetInputMode(InputMode);
+	PlayerController->bShowMouseCursor = true;
 }
 
 void UDRShopUIComponent::HandleInteractionExited(APawn* Interactor)
@@ -158,42 +224,48 @@ void UDRShopUIComponent::HandleInteractionExited(APawn* Interactor)
 
 void UDRShopUIComponent::HideShopWidget()
 {
-	if (!IsValid(ShopWidget))
+	if (IsValid(InventoryComponent))
 	{
-		return;
+		InventoryComponent->OnInventoryChangedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleInventoryChanged);
 	}
 
-	APlayerController* PlayerController = ShopWidget->GetOwningPlayer();
+	APlayerController* PlayerController = IsValid(ShopWidget)
+		? ShopWidget->GetOwningPlayer()
+		: nullptr;
 
-	ShopWidget->OnCloseRequested.RemoveDynamic(
-		this,
-		&ThisClass::HideShopWidget);
-	ShopWidget->OnPurchaseRequested.RemoveDynamic(
-		this,
-		&ThisClass::HandlePurchaseRequested);
-	ShopWidget->OnSellAllOresRequested.RemoveDynamic(
-		this,
-		&ThisClass::HandleSellAllOresRequested);
-	ShopWidget->RemoveFromParent();
+	if (IsValid(ShopWidget))
+	{
+		ShopWidget->OnCloseRequested.RemoveDynamic(
+			this,
+			&ThisClass::HideShopWidget);
+		ShopWidget->OnOfferRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleOfferRequested);
+		ShopWidget->OnSellAllOresRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleSellAllOresRequested);
+		ShopWidget->RemoveFromParent();
+	}
+
 	ShopWidget = nullptr;
+	InventoryComponent = nullptr;
 	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
 	{
-		// 위젯을 닫고 게임 입력으로 복구합니다.
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
 	}
 }
 
-void UDRShopUIComponent::HandlePurchaseRequested(
-	UDRItemDefinition* ItemDefinition)
+void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 {
 	if (IsValid(PlayerState))
 	{
-		// 로컬 UI의 구매 요청을 PlayerState의 서버 RPC로 전달합니다.
-		PlayerState->RequestPurchase(GetOwner(), ItemDefinition);
+		PlayerState->RequestOffer(GetOwner(), Request);
 	}
 }
 
@@ -203,4 +275,22 @@ void UDRShopUIComponent::HandleSellAllOresRequested()
 	{
 		PlayerState->RequestSellAllOres(GetOwner());
 	}
+}
+
+void UDRShopUIComponent::HandleInventoryChanged()
+{
+	RefreshUpgradeOffers();
+}
+
+void UDRShopUIComponent::RefreshUpgradeOffers()
+{
+	if (!IsValid(ShopWidget)
+		|| !IsValid(UpgradeComponent)
+		|| !IsValid(InventoryComponent))
+	{
+		return;
+	}
+
+	ShopWidget->SetUpgradeOffers(
+		UpgradeComponent->GetNextUpgradeOffers(this, InventoryComponent));
 }

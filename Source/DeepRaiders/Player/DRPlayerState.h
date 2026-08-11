@@ -1,12 +1,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "GameFramework/PlayerState.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
 class UDRInventoryComponent;
 class UDRItemDefinition;
+class UDRShopUIComponent;
+class UDRUpgradeComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -78,10 +81,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
 	void SetCoins(int32 NewCoins);
 
-	/** 로컬 구매 요청을 서버 거래 처리로 전달한다. */
-	void RequestPurchase(
+	/** 로컬 상품 요청을 서버 거래 처리로 전달한다. */
+	void RequestOffer(
 		AActor* ShopActor,
-		UDRItemDefinition* ItemDefinition);
+		const FDRShopOfferRequest& Request);
 
 	/** 로컬 전체 판매 요청을 서버 거래 처리로 전달한다. */
 	void RequestSellAllOres(AActor* ShopActor);
@@ -128,11 +131,11 @@ protected:
 	UFUNCTION()
 	void OnRep_Coins(int32 PreviousCoins);
 
-	/** 구매 요청 값이 실제 상점 상품인지 검증한다. */
-	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerPurchase(
+	/** 서버 데이터로 구매 또는 업그레이드 요청을 재검증한다. */
+	UFUNCTION(Server, Reliable)
+	void ServerRequestOffer(
 		AActor* ShopActor,
-		UDRItemDefinition* ItemDefinition);
+		FDRShopOfferRequest Request);
 
 	/** 판매 가능한 광석을 일괄 제거하고 판매 금액을 지급한다. */
 	UFUNCTION(Server, Reliable)
@@ -148,6 +151,17 @@ protected:
 private:
 	/** 소유 PlayerController의 인벤토리를 반환한다. */
 	UDRInventoryComponent* GetInventoryComponent() const;
+
+	bool TryPurchase(
+		const UDRShopUIComponent* ShopUIComponent,
+		UDRInventoryComponent* Inventory,
+		const FDRShopItemTableRow& ItemRow);
+
+	bool TryUpgrade(
+		const UDRUpgradeComponent* UpgradeComponent,
+		UDRInventoryComponent* Inventory,
+		const FDRShopItemTableRow& ItemRow,
+		int32 TargetLevel);
 
 	/** 판매 가능한 광석 엔트리와 총수량을 수집하고 총금액을 반환한다. */
 	int64 CollectSellableOreEntries(

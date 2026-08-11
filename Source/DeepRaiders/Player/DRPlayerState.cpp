@@ -5,6 +5,7 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
+#include "DeepRaiders/Shop/Components/DRUpgradeComponent.h"
 #include "Net/UnrealNetwork.h"
 
 void ADRPlayerState::GetLifetimeReplicatedProps(
@@ -129,13 +130,16 @@ void ADRPlayerState::SetCoins(int32 NewCoins)
 	ForceNetUpdate();
 }
 
-void ADRPlayerState::RequestPurchase(
+void ADRPlayerState::RequestOffer(
 	AActor* ShopActor,
-	UDRItemDefinition* ItemDefinition)
+	const FDRShopOfferRequest& Request)
 {
-	if (IsValid(ShopActor) && IsValid(ItemDefinition))
+	if (IsValid(ShopActor)
+		&& !Request.RowName.IsNone()
+		&& (Request.OfferType != EDRShopOfferType::Upgrade
+			|| Request.TargetLevel > 0))
 	{
-		ServerPurchase(ShopActor, ItemDefinition);
+		ServerRequestOffer(ShopActor, Request);
 	}
 }
 
@@ -159,53 +163,91 @@ void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
 	OnCoinsChanged.Broadcast(Coins);
 }
 
-bool ADRPlayerState::ServerPurchase_Validate(
+void ADRPlayerState::ServerRequestOffer_Implementation(
 	AActor* ShopActor,
-	UDRItemDefinition* ItemDefinition)
+	FDRShopOfferRequest Request)
 {
-	if (!IsValid(ShopActor) || !IsValid(ItemDefinition))
+	const UDRShopUIComponent* ShopUIComponent =
+		IsValid(ShopActor)
+			? ShopActor->FindComponentByClass<UDRShopUIComponent>()
+			: nullptr;
+	UDRInventoryComponent* Inventory = GetInventoryComponent();
+	FDRShopItemTableRow ItemRow;
+
+	if (!IsValid(ShopUIComponent)
+		|| !IsValid(Inventory)
+		|| Request.RowName.IsNone()
+		|| !ShopUIComponent->IsTransactionAllowed(GetPawn())
+		|| !ShopUIComponent->GetItemRow(Request.RowName, ItemRow))
+	{
+		return;
+	}
+
+	switch (Request.OfferType)
+	{
+	case EDRShopOfferType::Purchase:
+		TryPurchase(ShopUIComponent, Inventory, ItemRow);
+		break;
+
+	case EDRShopOfferType::Upgrade:
+		TryUpgrade(
+			ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
+			Inventory,
+			ItemRow,
+			Request.TargetLevel);
+		break;
+	}
+}
+
+bool ADRPlayerState::TryPurchase(
+	const UDRShopUIComponent* ShopUIComponent,
+	UDRInventoryComponent* Inventory,
+	const FDRShopItemTableRow& ItemRow)
+{
+	UDRItemDefinition* ItemDefinition = ItemRow.ItemDefinition;
+
+	if (!IsValid(ShopUIComponent)
+		|| !IsValid(Inventory)
+		|| ItemRow.IsUpgradeRow()
+		|| !IsValid(ItemDefinition)
+		|| ItemDefinition->Price <= 0
+		|| !ShopUIComponent->IsItemAvailable(ItemDefinition)
+		|| Coins < ItemDefinition->Price
+		|| !Inventory->CanAddItem(ItemDefinition, 1)
+		|| !Inventory->TryAddItem(ItemDefinition, 1))
 	{
 		return false;
 	}
 
-	const UDRShopUIComponent* ShopUIComponent =
-		ShopActor->FindComponentByClass<UDRShopUIComponent>();
-
-	return IsValid(ShopUIComponent)
-		&& ShopUIComponent->IsItemAvailable(ItemDefinition);
+	SetCoins(Coins - ItemDefinition->Price);
+	return true;
 }
 
-void ADRPlayerState::ServerPurchase_Implementation(
-	AActor* ShopActor,
-	UDRItemDefinition* ItemDefinition)
+bool ADRPlayerState::TryUpgrade(
+	const UDRUpgradeComponent* UpgradeComponent,
+	UDRInventoryComponent* Inventory,
+	const FDRShopItemTableRow& ItemRow,
+	int32 TargetLevel)
 {
-	// 서버에서 상점, 가격, 인벤토리 공간을 검증한다.
-	if (!IsValid(ShopActor) || !IsValid(ItemDefinition)
-		|| ItemDefinition->Price <= 0)
-	{
-		return;
-	}
+	FDRUpgradeOperation Operation;
 
-	const UDRShopUIComponent* ShopUIComponent =
-		ShopActor->FindComponentByClass<UDRShopUIComponent>();
-	UDRInventoryComponent* Inventory = GetInventoryComponent();
-
-	if (!IsValid(ShopUIComponent)
-		|| !ShopUIComponent->CanPurchase(GetPawn(), ItemDefinition)
-		|| Coins < ItemDefinition->Price
+	if (!IsValid(UpgradeComponent)
 		|| !IsValid(Inventory)
-		|| !Inventory->CanAddItem(ItemDefinition, 1))
+		|| !UpgradeComponent->BuildUpgradeOperation(
+			ItemRow,
+			TargetLevel,
+			Inventory,
+			Operation)
+		|| !IsValid(Operation.TargetDefinition)
+		|| Operation.TargetDefinition->Price < 0
+		|| Coins < Operation.TargetDefinition->Price
+		|| !UpgradeComponent->ApplyUpgrade(Inventory, Operation))
 	{
-		return;
+		return false;
 	}
 
-	// 아이템 추가가 완료된 경우에만 코인을 차감한다.
-	if (!Inventory->TryAddItem(ItemDefinition, 1))
-	{
-		return;
-	}
-
-	SetCoins(Coins - ItemDefinition->Price);
+	SetCoins(Coins - Operation.TargetDefinition->Price);
+	return true;
 }
 
 void ADRPlayerState::ServerSellAllOres_Implementation(AActor* ShopActor)
@@ -221,7 +263,7 @@ void ADRPlayerState::ServerSellAllOres_Implementation(AActor* ShopActor)
 		ShopActor->FindComponentByClass<UDRShopUIComponent>();
 	UDRInventoryComponent* Inventory = GetInventoryComponent();
 	const bool IsSellAllowed = IsValid(ShopUIComponent)
-		&& ShopUIComponent->IsSellAllowed(GetPawn());
+		&& ShopUIComponent->IsTransactionAllowed(GetPawn());
 
 	if (!IsValid(ShopUIComponent)
 		|| !IsSellAllowed

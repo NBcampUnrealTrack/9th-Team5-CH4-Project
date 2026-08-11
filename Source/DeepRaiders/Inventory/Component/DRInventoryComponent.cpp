@@ -81,6 +81,41 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 	return true;
 }
 
+bool UDRInventoryComponent::TryReplaceEntryDefinition(
+	FGuid EntryId,
+	UDRItemDefinition* ExpectedSourceDefinition,
+	UDRItemDefinition* TargetDefinition)
+{
+	if (!HasInventoryAuthority()
+		|| !EntryId.IsValid()
+		|| !IsValid(ExpectedSourceDefinition)
+		|| !IsValid(TargetDefinition)
+		|| ExpectedSourceDefinition == TargetDefinition)
+	{
+		return false;
+	}
+
+	FDRInventoryEntry* Entry = Entries.FindByPredicate(
+		[EntryId](const FDRInventoryEntry& InventoryEntry)
+		{
+			return InventoryEntry.EntryId == EntryId;
+		});
+
+	if (!Entry
+		|| Entry->Definition != ExpectedSourceDefinition
+		|| Entry->Quantity != 1)
+	{
+		return false;
+	}
+
+	Entry->Definition = TargetDefinition;
+	OnEntryDefinitionReplacedDelegate.Broadcast(
+		ExpectedSourceDefinition,
+		TargetDefinition);
+	HandleInventoryChangedOnServer();
+	return true;
+}
+
 bool UDRInventoryComponent::TryRemoveFromEntry(FGuid EntryId, int32 Quantity)
 {
 	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry start"), *GetName());

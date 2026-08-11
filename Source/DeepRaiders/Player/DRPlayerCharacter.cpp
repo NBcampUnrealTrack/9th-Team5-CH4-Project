@@ -1539,12 +1539,14 @@ void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinit
 	
 	HeldItemDefinition = NewItemDefinition;
 	RefreshHeldItemVisual();
+	RefreshHeldItemMiningSettings();
 	ForceNetUpdate();
 }
 
 void ADRPlayerCharacter::OnRep_HeldItemDefinition()
 {
 	RefreshHeldItemVisual();
+	RefreshHeldItemMiningSettings();
 }
 
 void ADRPlayerCharacter::RefreshHeldItemVisual()
@@ -1564,6 +1566,14 @@ void ADRPlayerCharacter::RefreshHeldItemVisual()
 	
 	ApplyHandEquipmentVisual(VisualMesh, VisualMesh
 		, FirstPersonVisualTransform, ThirdPersonVisualTransform);	
+}
+
+void ADRPlayerCharacter::RefreshHeldItemMiningSettings()
+{
+	if (IsValid(MiningComponent))
+	{
+		MiningComponent->ApplyItemDefinition(HeldItemDefinition);
+	}
 }
 
 void ADRPlayerCharacter::OnRep_CurrentHealth()
