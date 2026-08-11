@@ -43,13 +43,43 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-
 void UDRQuickSlotComponent::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, QuickSlots);
 	DOREPLIFETIME(ThisClass, SelectedSlotIndex);
+}
+
+bool UDRQuickSlotComponent::TryBindFirstEmptySlot(UDRItemDefinition* Definition)
+{
+	if (!HasQuickSlotAuthority()
+	|| !IsValid(Definition)
+	|| !CacheInventoryComponent())
+	{
+		return false;
+	}
+	
+	// 이미 바인딩 된 Definition
+	for (const FDRQuickSlotEntry& Slot : QuickSlots)
+	{
+		if (Slot.Definition == Definition)
+		{
+			return true;
+		}
+	}
+	
+	// 가장 앞의 슬롯에 바인딩
+	// 서버 호출이므로 Request 없이 구현부 실행
+	for (int32 Index = 0; Index < QuickSlots.Num(); ++Index)
+	{
+		if (!QuickSlots[Index].IsBound())
+		{
+			return BindSlotInternal(Index, Definition);
+		}
+	}
+	
+	return false;
 }
 
 void UDRQuickSlotComponent::RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition)

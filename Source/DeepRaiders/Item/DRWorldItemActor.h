@@ -5,17 +5,19 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DRItemInstance.h"
+#include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DRWorldItemActor.generated.h"
 
+class APawn;
+
 UCLASS()
-class DEEPRAIDERS_API ADRWorldItemActor : public AActor
+class DEEPRAIDERS_API ADRWorldItemActor : public AActor, public IDRInteractableInterface
 {
 	GENERATED_BODY()
 	
 public:	
 	ADRWorldItemActor();
 	
-	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	const FDRItemInstance& GetItemInstance() const
@@ -25,7 +27,19 @@ public:
 	
 	bool SetInitialItemInstance(FDRItemInstance InItemInstance);
 	
+	// 버려지는 순간 적용될 Impulse
+	void ApplyDropImpulse(const FVector& Impulse);
+	
 protected:	
+	virtual void BeginPlay() override;
+	
+	// 인벤토리에 넣을 수 있는 액터인가 검증
+	virtual bool IsPickupAvailable() const;
+	// 획득 후 월드 아이템 제거
+	virtual bool FinalizePickup();
+	
+	void ResetInteractionState();
+	
 	UFUNCTION()
 	void OnRep_ItemInstance();
 	
@@ -41,4 +55,12 @@ private:
 	// MeshData 갱신
 	void RefreshItemPresentation();
 	
+#pragma region Interactable
+public:
+	bool CanInteract_Implementation(APawn* Interactor) const override;
+	bool Interact_Implementation(APawn* Interactor) override;
+   
+protected:
+	uint8 bInteractionInProgress:1 = false;
+#pragma endregion
 };

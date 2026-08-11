@@ -8,6 +8,8 @@
 
 class AVoxelWorld;
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FDRTerrainDugDelegate, const FVector&, float);
+
 USTRUCT(BlueprintType)
 struct FDRTerrainDigOperation
 {
@@ -39,6 +41,9 @@ public:
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	virtual void Deinitialize() override;
 
+	// 서버에서 실제 지형 제거가 완료된 위치와 반경
+	FDRTerrainDugDelegate OnTerrainDug;
+
 	UPROPERTY(Transient)
 	TObjectPtr<AVoxelWorld> CachedVoxelWorld = nullptr;
 
@@ -51,6 +56,11 @@ public:
 	// 서버 권한으로 지형 변경을 확정하고 DigHistory에 원본 변경 이력을 저장한다.
 	bool RequestDig(
 		AVoxelWorld* TargetVoxelWorld,
+		const FVector& Location,
+		float Radius,
+		FDRTerrainDigOperation* OutOperation = nullptr);
+
+	bool RequestDigAtLocation(
 		const FVector& Location,
 		float Radius,
 		FDRTerrainDigOperation* OutOperation = nullptr);

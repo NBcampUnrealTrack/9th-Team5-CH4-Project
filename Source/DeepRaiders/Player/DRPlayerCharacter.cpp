@@ -9,13 +9,25 @@
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 
-ADRPlayerCharacter::ADRPlayerCharacter()
+#include "Components/TimelineComponent.h"
+#include "Curves/CurveFloat.h"
+
+namespace
+{
+	const FName FirstPersonSwingTrackName(
+		TEXT("FirstPersonSwing"));
+}
+
+ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
@@ -105,18 +117,34 @@ ADRPlayerCharacter::ADRPlayerCharacter()
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+	
+	FirstPersonItemSwingTimeline =
+		CreateDefaultSubobject<UTimelineComponent>(
+			TEXT("FirstPersonItemSwingTimeline"));
 }
 
 void ADRPlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!HasAuthority() || !bIsJetpackActive)
+	/*
+	 * 제트팩 이동은 CharacterMovementComponent가
+	 * 소유 클라이언트와 서버에서 예측 처리한다.
+	 *
+	 * Character Tick은 서버의 연료 소비에만 사용한다.
+	 */
+	if (!HasAuthority() ||
+		!bIsJetpackActive)
 	{
 		return;
 	}
 
-	UpdateJetpack(DeltaSeconds);
+	UpdateJetpackFuel(DeltaSeconds);
+}
+
+UDRCharacterMovementComponent* ADRPlayerCharacter::GetDRCharacterMovementComponent() const
+{
+	return Cast<UDRCharacterMovementComponent>(GetCharacterMovement());
 }
 
 void ADRPlayerCharacter::Landed(const FHitResult& Hit)
@@ -135,6 +163,19 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 	Super::Landed(Hit);
 
+	if (IsLocallyControlled())
+	{
+		UDRCharacterMovementComponent* Movement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(Movement))
+		{
+			Movement->SetWantsJetpack(false);
+		}
+
+		RefreshJetpackActivePresentation();
+	}
+	
 	/*
 	 * 낙하 피해와 제트팩 연료는 서버에서만 처리한다.
 	 */
@@ -281,37 +322,61 @@ void ADRPlayerCharacter::ApplyFallDamage(
 
 void ADRPlayerCharacter::RequestMine()
 {
-	if (IsDead())
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!HasHeldItemAction(EDRItemActionType::Dig))
 	{
 		return;
 	}
-	
+
 	if (!IsValid(MiningComponent))
 	{
 		UE_LOG(
 			LogTemp,
 			Error,
-			TEXT("[%s] MiningComponent is invalid"),
+			TEXT(
+				"[Mining] MiningComponent is invalid. "
+				"Character=%s"),
 			*GetName());
 
 		return;
 	}
+
+	/*
+	 * Dig 3인칭 Presentation 요청.
+	 *
+	 * 실제 채굴 권한 처리는 MiningComponent가 담당한다.
+	 */
+	ServerRequestDigPresentation();
 
 	MiningComponent->TryMine();
 }
 
 void ADRPlayerCharacter::RequestMeleeAttack()
 {
-	if (!IsLocallyControlled() || IsDead())
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::MeleeAttack))
 	{
 		return;
 	}
 	
-	// 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
-	PlayOwnerMeleeAttackPresentation();
+	// // 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
+	// PlayOwnerMeleeAttackPresentation();
 
 	// 실제 공격 승인과 판정은 서버가 담당한다.
 	ServerRequestMeleeAttack();
+}
+
+void ADRPlayerCharacter::RequestThrowHeldItem()
+{
+	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::Throw))
+	{
+		return;
+	}
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
+	{
+		PlayerController->RequestThrowHeldItem();
+	}
 }
 
 float ADRPlayerCharacter::TakeDamage(
@@ -345,12 +410,107 @@ float ADRPlayerCharacter::TakeDamage(
 	return AppliedDamage;
 }
 
+void ADRPlayerCharacter::RequestPrimaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
+{
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
+	{
+		return;
+	}
+
+	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
+}
+
+void ADRPlayerCharacter::RequestSecondaryItemAction(
+	EDRItemActionTriggerEvent TriggerEvent)
+{
+	if (!IsLocallyControlled() ||
+		IsDead() ||
+		!IsValid(HeldItemDefinition))
+	{
+		return;
+	}
+
+	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
+	{
+		return;
+	}
+
+	ExecuteHeldItemAction(HeldItemDefinition->SecondaryAction);
+}
+
+bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
+{
+	if (!IsValid(HeldItemDefinition) || ActionType == EDRItemActionType::None)
+	{
+		return false;
+	}
+
+	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
-	
+
+	// 장비 Root의 기본 위치 기억
+	if (IsValid(FirstPersonEquipmentRoot))
+	{
+		FirstPersonEquipmentRootBaseTransform =
+			FirstPersonEquipmentRoot->GetRelativeTransform();
+	}
+
+	UCurveFloat* InitialSwingCurve = nullptr;
+
+	if (IsValid(FirstPersonDigPresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonDigPresentation.Curve;
+	}
+	else if (IsValid(FirstPersonMeleePresentation.Curve))
+	{
+		InitialSwingCurve =
+			FirstPersonMeleePresentation.Curve;
+	}
+
+	if (IsValid(FirstPersonItemSwingTimeline) &&
+		IsValid(InitialSwingCurve))
+	{
+		FOnTimelineFloat UpdateDelegate;
+
+		UpdateDelegate.BindUFunction(
+			this,
+			FName("UpdateFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->AddInterpFloat(
+			InitialSwingCurve,
+			UpdateDelegate,
+			NAME_None,
+			FirstPersonSwingTrackName);
+
+		FOnTimelineEvent FinishedDelegate;
+
+		FinishedDelegate.BindUFunction(
+			this,
+			FName("FinishFirstPersonItemSwing"));
+
+		FirstPersonItemSwingTimeline->SetTimelineFinishedFunc(
+			FinishedDelegate);
+
+		FirstPersonItemSwingTimeline->SetLooping(false);
+
+		FirstPersonItemSwingTimeline->SetTimelineLengthMode(
+			TL_LastKeyFrame);
+	}
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -517,8 +677,36 @@ void ADRPlayerCharacter::OnRep_NetworkTestActive()
 	ApplyNetworkTestState();
 }
 
+void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
+{
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	RefreshJetpackActivePresentation();
+}
+
 void ADRPlayerCharacter::OnRep_JetpackActive()
 {
+	/*
+	 * 연료 소진, 착지, 사망 등 서버가 강제로 종료한 경우
+	 * 소유 클라이언트의 예측 상태도 정리한다.
+	 */
+	if (!bIsJetpackActive && IsLocallyControlled())
+	{
+		UDRCharacterMovementComponent* Movement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(Movement))
+		{
+			Movement->SetWantsJetpack(false);
+		}
+	}
+
 	RefreshJetpackActivePresentation();
 }
 
@@ -550,6 +738,7 @@ void ADRPlayerCharacter::ServerStartJetpack_Implementation()
 {
 	if (!CanStartJetpack())
 	{
+		ClientRejectJetpack();
 		return;
 	}
 
@@ -568,43 +757,67 @@ void ADRPlayerCharacter::StartJetpackFromServer()
 		return;
 	}
 
+	UDRCharacterMovementComponent* Movement = GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(true);
+	}
+
 	bIsJetpackActive = true;
 
-	// 서버에서 상승력과 연료를 처리한다.
+	// 서버에서는 연료 소비를 위해 Character Tick 사용
 	SetActorTickEnabled(true);
 
-	// 서버에서는 RepNotify가 자동 실행되지 않으므로 직접 반영
 	RefreshJetpackActivePresentation();
-
 	ForceNetUpdate();
 }
 
 void ADRPlayerCharacter::StopJetpackFromServer()
 {
-	if (!HasAuthority() || !bIsJetpackActive)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	bIsJetpackActive = false;
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
 
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	if (!bIsJetpackActive)
+	{
+		SetActorTickEnabled(false);
+		return;
+	}
+
+	bIsJetpackActive = false;
 	SetActorTickEnabled(false);
 
 	RefreshJetpackActivePresentation();
-
 	ForceNetUpdate();
 }
 
-void ADRPlayerCharacter::UpdateJetpack(
-	float DeltaSeconds)
+void ADRPlayerCharacter::UpdateJetpackFuel(float DeltaSeconds)
 {
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!HasAuthority())
+	{
+		return;
+	}
 
-	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
 
-	if (!IsValid(MovementComponent) ||
+	ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(Movement) ||
 		!IsValid(DRPlayerState) ||
-		!MovementComponent->IsFalling() ||
+		!Movement->IsFalling() ||
+		!Movement->WantsJetpack() ||
 		!DRPlayerState->HasJetpack())
 	{
 		StopJetpackFromServer();
@@ -616,40 +829,49 @@ void ADRPlayerCharacter::UpdateJetpack(
 	if (!DRPlayerState->ConsumeJetpackFuel(FuelCost))
 	{
 		StopJetpackFromServer();
+		ClientRejectJetpack();
 		return;
 	}
-
-	MovementComponent->Velocity.Z =
-		FMath::Min(
-			MovementComponent->Velocity.Z + JetpackAcceleration * DeltaSeconds,
-			MaxJetpackRiseSpeed);
 
 	if (DRPlayerState->GetJetpackFuel() <= KINDA_SMALL_NUMBER)
 	{
 		StopJetpackFromServer();
+		ClientRejectJetpack();
 	}
 }
 
 void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 {
+	const UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	const bool bPresentationActive =
+		IsLocallyControlled()
+			? IsValid(Movement) &&
+				Movement->WantsJetpack()
+			: bIsJetpackActive;
+
 	UE_LOG(
 		LogTemp,
 		Warning,
 		TEXT(
-			"[Jetpack] Character=%s Active=%d "
+			"[Jetpack] Character=%s "
+			"PresentationActive=%d "
+			"ServerActive=%d "
 			"Authority=%d Local=%d"),
 		*GetName(),
+		bPresentationActive,
 		bIsJetpackActive,
 		HasAuthority(),
 		IsLocallyControlled());
 
 	/*
-	 * 이후 추가할 항목:
+	 * 이후 bPresentationActive를 기준으로:
 	 *
-	 * 제트팩 불꽃 Niagara 활성화
+	 * Niagara 불꽃 활성화
 	 * 제트팩 사운드 재생
 	 * 카메라 흔들림
-	 * 캐릭터 애니메이션
+	 * 장비 흔들림
 	 */
 }
 
@@ -690,6 +912,11 @@ bool ADRPlayerCharacter::CanStartMeleeAttack() const
 		return false;
 	}
 
+	if (!HasHeldItemAction(EDRItemActionType::MeleeAttack))
+	{
+		return false;
+	}
+	
 	if (bIsMeleeAttacking)
 	{
 		return false;
@@ -1289,6 +1516,35 @@ void ADRPlayerCharacter::RestoreControllerInput()
 	OwningController->SetIgnoreLookInput(false);
 }
 
+void ADRPlayerCharacter::ExecuteHeldItemAction(
+	EDRItemActionType ActionType)
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		PlayFirstPersonItemActionPresentation(
+			EDRItemActionType::Dig);
+
+		RequestMine();
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		PlayFirstPersonItemActionPresentation(
+			EDRItemActionType::MeleeAttack);
+
+		RequestMeleeAttack();
+		break;
+
+	case EDRItemActionType::Throw:
+		RequestThrowHeldItem();
+		break;
+
+	case EDRItemActionType::None:
+	default:
+		break;
+	}
+}
+
 void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 {
 	if (!CanStartMeleeAttack())
@@ -1298,9 +1554,10 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 
 	bIsMeleeAttacking = true;
 
-	// 다른 플레이어가 보는 3인칭 공격 연출
-	MulticastPlayWorldMeleeAttack();
-
+	// 서버에서 Melee가 승인됐으므로 3인칭 Melee 연출 실행
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::MeleeAttack);
+	
 	// 공격 애니메이션의 타격 시점에 서버 판정
 	GetWorldTimerManager().SetTimer(
 		MeleeHitTimerHandle,
@@ -1318,36 +1575,167 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		false);
 }
 
-void ADRPlayerCharacter::MulticastPlayWorldMeleeAttack_Implementation()
+void ADRPlayerCharacter::PlayFirstPersonItemSwing(
+	const FDRFirstPersonSwingPresentation& Presentation)
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonItemSwingTimeline) ||
+		!IsValid(FirstPersonEquipmentRoot) ||
+		!IsValid(Presentation.Curve))
+	{
+		return;
+	}
+
+	// 혹시 기존 스윙이 재생 중이었다면 정리
+	FirstPersonItemSwingTimeline->Stop();
+
+	// 항상 기본 위치에서 새 Action 시작
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
+
+	// 이번 Action에서 사용할 Transform 데이터 저장
+	ActiveFirstPersonSwingRotation =
+		Presentation.RotationOffset;
+
+	ActiveFirstPersonSwingLocation =
+		Presentation.LocationOffset;
+
+	// 이번 Action에 맞는 Curve로 교체
+	FirstPersonItemSwingTimeline->SetFloatCurve(
+		Presentation.Curve,
+		FirstPersonSwingTrackName);
+
+	FirstPersonItemSwingTimeline->PlayFromStart();
+}
+
+void ADRPlayerCharacter::UpdateFirstPersonItemSwing(
+	float CurveValue)
+{
+	if (!IsLocallyControlled() ||
+		!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	const FVector BaseLocation =
+		FirstPersonEquipmentRootBaseTransform.GetLocation();
+
+	const FRotator BaseRotation =
+		FirstPersonEquipmentRootBaseTransform.Rotator();
+
+	const FVector NewLocation =
+		BaseLocation +
+		ActiveFirstPersonSwingLocation * CurveValue;
+
+	const FRotator RotationOffset =
+		ActiveFirstPersonSwingRotation * CurveValue;
+
+	const FRotator NewRotation =
+		BaseRotation + RotationOffset;
+
+	FirstPersonEquipmentRoot->SetRelativeLocationAndRotation(
+		NewLocation,
+		NewRotation);
+}
+
+void ADRPlayerCharacter::FinishFirstPersonItemSwing()
+{
+	if (!IsValid(FirstPersonEquipmentRoot))
+	{
+		return;
+	}
+
+	FirstPersonEquipmentRoot->SetRelativeTransform(
+		FirstPersonEquipmentRootBaseTransform);
+}
+
+void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
+	EDRItemActionType ActionType)
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		PlayFirstPersonItemSwing(
+			FirstPersonDigPresentation);
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		PlayFirstPersonItemSwing(
+			FirstPersonMeleePresentation);
+		break;
+
+	case EDRItemActionType::Throw:
+	case EDRItemActionType::None:
+	default:
+		break;
+	}
+}
+
+void ADRPlayerCharacter::PlayWorldItemActionPresentation(
+	EDRItemActionType ActionType)
+{
+	UAnimMontage* Montage =
+		ResolveWorldItemActionMontage(ActionType);
+
+	if (!IsValid(Montage))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ItemAction] World montage is invalid. "
+				"Character=%s Action=%s"),
+			*GetName(),
+			*UEnum::GetValueAsString(ActionType));
+
+		return;
+	}
+
+	PlayAnimMontage(Montage);
+}
+
+UAnimMontage* ADRPlayerCharacter::ResolveWorldItemActionMontage(
+	EDRItemActionType ActionType) const
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		return WorldDigMontage;
+
+	case EDRItemActionType::MeleeAttack:
+		return WorldMeleeAttackMontage;
+
+	case EDRItemActionType::Throw:
+	case EDRItemActionType::None:
+	default:
+		return nullptr;
+	}
+}
+
+void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
+{
+	if (IsDead() ||
+		!HasHeldItemAction(EDRItemActionType::Dig))
+	{
+		return;
+	}
+
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::Dig);
+}
+
+void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
+	EDRItemActionType ActionType)
 {
 	/*
-	 * 공격한 본인은 1인칭 표현을 사용한다.
-	 * 본인 클라이언트에서는 월드 Manny 몽타주를 생략한다.
+	 * 소유 플레이어는 별도의 1인칭 Presentation을 사용한다.
 	 */
 	if (IsLocallyControlled())
 	{
 		return;
 	}
 
-	PlayWorldMeleeAttackPresentation();
-}
-
-void ADRPlayerCharacter::PlayWorldMeleeAttackPresentation()
-{
-	if (!IsValid(WorldMeleeAttackMontage))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[Melee] WorldMeleeAttackMontage "
-				"is invalid. Character=%s"),
-			*GetName());
-
-		return;
-	}
-
-	PlayAnimMontage(WorldMeleeAttackMontage);
+	PlayWorldItemActionPresentation(ActionType);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
@@ -1531,6 +1919,30 @@ void ADRPlayerCharacter::HandleJumpPressed()
 	// 공중에서 다시 누르면 제트팩 요청
 	if (MovementComponent->IsFalling())
 	{
+		ADRPlayerState* DRPlayerState =
+			GetPlayerState<ADRPlayerState>();
+
+		if (!IsValid(DRPlayerState) ||
+			!DRPlayerState->HasJetpack() ||
+			DRPlayerState->GetJetpackFuel() <=
+				KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		/*
+		 * 서버 응답을 기다리지 않고 소유 클라이언트에서
+		 * CharacterMovement 예측을 즉시 시작한다.
+		 */
+		UDRCharacterMovementComponent* DRMovement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(DRMovement))
+		{
+			DRMovement->SetWantsJetpack(true);
+		}
+
+		RefreshJetpackActivePresentation();
 		ServerStartJetpack();
 	}
 }
@@ -1544,6 +1956,14 @@ void ADRPlayerCharacter::HandleJumpReleased()
 
 	StopJumping();
 
-	// 활성 여부와 관계없이 서버에 중지 요청해도 안전하다.
+	UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	if (IsValid(Movement))
+	{
+		Movement->SetWantsJetpack(false);
+	}
+
+	RefreshJetpackActivePresentation();
 	ServerStopJetpack();
 }

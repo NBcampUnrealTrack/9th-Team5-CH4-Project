@@ -1,6 +1,9 @@
 #include "DRShopUIComponent.h"
 
 #include "DRInteractionComponent.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -10,9 +13,56 @@ UDRShopUIComponent::UDRShopUIComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void UDRShopUIComponent::LoadItemDefinitions()
+{
+	ItemDefinitions.Reset();
+
+	if (!IsValid(ItemTable))
+	{
+		return;
+	}
+
+	TArray<FDRShopItemTableRow*> ItemRows;
+	ItemTable->GetAllRows(TEXT("LoadItemDefinitions"), ItemRows);
+
+	for (const FDRShopItemTableRow* ItemRow : ItemRows)
+	{
+		if (ItemRow && IsValid(ItemRow->ItemDefinition))
+		{
+			ItemDefinitions.AddUnique(ItemRow->ItemDefinition);
+		}
+	}
+}
+
+bool UDRShopUIComponent::IsItemAvailable(
+	const UDRItemDefinition* ItemDefinition) const
+{
+	return IsValid(ItemDefinition)
+		&& ItemDefinitions.Contains(ItemDefinition);
+}
+
+bool UDRShopUIComponent::CanPurchase(
+	const APawn* Interactor,
+	const UDRItemDefinition* ItemDefinition) const
+{
+	// 상점 상품 여부와 플레이어의 상호작용 범위를 함께 검증합니다.
+	return IsItemAvailable(ItemDefinition)
+		&& IsValid(InteractionComponent)
+		&& IsValid(Interactor)
+		&& InteractionComponent->IsOverlappingActor(Interactor);
+}
+
+bool UDRShopUIComponent::IsSellAllowed(const APawn* Interactor) const
+{
+	return IsValid(InteractionComponent)
+		&& IsValid(Interactor)
+		&& InteractionComponent->IsOverlappingActor(Interactor);
+}
+
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	LoadItemDefinitions();
 
 	InteractionComponent =
 		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
@@ -66,17 +116,26 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		return;
 	}
 
+	PlayerState =
+		PlayerController->GetPlayerState<ADRPlayerState>();
+
 	ShopWidget = CreateWidget<UDRShopWidget>(
 		PlayerController,
 		ShopWidgetClass);
 
 	if (IsValid(ShopWidget))
 	{
-		ShopWidget->InitializeItems(ItemDefinitions);
+		ShopWidget->InitializeShop(ItemDefinitions);
 		// 위젯을 표시하고 입력을 UI로 전환합니다.
 		ShopWidget->OnCloseRequested.AddDynamic(
 			this,
 			&ThisClass::HideShopWidget);
+		ShopWidget->OnPurchaseRequested.AddDynamic(
+			this,
+			&ThisClass::HandlePurchaseRequested);
+		ShopWidget->OnSellAllOresRequested.AddDynamic(
+			this,
+			&ThisClass::HandleSellAllOresRequested);
 		ShopWidget->AddToViewport();
 
 		FInputModeUIOnly InputMode;
@@ -109,8 +168,15 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopWidget->OnCloseRequested.RemoveDynamic(
 		this,
 		&ThisClass::HideShopWidget);
+	ShopWidget->OnPurchaseRequested.RemoveDynamic(
+		this,
+		&ThisClass::HandlePurchaseRequested);
+	ShopWidget->OnSellAllOresRequested.RemoveDynamic(
+		this,
+		&ThisClass::HandleSellAllOresRequested);
 	ShopWidget->RemoveFromParent();
 	ShopWidget = nullptr;
+	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -118,5 +184,23 @@ void UDRShopUIComponent::HideShopWidget()
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
+	}
+}
+
+void UDRShopUIComponent::HandlePurchaseRequested(
+	UDRItemDefinition* ItemDefinition)
+{
+	if (IsValid(PlayerState))
+	{
+		// 로컬 UI의 구매 요청을 PlayerState의 서버 RPC로 전달합니다.
+		PlayerState->RequestPurchase(GetOwner(), ItemDefinition);
+	}
+}
+
+void UDRShopUIComponent::HandleSellAllOresRequested()
+{
+	if (IsValid(PlayerState))
+	{
+		PlayerState->RequestSellAllOres(GetOwner());
 	}
 }

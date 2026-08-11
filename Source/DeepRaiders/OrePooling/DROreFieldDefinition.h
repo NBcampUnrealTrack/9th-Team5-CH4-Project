@@ -32,8 +32,7 @@ struct FDROreWeight
     TSubclassOf<ADROrePoolActor> OreActorClass;
 
     // 같은 섹터에서 해당 광물이 선택될 상대 가중치
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore",
-              meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore", meta = (ClampMin = "0.0"))
     float Weight = 1.f;
 };
 
@@ -43,18 +42,15 @@ struct FDROreDepthSector : public FTableRowBase
     GENERATED_BODY()
 
     // OreField 상단부터 섹터가 시작되는 깊이
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector",
-              meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector", meta = (ClampMin = "0.0"))
     float StartDepth = 0.f;
 
     // OreField 상단부터 섹터가 끝나는 깊이
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector",
-              meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector", meta = (ClampMin = "0.0"))
     float EndDepth = 1000.f;
 
     // 해당 섹터에 배치할 광물 개수
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector",
-              meta = (ClampMin = "0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sector", meta = (ClampMin = "0"))
     int32 SpawnCount = 10;
 
     // 해당 섹터에서 가중치로 선택할 광물 목록
@@ -76,19 +72,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field")
     EDROrePlacementMode PlacementMode = EDROrePlacementMode::SideWalls;
 
-    // 플레이어 깊이와 섹터 상태 확인 간격
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field",
-              meta = (ClampMin = "0.05"))
-    float UpdateInterval = 0.5f;
+    // 첫 로딩 프레임에 즉시 생성할 광물 수
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "1"))
+    int32 InitialPrewarmCount = 200;
+
+    // 이후 프레임마다 생성할 광물 수
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "1"))
+    int32 PrewarmBatchSize = 100;
 
     // 플레이어 최심도보다 아래쪽을 미리 활성화할 거리
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field",
-              meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "0.0"))
     float LoadAheadDistance = 1500.f;
 
     // Box 경계에서 안쪽으로 띄울 여백
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field",
-              meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "0.0"))
     float BoundsPadding = 100.f;
 
     // FDROreDepthSector 기반 깊이별 섹터 테이블

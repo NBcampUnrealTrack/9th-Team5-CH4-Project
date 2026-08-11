@@ -14,8 +14,8 @@ bool UDRVoxelTerrainSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	{
 		return false;
 	}
-
-	return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
+	return true;
+	// return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
 }
 
 void UDRVoxelTerrainSubsystem::OnWorldBeginPlay(UWorld& InWorld)
@@ -78,6 +78,14 @@ bool UDRVoxelTerrainSubsystem::RequestDig(
 	return true;
 }
 
+bool UDRVoxelTerrainSubsystem::RequestDigAtLocation(
+	const FVector& Location,
+	float Radius,
+	FDRTerrainDigOperation* OutOperation)
+{
+	return RequestDig(ResolveVoxelWorld(), Location, Radius, OutOperation);
+}
+
 bool UDRVoxelTerrainSubsystem::ApplyDig(const FDRTerrainDigOperation& Operation)
 {
 	if (Operation.OperationId > 0 &&
@@ -112,6 +120,14 @@ bool UDRVoxelTerrainSubsystem::ApplyDig(const FDRTerrainDigOperation& Operation)
 	if (Operation.OperationId > 0)
 	{
 		AppliedDigOperationIds.Add(Operation.OperationId);
+	}
+
+	// 파인 땅 위치 브로드캐스트
+	// OrePoolingSubsystem이 땅이 패인 위치를 통한 깊이별 풀링 작업을 진행함
+	UWorld* World = GetWorld();
+	if (IsValid(World) && World->GetNetMode() != NM_Client)
+	{
+		OnTerrainDug.Broadcast(Operation.Location, Operation.Radius);
 	}
 
 	return true;
