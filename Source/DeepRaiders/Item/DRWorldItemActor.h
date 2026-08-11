@@ -51,7 +51,7 @@ protected:
 		UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayMinedSound();
+	void MulticastPlayActiveSound();
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayPickupSound();

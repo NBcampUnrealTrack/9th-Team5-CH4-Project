@@ -110,16 +110,16 @@ void ADRWorldItemActor::BroadcastMined()
 {
 	if (HasAuthority())
 	{
-		MulticastPlayMinedSound();
+		MulticastPlayActiveSound();
 	}
 }
 
-void ADRWorldItemActor::MulticastPlayMinedSound_Implementation()
+void ADRWorldItemActor::MulticastPlayActiveSound_Implementation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
-	if (IsValid(Definition) && IsValid(Definition->MinedSound))
+	if (IsValid(Definition) && IsValid(Definition->ActiveSound))
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Definition->MinedSound, GetActorLocation());
+		UGameplayStatics::PlaySoundAtLocation(this, Definition->ActiveSound, GetActorLocation());
 	}
 }
 

@@ -79,9 +79,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
 
-	/** 아이템이 채굴되어 드러날 때 재생할 소리 */
+	/** 아이템이 활성화될 때 재생할 소리 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
-	TObjectPtr<USoundBase> MinedSound;
+	TObjectPtr<USoundBase> ActiveSound;
 
 	/** 아이템을 주웠을 때 재생할 소리 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
