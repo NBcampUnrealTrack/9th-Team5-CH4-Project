@@ -14,8 +14,8 @@ bool UDRVoxelTerrainSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	{
 		return false;
 	}
-
-	return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
+	return true;
+	// return World->GetMapName().Contains(TEXT("Test_Voxel_Map"));
 }
 
 void UDRVoxelTerrainSubsystem::OnWorldBeginPlay(UWorld& InWorld)
