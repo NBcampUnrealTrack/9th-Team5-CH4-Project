@@ -9,6 +9,7 @@
 #include "DRWorldItemActor.generated.h"
 
 class APawn;
+class UPrimitiveComponent;
 
 UCLASS()
 class DEEPRAIDERS_API ADRWorldItemActor : public AActor, public IDRInteractableInterface
@@ -29,7 +30,7 @@ public:
 	
 	// 버려지는 순간 적용될 Impulse
 	void ApplyDropImpulse(const FVector& Impulse);
-	
+
 protected:	
 	virtual void BeginPlay() override;
 	
@@ -39,9 +40,25 @@ protected:
 	virtual bool FinalizePickup();
 	
 	void ResetInteractionState();
+	void BroadcastMined();
+	void BroadcastDropped();
+	void ArmGroundHitEvent();
 	
 	UFUNCTION()
 	void OnRep_ItemInstance();
+
+	UFUNCTION()
+	void HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayActiveSound();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayPickupSound();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayDroppedSound();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
@@ -54,6 +71,7 @@ private:
 	// ItemInstance 갱신 시마다 호출
 	// MeshData 갱신
 	void RefreshItemPresentation();
+	bool bGroundHitEventArmed = false;
 	
 #pragma region Interactable
 public:
