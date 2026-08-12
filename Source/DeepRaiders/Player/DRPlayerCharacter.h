@@ -20,6 +20,7 @@ class UCurveFloat;
 class USoundBase;
 class UAudioComponent;
 class UCameraShakeBase;
+class UVoxelNoClippingComponent;
 
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
@@ -192,6 +193,12 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Mining")
     TObjectPtr<UDRMiningComponent> MiningComponent;
+
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Voxel")
+    TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
     
     UPROPERTY(
         EditDefaultsOnly,

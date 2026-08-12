@@ -11,6 +11,7 @@
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "VoxelComponents/VoxelNoClippingComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -44,6 +45,18 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MiningComponent =
 		CreateDefaultSubobject<UDRMiningComponent>(
 			TEXT("MiningComponent"));
+
+	VoxelNoClippingComponent =
+		CreateDefaultSubobject<UVoxelNoClippingComponent>(
+			TEXT("VoxelNoClippingComponent"));
+
+	VoxelNoClippingComponent->SetupAttachment(
+		GetCapsuleComponent());
+
+	VoxelNoClippingComponent->TickRate = 0.03f;
+	VoxelNoClippingComponent->SearchRange = 8;
+	VoxelNoClippingComponent->bEnableDefaultBehavior = true;
+	VoxelNoClippingComponent->Speed = 6000.f;
 
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
