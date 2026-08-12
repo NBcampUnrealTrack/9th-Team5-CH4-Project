@@ -85,6 +85,34 @@ bool UDRQuickSlotComponent::TryBindFirstEmptySlot(UDRItemDefinition* Definition)
 	return false;
 }
 
+bool UDRQuickSlotComponent::TryBindSelectedSlot(UDRItemDefinition* Definition)
+{
+	if (!HasQuickSlotAuthority()
+		|| !IsValid(Definition)
+		|| !CacheInventoryComponent())
+	{
+		return false;
+	}
+	
+	// 이미 바인딩 된 Definition인 경우, 해제한다.
+	for (FDRQuickSlotEntry& Slot : QuickSlots)
+	{
+		if (Slot.Definition == Definition)
+		{
+			Slot.Definition = nullptr;
+			break;
+		}
+	}
+	
+	for (int32 Index = 0; Index < QuickSlots.Num(); ++Index)
+	{
+		QuickSlots[SelectedSlotIndex].Definition = nullptr;
+		return BindSlotInternal(SelectedSlotIndex, Definition);
+	}
+	
+	return false;
+}
+
 void UDRQuickSlotComponent::RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition)
 {
 	if (!QuickSlots.IsValidIndex(SlotIndex)
@@ -299,6 +327,25 @@ void UDRQuickSlotComponent::OnRep_SelectedSlotIndex(int32 PreviousSlotIndex)
 
 void UDRQuickSlotComponent::HandleInventoryChanged()
 {
+	// 임시 코드, 신다인
+	// 보유량이 0개가 되면 슬롯 바인딩을 해제한다.
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	if (IsValid(Inventory))
+	{
+		for (int32 SlotIndex = 0; SlotIndex < QuickSlots.Num(); ++SlotIndex)
+		{
+			const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
+			if (!IsValid(Definition))
+			{
+				break;
+			}
+			if (Inventory->GetItemCount(Definition) <= 0)
+			{
+				QuickSlots[SlotIndex].Definition = nullptr;
+			}
+		}
+	}
+	
 	// 바인딩된 ItemDefinition은 그대로여도
 	// 실제 Inventory 내의 보유 정보가 변하는 경우
 	OnQuickSlotsChangedDelegate.Broadcast();
