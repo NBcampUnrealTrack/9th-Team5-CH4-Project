@@ -81,6 +81,27 @@ FText ADRTeleportPoint::GetTeleportDisplayName() const
 	return TeleportDisplayName.IsEmpty() ? FText::FromString(GetName()) : TeleportDisplayName;
 }
 
+bool ADRTeleportPoint::IsRegisteredForTeam(int32 TeamId) const
+{
+	if (!bRegistered || TeamId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	switch (AccessType)
+	{
+	case EDRTeleportAccessType::Public:
+		return true;
+
+	case EDRTeleportAccessType::Claimable:
+	case EDRTeleportAccessType::TeamOwned:
+		return OwnerTeamId == TeamId;
+
+	default:
+		return false;
+	}
+}
+
 FTransform ADRTeleportPoint::GetTeleportArrivalTransform() const
 {
 	return FTransform(GetActorRotation(), GetActorLocation() + GetActorRotation().RotateVector(TeleportArrivalOffset));

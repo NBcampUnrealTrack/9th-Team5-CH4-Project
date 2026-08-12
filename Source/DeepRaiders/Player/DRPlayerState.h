@@ -157,4 +157,16 @@ private:
 
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
+
+#pragma region Teleport
+public:
+	UFUNCTION(BlueprintPure, Category = "Player|Teleport")
+	int32 GetTeamId() const { return TeamId != INDEX_NONE ? TeamId : GetPlayerId(); }
+
+	void SetTeamId(int32 NewTeamId);
+
+private:
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+	int32 TeamId = INDEX_NONE;
+#pragma endregion
 };

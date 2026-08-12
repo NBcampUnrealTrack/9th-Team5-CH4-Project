@@ -27,6 +27,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 		COND_OwnerOnly);
 
 	DOREPLIFETIME(ADRPlayerState, Coins);
+	DOREPLIFETIME(ADRPlayerState, TeamId);
 }
 
 bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)
@@ -374,3 +375,16 @@ void ADRPlayerState::RefreshJetpackVisualOnPawn()
 
 	PlayerCharacter->RefreshJetpackVisual();
 }
+
+#pragma region Teleport
+void ADRPlayerState::SetTeamId(int32 NewTeamId)
+{
+	if (!HasAuthority() || TeamId == NewTeamId)
+	{
+		return;
+	}
+
+	TeamId = NewTeamId;
+	ForceNetUpdate();
+}
+#pragma endregion

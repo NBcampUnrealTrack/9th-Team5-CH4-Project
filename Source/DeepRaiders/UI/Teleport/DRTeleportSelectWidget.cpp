@@ -4,7 +4,6 @@
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
-#include "DeepRaiders/Core/Subsystem/DRTeleportSubsystem.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/teleport/DRTeleportPoint.h"
 #include "DRTeleportListItemWidget.h"
@@ -28,15 +27,15 @@ void UDRTeleportSelectWidget::InitializeTeleportList(ADRTeleportPoint* NewCurren
 	RefreshDestinationList();
 }
 
-void UDRTeleportSelectWidget::InitializeRegisteredTeleportList(int32 TeamId, ADRTeleportPoint* NewCurrentTeleportPoint)
+void UDRTeleportSelectWidget::InitializeRegisteredTeleportList(int32, ADRTeleportPoint* NewCurrentTeleportPoint)
 {
 	TArray<ADRTeleportPoint*> RegisteredDestinations;
 
-	if (UWorld* World = GetWorld())
+	if (APawn* OwningPawn = GetOwningPlayerPawn())
 	{
-		if (UDRTeleportSubsystem* TeleportSubsystem = World->GetSubsystem<UDRTeleportSubsystem>())
+		if (UDRTeleportComponent* TeleportComponent = OwningPawn->FindComponentByClass<UDRTeleportComponent>())
 		{
-			TeleportSubsystem->GetRegisteredTeleportDestinationsForTeam(TeamId, NewCurrentTeleportPoint, RegisteredDestinations);
+			TeleportComponent->GetRegisteredTeleportDestinations(NewCurrentTeleportPoint, RegisteredDestinations);
 		}
 	}
 

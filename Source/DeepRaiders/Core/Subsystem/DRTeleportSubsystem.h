@@ -9,15 +9,6 @@
 class ADRTeleportPoint;
 class APawn;
 
-USTRUCT()
-struct FDRTeleportPointList
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	TArray<TObjectPtr<ADRTeleportPoint>> TeleportPoints;
-};
-
 UCLASS()
 class DEEPRAIDERS_API UDRTeleportSubsystem : public UWorldSubsystem
 {
@@ -46,16 +37,6 @@ public:
 	bool CanUseRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint) const;
 
 private:
-	void AddRegisteredTeleportPoint(ADRTeleportPoint* TeleportPoint, int32 TeamId);
-	void RemoveRegisteredTeleportPoint(ADRTeleportPoint* TeleportPoint);
-	void AppendValidTeleportPoints(const TArray<TObjectPtr<ADRTeleportPoint>>& Source, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
-
 	UPROPERTY()
 	TArray<TObjectPtr<ADRTeleportPoint>> TeleportPoints;
-
-	UPROPERTY()
-	TArray<TObjectPtr<ADRTeleportPoint>> PublicRegisteredTeleports;
-
-	UPROPERTY()
-	TMap<int32, FDRTeleportPointList> TeamRegisteredTeleports;
 };

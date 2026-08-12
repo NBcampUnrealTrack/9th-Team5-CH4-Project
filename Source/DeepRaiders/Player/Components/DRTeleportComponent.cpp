@@ -1,15 +1,24 @@
 #include "DRTeleportComponent.h"
 
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRTeleportSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/teleport/DRTeleportPoint.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Net/UnrealNetwork.h"
 
 UDRTeleportComponent::UDRTeleportComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
+}
+
+void UDRTeleportComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(UDRTeleportComponent, CurrentInteractableTeleport, COND_OwnerOnly);
 }
 
 void UDRTeleportComponent::RequestRegisterCurrentTeleport()
@@ -34,6 +43,38 @@ void UDRTeleportComponent::RequestTeleportTo(ADRTeleportPoint* DestinationTelepo
 	ServerRequestTeleportTo(DestinationTeleportPoint);
 }
 
+bool UDRTeleportComponent::IsTeleportPointRegistered(ADRTeleportPoint* TeleportPoint) const
+{
+	if (const UWorld* World = GetWorld())
+	{
+		if (const ADRMiningGameStateBase* GameState = World->GetGameState<ADRMiningGameStateBase>())
+		{
+			return GameState->CanTeamUseRegisteredTeleportPoint(GetOwnerTeamId(), TeleportPoint);
+		}
+	}
+
+	return false;
+}
+
+void UDRTeleportComponent::GetRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const
+{
+	OutTeleportPoints.Reset();
+
+	if (const UWorld* World = GetWorld())
+	{
+		if (const ADRMiningGameStateBase* GameState = World->GetGameState<ADRMiningGameStateBase>())
+		{
+			GameState->GetRegisteredTeleportPointsForTeam(GetOwnerTeamId(), OutTeleportPoints);
+		}
+	}
+}
+
+void UDRTeleportComponent::GetRegisteredTeleportDestinations(ADRTeleportPoint* CurrentTeleportPoint, TArray<ADRTeleportPoint*>& OutTeleportPoints) const
+{
+	GetRegisteredTeleportPoints(OutTeleportPoints);
+	OutTeleportPoints.Remove(CurrentTeleportPoint);
+}
+
 void UDRTeleportComponent::SetCurrentInteractableTeleport(ADRTeleportPoint* TeleportPoint)
 {
 	if (!IsValid(TeleportPoint))
@@ -55,12 +96,20 @@ void UDRTeleportComponent::ClearCurrentInteractableTeleport(ADRTeleportPoint* Te
 	CurrentInteractableTeleport = nullptr;
 }
 
+int32 UDRTeleportComponent::GetOwnerTeamId() const
+{
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const ADRPlayerState* DRPlayerState = IsValid(OwnerPawn) ? OwnerPawn->GetPlayerState<ADRPlayerState>() : nullptr;
+	return IsValid(DRPlayerState) ? DRPlayerState->GetTeamId() : INDEX_NONE;
+}
+
 void UDRTeleportComponent::ServerRequestRegisterTeleport_Implementation(ADRTeleportPoint* TeleportPoint)
 {
 	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	ADRTeleportPoint* TargetTeleportPoint = IsValid(TeleportPoint) ? TeleportPoint : nullptr;
+	const int32 TeamId = GetOwnerTeamId();
 
-	if (!IsValid(OwnerPawn) || !IsValid(TargetTeleportPoint))
+	if (!IsValid(OwnerPawn) || !IsValid(TargetTeleportPoint) || TeamId == INDEX_NONE)
 	{
 		return;
 	}
@@ -83,8 +132,7 @@ void UDRTeleportComponent::ServerRequestRegisterTeleport_Implementation(ADRTelep
 		return;
 	}
 
-	// Team system is not wired yet, so TeamId 0 verifies only the registration path.
-	TeleportSubsystem->TryRegisterTeleportPoint(TargetTeleportPoint, OwnerPawn, GetTemporaryTeamId());
+	TeleportSubsystem->TryRegisterTeleportPoint(TargetTeleportPoint, OwnerPawn, TeamId);
 }
 
 void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoint* DestinationTeleportPoint)
@@ -101,14 +149,7 @@ void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoi
 		return;
 	}
 
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
-	{
-		return;
-	}
-
-	UDRTeleportSubsystem* TeleportSubsystem = World->GetSubsystem<UDRTeleportSubsystem>();
-	if (!IsValid(TeleportSubsystem) || !TeleportSubsystem->CanUseRegisteredTeleportPoint(GetTemporaryTeamId(), DestinationTeleportPoint))
+	if (!IsTeleportPointRegistered(DestinationTeleportPoint))
 	{
 		return;
 	}

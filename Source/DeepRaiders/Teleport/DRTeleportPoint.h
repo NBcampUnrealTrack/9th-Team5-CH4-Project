@@ -52,6 +52,9 @@ public:
 	EDRTeleportAccessType GetAccessType() const { return AccessType; }
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
+	bool IsRegisteredForTeam(int32 TeamId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Teleport")
 	FTransform GetTeleportArrivalTransform() const;
 
 	bool CanRegisterForTeam(int32 TeamId, APawn* Interactor) const;
