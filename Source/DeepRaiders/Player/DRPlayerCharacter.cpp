@@ -1260,6 +1260,7 @@ void ADRPlayerCharacter::StartMeleeWeaponSweep()
 {
 	if (!HasAuthority() ||
 		!bIsMeleeAttacking ||
+		MeleeTraceMode != EDRMeleeTraceMode::WeaponSweep ||
 		bIsMeleeSweepActive ||
 		!IsValid(WorldHandEquipmentMesh))
 	{
@@ -1296,31 +1297,12 @@ void ADRPlayerCharacter::StartMeleeWeaponSweep()
 			MeleeSweepTipSocketName);
 
 	/*
-	 * 시작 시점에 이미 무기와 겹쳐 있는 대상도 잡기 위해
-	 * 현재 Base -> Tip 구간을 한 번 검사한다.
+	 * Window가 열린 순간 이미 무기와 겹쳐 있는
+	 * 대상도 잡는다.
 	 */
 	SweepMeleeSegment(
 		PreviousMeleeBaseLocation,
 		PreviousMeleeTipLocation);
-
-	GetWorldTimerManager().SetTimer(
-		MeleeSweepUpdateTimerHandle,
-		this,
-		&ThisClass::UpdateMeleeWeaponSweep,
-		MeleeSweepUpdateInterval,
-		true);
-
-	/*
-	 * 별도 종료 Timer를 추가하지 않고
-	 * Sweep Timer 자체의 첫 Delay/Duration을 관리해도 되지만,
-	 * 지금은 단순하게 TimerManager로 종료 예약.
-	 */
-	GetWorldTimerManager().SetTimer(
-		MeleeSweepStopTimerHandle,
-		this,
-		&ThisClass::StopMeleeWeaponSweep,
-		MeleeSweepDuration,
-		false);
 }
 
 void ADRPlayerCharacter::UpdateMeleeWeaponSweep()
@@ -1330,7 +1312,6 @@ void ADRPlayerCharacter::UpdateMeleeWeaponSweep()
 		!bIsMeleeSweepActive ||
 		!IsValid(WorldHandEquipmentMesh))
 	{
-		StopMeleeWeaponSweep();
 		return;
 	}
 
@@ -1394,12 +1375,6 @@ void ADRPlayerCharacter::StopMeleeWeaponSweep()
 	{
 		return;
 	}
-
-	GetWorldTimerManager().ClearTimer(
-		MeleeSweepUpdateTimerHandle);
-
-	GetWorldTimerManager().ClearTimer(
-		MeleeSweepStopTimerHandle);
 
 	bIsMeleeSweepActive = false;
 
@@ -2045,19 +2020,27 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 
 	bIsMeleeAttacking = true;
 
-	// 서버에서 Melee가 승인됐으므로 3인칭 Melee 연출 실행
 	MulticastPlayWorldItemActionPresentation(
 		EDRItemActionType::MeleeAttack);
-	
-	// 공격 애니메이션의 타격 시점에 서버 판정
-	GetWorldTimerManager().SetTimer(
-		MeleeHitTimerHandle,
-		this,
-		&ThisClass::PerformMeleeHitCheck,
-		MeleeAttackHitTime,
-		false);
 
-	// 공격 종료 후 다시 공격 가능
+	/*
+	 * ViewLine은 기존처럼 특정 시점에
+	 * 단발 판정을 수행한다.
+	 *
+	 * WeaponSweep은 Montage의
+	 * AnimNotifyState가 판정 Window를 제어한다.
+	 */
+	if (MeleeTraceMode ==
+		EDRMeleeTraceMode::ViewLine)
+	{
+		GetWorldTimerManager().SetTimer(
+			MeleeHitTimerHandle,
+			this,
+			&ThisClass::PerformMeleeHitCheck,
+			MeleeAttackHitTime,
+			false);
+	}
+
 	GetWorldTimerManager().SetTimer(
 		MeleeFinishTimerHandle,
 		this,

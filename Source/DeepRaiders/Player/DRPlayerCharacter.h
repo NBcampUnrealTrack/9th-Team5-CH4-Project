@@ -21,6 +21,7 @@ class USoundBase;
 class UAudioComponent;
 class UCameraShakeBase;
 class UVoxelNoClippingComponent;
+class UDRANS_MeleeSweepWindow;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -262,7 +263,9 @@ private:
     void InitializeLocalJetpackFuelPrediction();
     
     // ===== Melee Attack =====
-
+    
+    friend class UDRANS_MeleeSweepWindow;
+    
     /** 소유 플레이어의 1인칭 공격 표현을 실행한다. */
     void PlayOwnerMeleeAttackPresentation();
 
@@ -319,10 +322,6 @@ private:
 
     bool bIsMeleeSweepActive = false;
 
-    FTimerHandle MeleeSweepUpdateTimerHandle;
-    
-    FTimerHandle MeleeSweepStopTimerHandle;
-    
     // ===== Fall Damage =====
 
     /** 착지 속도를 기준으로 낙하 피해량을 계산한다. */
@@ -483,25 +482,6 @@ protected:
         Category = "Player|Combat|Sweep",
         meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeSweepRadius = 35.f;
-    
-    /** Sweep 판정을 유지할 시간 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat|Sweep",
-        meta = (ClampMin = "0.01", Units = "s"))
-    float MeleeSweepDuration = 0.22f;
-
-    /**
-     * Sweep 위치 샘플링 간격.
-     * 실제 Timer 실행은 Frame Rate의 영향도 받는다.
-     */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat|Sweep",
-        meta = (ClampMin = "0.001", Units = "s"))
-    float MeleeSweepUpdateInterval = 0.016f;
     
     // ===== Death / Respawn =====
 
