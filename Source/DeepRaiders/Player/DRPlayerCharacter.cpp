@@ -25,6 +25,10 @@
 #include "Curves/CurveFloat.h"
 #include "Components/AudioComponent.h"
 
+#include "Camera/CameraShakeBase.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
+
 namespace
 {
 	const FName FirstPersonSwingTrackName(
@@ -406,7 +410,7 @@ float ADRPlayerCharacter::TakeDamage(
 		CurrentHealth - AppliedDamage,
 		0.f,
 		MaxHealth);
-
+	
 	if (IsDead())
 	{
 		HandleDeath();
@@ -840,6 +844,7 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 				Movement->WantsJetpack()
 			: bIsJetpackActive;
 
+	// 기존 Jetpack Sound
 	if (bPresentationActive)
 	{
 		if (!IsValid(JetpackAudioComponent) &&
@@ -857,6 +862,48 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 		{
 			JetpackAudioComponent->Stop();
 			JetpackAudioComponent = nullptr;
+		}
+	}
+
+	// Camera Shake는 자기 화면에만
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(GetController());
+
+	if (!IsValid(PlayerController) ||
+		!IsValid(PlayerController->PlayerCameraManager))
+	{
+		return;
+	}
+
+	if (bPresentationActive)
+	{
+		if (!IsValid(JetpackCameraShakeInstance) &&
+			JetpackCameraShakeClass)
+		{
+			JetpackCameraShakeInstance =
+				PlayerController->PlayerCameraManager
+					->StartCameraShake(
+						JetpackCameraShakeClass,
+						1.f,
+						ECameraShakePlaySpace::CameraLocal,
+						FRotator::ZeroRotator);
+		}
+	}
+	else
+	{
+		if (IsValid(JetpackCameraShakeInstance))
+		{
+			PlayerController->PlayerCameraManager
+				->StopCameraShake(
+					JetpackCameraShakeInstance,
+					false);
+
+			JetpackCameraShakeInstance = nullptr;
 		}
 	}
 }
@@ -1005,6 +1052,13 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 	}
 
 	const bool bKilled = HitPlayer->IsDead();
+
+	// 공격자
+	ClientPlayMeleeHitFeedback(bKilled);
+
+	// 피격자
+	HitPlayer->ClientPlayMeleeDamagedFeedback(
+		bKilled);
 
 	MulticastPlayMeleeImpactSound(
 		bKilled,
@@ -1843,6 +1897,14 @@ void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
 			this,
 			SoundToPlay);
 	}
+
+	// 낙하 피해가 발생한 착지에만 Camera Shake
+	if (bTookFallDamage || bDied)
+	{
+		PlayLocalCameraShake(
+			FallDamageCameraShakeClass,
+			bDied ? 1.4f : 1.f);
+	}
 }
 
 void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
@@ -1874,6 +1936,55 @@ void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
 		this,
 		SoundToPlay,
 		ImpactLocation);
+}
+
+void ADRPlayerCharacter::PlayLocalCameraShake(
+	TSubclassOf<UCameraShakeBase> ShakeClass,
+	float Scale)
+{
+	if (!IsLocallyControlled() ||
+		!ShakeClass)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(GetController());
+
+	if (!IsValid(PlayerController) ||
+		!IsValid(PlayerController->PlayerCameraManager))
+	{
+		return;
+	}
+
+	PlayerController->PlayerCameraManager->StartCameraShake(
+		ShakeClass,
+		Scale,
+		ECameraShakePlaySpace::CameraLocal,
+		FRotator::ZeroRotator);
+}
+
+void ADRPlayerCharacter::ClientPlayMeleeHitFeedback_Implementation(
+	bool bKilled)
+{
+	PlayLocalCameraShake(
+		MeleeHitConfirmCameraShakeClass,
+		bKilled ? 1.3f : 1.f);
+}
+
+void ADRPlayerCharacter::ClientPlayMeleeDamagedFeedback_Implementation(
+	bool bKilled)
+{
+	PlayLocalCameraShake(
+		MeleeDamagedCameraShakeClass,
+		bKilled ? 1.2f : 1.f);
+}
+
+void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
+{
+	PlayLocalCameraShake(
+		MeleeDamagedCameraShakeClass,
+		1.f);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(
