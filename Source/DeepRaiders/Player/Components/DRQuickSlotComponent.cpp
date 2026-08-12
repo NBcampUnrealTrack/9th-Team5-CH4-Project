@@ -82,6 +82,34 @@ bool UDRQuickSlotComponent::TryBindFirstEmptySlot(UDRItemDefinition* Definition)
 	return false;
 }
 
+bool UDRQuickSlotComponent::TryBindSelectedSlot(UDRItemDefinition* Definition)
+{
+	if (!HasQuickSlotAuthority()
+		|| !IsValid(Definition)
+		|| !CacheInventoryComponent())
+	{
+		return false;
+	}
+	
+	// 이미 바인딩 된 Definition인 경우, 해제한다.
+	for (FDRQuickSlotEntry& Slot : QuickSlots)
+	{
+		if (Slot.Definition == Definition)
+		{
+			Slot.Definition = nullptr;
+			break;
+		}
+	}
+	
+	for (int32 Index = 0; Index < QuickSlots.Num(); ++Index)
+	{
+		QuickSlots[SelectedSlotIndex].Definition = nullptr;
+		return BindSlotInternal(SelectedSlotIndex, Definition);
+	}
+	
+	return false;
+}
+
 void UDRQuickSlotComponent::RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition)
 {
 	if (!QuickSlots.IsValidIndex(SlotIndex)

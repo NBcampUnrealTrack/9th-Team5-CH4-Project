@@ -294,6 +294,16 @@ int32 UDRInventoryComponent::GetItemCount(const UDRItemDefinition* Definition) c
 	return TotalQuantity;
 }
 
+const FDRInventoryEntry* UDRInventoryComponent::GetEntry(FGuid EntryId) const
+{
+	return Entries.FindByPredicate(
+	[&EntryId](const FDRInventoryEntry& Entry)
+	{
+		return Entry.EntryId == EntryId;	
+	}
+	);
+}
+
 void UDRInventoryComponent::OnRep_Entries()
 {
 	BroadcastInventoryChanged();

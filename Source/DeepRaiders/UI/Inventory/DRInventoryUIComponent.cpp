@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "GameFramework/PlayerState.h"
 
 UDRInventoryUIComponent::UDRInventoryUIComponent()
@@ -125,7 +126,7 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	}
 	
 	// InventoryComponent와 Widget 연결
-	PlayerInventoryWidget->InitializeInventory(PlayerController->GetQuickSlotInventoryComponent());
+	PlayerInventoryWidget->InitializeInventory(PlayerController->GetInventoryComponent());
 	
 	PlayerInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 	PlayerInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
@@ -198,6 +199,23 @@ void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid EntryId)
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
 		PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::PlayerToStorage, EntryId);
+	}
+	else if (UIState == EDRInventoryUIState::PlayerOnly)
+	{
+		UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
+		if (!IsValid(QuickSlot))
+		{
+			return;
+		}
+		
+		UDRInventoryComponent* PlayerInventory = PlayerController->GetInventoryComponent();
+		if (!IsValid(PlayerInventory))
+		{
+			return;
+		}
+		const FDRInventoryEntry* Entry = PlayerInventory->GetEntry(EntryId);
+		
+		QuickSlot->TryBindSelectedSlot(Entry->Definition);
 	}
 }
 

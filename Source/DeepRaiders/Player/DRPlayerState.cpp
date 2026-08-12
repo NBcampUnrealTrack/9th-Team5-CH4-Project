@@ -284,7 +284,7 @@ UDRInventoryComponent* ADRPlayerState::GetInventoryComponent() const
 		Cast<ADRPlayerController>(GetOwner());
 
 	return IsValid(PlayerController)
-		? PlayerController->GetQuickSlotInventoryComponent()
+		? PlayerController->GetInventoryComponent()
 		: nullptr;
 }
 

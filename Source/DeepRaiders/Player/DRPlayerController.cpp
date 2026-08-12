@@ -27,7 +27,7 @@
 ADRPlayerController::ADRPlayerController()
 {
     // QuickSlot Initialize
-    QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
+    InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
     
     // UI Component Initialize
@@ -318,7 +318,7 @@ void ADRPlayerController::HandleNetworkTest(
 void ADRPlayerController::InitializeStartingQuickSlot()
 {
     if (!HasAuthority() ||
-        !IsValid(QuickSlotInventoryComponent) ||
+        !IsValid(InventoryComponent) ||
         !IsValid(QuickSlotComponent) ||
         !IsValid(StartingShovelDefinition))
     {
@@ -341,11 +341,11 @@ void ADRPlayerController::InitializeStartingQuickSlot()
     }
 
     // 1. 인벤토리에 시작 삽 지급
-    if (QuickSlotInventoryComponent->GetItemCount(
+    if (InventoryComponent->GetItemCount(
             StartingShovelDefinition) <= 0)
     {
         const bool bAdded =
-            QuickSlotInventoryComponent->TryAddItem(
+            InventoryComponent->TryAddItem(
                 StartingShovelDefinition,
                 1);
 
@@ -590,15 +590,15 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* ExpectedT
 
 bool ADRPlayerController::CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const
 {
-    return HasAuthority() && IsValid(QuickSlotInventoryComponent) 
-        && QuickSlotInventoryComponent->CanAddItem(Definition, Quantity);
+    return HasAuthority() && IsValid(InventoryComponent) 
+        && InventoryComponent->CanAddItem(Definition, Quantity);
 }
 
 bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity)
 {
     // 퀵슬롯 여부와는 상관없이 아이템은 추가될 수 있다.
     if (!CanReceiveItem(Definition,Quantity) 
-        || !QuickSlotInventoryComponent->TryAddItem(Definition, Quantity))
+        || !InventoryComponent->TryAddItem(Definition, Quantity))
     {
         return false;
     }
@@ -642,14 +642,14 @@ ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform
 {
     APawn* CachedPawn = GetPawn();
 
-    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(QuickSlotInventoryComponent) || Quantity <= 0)
+    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(InventoryComponent) || Quantity <= 0)
     {
         return nullptr;
     }
 
     UDRItemDefinition* Definition = QuickSlotComponent->GetSelectedItemDefinition();
 
-    if (!IsValid(Definition) || QuickSlotInventoryComponent->GetItemCount(Definition) < Quantity)
+    if (!IsValid(Definition) || InventoryComponent->GetItemCount(Definition) < Quantity)
     {
         return nullptr;
     }
@@ -661,7 +661,7 @@ ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform
         return nullptr;
     }
 
-    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
+    if (!InventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
     {
         RollbackDroppedItem(SpawnedItem);
         return nullptr;
@@ -873,7 +873,7 @@ bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirec
     
     UDRInventoryComponent* StorageInventory = Storage->GetInventoryComponent();
     
-    if (!IsValid(QuickSlotInventoryComponent) || !IsValid(StorageInventory))
+    if (!IsValid(InventoryComponent) || !IsValid(StorageInventory))
     {
         return false;
     }
@@ -884,12 +884,12 @@ bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirec
     switch (Direction)
     {
     case EDRStorageTransferDirection::PlayerToStorage:
-        SourceInventory = QuickSlotInventoryComponent;
+        SourceInventory = InventoryComponent;
         DestinationInventory = StorageInventory;
         break;
     case EDRStorageTransferDirection::StorageToPlayer:
         SourceInventory = StorageInventory;
-        DestinationInventory = QuickSlotInventoryComponent;
+        DestinationInventory = InventoryComponent;
         break;
     default:
         return false;
@@ -978,12 +978,12 @@ bool ADRPlayerController::IsStorageWithinInteractionRange(const ADRStorage* Stor
 
 void ADRPlayerController::DRDepositFirstItem()
 {
-    if (!IsValid(QuickSlotInventoryComponent))
+    if (!IsValid(InventoryComponent))
     {
         return;
     }
 
-    const TArray<FDRInventoryEntry> Entries = QuickSlotInventoryComponent->GetEntries();
+    const TArray<FDRInventoryEntry> Entries = InventoryComponent->GetEntries();
 
     if (!Entries.IsEmpty())
     {
