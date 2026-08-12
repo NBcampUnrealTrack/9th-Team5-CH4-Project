@@ -57,6 +57,8 @@ void ADRWorldItemActor::GetLifetimeReplicatedProps(TArray<class FLifetimePropert
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, ItemInstance);
+	DOREPLIFETIME(ThisClass, WorldItemState);
+	DOREPLIFETIME(ThisClass, ThrowingPawn);
 }
 
 bool ADRWorldItemActor::SetInitialItemInstance(FDRItemInstance InItemInstance)
@@ -106,6 +108,19 @@ void ADRWorldItemActor::ApplyDropImpulse(const FVector& Impulse)
 	StaticMeshComponent->AddImpulse(Impulse, NAME_None, true);
 }
 
+void ADRWorldItemActor::MarkAsThrown(APawn* Thrower)
+{
+	if (!HasAuthority() || !IsValid(Thrower))
+	{
+		return;
+	}
+
+	ThrowingPawn = Thrower;
+	WorldItemState = EDRWorldItemState::Thrown;
+	ApplyWorldItemCollision();
+	ForceNetUpdate();
+}
+
 void ADRWorldItemActor::BroadcastMined()
 {
 	if (HasAuthority())
@@ -143,12 +158,23 @@ void ADRWorldItemActor::BroadcastDropped()
 void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (!HasAuthority() || !bGroundHitEventArmed || Hit.ImpactNormal.Z < 0.5f)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	BroadcastDropped();
+	if (WorldItemState == EDRWorldItemState::Thrown)
+	{
+		WorldItemState = EDRWorldItemState::Dropped;
+		ThrowingPawn = nullptr;
+		ApplyWorldItemCollision();
+		ForceNetUpdate();
+	}
+
+	if (bGroundHitEventArmed && Hit.ImpactNormal.Z >= 0.5f)
+	{
+		BroadcastDropped();
+	}
 }
 
 void ADRWorldItemActor::MulticastPlayPickupSound_Implementation()
@@ -201,6 +227,44 @@ void ADRWorldItemActor::OnRep_ItemInstance()
 	}
 }
 
+void ADRWorldItemActor::OnRep_WorldItemState()
+{
+	ApplyWorldItemCollision();
+}
+
+void ADRWorldItemActor::ApplyWorldItemCollision()
+{
+	if (!IsValid(StaticMeshComponent))
+	{
+		return;
+	}
+
+	if (IgnoredThrower.IsValid() && IgnoredThrower.Get() != ThrowingPawn)
+	{
+		StaticMeshComponent->IgnoreActorWhenMoving(IgnoredThrower.Get(), false);
+		IgnoredThrower.Reset();
+	}
+
+	if (WorldItemState == EDRWorldItemState::Thrown)
+	{
+		StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	}
+	else
+	{
+		// Dropped 상태에서는 지면과 다른 물리 아이템만 막는다.
+		StaticMeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+		StaticMeshComponent->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		StaticMeshComponent->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+		StaticMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	}
+
+	if (IsValid(ThrowingPawn))
+	{
+		StaticMeshComponent->IgnoreActorWhenMoving(ThrowingPawn, true);
+		IgnoredThrower = ThrowingPawn;
+	}
+}
+
 void ADRWorldItemActor::RefreshItemPresentation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
@@ -217,6 +281,7 @@ void ADRWorldItemActor::RefreshItemPresentation()
 	
 	StaticMeshComponent->SetStaticMesh(Definition->WorldMesh);
 	StaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	ApplyWorldItemCollision();
 	
 	SetActorHiddenInGame(false);	
 }

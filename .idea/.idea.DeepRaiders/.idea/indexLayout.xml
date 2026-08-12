@@ -6,6 +6,9 @@
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
       <Path>Source/DeepRaiders/Inventory/DRInventoryTypes.h</Path>
+      <Path>Source/DeepRaiders/Storage</Path>
+      <Path>Source/DeepRaiders/Storage/DRStorage.cpp</Path>
+      <Path>Source/DeepRaiders/Storage/DRStorage.h</Path>
     </explicitIncludes>
     <explicitExcludes />
   </component>
