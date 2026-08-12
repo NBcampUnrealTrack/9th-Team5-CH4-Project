@@ -73,6 +73,11 @@ public:
 	// 슬롯 수 감소 시 범위 밖 바인딩 제거
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
 	bool SetSlotCount(int32 NewSlotCount);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
+	bool ReplaceBoundDefinition(
+		UDRItemDefinition* SourceDefinition,
+		UDRItemDefinition* TargetDefinition);
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	int32 GetSlotCount() const
@@ -132,6 +137,11 @@ protected:
 	
 	UFUNCTION()
 	void HandleInventoryChanged();
+
+	UFUNCTION()
+	void HandleInventoryEntryDefinitionReplaced(
+		UDRItemDefinition* SourceDefinition,
+		UDRItemDefinition* TargetDefinition);
 	
 private:
 	bool CacheInventoryComponent();

@@ -121,6 +121,7 @@ public:
 UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     : bWantsJetpack(false)
 {
+    GravityScale = 1.5f;
 }
 
 void UDRCharacterMovementComponent::SetWantsJetpack(

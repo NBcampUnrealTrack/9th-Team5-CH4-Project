@@ -9,82 +9,109 @@
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeShop(
-	const TArray<TObjectPtr<UDRItemDefinition>>& NewItemDefinitions)
+	const TArray<FDRShopItemOffer>& NewItemOffers)
 {
-	ItemDefinitions = NewItemDefinitions;
+	ItemOffers = NewItemOffers;
 	SelectCategory(EItemCategory::Equipment);
+}
+
+void UDRShopWidget::SetUpgradeOffers(
+	const TArray<FDRShopItemOffer>& NewUpgradeOffers)
+{
+	UpgradeOffers = NewUpgradeOffers;
+
+	if (IsUpgradeSelected)
+	{
+		RefreshUpgradeItems();
+	}
 }
 
 void UDRShopWidget::SelectCategory(EItemCategory Category)
 {
-	// 비활성화 버튼 스타일로 현재 선택된 탭을 표시합니다.
+	if (!IsValid(EquipmentButton) || !IsValid(ConsumableButton))
+	{
+		return;
+	}
+
+	IsUpgradeSelected = false;
 	EquipmentButton->SetIsEnabled(Category != EItemCategory::Equipment);
 	ConsumableButton->SetIsEnabled(Category != EItemCategory::Consumable);
+
+	if (IsValid(UpgradeButton))
+	{
+		UpgradeButton->SetIsEnabled(true);
+	}
+
 	RefreshItems(Category);
 }
 
 void UDRShopWidget::RefreshItems(EItemCategory Category)
 {
-	if (!ItemWidgetClass)
+	if (!IsValid(ItemScrollBox) || !ItemWidgetClass)
 	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("Shop items initialization failed: ItemWidgetClass is invalid."));
 		return;
 	}
 
-	if (!IsValid(ItemScrollBox))
-	{
-		UE_LOG(LogTemp, Error,
-			TEXT("Shop items initialization failed: ItemScrollBox is invalid."));
-		return;
-	}
-
-	// 선택한 카테고리에 해당하는 아이템 위젯만 다시 생성합니다.
 	ItemScrollBox->ClearChildren();
-	int32 CreatedItemCount = 0;
 
-	for (UDRItemDefinition* ItemDefinition : ItemDefinitions)
+	for (const FDRShopItemOffer& ItemOffer : ItemOffers)
 	{
-		if (!IsValid(ItemDefinition)
-			|| ItemDefinition->Category != Category)
+		if (ItemOffer.IsUpgrade()
+			|| !IsValid(ItemOffer.ItemDefinition)
+			|| ItemOffer.ItemDefinition->Category != Category)
 		{
 			continue;
 		}
 
-		UDRShopItemWidget* ItemWidget =
-			CreateWidget<UDRShopItemWidget>(
-				GetOwningPlayer(),
-				ItemWidgetClass);
+		CreateItemWidget(ItemOffer);
+	}
+}
 
-		if (!IsValid(ItemWidget))
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("Shop item widget creation failed: Item=%s."),
-				*ItemDefinition->DisplayName.ToString());
-			continue;
-		}
-
-		ItemWidget->SetItemDefinition(ItemDefinition);
-		ItemWidget->OnPurchaseRequested.AddDynamic(
-			this,
-			&ThisClass::HandlePurchaseRequested);
-		ItemScrollBox->AddChild(ItemWidget);
-		++CreatedItemCount;
+void UDRShopWidget::RefreshUpgradeItems()
+{
+	if (!IsValid(ItemScrollBox) || !ItemWidgetClass)
+	{
+		return;
 	}
 
-	UE_LOG(LogTemp, Log,
-		TEXT("Shop category items created successfully: %d items."),
-		CreatedItemCount);
+	ItemScrollBox->ClearChildren();
+
+	for (const FDRShopItemOffer& ItemOffer : UpgradeOffers)
+	{
+		CreateItemWidget(ItemOffer);
+	}
+}
+
+bool UDRShopWidget::CreateItemWidget(const FDRShopItemOffer& ItemOffer)
+{
+	if (!IsValid(ItemOffer.ItemDefinition))
+	{
+		return false;
+	}
+
+	UDRShopItemWidget* ItemWidget = CreateWidget<UDRShopItemWidget>(
+		GetOwningPlayer(),
+		ItemWidgetClass);
+
+	if (!IsValid(ItemWidget))
+	{
+		return false;
+	}
+
+	ItemWidget->SetItemOffer(ItemOffer);
+	ItemWidget->OnOfferRequested.AddDynamic(
+		this,
+		&ThisClass::HandleOfferRequested);
+	ItemScrollBox->AddChild(ItemWidget);
+	return true;
 }
 
 void UDRShopWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 	InitializeSellAllOresButton();
+	InitializeUpgradeButton();
 
-	// 위젯 수명 동안 한 번만 버튼 이벤트를 연결합니다.
 	if (IsValid(CloseButton))
 	{
 		CloseButton->OnClicked.AddDynamic(
@@ -92,12 +119,26 @@ void UDRShopWidget::NativeOnInitialized()
 			&ThisClass::HandleCloseButtonClicked);
 	}
 
-	EquipmentButton->OnClicked.AddDynamic(
-		this,
-		&ThisClass::HandleEquipmentButtonClicked);
-	ConsumableButton->OnClicked.AddDynamic(
-		this,
-		&ThisClass::HandleConsumableButtonClicked);
+	if (IsValid(EquipmentButton))
+	{
+		EquipmentButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleEquipmentButtonClicked);
+	}
+
+	if (IsValid(ConsumableButton))
+	{
+		ConsumableButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleConsumableButtonClicked);
+	}
+
+	if (IsValid(UpgradeButton))
+	{
+		UpgradeButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleUpgradeButtonClicked);
+	}
 
 	if (IsValid(SellAllOresButton))
 	{
@@ -128,9 +169,49 @@ void UDRShopWidget::InitializeSellAllOresButton()
 		UButton::StaticClass(),
 		TEXT("SellAllOresButton"));
 	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>();
+
+	if (!IsValid(SellAllOresButton) || !IsValid(ButtonText))
+	{
+		SellAllOresButton = nullptr;
+		return;
+	}
+
 	ButtonText->SetText(FText::FromString(TEXT("광석 전체 판매")));
 	SellAllOresButton->SetContent(ButtonText);
 	ButtonContainer->AddChild(SellAllOresButton);
+}
+
+void UDRShopWidget::InitializeUpgradeButton()
+{
+	if (IsValid(UpgradeButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(WidgetTree))
+	{
+		return;
+	}
+
+	UPanelWidget* ButtonContainer =
+		Cast<UPanelWidget>(ConsumableButton->GetParent());
+
+	if (!IsValid(ButtonContainer))
+	{
+		return;
+	}
+
+	UpgradeButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(),
+		TEXT("UpgradeButton"));
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>();
+
+	if (!IsValid(UpgradeButton) || !IsValid(ButtonText))
+	{
+		UpgradeButton = nullptr;
+		return;
+	}
+
+	ButtonText->SetText(FText::FromString(TEXT("업그레이드")));
+	UpgradeButton->SetContent(ButtonText);
+	ButtonContainer->AddChild(UpgradeButton);
 }
 
 void UDRShopWidget::NativeDestruct()
@@ -142,12 +223,26 @@ void UDRShopWidget::NativeDestruct()
 			&ThisClass::HandleCloseButtonClicked);
 	}
 
-	EquipmentButton->OnClicked.RemoveDynamic(
-		this,
-		&ThisClass::HandleEquipmentButtonClicked);
-	ConsumableButton->OnClicked.RemoveDynamic(
-		this,
-		&ThisClass::HandleConsumableButtonClicked);
+	if (IsValid(EquipmentButton))
+	{
+		EquipmentButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleEquipmentButtonClicked);
+	}
+
+	if (IsValid(ConsumableButton))
+	{
+		ConsumableButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleConsumableButtonClicked);
+	}
+
+	if (IsValid(UpgradeButton))
+	{
+		UpgradeButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleUpgradeButtonClicked);
+	}
 
 	if (IsValid(SellAllOresButton))
 	{
@@ -174,13 +269,28 @@ void UDRShopWidget::HandleConsumableButtonClicked()
 	SelectCategory(EItemCategory::Consumable);
 }
 
+void UDRShopWidget::HandleUpgradeButtonClicked()
+{
+	if (!IsValid(EquipmentButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(UpgradeButton))
+	{
+		return;
+	}
+
+	IsUpgradeSelected = true;
+	EquipmentButton->SetIsEnabled(true);
+	ConsumableButton->SetIsEnabled(true);
+	UpgradeButton->SetIsEnabled(false);
+	RefreshUpgradeItems();
+}
+
 void UDRShopWidget::HandleSellAllOresButtonClicked()
 {
 	OnSellAllOresRequested.Broadcast();
 }
 
-void UDRShopWidget::HandlePurchaseRequested(
-	UDRItemDefinition* ItemDefinition)
+void UDRShopWidget::HandleOfferRequested(FDRShopOfferRequest Request)
 {
-	OnPurchaseRequested.Broadcast(ItemDefinition);
+	OnOfferRequested.Broadcast(Request);
 }
