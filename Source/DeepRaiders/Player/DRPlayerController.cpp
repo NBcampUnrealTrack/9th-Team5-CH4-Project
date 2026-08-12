@@ -6,6 +6,7 @@
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
@@ -479,6 +480,44 @@ void ADRPlayerController::HandleSelectQuickSlot(
 }
 
 #pragma region Terrain Dig
+void ADRPlayerController::QueueTerrainDigHistory(
+    const TArray<FDRTerrainDigOperation>& DigHistory)
+{
+    if (!HasAuthority() || DigHistory.IsEmpty())
+    {
+        return;
+    }
+
+    PendingTerrainDigHistory.Append(DigHistory);
+    if (!TerrainDigHistoryTimer.IsValid())
+    {
+        TerrainDigHistoryTimer = GetWorldTimerManager().SetTimerForNextTick(
+            this, &ThisClass::SendTerrainDigHistoryBatch);
+    }
+}
+
+void ADRPlayerController::SendTerrainDigHistoryBatch()
+{
+    TerrainDigHistoryTimer.Invalidate();
+    constexpr int32 BatchSize = 8;
+    const int32 BatchCount = FMath::Min(BatchSize, PendingTerrainDigHistory.Num());
+    if (BatchCount <= 0)
+    {
+        return;
+    }
+
+    TArray<FDRTerrainDigOperation> Batch;
+    Batch.Append(PendingTerrainDigHistory.GetData(), BatchCount);
+    PendingTerrainDigHistory.RemoveAt(0, BatchCount, EAllowShrinking::No);
+    Client_ApplyTerrainDigHistory(Batch);
+
+    if (!PendingTerrainDigHistory.IsEmpty())
+    {
+        TerrainDigHistoryTimer = GetWorldTimerManager().SetTimerForNextTick(
+            this, &ThisClass::SendTerrainDigHistoryBatch);
+    }
+}
+
 void ADRPlayerController::Client_ApplyTerrainDigHistory_Implementation(
     const TArray<FDRTerrainDigOperation>& DigHistory)
 {

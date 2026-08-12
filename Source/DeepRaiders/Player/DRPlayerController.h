@@ -110,12 +110,18 @@ protected:
 	
 #pragma region Terrain Dig
 public:
+	void QueueTerrainDigHistory(const TArray<FDRTerrainDigOperation>& DigHistory);
+
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyTerrainDigHistory(
 		const TArray<FDRTerrainDigOperation>& DigHistory);
 
 private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
+	void SendTerrainDigHistoryBatch();
+
+	TArray<FDRTerrainDigOperation> PendingTerrainDigHistory;
+	FTimerHandle TerrainDigHistoryTimer;
 #pragma endregion
 
 #pragma region QuickSlot

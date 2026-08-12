@@ -31,12 +31,20 @@ public:
 #pragma region TerrainDig
 public:
 	void RegisterTerrainDig(const FDRTerrainDigOperation& Operation);
+	void QueueTerrainCaveDig(const FDRTerrainDigOperation& Operation);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ApplyTerrainDig(const FDRTerrainDigOperation& Operation);
 
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ApplyTerrainDigBatch(const TArray<FDRTerrainDigOperation>& Operations);
+
 private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
+	void SendTerrainCaveDigBatch();
+
+	TArray<FDRTerrainDigOperation> PendingCaveDigs;
+	FTimerHandle CaveDigBatchTimer;
 #pragma endregion 
 	
 #pragma region Teleport
