@@ -23,6 +23,7 @@ class UCameraShakeBase;
 class UVoxelNoClippingComponent;
 
 class UDRMeleeCombatComponent;
+class UDRJetpackComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -176,14 +177,12 @@ public:
     /** 서버에서의 땅파기 성공 여부 알려줌 */
     void NotifyMineConfirmedFromServer();
     
-    UDRMeleeCombatComponent*
-        GetMeleeCombatComponent() const
+    UDRMeleeCombatComponent* GetMeleeCombatComponent() const
     {
         return MeleeCombatComponent;
     }
 
-    UStaticMeshComponent*
-        GetWorldHandEquipmentMesh() const
+    UStaticMeshComponent* GetWorldHandEquipmentMesh() const
     {
         return WorldHandEquipmentMesh;
     }
@@ -203,13 +202,24 @@ public:
         bool bKilled,
         const FVector& ImpactLocation);
     
+    UDRJetpackComponent* GetJetpackComponent() const
+    {
+        return JetpackComponent;
+    }
+
+    /** JetpackComponent의 서버 Active 상태가 변경됨. */
+    void HandleJetpackActiveStateChangedFromComponent();
+
+    /** 서버가 로컬 제트팩 예측을 거절함. */
+    void HandleJetpackRejectedByServer();
+    
     /** HUD에서 사용할 제트팩 연료 비율. 소유 클라이언트는 예측값을 사용한다. */
     UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
     float GetDisplayedJetpackFuelRatio() const;
 
     /** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
     void ReconcileJetpackFuelFromServer(float ServerFuel);
-    
+
 protected:
     virtual void BeginPlay() override;
 
@@ -233,6 +243,13 @@ protected:
     TObjectPtr<UDRMeleeCombatComponent> MeleeCombatComponent;
     
     UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Jetpack",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRJetpackComponent> JetpackComponent;
+    
+    UPROPERTY(
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Health")
@@ -251,29 +268,7 @@ protected:
 private:
     void PrintNetworkState(const TCHAR* Context) const;
 
-    UFUNCTION(Server, Reliable)
-    void ServerStartJetpack();
-
-    UFUNCTION(Server, Reliable)
-    void ServerStopJetpack();
-
-    /** 서버가 입력을 거절하거나 연료가 소진된 경우 로컬 예측을 취소한다. */
-    UFUNCTION(Client, Reliable)
-    void ClientRejectJetpack();
-
-    UFUNCTION()
-    void OnRep_JetpackActive();
-
-    bool CanStartJetpack() const;
-
-    UDRCharacterMovementComponent*
-        GetDRCharacterMovementComponent() const;
-
-    void StartJetpackFromServer();
-    void StopJetpackFromServer();
-
-    /** 서버에서 연료만 소비한다. 이동은 MovementComponent가 담당한다. */
-    void UpdateJetpackFuel(float DeltaSeconds);
+    UDRCharacterMovementComponent* GetDRCharacterMovementComponent() const;
 
     void RefreshJetpackActivePresentation();
     
@@ -363,22 +358,6 @@ protected:
         EditDefaultsOnly,
         Category = "Player|Equipment|Jetpack")
     FTransform JetpackRelativeTransform;
-    
-    /** 현재 Pawn이 실제로 제트팩을 분사 중인지 나타낸다. */
-    UPROPERTY(
-        ReplicatedUsing = OnRep_JetpackActive,
-        VisibleAnywhere,
-        BlueprintReadOnly,
-        Category = "Player|Jetpack")
-    bool bIsJetpackActive = false;
-
-    /** 초당 연료 소비량 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Jetpack",
-        meta = (ClampMin = "0.0"))
-    float JetpackFuelConsumptionPerSecond = 20.f;
     
     // ===== Death / Respawn =====
 

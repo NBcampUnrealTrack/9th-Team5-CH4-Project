@@ -13,6 +13,7 @@
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
+#include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -62,6 +63,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
+	
+	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
 	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -164,23 +167,20 @@ void ADRPlayerCharacter::Tick(float DeltaSeconds)
 		if (IsValid(Movement) &&
 			Movement->WantsJetpack())
 		{
+			const float FuelConsumption =
+				IsValid(JetpackComponent)
+					? JetpackComponent->
+						GetFuelConsumptionPerSecond()
+					: 0.f;
+
 			LocalPredictedJetpackFuel =
 				FMath::Max(
 					0.f,
 					LocalPredictedJetpackFuel -
-					JetpackFuelConsumptionPerSecond *
-					DeltaSeconds);
+					FuelConsumption * DeltaSeconds);
 		}
 	}
 
-	// ================================
-	// 실제 연료는 서버만 변경
-	// ================================
-	if (HasAuthority() &&
-		bIsJetpackActive)
-	{
-		UpdateJetpackFuel(DeltaSeconds);
-	}
 }
 
 UDRCharacterMovementComponent* ADRPlayerCharacter::GetDRCharacterMovementComponent() const
@@ -225,7 +225,10 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 		return;
 	}
 
-	StopJetpackFromServer();
+	if (IsValid(JetpackComponent))
+	{
+		JetpackComponent->StopFromServer();
+	}
 
 	const float CalculatedFallDamage =
 		CalculateFallDamage(LandingSpeed);
@@ -782,10 +785,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(
-		ADRPlayerCharacter,
-		bIsJetpackActive);
 	
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
@@ -796,43 +795,18 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 		HeldItemDefinition);
 }
 
-void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
+void ADRPlayerCharacter::HandleJetpackActiveStateChangedFromComponent()
 {
-	UDRCharacterMovementComponent* Movement =
-		GetDRCharacterMovementComponent();
+	const bool bServerActive =
+		IsValid(JetpackComponent) &&
+		JetpackComponent->IsActive();
 
-	if (IsValid(Movement))
-	{
-		Movement->SetWantsJetpack(false);
-	}
-
-	if (!HasAuthority())
-	{
-		SetActorTickEnabled(false);
-	}
-
-	RefreshJetpackActivePresentation();
-
-	// 현재 수신해 둔 서버값으로 다시 보정
-	const ADRPlayerState* DRPlayerState =
-		GetPlayerState<ADRPlayerState>();
-
-	if (IsValid(DRPlayerState))
-	{
-		LocalPredictedJetpackFuel =
-			DRPlayerState->GetJetpackFuel();
-
-		bLocalJetpackFuelPredictionInitialized = true;
-	}
-}
-
-void ADRPlayerCharacter::OnRep_JetpackActive()
-{
 	/*
-	 * 연료 소진, 착지, 사망 등 서버가 강제로 종료한 경우
-	 * 소유 클라이언트의 예측 상태도 정리한다.
+	 * 서버가 연료 소진/착지 등으로 강제 종료했다면
+	 * 소유 클라이언트 Prediction도 종료.
 	 */
-	if (!bIsJetpackActive && IsLocallyControlled())
+	if (!bServerActive &&
+		IsLocallyControlled())
 	{
 		UDRCharacterMovementComponent* Movement =
 			GetDRCharacterMovementComponent();
@@ -841,81 +815,18 @@ void ADRPlayerCharacter::OnRep_JetpackActive()
 		{
 			Movement->SetWantsJetpack(false);
 		}
+
+		if (!HasAuthority())
+		{
+			SetActorTickEnabled(false);
+		}
 	}
 
 	RefreshJetpackActivePresentation();
 }
 
-bool ADRPlayerCharacter::CanStartJetpack() const
+void ADRPlayerCharacter::HandleJetpackRejectedByServer()
 {
-	if (!HasAuthority() || IsDead())
-	{
-		return false;
-	}
-
-	const UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-
-	if (!IsValid(MovementComponent) || !MovementComponent->IsFalling())
-	{
-		return false;
-	}
-
-	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-
-	if (!IsValid(DRPlayerState))
-	{
-		return false;
-	}
-
-	return DRPlayerState->HasJetpack() && DRPlayerState->GetJetpackFuel() > 0.f;
-}
-
-void ADRPlayerCharacter::ServerStartJetpack_Implementation()
-{
-	if (!CanStartJetpack())
-	{
-		ClientRejectJetpack();
-		return;
-	}
-
-	StartJetpackFromServer();
-}
-
-void ADRPlayerCharacter::ServerStopJetpack_Implementation()
-{
-	StopJetpackFromServer();
-}
-
-void ADRPlayerCharacter::StartJetpackFromServer()
-{
-	if (!HasAuthority() || bIsJetpackActive)
-	{
-		return;
-	}
-
-	UDRCharacterMovementComponent* Movement = GetDRCharacterMovementComponent();
-
-	if (IsValid(Movement))
-	{
-		Movement->SetWantsJetpack(true);
-	}
-
-	bIsJetpackActive = true;
-
-	// 서버에서는 연료 소비를 위해 Character Tick 사용
-	SetActorTickEnabled(true);
-
-	RefreshJetpackActivePresentation();
-	ForceNetUpdate();
-}
-
-void ADRPlayerCharacter::StopJetpackFromServer()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
 	UDRCharacterMovementComponent* Movement =
 		GetDRCharacterMovementComponent();
 
@@ -924,55 +835,23 @@ void ADRPlayerCharacter::StopJetpackFromServer()
 		Movement->SetWantsJetpack(false);
 	}
 
-	if (!bIsJetpackActive)
-	{
-		SetActorTickEnabled(false);
-		return;
-	}
-
-	bIsJetpackActive = false;
-	SetActorTickEnabled(false);
-
-	RefreshJetpackActivePresentation();
-	ForceNetUpdate();
-}
-
-void ADRPlayerCharacter::UpdateJetpackFuel(float DeltaSeconds)
-{
 	if (!HasAuthority())
 	{
-		return;
+		SetActorTickEnabled(false);
 	}
 
-	UDRCharacterMovementComponent* Movement =
-		GetDRCharacterMovementComponent();
+	RefreshJetpackActivePresentation();
 
-	ADRPlayerState* DRPlayerState =
+	const ADRPlayerState* DRPlayerState =
 		GetPlayerState<ADRPlayerState>();
 
-	if (!IsValid(Movement) ||
-		!IsValid(DRPlayerState) ||
-		!Movement->IsFalling() ||
-		!Movement->WantsJetpack() ||
-		!DRPlayerState->HasJetpack())
+	if (IsValid(DRPlayerState))
 	{
-		StopJetpackFromServer();
-		return;
-	}
+		LocalPredictedJetpackFuel =
+			DRPlayerState->GetJetpackFuel();
 
-	const float FuelCost = JetpackFuelConsumptionPerSecond * DeltaSeconds;
-
-	if (!DRPlayerState->ConsumeJetpackFuel(FuelCost))
-	{
-		StopJetpackFromServer();
-		ClientRejectJetpack();
-		return;
-	}
-
-	if (DRPlayerState->GetJetpackFuel() <= KINDA_SMALL_NUMBER)
-	{
-		StopJetpackFromServer();
-		ClientRejectJetpack();
+		bLocalJetpackFuelPredictionInitialized =
+			true;
 	}
 }
 
@@ -981,11 +860,15 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 	const UDRCharacterMovementComponent* Movement =
 		GetDRCharacterMovementComponent();
 
+	const bool bServerActive =
+		IsValid(JetpackComponent) &&
+		JetpackComponent->IsActive();
+
 	const bool bPresentationActive =
 		IsLocallyControlled()
 			? IsValid(Movement) &&
 				Movement->WantsJetpack()
-			: bIsJetpackActive;
+			: bServerActive;
 
 	// 기존 Jetpack Sound
 	if (bPresentationActive)
@@ -1085,7 +968,10 @@ void ADRPlayerCharacter::HandleDeath()
 		MeleeCombatComponent->CancelAttack();
 	}
 
-	StopJetpackFromServer();
+	if (IsValid(JetpackComponent))
+	{
+		JetpackComponent->StopFromServer();
+	}
 
 	/*
 	 * 사망 순간의 Actor 위치는 저장하지 않는다.
@@ -2172,7 +2058,11 @@ void ADRPlayerCharacter::HandleJumpPressed()
 		}
 		
 		RefreshJetpackActivePresentation();
-		ServerStartJetpack();
+
+		if (IsValid(JetpackComponent))
+		{
+			JetpackComponent->RequestStart();
+		}
 	}
 }
 
@@ -2199,6 +2089,10 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	}
 
 	RefreshJetpackActivePresentation();
-	ServerStopJetpack();
+
+	if (IsValid(JetpackComponent))
+	{
+		JetpackComponent->RequestStop();
+	}
 }
 
