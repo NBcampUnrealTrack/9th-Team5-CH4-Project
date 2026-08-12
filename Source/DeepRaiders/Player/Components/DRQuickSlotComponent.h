@@ -60,6 +60,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
 	void RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition);
 	
+	// 로컬 플레이어가 선택한 슬롯에 아이템 바인딩 요청
+	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
+	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
+	void RequestBindSelectedSlot(UDRItemDefinition* Definition);
+	
 	// 특정 퀵슬롯 바인딩 제거
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
 	void RequestClearSlot(int32 SlotIndex);
@@ -122,6 +127,9 @@ public:
 protected:
 	UFUNCTION(Server, Reliable)
 	void ServerBindSlot(int32 SlotIndex, UDRItemDefinition* Definition);
+	
+	UFUNCTION(Server, Reliable)
+	void ServerBindSelectedSlot(UDRItemDefinition* Definition);
 	
 	UFUNCTION(Server, Reliable)
 	void ServerClearSlot(int32 SlotIndex);

@@ -215,7 +215,7 @@ void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid EntryId)
 		}
 		const FDRInventoryEntry* Entry = PlayerInventory->GetEntry(EntryId);
 		
-		QuickSlot->TryBindSelectedSlot(Entry->Definition);
+		QuickSlot->RequestBindSelectedSlot(Entry->Definition);
 	}
 }
 
