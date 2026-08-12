@@ -84,9 +84,14 @@ bool UDRLeashComponent::TryClaimLeashTarget(AActor* NewTarget)
 
 bool UDRLeashComponent::TryReleaseLeashTarget()
 {
-	if (!HasLeashAuthority()
-	||!IsValid(LeashTarget))
+	if (!HasLeashAuthority())
 	{
+		return false;
+	}
+	
+	if (!IsValid(LeashTarget))
+	{
+		ClearLeashTarget();
 		return false;
 	}
 	
@@ -113,7 +118,7 @@ void UDRLeashComponent::OnRep_LeashTarget(AActor* PreviousTarget)
 
 void UDRLeashComponent::OnRep_IsFollowing()
 {
-	OnLeashFollowingChanged.Broadcast(bIsFollowing);
+	OnLeashFollowingChangedDelegate.Broadcast(bIsFollowing);
 }
 
 bool UDRLeashComponent::HasLeashAuthority() const
@@ -144,7 +149,7 @@ void UDRLeashComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
 	
 	if (!IsValid(LeashTarget))
 	{
-		TryReleaseLeashTarget();
+		ClearLeashTarget();
 		return;
 	}
 	
@@ -183,8 +188,8 @@ void UDRLeashComponent::UpdateLeashMovement(float DeltaSeconds)
 		SetFollowingState(true);
 	}
 	
-	const float DistanceGab = FMath::Max(Distance - SafeStopDistance, 0.0f);
-	const float SpeedAlpha = FMath::Clamp(DistanceGab / DistanceRange, 0.0f, 1.0f);
+	const float DistanceGap = FMath::Max(Distance - SafeStopDistance, 0.0f);
+	const float SpeedAlpha = FMath::Clamp(DistanceGap / DistanceRange, 0.0f, 1.0f);
 	
 	const float DesiredSpeed = MaxFollowSpeed * SpeedAlpha;
 	const FVector DesiredVelocity = ToTarget.GetSafeNormal() * DesiredSpeed;
@@ -194,7 +199,7 @@ void UDRLeashComponent::UpdateLeashMovement(float DeltaSeconds)
 	
 	CurrentVelocity = CurrentVelocity.GetClampedToMaxSize(FMath::Max(MaxFollowSpeed, 0.0f));
 	
-	if (Distance <= SafeStartDistance && CurrentVelocity.IsNearlyZero())
+	if (Distance <= SafeStopDistance && CurrentVelocity.IsNearlyZero())
 	{
 		CurrentVelocity = FVector::ZeroVector;
 		SetFollowingState(false);
@@ -215,7 +220,8 @@ void UDRLeashComponent::UpdateLeashMovement(float DeltaSeconds)
 	
 	if (Hit.bBlockingHit)
 	{
-		// 벽과 충돌 시 벽을 따라 이동
+		// 벽에 끼이지 않도록
+		// 똑똑하게 따라오기 위해선 navigation 기반 이동 필요 - 추후 고려
 		CurrentVelocity = FVector::VectorPlaneProject(CurrentVelocity, Hit.Normal);
 	}
 	
@@ -229,7 +235,7 @@ void UDRLeashComponent::SetFollowingState(bool bNewFollowing)
 	}
 	
 	bIsFollowing = bNewFollowing;
-	OnLeashFollowingChanged.Broadcast(bNewFollowing);
+	OnLeashFollowingChangedDelegate.Broadcast(bNewFollowing);
 	
 	RequestReplicationUpdate();
 
@@ -247,4 +253,17 @@ void UDRLeashComponent::RequestReplicationUpdate() const
 	
 	OwnerActor->FlushNetDormancy();
 	OwnerActor->ForceNetUpdate();
+}
+
+void UDRLeashComponent::ClearLeashTarget()
+{
+	LeashTarget = nullptr;
+	CurrentVelocity = FVector::ZeroVector;
+	SetFollowingState(false);
+	SetComponentTickEnabled(false);
+		
+	RequestReplicationUpdate();
+	
+	// 두 매개변수 모두 nullptr로 전달
+	OnLeashTargetChangedDelegate.Broadcast(nullptr, nullptr);
 }

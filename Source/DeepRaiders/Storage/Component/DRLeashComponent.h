@@ -7,7 +7,7 @@
 #include "DRLeashComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRLeashTargetChanged, AActor*, PreviousTarget, AActor*, NewTarget);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRLeashFollowingChanged, bool, bNewFollwing);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRLeashFollowingChanged, bool, bNewFollowing);
 
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -38,7 +38,7 @@ public:
 	// 추적 대상 해제
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Leash")
 	bool TryReleaseLeashTarget();
-
+	
 	UFUNCTION(BlueprintPure, Category = "Leash")
 	AActor* GetLeashTarget() const
 	{
@@ -55,7 +55,7 @@ public:
 	FDRLeashTargetChanged OnLeashTargetChangedDelegate;
 	
 	UPROPERTY(BlueprintAssignable, Category = "Leash")
-	FDRLeashFollowingChanged OnLeashFollowingChanged;
+	FDRLeashFollowingChanged OnLeashFollowingChangedDelegate;
 	
 protected:
 	UFUNCTION()
@@ -74,7 +74,7 @@ protected:
 	float FollowStopDistance = 200.0f;
 	
 	// 최대 속도
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leash|Movement", meta = (ClampMin = "0.0", Units = "cm/s"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leash|Movement", meta = (ClampMin = "1.0", Units = "cm/s"))
 	float MaxFollowSpeed = 500.0f;
 	
 	// 속도 보간 변화량, 작을 수록 lag가 커짐
@@ -102,6 +102,8 @@ private:
 	
 	void SetFollowingState(bool bNewFollowing);
 	void RequestReplicationUpdate() const;
+	
+	void ClearLeashTarget();
 	
 private:
 	FVector CurrentVelocity = FVector::ZeroVector;	
