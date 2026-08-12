@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "GameFramework/PlayerState.h"
 
 UDRInventoryUIComponent::UDRInventoryUIComponent()
 {
@@ -26,6 +27,7 @@ void UDRInventoryUIComponent::BeginPlay()
 	}
 	
 	PlayerController->OnCurrentStorageChangedDelegate.AddDynamic(this, &ThisClass::HandleCurrentStorageChanged);
+	
 	
 	// 최초 실행 초기화
 	HandleCurrentStorageChanged(PlayerController->GetCurrentStorage());
@@ -86,6 +88,8 @@ void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage
 	if (IsValid(NewStorage))
 	{
 		UIState = EDRInventoryUIState::PlayerAndStorage;
+		
+		CurrentStorage = NewStorage;
 		
 		ShowPlayerInventory();
 		ShowStorageInventory(NewStorage);
@@ -153,8 +157,10 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 		return;
 	}
 	
-	StorageInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, StorageInventoryWidgetClass);
+	// 오픈 도중 소유권 전환 처리 (ex: 창고 확인 중 기절)
+	Storage->OnStorageOwnerChangedDelegate.AddDynamic(this, &ThisClass::HandleStorageOwnerChanged);
 	
+	StorageInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, StorageInventoryWidgetClass);
 	if (!IsValid(StorageInventoryWidget))
 	{
 		return;
@@ -172,6 +178,12 @@ void UDRInventoryUIComponent::HideStorageInventory()
 	if (!IsValid(StorageInventoryWidget))
 	{
 		return;
+	}
+	
+	if (IsValid(CurrentStorage.Get()))
+	{
+		// 오픈 도중 소유권 전환 처리 (ex: 창고 확인 중 기절)
+		CurrentStorage->OnStorageOwnerChangedDelegate.RemoveDynamic(this, &ThisClass::HandleStorageOwnerChanged);		
 	}
 	
 	StorageInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandleStorageEntryClicked);
@@ -202,6 +214,23 @@ void UDRInventoryUIComponent::HandleCloseRequested()
 	const bool bHadStorage = UIState == EDRInventoryUIState::PlayerAndStorage;
 	
 	CloseInventoryScreen();
+	if (bHadStorage)
+	{
+		PlayerController->RequestCloseStorage();
+	}
+}
+
+void UDRInventoryUIComponent::HandleStorageOwnerChanged(APlayerState* PreviousOwner, APlayerState* NewOwner)
+{
+	if (!IsValid(PlayerController)
+		|| PlayerController->GetPlayerState<APlayerState>() == NewOwner)
+	{
+		return ;
+	}
+	
+	// 창고 오픈 상태
+	const bool bHadStorage = UIState == EDRInventoryUIState::PlayerAndStorage;
+	
 	if (bHadStorage)
 	{
 		PlayerController->RequestCloseStorage();

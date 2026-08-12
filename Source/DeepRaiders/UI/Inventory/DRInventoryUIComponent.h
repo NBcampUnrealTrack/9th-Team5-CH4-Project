@@ -9,6 +9,7 @@
 class ADRPlayerController;
 class ADRStorage;
 class UDRInventoryWidget;
+class APlayerState;
 
 enum class EDRInventoryUIState : uint8
 {
@@ -68,6 +69,9 @@ private:
 	UFUNCTION()
 	void HandleCloseRequested();
 	
+	UFUNCTION()
+	void HandleStorageOwnerChanged(APlayerState* PreviousOwner, APlayerState* NewOwner);
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI")
 	TSubclassOf<UDRInventoryWidget> PlayerInventoryWidgetClass;
@@ -91,4 +95,7 @@ private:
 	
 	EDRInventoryUIState UIState = EDRInventoryUIState::Closed;
 	FTimerHandle StorageDistanceTimerHandle;
+	
+	UPROPERTY(Transient)
+	TWeakObjectPtr<ADRStorage> CurrentStorage;
 };
