@@ -3,6 +3,7 @@
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRTeleportSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/teleport/DRTeleportPoint.h"
 #include "Engine/World.h"
@@ -105,6 +106,7 @@ void UDRTeleportComponent::SetCurrentInteractableTeleport(ADRTeleportPoint* Tele
 
 	// Keep the most recent teleport volume as the current interaction target.
 	CurrentInteractableTeleport = TeleportPoint;
+	UpdateOwnerControllerTeleportInteractFlag();
 }
 
 void UDRTeleportComponent::ClearCurrentInteractableTeleport(ADRTeleportPoint* TeleportPoint)
@@ -115,6 +117,7 @@ void UDRTeleportComponent::ClearCurrentInteractableTeleport(ADRTeleportPoint* Te
 	}
 
 	CurrentInteractableTeleport = nullptr;
+	UpdateOwnerControllerTeleportInteractFlag();
 }
 
 int32 UDRTeleportComponent::GetOwnerTeamId() const
@@ -122,6 +125,21 @@ int32 UDRTeleportComponent::GetOwnerTeamId() const
 	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	const ADRPlayerState* DRPlayerState = IsValid(OwnerPawn) ? OwnerPawn->GetPlayerState<ADRPlayerState>() : nullptr;
 	return IsValid(DRPlayerState) ? DRPlayerState->GetTeamId() : INDEX_NONE;
+}
+
+void UDRTeleportComponent::UpdateOwnerControllerTeleportInteractFlag() const
+{
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	ADRPlayerController* PlayerController = IsValid(OwnerPawn) ? Cast<ADRPlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (IsValid(PlayerController))
+	{
+		PlayerController->SetCanTeleportInteract(IsValid(CurrentInteractableTeleport));
+	}
+}
+
+void UDRTeleportComponent::OnRep_CurrentInteractableTeleport()
+{
+	UpdateOwnerControllerTeleportInteractFlag();
 }
 
 void UDRTeleportComponent::ServerRequestRegisterTeleport_Implementation(ADRTeleportPoint* TeleportPoint)

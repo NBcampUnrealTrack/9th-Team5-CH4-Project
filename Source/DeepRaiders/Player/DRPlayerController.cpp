@@ -16,15 +16,16 @@
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Storage/DRStorage.h"
+#include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 
-#include "Debug/DebugDrawService.h"
+#include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
 ADRPlayerController::ADRPlayerController()
+    : bCanTeleportInteract(false)
 {
     // QuickSlot Initialize
     QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
@@ -526,16 +527,20 @@ void ADRPlayerController::HandleInteract(const FInputActionValue&)
     FHitResult Hit;
     
     // 상호작용 가능한 액터 탐색
-    if (!IsLocalController()
-        || !TraceInteractable(Hit))
+    if (!IsLocalController())
     {
+        return;
+    }
+
+    if (!TraceInteractable(Hit))
+    {
+        TryInteractCurrentTeleport();
         return;
     }
     
     // Interface 구현 여부 확인
     AActor* Target = Hit.GetActor();
-    if (!IsValid(Target)
-        || !Target->Implements<UDRInteractableInterface>())
+    if (!IsValid(Target) || !Target->Implements<UDRInteractableInterface>())
     {
         return;
     }
@@ -810,7 +815,6 @@ void ADRPlayerController::NotifyThrownItem(ADRWorldItemActor* ThrownItem, APawn*
     IDRThrowableItemInterface::Execute_NotifyThrown(ThrownItem, Thrower);
 }
 
-
 bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
 {
     if (!HasAuthority() || !CanAccessStorage(Storage))
@@ -998,3 +1002,37 @@ void ADRPlayerController::DRWithDrawFirstItem()
             Entries[0].EntryId);
     }
 }
+
+#pragma region Teleport
+void ADRPlayerController::SetCanTeleportInteract(bool bNewCanTeleportInteract)
+{
+    bCanTeleportInteract = bNewCanTeleportInteract;
+}
+
+void ADRPlayerController::TryInteractCurrentTeleport()
+{
+    if (bCanTeleportInteract)
+    {
+        ServerRequestInteractCurrentTeleport();
+    }
+}
+
+void ADRPlayerController::ServerRequestInteractCurrentTeleport_Implementation()
+{
+    APawn* CachedPawn = GetPawn();
+    const UDRTeleportComponent* TeleportComponent = IsValid(CachedPawn) ? CachedPawn->FindComponentByClass<UDRTeleportComponent>() : nullptr;
+    AActor* Target = IsValid(TeleportComponent) ? TeleportComponent->GetCurrentInteractableTeleport() : nullptr;
+
+    if (!IsValid(CachedPawn) || !IsValid(Target) || !Target->Implements<UDRInteractableInterface>())
+    {
+        return;
+    }
+
+    if (!IDRInteractableInterface::Execute_CanInteract(Target, CachedPawn))
+    {
+        return;
+    }
+
+    IDRInteractableInterface::Execute_Interact(Target, CachedPawn);
+}
+#pragma endregion

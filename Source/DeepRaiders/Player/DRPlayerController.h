@@ -291,4 +291,18 @@ protected:
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
 #pragma endregion 
+	
+#pragma region Teleport
+public:
+	void SetCanTeleportInteract(bool bNewCanTeleportInteract);
+	bool CanTeleportInteract() const { return bCanTeleportInteract; }
+
+private:
+	void TryInteractCurrentTeleport();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestInteractCurrentTeleport();
+
+	uint8 bCanTeleportInteract : 1;
+#pragma endregion 
 };

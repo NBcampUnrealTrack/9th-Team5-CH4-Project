@@ -53,6 +53,10 @@ public:
 
 private:
 	int32 GetOwnerTeamId() const;
+	void UpdateOwnerControllerTeleportInteractFlag() const;
+
+	UFUNCTION()
+	void OnRep_CurrentInteractableTeleport();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestRegisterTeleport(ADRTeleportPoint* TeleportPoint);
@@ -66,6 +70,6 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientNotifyTeleportRegistered(ADRTeleportPoint* TeleportPoint);
 
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentInteractableTeleport)
 	TObjectPtr<ADRTeleportPoint> CurrentInteractableTeleport;
 };

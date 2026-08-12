@@ -7,12 +7,16 @@
 #include "GameFramework/GameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
+#include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "DeepRaiders/Teleport/DRTeleportPoint.h"
+#include "DeepRaiders/UI/Teleport/DRTeleportSelectWidget.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -38,6 +42,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MiningComponent =
 		CreateDefaultSubobject<UDRMiningComponent>(
 			TEXT("MiningComponent"));
+
+	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -461,6 +467,7 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
+	BindTeleportEvents();
 
 	// 장비 Root의 기본 위치 기억
 	if (IsValid(FirstPersonEquipmentRoot))
@@ -1967,3 +1974,47 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	RefreshJetpackActivePresentation();
 	ServerStopJetpack();
 }
+
+#pragma region Teleport
+void ADRPlayerCharacter::BindTeleportEvents()
+{
+	if (IsValid(TeleportComponent))
+	{
+		TeleportComponent->OnTeleportUseRequested.AddUniqueDynamic(this, &ThisClass::HandleTeleportUseRequested);
+	}
+}
+
+void ADRPlayerCharacter::OpenTeleportSelectWidget(ADRTeleportPoint* CurrentTeleportPoint)
+{
+	if (!IsLocallyControlled() || !IsValid(CurrentTeleportPoint) || !TeleportSelectWidgetClass)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	if (IsValid(ActiveTeleportSelectWidget))
+	{
+		ActiveTeleportSelectWidget->RemoveFromParent();
+		ActiveTeleportSelectWidget = nullptr;
+	}
+
+	ActiveTeleportSelectWidget = CreateWidget<UDRTeleportSelectWidget>(PlayerController, TeleportSelectWidgetClass);
+	if (!IsValid(ActiveTeleportSelectWidget))
+	{
+		return;
+	}
+
+	ActiveTeleportSelectWidget->InitializeRegisteredTeleportList(INDEX_NONE, CurrentTeleportPoint);
+	ActiveTeleportSelectWidget->AddToViewport();
+}
+
+void ADRPlayerCharacter::HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint)
+{
+	OpenTeleportSelectWidget(CurrentTeleportPoint);
+}
+#pragma endregion

@@ -11,11 +11,14 @@ class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
+class UDRTeleportComponent;
+class UDRTeleportSelectWidget;
 class UAnimMontage;
 class UDRCharacterMovementComponent;
 class UDRItemDefinition;
 class UTimelineComponent;
 class UCurveFloat;
+class ADRTeleportPoint;
 
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
@@ -592,6 +595,25 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Item Action|Presentation")
     TObjectPtr<UAnimMontage> WorldMeleeAttackMontage;
+
+#pragma region Teleport
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRTeleportComponent> TeleportComponent;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Teleport|UI", meta = (AllowPrivateAccess = "true"))
+    TSubclassOf<UDRTeleportSelectWidget> TeleportSelectWidgetClass;
+
+private:
+    void BindTeleportEvents();
+    void OpenTeleportSelectWidget(ADRTeleportPoint* CurrentTeleportPoint);
+
+    UFUNCTION()
+    void HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint);
+
+    UPROPERTY(Transient)
+    TObjectPtr<UDRTeleportSelectWidget> ActiveTeleportSelectWidget;
+#pragma endregion
     
 #pragma region QuickSlot
 public:
