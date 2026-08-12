@@ -9,6 +9,7 @@ class ADRPlayerState;
 class UDRInventoryComponent;
 class UDRShopComponent;
 class UDRUpgradeComponent;
+class USoundBase;
 
 UCLASS(ClassGroup = (DeepRaiders))
 class DEEPRAIDERS_API UDRShopTransactionComponent : public UActorComponent
@@ -37,12 +38,20 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSellAllOres(AActor* ShopActor);
 
+	UFUNCTION(Client, Reliable)
+	void ClientPlayTransactionSound(
+		USoundBase* Sound,
+		float VolumeMultiplier);
+
 private:
 	/** 이 컴포넌트를 소유한 Controller의 PlayerState를 반환한다. */
 	ADRPlayerState* GetPlayerState() const;
 
 	/** 이 컴포넌트를 소유한 Controller의 인벤토리를 반환한다. */
 	UDRInventoryComponent* GetInventoryComponent() const;
+
+	void PlayPurchaseSound(const AActor* ShopActor);
+	void PlaySellSound(const AActor* ShopActor);
 
 	/** 일반 상품의 가격과 인벤토리 공간을 검증하고 구매를 확정한다. */
 	bool TryPurchase(
