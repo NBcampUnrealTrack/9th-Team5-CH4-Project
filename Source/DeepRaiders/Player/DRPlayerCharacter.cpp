@@ -1180,12 +1180,73 @@ void ADRPlayerCharacter::PerformMeleeLineTrace()
 
 void ADRPlayerCharacter::PerformMeleeWeaponSweep()
 {
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Melee][Sweep] "
-			"Weapon Sweep is not implemented yet."));
+	if (!HasAuthority() ||
+		!bIsMeleeAttacking ||
+		!IsValid(WorldHandEquipmentMesh) ||
+		!IsValid(WorldHandEquipmentMesh->GetStaticMesh()))
+	{
+		return;
+	}
+
+	if (!WorldHandEquipmentMesh->DoesSocketExist(
+			MeleeSweepBaseSocketName) ||
+		!WorldHandEquipmentMesh->DoesSocketExist(
+			MeleeSweepTipSocketName))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[Melee][Sweep] Missing Socket. "
+				"Mesh=%s Base=%s Tip=%s"),
+			*GetNameSafe(
+				WorldHandEquipmentMesh->GetStaticMesh()),
+			*MeleeSweepBaseSocketName.ToString(),
+			*MeleeSweepTipSocketName.ToString());
+
+		return;
+	}
+
+	const FVector BaseLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepBaseSocketName);
+
+	const FVector TipLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepTipSocketName);
+
+#if ENABLE_DRAW_DEBUG
+	if (bIsMeleeAttackDrawDebug)
+	{
+		DrawDebugSphere(
+			GetWorld(),
+			BaseLocation,
+			MeleeSweepRadius,
+			16,
+			FColor::Blue,
+			false,
+			1.f);
+
+		DrawDebugSphere(
+			GetWorld(),
+			TipLocation,
+			MeleeSweepRadius,
+			16,
+			FColor::Yellow,
+			false,
+			1.f);
+
+		DrawDebugLine(
+			GetWorld(),
+			BaseLocation,
+			TipLocation,
+			FColor::Cyan,
+			false,
+			1.f,
+			0,
+			2.f);
+	}
+#endif
 }
 
 void ADRPlayerCharacter::ProcessMeleeHit(
@@ -2017,12 +2078,24 @@ void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
 void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
 	EDRItemActionType ActionType)
 {
+	/*
+	 * 서버는 Socket 기반 판정을 위해
+	 * 로컬 호스트 캐릭터라도 World Montage를 재생해야 한다.
+	 */
+	if (HasAuthority() ||
+		!IsLocallyControlled())
+	{
+		PlayWorldItemActionPresentation(ActionType);
+	}
+
+	/*
+	 * 로컬 플레이어는 기존 1P 사운드/표현이 있으므로
+	 * 아래 World Sound는 재생하지 않는다.
+	 */
 	if (IsLocallyControlled())
 	{
 		return;
 	}
-
-	PlayWorldItemActionPresentation(ActionType);
 
 	USoundBase* ActionSound = nullptr;
 

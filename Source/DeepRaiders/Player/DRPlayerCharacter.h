@@ -430,6 +430,30 @@ protected:
         meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeAttackRange = 200.f;
     
+    /** Sweep 판정의 손잡이 쪽 Socket */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat|Sweep")
+    FName MeleeSweepBaseSocketName =
+        TEXT("S_MeleeBase");
+
+    /** Sweep 판정의 무기 끝 쪽 Socket */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat|Sweep")
+    FName MeleeSweepTipSocketName =
+        TEXT("S_MeleeTip");
+
+    /** Sweep 판정 두께 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat|Sweep",
+        meta = (ClampMin = "0.0", Units = "cm"))
+    float MeleeSweepRadius = 35.f;
+    
     // ===== Death / Respawn =====
 
     /** 사망 후 같은 위치에 다시 생성되기까지의 시간 */
