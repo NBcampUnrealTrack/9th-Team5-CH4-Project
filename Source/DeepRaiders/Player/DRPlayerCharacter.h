@@ -18,6 +18,7 @@ class UTimelineComponent;
 class UCurveFloat;
 class USoundBase;
 class UAudioComponent;
+class UCameraShakeBase;
 
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
@@ -628,6 +629,33 @@ protected:
     void MulticastPlayMeleeImpactSound(
         bool bKilled,
         FVector_NetQuantize ImpactLocation);
+    
+    // ===== Camera Shake =====
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> HitCameraShakeClass;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> JetpackCameraShakeClass;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UCameraShakeBase> JetpackCameraShakeInstance;
+    
+    void PlayLocalCameraShake(
+        TSubclassOf<UCameraShakeBase> ShakeClass,
+        float Scale = 1.f);
+    
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayMeleeHitFeedback(bool bKilled);
+    
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayDamagedCameraShake();
     
 #pragma region QuickSlot
 public:
