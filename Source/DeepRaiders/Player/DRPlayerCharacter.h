@@ -68,7 +68,6 @@ class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter
 public:
     ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
-    virtual void Tick(float DeltaSeconds) override;
     virtual void Landed(const FHitResult& Hit) override;
 
     /** 지상에서는 점프, 공중에서는 제트팩 사용을 요청한다. */
@@ -206,12 +205,6 @@ public:
     {
         return JetpackComponent;
     }
-
-    /** JetpackComponent의 서버 Active 상태가 변경됨. */
-    void HandleJetpackActiveStateChangedFromComponent();
-
-    /** 서버가 로컬 제트팩 예측을 거절함. */
-    void HandleJetpackRejectedByServer();
     
     /** HUD에서 사용할 제트팩 연료 비율. 소유 클라이언트는 예측값을 사용한다. */
     UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
@@ -267,17 +260,6 @@ protected:
     
 private:
     void PrintNetworkState(const TCHAR* Context) const;
-
-    UDRCharacterMovementComponent* GetDRCharacterMovementComponent() const;
-
-    void RefreshJetpackActivePresentation();
-    
-    /** 소유 클라이언트 HUD 전용 예측 연료. 서버 권위값과 별개다. */
-    float LocalPredictedJetpackFuel = 0.f;
-
-    bool bLocalJetpackFuelPredictionInitialized = false;
-
-    void InitializeLocalJetpackFuelPrediction();
 
     // ===== Fall Damage =====
 
@@ -347,18 +329,6 @@ protected:
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
-    // ===== Jetpack =====
-    
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Jetpack")
-        TObjectPtr<UStaticMesh> JetpackMesh;
-    
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Jetpack")
-    FTransform JetpackRelativeTransform;
-    
     // ===== Death / Respawn =====
 
     /** 사망 후 같은 위치에 다시 생성되기까지의 시간 */
@@ -566,14 +536,6 @@ protected:
         Category = "Player|Item Action|Sound")
     TObjectPtr<USoundBase> MeleeSwingSound;
     
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Sound")
-    TObjectPtr<USoundBase> JetpackSound;
-
-    UPROPERTY(Transient)
-    TObjectPtr<UAudioComponent> JetpackAudioComponent;
     
     UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
     TObjectPtr<USoundBase> FallSound;
@@ -633,16 +595,7 @@ protected:
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Camera|Shake")
-    TSubclassOf<UCameraShakeBase> JetpackCameraShakeClass;
-    
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Camera|Shake")
     TSubclassOf<UCameraShakeBase> FallDamageCameraShakeClass;
-    
-    UPROPERTY(Transient)
-    TObjectPtr<UCameraShakeBase> JetpackCameraShakeInstance;
     
     void PlayLocalCameraShake(
         TSubclassOf<UCameraShakeBase> ShakeClass,

@@ -6,6 +6,10 @@
 
 class ADRPlayerCharacter;
 class UDRCharacterMovementComponent;
+class UStaticMesh;
+class USoundBase;
+class UAudioComponent;
+class UCameraShakeBase;
 
 UCLASS(
 	ClassGroup = (Player),
@@ -50,6 +54,21 @@ public:
 		return FuelConsumptionPerSecond;
 	}
 
+	/** 착지 시 로컬 Prediction과 서버 상태를 정리한다. */
+	void HandleLanded();
+
+	/** PlayerState가 준비/복제된 시점에 초기 상태를 갱신한다. */
+	void HandlePlayerStateReady();
+
+	/** 현재 PlayerState의 제트팩 소유 여부를 외형에 반영한다. */
+	void RefreshVisual();
+
+	/** HUD가 사용할 제트팩 연료 비율 */
+	float GetDisplayedFuelRatio() const;
+
+	/** PlayerState에서 복제된 서버 연료값과 로컬 표시값을 보정한다. */
+	void ReconcileFuelFromServer(float ServerFuel);
+	
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
@@ -75,6 +94,12 @@ private:
 	UFUNCTION()
 	void OnRep_JetpackActive();
 
+	void InitializeLocalFuelPrediction();
+
+	void RefreshActivePresentation();
+
+	void StopLocalPrediction();
+	
 private:
 	UPROPERTY(
 		ReplicatedUsing = OnRep_JetpackActive,
@@ -82,6 +107,11 @@ private:
 		Category = "Jetpack")
 	bool bIsJetpackActive = false;
 
+	/** 소유 게스트의 HUD 표시용 예측 연료 */
+	float LocalPredictedFuel = 0.f;
+
+	bool bLocalFuelPredictionInitialized = false;
+	
 protected:
 	UPROPERTY(
 		EditDefaultsOnly,
@@ -89,4 +119,40 @@ protected:
 		Category = "Jetpack",
 		meta = (ClampMin = "0.0"))
 	float FuelConsumptionPerSecond = 20.f;
+	
+	/** 등에 표시할 제트팩 Mesh */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Jetpack|Visual")
+	TObjectPtr<UStaticMesh> JetpackMesh;
+
+	/** 등 Socket 기준 제트팩 Transform */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Jetpack|Visual")
+	FTransform JetpackRelativeTransform;
+
+	/** 제트팩 사용 중 Loop Sound */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Jetpack|Presentation")
+	TObjectPtr<USoundBase> JetpackSound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> JetpackAudioComponent;
+
+	/** 로컬 사용 중 Camera Shake */
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Jetpack|Presentation")
+	TSubclassOf<UCameraShakeBase>
+		JetpackCameraShakeClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UCameraShakeBase>
+		JetpackCameraShakeInstance;
 };
