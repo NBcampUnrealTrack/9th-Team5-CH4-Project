@@ -171,6 +171,19 @@ public:
     /** 서버에서의 땅파기 성공 여부 알려줌 */
     void NotifyMineConfirmedFromServer();
     
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Melee|Debug")
+    bool bIsMeleeAttackDrawDebug = true;
+    
+    /** HUD에서 사용할 제트팩 연료 비율. 소유 클라이언트는 예측값을 사용한다. */
+    UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
+    float GetDisplayedJetpackFuelRatio() const;
+
+    /** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
+    void ReconcileJetpackFuelFromServer(float ServerFuel);
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -224,6 +237,13 @@ private:
     void UpdateJetpackFuel(float DeltaSeconds);
 
     void RefreshJetpackActivePresentation();
+    
+    /** 소유 클라이언트 HUD 전용 예측 연료. 서버 권위값과 별개다. */
+    float LocalPredictedJetpackFuel = 0.f;
+
+    bool bLocalJetpackFuelPredictionInitialized = false;
+
+    void InitializeLocalJetpackFuelPrediction();
     
     // ===== Melee Attack =====
 
@@ -357,7 +377,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Combat",
         meta = (ClampMin = "0.01"))
-    float MeleeAttackDuration = 0.7f;
+    float MeleeAttackDuration = 0.8f;
 
     /** 공격 피해량 */
     UPROPERTY(
@@ -365,7 +385,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Combat",
         meta = (ClampMin = "0.0"))
-    float MeleeAttackDamage = 20.f;
+    float MeleeAttackDamage = 10.f;
 
     /** 시선 정면으로 검사할 거리 */
     UPROPERTY(
