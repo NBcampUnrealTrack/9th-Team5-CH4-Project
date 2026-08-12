@@ -553,16 +553,6 @@ void ADRPlayerCharacter::LookInput(
 	AddControllerPitchInput(LookInput.Y);
 }
 
-void ADRPlayerCharacter::RequestNetworkTest()
-{
-	if (!IsLocallyControlled())
-	{
-		return;
-	}
-
-	ServerToggleNetworkTest();
-}
-
 void ADRPlayerCharacter::PossessedBy(
 	AController* NewController)
 {
@@ -646,10 +636,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
-		bNetworkTestActive);
-
-	DOREPLIFETIME(
-		ADRPlayerCharacter,
 		bIsJetpackActive);
 	
 	DOREPLIFETIME(
@@ -659,22 +645,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		HeldItemDefinition);
-}
-
-void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
-{
-	bNetworkTestActive = !bNetworkTestActive;
-
-	// 리슨 서버 월드의 외형 갱신
-	ApplyNetworkTestState();
-
-	ForceNetUpdate();
-}
-
-void ADRPlayerCharacter::OnRep_NetworkTestActive()
-{
-	// 복제 값을 받은 클라이언트의 외형 갱신
-	ApplyNetworkTestState();
 }
 
 void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
@@ -1519,6 +1489,17 @@ void ADRPlayerCharacter::RestoreControllerInput()
 void ADRPlayerCharacter::ExecuteHeldItemAction(
 	EDRItemActionType ActionType)
 {
+	if (!CanStartLocalItemAction())
+	{
+		return;
+	}
+
+	const float Cooldown =
+		GetItemActionCooldown(ActionType);
+
+	NextLocalItemActionTime =
+		GetWorld()->GetTimeSeconds() + Cooldown;
+	
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
@@ -1573,6 +1554,30 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		&ThisClass::FinishMeleeAttack,
 		MeleeAttackDuration,
 		false);
+}
+
+bool ADRPlayerCharacter::CanStartLocalItemAction() const
+{
+	const UWorld* World = GetWorld();
+
+	return IsValid(World) &&
+		World->GetTimeSeconds() >= NextLocalItemActionTime;
+}
+
+float ADRPlayerCharacter::GetItemActionCooldown(
+	EDRItemActionType ActionType) const
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		return DigActionCooldown;
+
+	case EDRItemActionType::MeleeAttack:
+		return MeleeAttackDuration;
+
+	default:
+		return 0.f;
+	}
 }
 
 void ADRPlayerCharacter::PlayFirstPersonItemSwing(
@@ -1798,38 +1803,6 @@ void ADRPlayerCharacter::OnRep_CurrentHealth()
 	}
 }
 
-void ADRPlayerCharacter::ApplyNetworkTestState()
-{
-	if (bNetworkTestActive)
-	{
-		ApplyHandEquipmentVisual(
-			EquipmentTestMesh,
-			EquipmentTestMesh,
-			TestFirstPersonTransform,
-			TestWorldHandTransform);
-
-		ApplyBackEquipmentVisual(
-			EquipmentTestMesh,
-			TestWorldBackTransform);
-	}
-	else
-	{
-		ClearHandEquipmentVisual();
-		ClearBackEquipmentVisual();
-	}
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[EquipmentVisualTest] "
-			"Name=%s Active=%d Authority=%d Local=%d"),
-		*GetName(),
-		bNetworkTestActive,
-		HasAuthority(),
-		IsLocallyControlled());
-}
-
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(
 	UStaticMesh* FirstPersonMesh,
 	UStaticMesh* WorldMesh,
@@ -1977,3 +1950,4 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	RefreshJetpackActivePresentation();
 	ServerStopJetpack();
 }
+

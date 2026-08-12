@@ -156,15 +156,6 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleSelectQuickSlot);
     }
-
-    if (IsValid(NetworkTestAction.Get()))
-    {
-        EnhancedInput->BindAction(
-            NetworkTestAction.Get(),
-            ETriggerEvent::Started,
-            this,
-            &ThisClass::HandleNetworkTest);
-    }
     
     if (IsValid(PrimaryAction.Get()))
     {
@@ -303,18 +294,6 @@ void ADRPlayerController::HandleJumpCompleted(
     if (IsValid(PlayerCharacter))
     {
         PlayerCharacter->HandleJumpReleased();
-    }
-}
-
-void ADRPlayerController::HandleNetworkTest(
-    const FInputActionValue& Value)
-{
-    ADRPlayerCharacter* PlayerCharacter =
-        GetDRPlayerCharacter();
-
-    if (IsValid(PlayerCharacter))
-    {
-        PlayerCharacter->RequestNetworkTest();
     }
 }
 
