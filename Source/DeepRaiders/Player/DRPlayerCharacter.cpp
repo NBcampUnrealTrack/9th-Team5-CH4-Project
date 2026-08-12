@@ -1110,7 +1110,9 @@ void ADRPlayerCharacter::HandleDeath()
 		&ThisClass::RespawnAtRagdollLocation,
 		RespawnDelay,
 		false);
-
+	
+	OnPlayerCharacterDeathDelegate.Broadcast();
+	
 	ForceNetUpdate();
 
 	UE_LOG(

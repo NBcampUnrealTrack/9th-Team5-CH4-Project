@@ -70,7 +70,7 @@ private:
 	void HandleCloseRequested();
 	
 	UFUNCTION()
-	void HandleStorageOwnerChanged(APlayerState* PreviousOwner, APlayerState* NewOwner);
+	void HandleStorageOwnerChanged(AActor* PreviousOwner, AActor* NewOwner);
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI")

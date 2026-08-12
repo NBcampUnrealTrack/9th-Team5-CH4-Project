@@ -4,6 +4,7 @@
 #include "DRStorage.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "GameFramework/Pawn.h"
@@ -24,22 +25,28 @@ void ADRStorage::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& Out
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(ThisClass, StorageOwnerPlayerState);
+	DOREPLIFETIME(ThisClass, StorageOwner);
 }
 
-bool ADRStorage::TrySetStorageOwner(APlayerState* NewOwner)
+bool ADRStorage::TrySetStorageOwner(AActor* NewOwner)
 {
 	if (!HasAuthority()
 		|| !IsValid(NewOwner) || NewOwner->GetWorld() != GetWorld()
-		|| StorageOwnerPlayerState == NewOwner)
+		|| StorageOwner == NewOwner)
 	{
 		return false;
 	}
 	
-	APlayerState* PreviousOwner = StorageOwnerPlayerState.Get();
+	AActor* PreviousOwner = StorageOwner.Get();
 	
-	StorageOwnerPlayerState = NewOwner;
+	StorageOwner = NewOwner;
 	OnStorageOwnerChangedDelegate.Broadcast(PreviousOwner, NewOwner);
+	
+	ADRPlayerCharacter* DRPlayerCharacter = Cast<ADRPlayerCharacter>(NewOwner);
+	if (DRPlayerCharacter)
+	{
+		DRPlayerCharacter->OnPlayerCharacterDeathDelegate.AddDynamic(this, &ThisClass::HandleOwnerActorDeath);
+	}
 	
 	FlushNetDormancy();
 	ForceNetUpdate();
@@ -47,36 +54,46 @@ bool ADRStorage::TrySetStorageOwner(APlayerState* NewOwner)
 	return true;	
 }
 
-bool ADRStorage::TryClaimOwnership(APlayerState* InPlayerState)
+bool ADRStorage::TryClaimOwnership(AActor* NewOwner)
 {
 	if (!HasAuthority()
-		|| !IsValid(InPlayerState))
+		|| !IsValid(NewOwner))
 	{
 		return false;
 	}
 	
-	APlayerState* CurrentOwner = StorageOwnerPlayerState.Get();
+	if (Authority == EDRStorageAuthority::Common)
+	{
+		return true;
+	}
+	
+	AActor* CurrentOwner = StorageOwner.Get();
 	
 	if (IsValid(CurrentOwner))
 	{
-		return CurrentOwner == InPlayerState;
+		return CurrentOwner == NewOwner;
 	}
 	
-	return TrySetStorageOwner(InPlayerState);
+	return TrySetStorageOwner(NewOwner);
 }
 
 bool ADRStorage::TryReleaseStorageOwner()
 {
 	if (!HasAuthority()
-		|| !IsValid(StorageOwnerPlayerState))
+		|| !IsValid(StorageOwner.Get()))
 	{
 		return false;
 	}
 	
-	APlayerState* PreviousOwner = StorageOwnerPlayerState.Get();
+	ADRPlayerCharacter* DRPlayerCharacter = Cast<ADRPlayerCharacter>(StorageOwner);
+	if (DRPlayerCharacter)
+	{
+		DRPlayerCharacter->OnPlayerCharacterDeathDelegate.RemoveDynamic(this, &ThisClass::HandleOwnerActorDeath);
+	}
 	
-	StorageOwnerPlayerState = nullptr;
+	AActor* PreviousOwner = StorageOwner.Get();
 	
+	StorageOwner = nullptr;
 	OnStorageOwnerChangedDelegate.Broadcast(PreviousOwner, nullptr);
 	
 	FlushNetDormancy();
@@ -85,14 +102,23 @@ bool ADRStorage::TryReleaseStorageOwner()
 	return true;
 }
 
-bool ADRStorage::IsOwnerBy(APlayerState* InPlayerState) const
+bool ADRStorage::IsOwnerBy(AActor* InActor) const
 {
-	return IsValid(InPlayerState) && StorageOwnerPlayerState == InPlayerState;
+	if (Authority == EDRStorageAuthority::Common)
+		return true;
+	
+	return IsValid(InActor) && StorageOwner == InActor;
 }
 
-void ADRStorage::OnRep_StorageOwner(APlayerState* PreviousOwner)
+void ADRStorage::OnRep_StorageOwner(TWeakObjectPtr<AActor> PreviousOwner)
 {
-	OnStorageOwnerChangedDelegate.Broadcast(PreviousOwner, StorageOwnerPlayerState.Get());
+	OnStorageOwnerChangedDelegate.Broadcast(PreviousOwner.Get(), StorageOwner.Get());
+}
+
+void ADRStorage::HandleOwnerActorDeath()
+{
+	// 함수 내부에서 OnStorageOwnerChangedDelegate 전파
+	TryReleaseStorageOwner();
 }
 
 bool ADRStorage::CanInteract_Implementation(APawn* Interactor) const
@@ -102,8 +128,11 @@ bool ADRStorage::CanInteract_Implementation(APawn* Interactor) const
 		return false;
 	}
 	
-	APlayerState* InteractorState = Interactor->GetPlayerState();
-	APlayerState* CurrentOwner = StorageOwnerPlayerState.Get();
+	if (Authority == EDRStorageAuthority::Common)
+		return true;
+	
+	AActor* InteractorState = Cast<AActor>(Interactor);
+	AActor* CurrentOwner = StorageOwner.Get();
 	
 	// 소유권이 아무도 없거나, 주인인 경우 성공
 	return IsValid(InteractorState) 

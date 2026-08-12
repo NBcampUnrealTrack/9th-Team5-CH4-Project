@@ -814,9 +814,7 @@ bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
         return false;
     }
     
-    APlayerState* ControlledPlayerState = ControlledPawn->GetPlayerState();
-    
-    if (!Storage->TryClaimOwnership(ControlledPlayerState))
+    if (!Storage->TryClaimOwnership(ControlledPawn))
     {
         return false;
     }

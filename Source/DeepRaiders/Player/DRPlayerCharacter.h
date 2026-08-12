@@ -21,6 +21,8 @@ class USoundBase;
 class UAudioComponent;
 class UCameraShakeBase;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
+
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
 {
@@ -277,6 +279,9 @@ private:
     FTimerHandle RespawnTimerHandle;
     
     void ExecuteHeldItemAction(EDRItemActionType ActionType);
+    
+public:
+    FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
     
 protected:
     UPROPERTY(
