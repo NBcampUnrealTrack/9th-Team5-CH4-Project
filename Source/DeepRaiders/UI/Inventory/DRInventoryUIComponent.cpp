@@ -241,7 +241,7 @@ void UDRInventoryUIComponent::HandleCloseRequested()
 void UDRInventoryUIComponent::HandleStorageOwnerChanged(AActor* PreviousOwner, AActor* NewOwner)
 {
 	if (!IsValid(PlayerController)
-		|| PlayerController->GetPlayerState<APlayerState>() == NewOwner)
+		|| PlayerController->GetPawn() == NewOwner)
 	{
 		return ;
 	}
