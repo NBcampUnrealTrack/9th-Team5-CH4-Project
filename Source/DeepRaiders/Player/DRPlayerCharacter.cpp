@@ -14,6 +14,7 @@
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
+#include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -28,12 +29,6 @@
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
-
-namespace
-{
-	const FName FirstPersonSwingTrackName(
-		TEXT("FirstPersonSwing"));
-}
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -62,6 +57,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
 	
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
+	
+	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
 	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -141,10 +138,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
-	
-	FirstPersonItemSwingTimeline =
-		CreateDefaultSubobject<UTimelineComponent>(
-			TEXT("FirstPersonItemSwingTimeline"));
 }
 
 void ADRPlayerCharacter::Landed(
@@ -448,24 +441,26 @@ bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
 
 void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
 {
-	if (!HasAuthority())
+	if (!HasAuthority() ||
+		!IsValid(
+			ItemActionPresentationComponent))
 	{
 		return;
 	}
 
-	MulticastPlayWorldItemActionPresentation(
-		EDRItemActionType::Dig);
+	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
 }
 
 void ADRPlayerCharacter::PlayMeleeWorldPresentationFromServer()
 {
-	if (!HasAuthority())
+	if (!HasAuthority() ||
+		!IsValid(
+			ItemActionPresentationComponent))
 	{
 		return;
 	}
 
-	MulticastPlayWorldItemActionPresentation(
-		EDRItemActionType::MeleeAttack);
+	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::MeleeAttack);
 }
 
 void ADRPlayerCharacter::PlayMeleeHitPresentationFromServer(
@@ -474,23 +469,18 @@ void ADRPlayerCharacter::PlayMeleeHitPresentationFromServer(
 	const FVector& ImpactLocation)
 {
 	if (!HasAuthority() ||
-		!IsValid(HitPlayer))
+		!IsValid(HitPlayer) ||
+		!IsValid(
+			ItemActionPresentationComponent))
 	{
 		return;
 	}
 
-	// 공격자
-	ClientPlayMeleeHitFeedback(
-		bKilled);
-
-	// 피격자
-	HitPlayer->ClientPlayMeleeDamagedFeedback(
-		bKilled);
-
-	// 월드 Impact Sound
-	MulticastPlayMeleeImpactSound(
-		bKilled,
-		ImpactLocation);
+	ItemActionPresentationComponent->
+		PlayMeleeHitFeedbackFromServer(
+			HitPlayer,
+			bKilled,
+			ImpactLocation);
 }
 
 float ADRPlayerCharacter::GetDisplayedJetpackFuelRatio() const
@@ -517,56 +507,6 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PrintNetworkState(TEXT("BeginPlay"));
-
-	// 장비 Root의 기본 위치 기억
-	if (IsValid(FirstPersonEquipmentRoot))
-	{
-		FirstPersonEquipmentRootBaseTransform =
-			FirstPersonEquipmentRoot->GetRelativeTransform();
-	}
-
-	UCurveFloat* InitialSwingCurve = nullptr;
-
-	if (IsValid(FirstPersonDigPresentation.Curve))
-	{
-		InitialSwingCurve =
-			FirstPersonDigPresentation.Curve;
-	}
-	else if (IsValid(FirstPersonMeleePresentation.Curve))
-	{
-		InitialSwingCurve =
-			FirstPersonMeleePresentation.Curve;
-	}
-
-	if (IsValid(FirstPersonItemSwingTimeline) &&
-		IsValid(InitialSwingCurve))
-	{
-		FOnTimelineFloat UpdateDelegate;
-
-		UpdateDelegate.BindUFunction(
-			this,
-			FName("UpdateFirstPersonItemSwing"));
-
-		FirstPersonItemSwingTimeline->AddInterpFloat(
-			InitialSwingCurve,
-			UpdateDelegate,
-			NAME_None,
-			FirstPersonSwingTrackName);
-
-		FOnTimelineEvent FinishedDelegate;
-
-		FinishedDelegate.BindUFunction(
-			this,
-			FName("FinishFirstPersonItemSwing"));
-
-		FirstPersonItemSwingTimeline->SetTimelineFinishedFunc(
-			FinishedDelegate);
-
-		FirstPersonItemSwingTimeline->SetLooping(false);
-
-		FirstPersonItemSwingTimeline->SetTimelineLengthMode(
-			TL_LastKeyFrame);
-	}
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -1267,214 +1207,30 @@ float ADRPlayerCharacter::GetItemActionCooldown(
 	}
 }
 
-void ADRPlayerCharacter::PlayFirstPersonItemSwing(
-	const FDRFirstPersonSwingPresentation& Presentation)
-{
-	if (!IsLocallyControlled() ||
-		!IsValid(FirstPersonItemSwingTimeline) ||
-		!IsValid(FirstPersonEquipmentRoot) ||
-		!IsValid(Presentation.Curve))
-	{
-		return;
-	}
-
-	// 혹시 기존 스윙이 재생 중이었다면 정리
-	FirstPersonItemSwingTimeline->Stop();
-
-	// 항상 기본 위치에서 새 Action 시작
-	FirstPersonEquipmentRoot->SetRelativeTransform(
-		FirstPersonEquipmentRootBaseTransform);
-
-	// 이번 Action에서 사용할 Transform 데이터 저장
-	ActiveFirstPersonSwingRotation =
-		Presentation.RotationOffset;
-
-	ActiveFirstPersonSwingLocation =
-		Presentation.LocationOffset;
-
-	// 이번 Action에 맞는 Curve로 교체
-	FirstPersonItemSwingTimeline->SetFloatCurve(
-		Presentation.Curve,
-		FirstPersonSwingTrackName);
-
-	FirstPersonItemSwingTimeline->PlayFromStart();
-}
-
-void ADRPlayerCharacter::UpdateFirstPersonItemSwing(
-	float CurveValue)
-{
-	if (!IsLocallyControlled() ||
-		!IsValid(FirstPersonEquipmentRoot))
-	{
-		return;
-	}
-
-	const FVector BaseLocation =
-		FirstPersonEquipmentRootBaseTransform.GetLocation();
-
-	const FRotator BaseRotation =
-		FirstPersonEquipmentRootBaseTransform.Rotator();
-
-	const FVector NewLocation =
-		BaseLocation +
-		ActiveFirstPersonSwingLocation * CurveValue;
-
-	const FRotator RotationOffset =
-		ActiveFirstPersonSwingRotation * CurveValue;
-
-	const FRotator NewRotation =
-		BaseRotation + RotationOffset;
-
-	FirstPersonEquipmentRoot->SetRelativeLocationAndRotation(
-		NewLocation,
-		NewRotation);
-}
-
-void ADRPlayerCharacter::FinishFirstPersonItemSwing()
-{
-	if (!IsValid(FirstPersonEquipmentRoot))
-	{
-		return;
-	}
-
-	FirstPersonEquipmentRoot->SetRelativeTransform(
-		FirstPersonEquipmentRootBaseTransform);
-}
-
 void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
 	EDRItemActionType ActionType)
 {
-	switch (ActionType)
+	if (IsValid(
+			ItemActionPresentationComponent))
 	{
-	case EDRItemActionType::Dig:
-		PlayFirstPersonItemSwing(
-			FirstPersonDigPresentation);
-		if (IsValid(DigSound))
-		{
-			UGameplayStatics::PlaySound2D(
-				this,
-				DigSound);
-		}
-		break;
-
-	case EDRItemActionType::MeleeAttack:
-		PlayFirstPersonItemSwing(
-			FirstPersonMeleePresentation);
-
-		if (IsValid(MeleeAirSound))
-		{
-			UGameplayStatics::PlaySound2D(
-				this,
-				MeleeAirSound);
-		}
-		
-		break;
-
-	case EDRItemActionType::Throw:
-	case EDRItemActionType::None:
-	default:
-		break;
-	}
-}
-
-void ADRPlayerCharacter::PlayWorldItemActionPresentation(
-	EDRItemActionType ActionType)
-{
-	UAnimMontage* Montage =
-		ResolveWorldItemActionMontage(ActionType);
-
-	if (!IsValid(Montage))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[ItemAction] World montage is invalid. "
-				"Character=%s Action=%s"),
-			*GetName(),
-			*UEnum::GetValueAsString(ActionType));
-
-		return;
-	}
-
-	PlayAnimMontage(Montage);
-}
-
-UAnimMontage* ADRPlayerCharacter::ResolveWorldItemActionMontage(
-	EDRItemActionType ActionType) const
-{
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		return WorldDigMontage;
-
-	case EDRItemActionType::MeleeAttack:
-		return WorldMeleeAttackMontage;
-
-	case EDRItemActionType::Throw:
-	case EDRItemActionType::None:
-	default:
-		return nullptr;
+		ItemActionPresentationComponent->
+			PlayFirstPersonAction(
+				ActionType);
 	}
 }
 
 void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
 {
 	if (IsDead() ||
-		!HasHeldItemAction(EDRItemActionType::Dig))
+		!HasHeldItemAction(
+			EDRItemActionType::Dig) ||
+		!IsValid(
+			ItemActionPresentationComponent))
 	{
 		return;
 	}
 
-	MulticastPlayWorldItemActionPresentation(
-		EDRItemActionType::Dig);
-}
-
-void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
-	EDRItemActionType ActionType)
-{
-	/*
-	 * 서버는 Socket 기반 판정을 위해
-	 * 로컬 호스트 캐릭터라도 World Montage를 재생해야 한다.
-	 */
-	if (HasAuthority() ||
-		!IsLocallyControlled())
-	{
-		PlayWorldItemActionPresentation(ActionType);
-	}
-
-	/*
-	 * 로컬 플레이어는 기존 1P 사운드/표현이 있으므로
-	 * 아래 World Sound는 재생하지 않는다.
-	 */
-	if (IsLocallyControlled())
-	{
-		return;
-	}
-
-	USoundBase* ActionSound = nullptr;
-
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		ActionSound = DigSound;
-		break;
-
-	case EDRItemActionType::MeleeAttack:
-		ActionSound = MeleeAirSound;
-		break;
-
-	default:
-		break;
-	}
-
-	if (IsValid(ActionSound))
-	{
-		UGameplayStatics::PlaySoundAtLocation(
-			this,
-			ActionSound,
-			GetActorLocation());
-	}
+	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
 }
 
 void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
@@ -1512,37 +1268,6 @@ void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
 	}
 }
 
-void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
-	bool bKilled,
-	FVector_NetQuantize ImpactLocation)
-{
-	USoundBase* SoundToPlay =
-		bKilled
-			? MeleeKillSound
-			: MeleeHitSound;
-
-	if (!IsValid(SoundToPlay))
-	{
-		return;
-	}
-
-	// 공격한 본인은 1인칭 피드백으로 바로 들음
-	if (IsLocallyControlled())
-	{
-		UGameplayStatics::PlaySound2D(
-			this,
-			SoundToPlay);
-
-		return;
-	}
-
-	// 다른 플레이어는 실제 맞은 위치에서 들음
-	UGameplayStatics::PlaySoundAtLocation(
-		this,
-		SoundToPlay,
-		ImpactLocation);
-}
-
 void ADRPlayerCharacter::PlayLocalCameraShake(
 	TSubclassOf<UCameraShakeBase> ShakeClass,
 	float Scale)
@@ -1569,27 +1294,14 @@ void ADRPlayerCharacter::PlayLocalCameraShake(
 		FRotator::ZeroRotator);
 }
 
-void ADRPlayerCharacter::ClientPlayMeleeHitFeedback_Implementation(
-	bool bKilled)
-{
-	PlayLocalCameraShake(
-		MeleeHitConfirmCameraShakeClass,
-		bKilled ? 1.3f : 1.f);
-}
-
-void ADRPlayerCharacter::ClientPlayMeleeDamagedFeedback_Implementation(
-	bool bKilled)
-{
-	PlayLocalCameraShake(
-		MeleeDamagedCameraShakeClass,
-		bKilled ? 1.2f : 1.f);
-}
-
 void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
 {
-	PlayLocalCameraShake(
-		MeleeDamagedCameraShakeClass,
-		1.f);
+	if (IsValid(
+			ItemActionPresentationComponent))
+	{
+		ItemActionPresentationComponent->
+			PlayDamagedFeedbackLocal();
+	}
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(
