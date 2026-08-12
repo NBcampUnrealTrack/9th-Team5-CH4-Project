@@ -117,9 +117,6 @@ private:
 	FVector TeleportArrivalOffset = FVector(0.f, 0.f, 120.f);
 	
 	// false인 텔레포트는 이후 단계에서 즉시 사용 가능한 포인트로 다룬다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
-	bool bRequiresRegistration = true;
-
 	// 등록 여부만 복제하고, 이동/목록 UI는 이후 단계에서 붙인다.
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
 	bool bRegistered = false;

@@ -8,6 +8,7 @@
 #include "DeepRaiders/teleport/DRTeleportPoint.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 
 UDRTeleportComponent::UDRTeleportComponent()
@@ -197,7 +198,18 @@ void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoi
 	}
 
 	const FTransform ArrivalTransform = DestinationTeleportPoint->GetTeleportArrivalTransform();
+	UCharacterMovementComponent* CharacterMovement = Cast<UCharacterMovementComponent>(OwnerPawn->GetMovementComponent());
+	if (IsValid(CharacterMovement))
+	{
+		CharacterMovement->StopMovementImmediately();
+	}
+
 	OwnerPawn->TeleportTo(ArrivalTransform.GetLocation(), ArrivalTransform.Rotator(), false, true);
+
+	if (IsValid(CharacterMovement))
+	{
+		CharacterMovement->StopMovementImmediately();
+	}
 }
 
 void UDRTeleportComponent::ClientRequestUseTeleportPoint_Implementation(ADRTeleportPoint* TeleportPoint)

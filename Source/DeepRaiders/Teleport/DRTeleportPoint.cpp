@@ -115,12 +115,6 @@ bool ADRTeleportPoint::CanRegisterForTeam(int32 TeamId, APawn* Interactor) const
 		return false;
 	}
 
-	if (!bRequiresRegistration)
-	{
-		// 등록이 필요 없는 텔레포트는 이번 단계의 등록 대상에서 제외한다.
-		return false;
-	}
-
 	if (bRegistered && AccessType != EDRTeleportAccessType::Public)
 	{
 		return false;
