@@ -52,6 +52,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
 	bool TryBindFirstEmptySlot(UDRItemDefinition* Definition);
 	
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
+	bool TryBindSelectedSlot(UDRItemDefinition* Definition);
+	
 	// 로컬 플레이어가 특정 슬롯에 아이템 바인딩 요청
 	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")

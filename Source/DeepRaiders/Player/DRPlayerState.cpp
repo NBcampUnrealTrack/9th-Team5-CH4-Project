@@ -117,6 +117,13 @@ void ADRPlayerState::OnRep_HasJetpack()
 
 void ADRPlayerState::OnRep_JetpackFuel()
 {
+	/*
+    * 추후 HUD 연료 게이지 갱신용.
+    *
+    * 현재 UI가 없다면 비어 있어도 동작에는 문제가 없지만,
+    * 아무 처리도 계속 하지 않을 거면 ReplicatedUsing 대신
+    * Replicated로 바꿔도 된다.
+    */
 }
 
 void ADRPlayerState::RefreshJetpackVisualOnPawn()

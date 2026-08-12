@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+#include "GameFramework/PlayerState.h"
 
 UDRInventoryUIComponent::UDRInventoryUIComponent()
 {
@@ -26,6 +28,7 @@ void UDRInventoryUIComponent::BeginPlay()
 	}
 	
 	PlayerController->OnCurrentStorageChangedDelegate.AddDynamic(this, &ThisClass::HandleCurrentStorageChanged);
+	
 	
 	// 최초 실행 초기화
 	HandleCurrentStorageChanged(PlayerController->GetCurrentStorage());
@@ -87,6 +90,8 @@ void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage
 	{
 		UIState = EDRInventoryUIState::PlayerAndStorage;
 		
+		CurrentStorage = NewStorage;
+		
 		ShowPlayerInventory();
 		ShowStorageInventory(NewStorage);
 		StartStorageDistanceCheck();
@@ -121,7 +126,7 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	}
 	
 	// InventoryComponent와 Widget 연결
-	PlayerInventoryWidget->InitializeInventory(PlayerController->GetQuickSlotInventoryComponent());
+	PlayerInventoryWidget->InitializeInventory(PlayerController->GetInventoryComponent());
 	
 	PlayerInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 	PlayerInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
@@ -153,8 +158,10 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 		return;
 	}
 	
-	StorageInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, StorageInventoryWidgetClass);
+	// 오픈 도중 소유권 전환 처리 (ex: 창고 확인 중 기절)
+	Storage->OnStorageOwnerChangedDelegate.AddDynamic(this, &ThisClass::HandleStorageOwnerChanged);
 	
+	StorageInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, StorageInventoryWidgetClass);
 	if (!IsValid(StorageInventoryWidget))
 	{
 		return;
@@ -174,6 +181,12 @@ void UDRInventoryUIComponent::HideStorageInventory()
 		return;
 	}
 	
+	if (IsValid(CurrentStorage.Get()))
+	{
+		// 오픈 도중 소유권 전환 처리 (ex: 창고 확인 중 기절)
+		CurrentStorage->OnStorageOwnerChangedDelegate.RemoveDynamic(this, &ThisClass::HandleStorageOwnerChanged);		
+	}
+	
 	StorageInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandleStorageEntryClicked);
 	StorageInventoryWidget->OnCloseRequestedDelegate.RemoveDynamic(this, &ThisClass::HandleCloseRequested);
 	
@@ -186,6 +199,23 @@ void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid EntryId)
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
 		PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::PlayerToStorage, EntryId);
+	}
+	else if (UIState == EDRInventoryUIState::PlayerOnly)
+	{
+		UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
+		if (!IsValid(QuickSlot))
+		{
+			return;
+		}
+		
+		UDRInventoryComponent* PlayerInventory = PlayerController->GetInventoryComponent();
+		if (!IsValid(PlayerInventory))
+		{
+			return;
+		}
+		const FDRInventoryEntry* Entry = PlayerInventory->GetEntry(EntryId);
+		
+		QuickSlot->TryBindSelectedSlot(Entry->Definition);
 	}
 }
 
@@ -202,6 +232,23 @@ void UDRInventoryUIComponent::HandleCloseRequested()
 	const bool bHadStorage = UIState == EDRInventoryUIState::PlayerAndStorage;
 	
 	CloseInventoryScreen();
+	if (bHadStorage)
+	{
+		PlayerController->RequestCloseStorage();
+	}
+}
+
+void UDRInventoryUIComponent::HandleStorageOwnerChanged(APlayerState* PreviousOwner, APlayerState* NewOwner)
+{
+	if (!IsValid(PlayerController)
+		|| PlayerController->GetPlayerState<APlayerState>() == NewOwner)
+	{
+		return ;
+	}
+	
+	// 창고 오픈 상태
+	const bool bHadStorage = UIState == EDRInventoryUIState::PlayerAndStorage;
+	
 	if (bHadStorage)
 	{
 		PlayerController->RequestCloseStorage();

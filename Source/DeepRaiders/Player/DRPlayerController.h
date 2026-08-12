@@ -119,12 +119,7 @@ private:
 
 #pragma region QuickSlot
 public:
-	UDRInventoryComponent* GetInventoryComponent() const
-	{
-		return QuickSlotInventoryComponent;
-	}
-
-	UDRInventoryComponent* GetQuickSlotInventoryComponent() const { return QuickSlotInventoryComponent;}
+	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent;}
 	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
 	{
@@ -133,7 +128,7 @@ public:
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
-	TObjectPtr<UDRInventoryComponent> QuickSlotInventoryComponent;
+	TObjectPtr<UDRInventoryComponent> InventoryComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
 	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
