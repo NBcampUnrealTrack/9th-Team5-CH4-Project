@@ -12,6 +12,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
+#include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -60,6 +61,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
+	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
+	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
 	
@@ -392,16 +395,10 @@ bool ADRPlayerCharacter::RequestMine()
 
 void ADRPlayerCharacter::RequestMeleeAttack()
 {
-	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::MeleeAttack))
+	if (IsValid(MeleeCombatComponent))
 	{
-		return;
+		MeleeCombatComponent->RequestAttack();
 	}
-	
-	// // 현재는 1인칭 공격 애니메이션이 없으므로 임시 표현만 실행한다.
-	// PlayOwnerMeleeAttackPresentation();
-
-	// 실제 공격 승인과 판정은 서버가 담당한다.
-	ServerRequestMeleeAttack();
 }
 
 void ADRPlayerCharacter::RequestThrowHeldItem()
@@ -503,6 +500,42 @@ void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
 
 	MulticastPlayWorldItemActionPresentation(
 		EDRItemActionType::Dig);
+}
+
+void ADRPlayerCharacter::PlayMeleeWorldPresentationFromServer()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::MeleeAttack);
+}
+
+void ADRPlayerCharacter::PlayMeleeHitPresentationFromServer(
+	ADRPlayerCharacter* HitPlayer,
+	bool bKilled,
+	const FVector& ImpactLocation)
+{
+	if (!HasAuthority() ||
+		!IsValid(HitPlayer))
+	{
+		return;
+	}
+
+	// 공격자
+	ClientPlayMeleeHitFeedback(
+		bKilled);
+
+	// 피격자
+	HitPlayer->ClientPlayMeleeDamagedFeedback(
+		bKilled);
+
+	// 월드 Impact Sound
+	MulticastPlayMeleeImpactSound(
+		bKilled,
+		ImpactLocation);
 }
 
 float ADRPlayerCharacter::GetDisplayedJetpackFuelRatio() const
@@ -1039,440 +1072,6 @@ void ADRPlayerCharacter::InitializeLocalJetpackFuelPrediction()
 	bLocalJetpackFuelPredictionInitialized = true;
 }
 
-void ADRPlayerCharacter::PlayOwnerMeleeAttackPresentation()
-{
-	if (!IsLocallyControlled())
-	{
-		return;
-	}
-
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			0.8f,
-			FColor::Yellow,
-			TEXT("[Melee] 1인칭 공격 표현 실행"));
-	}
-
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT(
-			"[Melee] Owner presentation "
-			"Character=%s Authority=%d"),
-		*GetName(),
-		HasAuthority());
-	
-	// 향후
-	// FirstPersonEquipmentRoot Timeline
-	// 또는 1인칭 팔 Montage
-}
-
-bool ADRPlayerCharacter::CanStartMeleeAttack() const
-{
-	if (!HasAuthority())
-	{
-		return false;
-	}
-
-	if (!HasHeldItemAction(EDRItemActionType::MeleeAttack))
-	{
-		return false;
-	}
-	
-	if (bIsMeleeAttacking)
-	{
-		return false;
-	}
-
-	if (CurrentHealth <= 0.f)
-	{
-		return false;
-	}
-
-	return true;
-}
-
-void ADRPlayerCharacter::PerformMeleeHitCheck()
-{
-	if (!HasAuthority() ||
-		!bIsMeleeAttacking)
-	{
-		return;
-	}
-
-	switch (MeleeTraceMode)
-	{
-	case EDRMeleeTraceMode::ViewLine:
-		PerformMeleeLineTrace();
-		break;
-
-	case EDRMeleeTraceMode::WeaponSweep:
-		PerformMeleeWeaponSweep();
-		break;
-
-	default:
-		break;
-	}
-}
-
-void ADRPlayerCharacter::PerformMeleeLineTrace()
-{
-	const FVector TraceStart =
-		GetPawnViewLocation();
-
-	const FRotator AimRotation =
-		GetBaseAimRotation();
-
-	const FVector TraceEnd =
-		TraceStart +
-		AimRotation.Vector() * MeleeAttackRange;
-
-	FCollisionQueryParams QueryParams(
-		SCENE_QUERY_STAT(MeleeAttackLineTrace),
-		false,
-		this);
-
-	QueryParams.AddIgnoredActor(this);
-
-	FHitResult HitResult;
-
-	const bool bHit =
-		GetWorld()->LineTraceSingleByChannel(
-			HitResult,
-			TraceStart,
-			TraceEnd,
-			ECC_Visibility,
-			QueryParams);
-
-#if ENABLE_DRAW_DEBUG
-	if (bIsMeleeAttackDrawDebug)
-	{
-		DrawDebugLine(
-			GetWorld(),
-			TraceStart,
-			TraceEnd,
-			bHit
-				? FColor::Green
-				: FColor::Red,
-			false,
-			1.5f,
-			0,
-			2.f);
-	}
-#endif
-
-	if (!bHit)
-	{
-		UE_LOG(
-			LogTemp,
-			Log,
-			TEXT(
-				"[Melee][Line] Miss Character=%s"),
-			*GetName());
-
-		return;
-	}
-
-	ProcessMeleeHit(HitResult);
-}
-
-void ADRPlayerCharacter::PerformMeleeWeaponSweep()
-{
-	StartMeleeWeaponSweep();
-}
-
-void ADRPlayerCharacter::ProcessMeleeHit(
-	const FHitResult& HitResult)
-{
-	ADRPlayerCharacter* HitPlayer =
-		Cast<ADRPlayerCharacter>(
-			HitResult.GetActor());
-
-	if (!IsValid(HitPlayer) ||
-		HitPlayer == this)
-	{
-		UE_LOG(
-			LogTemp,
-			Log,
-			TEXT(
-				"[Melee] Hit non-player actor=%s"),
-			*GetNameSafe(
-				HitResult.GetActor()));
-
-		return;
-	}
-
-	const float AppliedDamage =
-		UGameplayStatics::ApplyDamage(
-			HitPlayer,
-			MeleeAttackDamage,
-			GetController(),
-			this,
-			UDamageType::StaticClass());
-
-	if (AppliedDamage <= 0.f)
-	{
-		return;
-	}
-
-	const bool bKilled =
-		HitPlayer->IsDead();
-
-	// 공격자 피드백
-	ClientPlayMeleeHitFeedback(
-		bKilled);
-
-	// 피격자 피드백
-	HitPlayer->ClientPlayMeleeDamagedFeedback(
-		bKilled);
-
-	// 월드 타격 사운드
-	MulticastPlayMeleeImpactSound(
-		bKilled,
-		HitResult.ImpactPoint);
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Melee] Attacker=%s "
-			"Target=%s Damage=%.1f"),
-		*GetName(),
-		*GetNameSafe(HitPlayer),
-		AppliedDamage);
-}
-
-void ADRPlayerCharacter::FinishMeleeAttack()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	StopMeleeWeaponSweep();
-
-	bIsMeleeAttacking = false;
-}
-
-void ADRPlayerCharacter::StartMeleeWeaponSweep()
-{
-	if (!HasAuthority() ||
-		!bIsMeleeAttacking ||
-		MeleeTraceMode != EDRMeleeTraceMode::WeaponSweep ||
-		bIsMeleeSweepActive ||
-		!IsValid(WorldHandEquipmentMesh))
-	{
-		return;
-	}
-
-	if (!WorldHandEquipmentMesh->DoesSocketExist(
-			MeleeSweepBaseSocketName) ||
-		!WorldHandEquipmentMesh->DoesSocketExist(
-			MeleeSweepTipSocketName))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[Melee][Sweep] Missing Socket. "
-				"Mesh=%s"),
-			*GetNameSafe(
-				WorldHandEquipmentMesh->GetStaticMesh()));
-
-		return;
-	}
-
-	bIsMeleeSweepActive = true;
-
-	MeleeAlreadyHitActors.Reset();
-
-	PreviousMeleeBaseLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepBaseSocketName);
-
-	PreviousMeleeTipLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepTipSocketName);
-
-	/*
-	 * Window가 열린 순간 이미 무기와 겹쳐 있는
-	 * 대상도 잡는다.
-	 */
-	SweepMeleeSegment(
-		PreviousMeleeBaseLocation,
-		PreviousMeleeTipLocation);
-}
-
-void ADRPlayerCharacter::UpdateMeleeWeaponSweep()
-{
-	if (!HasAuthority() ||
-		!bIsMeleeAttacking ||
-		!bIsMeleeSweepActive ||
-		!IsValid(WorldHandEquipmentMesh))
-	{
-		return;
-	}
-
-	const FVector CurrentBaseLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepBaseSocketName);
-
-	const FVector CurrentTipLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepTipSocketName);
-
-	const FVector PreviousMiddleLocation =
-		(PreviousMeleeBaseLocation +
-		 PreviousMeleeTipLocation) * 0.5f;
-
-	const FVector CurrentMiddleLocation =
-		(CurrentBaseLocation +
-		 CurrentTipLocation) * 0.5f;
-
-	/*
-	 * 1. 손잡이 쪽 이동 궤적
-	 */
-	SweepMeleeSegment(
-		PreviousMeleeBaseLocation,
-		CurrentBaseLocation);
-
-	/*
-	 * 2. 무기 중앙 이동 궤적
-	 */
-	SweepMeleeSegment(
-		PreviousMiddleLocation,
-		CurrentMiddleLocation);
-
-	/*
-	 * 3. 무기 끝 이동 궤적
-	 */
-	SweepMeleeSegment(
-		PreviousMeleeTipLocation,
-		CurrentTipLocation);
-
-	/*
-	 * 4. 현재 프레임의 무기 자체 길이도 검사.
-	 *
-	 * 두 프레임 사이 이동뿐 아니라
-	 * 현재 Base~Tip 사이에 들어온 대상도 잡는다.
-	 */
-	SweepMeleeSegment(
-		CurrentBaseLocation,
-		CurrentTipLocation);
-
-	PreviousMeleeBaseLocation =
-		CurrentBaseLocation;
-
-	PreviousMeleeTipLocation =
-		CurrentTipLocation;
-}
-
-void ADRPlayerCharacter::StopMeleeWeaponSweep()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	bIsMeleeSweepActive = false;
-
-	MeleeAlreadyHitActors.Reset();
-}
-
-void ADRPlayerCharacter::SweepMeleeSegment(
-	const FVector& Start,
-	const FVector& End)
-{
-	UWorld* World = GetWorld();
-
-	if (!IsValid(World))
-	{
-		return;
-	}
-
-	FCollisionQueryParams QueryParams(
-		SCENE_QUERY_STAT(MeleeWeaponSweep),
-		false,
-		this);
-
-	QueryParams.AddIgnoredActor(this);
-
-	TArray<FHitResult> HitResults;
-
-	const bool bHit =
-		World->SweepMultiByChannel(
-			HitResults,
-			Start,
-			End,
-			FQuat::Identity,
-			ECC_Visibility,
-			FCollisionShape::MakeSphere(
-				MeleeSweepRadius),
-			QueryParams);
-
-#if ENABLE_DRAW_DEBUG
-	if (bIsMeleeAttackDrawDebug)
-	{
-		DrawDebugLine(
-			World,
-			Start,
-			End,
-			bHit
-				? FColor::Green
-				: FColor::Red,
-			false,
-			0.15f,
-			0,
-			2.f);
-
-		DrawDebugSphere(
-			World,
-			End,
-			MeleeSweepRadius,
-			12,
-			bHit
-				? FColor::Green
-				: FColor::Red,
-			false,
-			0.15f);
-	}
-#endif
-
-	if (!bHit)
-	{
-		return;
-	}
-
-	for (const FHitResult& HitResult : HitResults)
-	{
-		ADRPlayerCharacter* HitPlayer =
-			Cast<ADRPlayerCharacter>(
-				HitResult.GetActor());
-
-		if (!IsValid(HitPlayer) ||
-			HitPlayer == this)
-		{
-			continue;
-		}
-
-		if (MeleeAlreadyHitActors.Contains(
-				HitPlayer))
-		{
-			continue;
-		}
-
-		/*
-		 * 한 공격당 동일 플레이어는 한 번만.
-		 */
-		MeleeAlreadyHitActors.Add(
-			HitPlayer);
-
-		ProcessMeleeHit(HitResult);
-	}
-}
-
 void ADRPlayerCharacter::HandleDeath()
 {
 	if (!HasAuthority() ||
@@ -1481,13 +1080,10 @@ void ADRPlayerCharacter::HandleDeath()
 		return;
 	}
 
-	GetWorldTimerManager().ClearTimer(
-		MeleeHitTimerHandle);
-
-	GetWorldTimerManager().ClearTimer(
-		MeleeFinishTimerHandle);
-
-	bIsMeleeAttacking = false;
+	if (IsValid(MeleeCombatComponent))
+	{
+		MeleeCombatComponent->CancelAttack();
+	}
 
 	StopJetpackFromServer();
 
@@ -2011,44 +1607,6 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(
 	}
 }
 
-void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
-{
-	if (!CanStartMeleeAttack())
-	{
-		return;
-	}
-
-	bIsMeleeAttacking = true;
-
-	MulticastPlayWorldItemActionPresentation(
-		EDRItemActionType::MeleeAttack);
-
-	/*
-	 * ViewLine은 기존처럼 특정 시점에
-	 * 단발 판정을 수행한다.
-	 *
-	 * WeaponSweep은 Montage의
-	 * AnimNotifyState가 판정 Window를 제어한다.
-	 */
-	if (MeleeTraceMode ==
-		EDRMeleeTraceMode::ViewLine)
-	{
-		GetWorldTimerManager().SetTimer(
-			MeleeHitTimerHandle,
-			this,
-			&ThisClass::PerformMeleeHitCheck,
-			MeleeAttackHitTime,
-			false);
-	}
-
-	GetWorldTimerManager().SetTimer(
-		MeleeFinishTimerHandle,
-		this,
-		&ThisClass::FinishMeleeAttack,
-		MeleeAttackDuration,
-		false);
-}
-
 bool ADRPlayerCharacter::CanStartLocalItemAction() const
 {
 	const UWorld* World = GetWorld();
@@ -2066,7 +1624,9 @@ float ADRPlayerCharacter::GetItemActionCooldown(
 		return DigActionCooldown;
 
 	case EDRItemActionType::MeleeAttack:
-		return MeleeAttackDuration;
+		return IsValid(MeleeCombatComponent)
+			? MeleeCombatComponent->GetAttackDuration()
+			: 0.f;
 
 	default:
 		return 0.f;

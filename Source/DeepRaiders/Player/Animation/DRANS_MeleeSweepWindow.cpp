@@ -2,6 +2,7 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 
 void UDRANS_MeleeSweepWindow::NotifyBegin(
 	USkeletalMeshComponent* MeshComp,
@@ -20,16 +21,16 @@ void UDRANS_MeleeSweepWindow::NotifyBegin(
 		return;
 	}
 
-	ADRPlayerCharacter* Character =
+	if (ADRPlayerCharacter* Character =
 		Cast<ADRPlayerCharacter>(
-			MeshComp->GetOwner());
-
-	if (!IsValid(Character))
+			MeshComp->GetOwner()))
 	{
-		return;
+		if (UDRMeleeCombatComponent* Combat =
+				Character->GetMeleeCombatComponent())
+		{
+			Combat->StartSweepWindow();
+		}
 	}
-
-	Character->StartMeleeWeaponSweep();
 }
 
 void UDRANS_MeleeSweepWindow::NotifyTick(
@@ -49,16 +50,16 @@ void UDRANS_MeleeSweepWindow::NotifyTick(
 		return;
 	}
 
-	ADRPlayerCharacter* Character =
+	if (ADRPlayerCharacter* Character =
 		Cast<ADRPlayerCharacter>(
-			MeshComp->GetOwner());
-
-	if (!IsValid(Character))
+			MeshComp->GetOwner()))
 	{
-		return;
+		if (UDRMeleeCombatComponent* Combat =
+				Character->GetMeleeCombatComponent())
+		{
+			Combat->UpdateSweepWindow();
+		}
 	}
-
-	Character->UpdateMeleeWeaponSweep();
 }
 
 void UDRANS_MeleeSweepWindow::NotifyEnd(
@@ -76,14 +77,14 @@ void UDRANS_MeleeSweepWindow::NotifyEnd(
 		return;
 	}
 
-	ADRPlayerCharacter* Character =
+	if (ADRPlayerCharacter* Character =
 		Cast<ADRPlayerCharacter>(
-			MeshComp->GetOwner());
-
-	if (!IsValid(Character))
+			MeshComp->GetOwner()))
 	{
-		return;
+		if (UDRMeleeCombatComponent* Combat =
+				Character->GetMeleeCombatComponent())
+		{
+			Combat->EndSweepWindow();
+		}
 	}
-
-	Character->StopMeleeWeaponSweep();
 }

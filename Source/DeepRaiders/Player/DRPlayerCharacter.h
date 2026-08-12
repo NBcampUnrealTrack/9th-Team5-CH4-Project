@@ -21,7 +21,8 @@ class USoundBase;
 class UAudioComponent;
 class UCameraShakeBase;
 class UVoxelNoClippingComponent;
-class UDRANS_MeleeSweepWindow;
+
+class UDRMeleeCombatComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -50,13 +51,6 @@ struct FDRFirstPersonSwingPresentation
         BlueprintReadOnly,
         Category = "First Person")
     FVector LocationOffset = FVector::ZeroVector;
-};
-
-UENUM(BlueprintType)
-enum class EDRMeleeTraceMode : uint8
-{
-    ViewLine UMETA(DisplayName = "View Line"),
-    WeaponSweep UMETA(DisplayName = "Weapon Sweep")
 };
 
 /**
@@ -182,11 +176,32 @@ public:
     /** 서버에서의 땅파기 성공 여부 알려줌 */
     void NotifyMineConfirmedFromServer();
     
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Melee|Debug")
-    bool bIsMeleeAttackDrawDebug = true;
+    UDRMeleeCombatComponent*
+        GetMeleeCombatComponent() const
+    {
+        return MeleeCombatComponent;
+    }
+
+    UStaticMeshComponent*
+        GetWorldHandEquipmentMesh() const
+    {
+        return WorldHandEquipmentMesh;
+    }
+
+    /**
+     * CombatComponent가 서버에서 공격을 승인했을 때
+     * 기존 Character Presentation을 실행한다.
+     */
+    void PlayMeleeWorldPresentationFromServer();
+
+    /**
+     * 서버에서 Melee Hit가 확정됐을 때
+     * 기존 Sound / CameraShake 표현을 실행한다.
+     */
+    void PlayMeleeHitPresentationFromServer(
+        ADRPlayerCharacter* HitPlayer,
+        bool bKilled,
+        const FVector& ImpactLocation);
     
     /** HUD에서 사용할 제트팩 연료 비율. 소유 클라이언트는 예측값을 사용한다. */
     UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
@@ -209,6 +224,13 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Voxel")
     TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
+    
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Combat",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRMeleeCombatComponent> MeleeCombatComponent;
     
     UPROPERTY(
         EditDefaultsOnly,
@@ -261,66 +283,6 @@ private:
     bool bLocalJetpackFuelPredictionInitialized = false;
 
     void InitializeLocalJetpackFuelPrediction();
-    
-    // ===== Melee Attack =====
-    
-    friend class UDRANS_MeleeSweepWindow;
-    
-    /** 소유 플레이어의 1인칭 공격 표현을 실행한다. */
-    void PlayOwnerMeleeAttackPresentation();
-
-    /** 서버에서 공격 가능 여부를 검사한다. */
-    bool CanStartMeleeAttack() const;
-
-    /** 현재 선택된 판정 방식으로 근접 공격 판정을 수행한다. */
-    void PerformMeleeHitCheck();
-
-    /** 카메라 정면 단일 LineTrace 판정. */
-    void PerformMeleeLineTrace();
-
-    /** 무기 Socket 기반 Sweep 판정. 다음 단계에서 구현한다. */
-    void PerformMeleeWeaponSweep();
-
-    /** Trace/Sweep으로 검출된 대상에 실제 공격 결과를 처리한다. */
-    void ProcessMeleeHit(const FHitResult& HitResult);
-
-    /** 서버에서 공격 상태를 종료한다. */
-    void FinishMeleeAttack();
-
-    /** 소유 클라이언트의 공격 요청을 서버에서 처리한다. */
-    UFUNCTION(Server, Reliable)
-    void ServerRequestMeleeAttack();
-
-    bool bIsMeleeAttacking = false;
-
-    FTimerHandle MeleeHitTimerHandle;
-    FTimerHandle MeleeFinishTimerHandle;
-    
-    /** 무기 Sweep 판정 Window를 시작한다. */
-    void StartMeleeWeaponSweep();
-
-    /** Sweep Window 동안 반복 호출되는 실제 판정. */
-    void UpdateMeleeWeaponSweep();
-
-    /** 무기 Sweep 판정을 종료한다. */
-    void StopMeleeWeaponSweep();
-
-    /** 한 구간에 Sphere Sweep을 수행한다. */
-    void SweepMeleeSegment(
-        const FVector& Start,
-        const FVector& End);
-
-    /** 현재 공격에서 이미 맞은 플레이어 */
-    TSet<TWeakObjectPtr<AActor>> MeleeAlreadyHitActors;
-
-    /** 직전 판정 프레임의 Socket 위치 */
-    FVector PreviousMeleeBaseLocation =
-        FVector::ZeroVector;
-
-    FVector PreviousMeleeTipLocation =
-        FVector::ZeroVector;
-
-    bool bIsMeleeSweepActive = false;
 
     // ===== Fall Damage =====
 
@@ -417,71 +379,6 @@ protected:
         Category = "Player|Jetpack",
         meta = (ClampMin = "0.0"))
     float JetpackFuelConsumptionPerSecond = 20.f;
-    
-    // ===== Melee Attack =====
-
-    /** 근접 공격 판정 방식 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat")
-    EDRMeleeTraceMode MeleeTraceMode = EDRMeleeTraceMode::ViewLine;
-    
-    /** 공격 시작 후 실제 판정까지의 시간 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat",
-        meta = (ClampMin = "0.0"))
-    float MeleeAttackHitTime = 0.25f;
-
-    /** 다음 공격이 가능해질 때까지의 시간 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat",
-        meta = (ClampMin = "0.01"))
-    float MeleeAttackDuration = 0.8f;
-
-    /** 공격 피해량 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat",
-        meta = (ClampMin = "0.0"))
-    float MeleeAttackDamage = 40.f;
-
-    /** 시선 정면으로 검사할 거리 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat",
-        meta = (ClampMin = "0.0", Units = "cm"))
-    float MeleeAttackRange = 200.f;
-    
-    /** Sweep 판정의 손잡이 쪽 Socket */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat|Sweep")
-    FName MeleeSweepBaseSocketName =
-        TEXT("S_MeleeBase");
-
-    /** Sweep 판정의 무기 끝 쪽 Socket */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat|Sweep")
-    FName MeleeSweepTipSocketName =
-        TEXT("S_MeleeTip");
-
-    /** Sweep 판정 두께 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Combat|Sweep",
-        meta = (ClampMin = "0.0", Units = "cm"))
-    float MeleeSweepRadius = 35.f;
     
     // ===== Death / Respawn =====
 
