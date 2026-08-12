@@ -42,5 +42,5 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	}
 
 	// 중도난입한 플레이어에게 서버가 확정한 지형 변경 이력을 한 번에 전달한다.
-	PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
+	PlayerController->QueueTerrainDigHistory(DigHistory);
 }

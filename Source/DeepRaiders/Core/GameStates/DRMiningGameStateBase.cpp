@@ -3,6 +3,12 @@
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
+
+namespace
+{
+constexpr int32 TerrainDigBatchSize = 8;
+}
 
 void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -23,6 +29,21 @@ void ADRMiningGameStateBase::RegisterTerrainDig(const FDRTerrainDigOperation& Op
 	Multicast_ApplyTerrainDig(Operation);
 }
 
+void ADRMiningGameStateBase::QueueTerrainCaveDig(const FDRTerrainDigOperation& Operation)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	PendingCaveDigs.Add(Operation);
+	if (!CaveDigBatchTimer.IsValid())
+	{
+		CaveDigBatchTimer = GetWorldTimerManager().SetTimerForNextTick(
+			this, &ThisClass::SendTerrainCaveDigBatch);
+	}
+}
+
 void ADRMiningGameStateBase::Multicast_ApplyTerrainDig_Implementation(const FDRTerrainDigOperation& Operation)
 {
 	if (HasAuthority())
@@ -31,6 +52,41 @@ void ADRMiningGameStateBase::Multicast_ApplyTerrainDig_Implementation(const FDRT
 	}
 
 	ApplyTerrainDigOnce(Operation);
+}
+
+void ADRMiningGameStateBase::Multicast_ApplyTerrainDigBatch_Implementation(
+	const TArray<FDRTerrainDigOperation>& Operations)
+{
+	if (HasAuthority())
+	{
+		return;
+	}
+
+	for (const FDRTerrainDigOperation& Operation : Operations)
+	{
+		ApplyTerrainDigOnce(Operation);
+	}
+}
+
+void ADRMiningGameStateBase::SendTerrainCaveDigBatch()
+{
+	CaveDigBatchTimer.Invalidate();
+	const int32 BatchCount = FMath::Min(TerrainDigBatchSize, PendingCaveDigs.Num());
+	if (BatchCount <= 0)
+	{
+		return;
+	}
+
+	TArray<FDRTerrainDigOperation> Batch;
+	Batch.Append(PendingCaveDigs.GetData(), BatchCount);
+	PendingCaveDigs.RemoveAt(0, BatchCount, EAllowShrinking::No);
+	Multicast_ApplyTerrainDigBatch(Batch);
+
+	if (!PendingCaveDigs.IsEmpty())
+	{
+		CaveDigBatchTimer = GetWorldTimerManager().SetTimerForNextTick(
+			this, &ThisClass::SendTerrainCaveDigBatch);
+	}
 }
 
 bool ADRMiningGameStateBase::ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation)

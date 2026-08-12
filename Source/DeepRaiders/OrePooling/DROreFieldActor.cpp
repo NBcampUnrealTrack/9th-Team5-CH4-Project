@@ -570,7 +570,7 @@ void ADROreFieldActor::GenerateCave()
 
         if (MiningGameState)
         {
-            MiningGameState->RegisterTerrainDig(Operation);
+            MiningGameState->QueueTerrainCaveDig(Operation);
         }
     }
 
