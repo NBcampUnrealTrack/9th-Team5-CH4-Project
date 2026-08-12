@@ -636,14 +636,26 @@ protected:
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Camera|Shake")
-    TSubclassOf<UCameraShakeBase> HitCameraShakeClass;
+    TSubclassOf<UCameraShakeBase> MeleeHitConfirmCameraShakeClass;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> MeleeDamagedCameraShakeClass;
 
     UPROPERTY(
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Player|Camera|Shake")
     TSubclassOf<UCameraShakeBase> JetpackCameraShakeClass;
-
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> FallDamageCameraShakeClass;
+    
     UPROPERTY(Transient)
     TObjectPtr<UCameraShakeBase> JetpackCameraShakeInstance;
     
@@ -653,6 +665,9 @@ protected:
     
     UFUNCTION(Client, Unreliable)
     void ClientPlayMeleeHitFeedback(bool bKilled);
+
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayMeleeDamagedFeedback(bool bKilled);
     
     UFUNCTION(Client, Unreliable)
     void ClientPlayDamagedCameraShake();

@@ -404,8 +404,6 @@ float ADRPlayerCharacter::TakeDamage(
 		CurrentHealth - AppliedDamage,
 		0.f,
 		MaxHealth);
-
-	ClientPlayDamagedCameraShake();
 	
 	if (IsDead())
 	{
@@ -1048,7 +1046,11 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 
 	const bool bKilled = HitPlayer->IsDead();
 
-	ClientPlayMeleeHitFeedback(
+	// 공격자
+	ClientPlayMeleeHitFeedback(bKilled);
+
+	// 피격자
+	HitPlayer->ClientPlayMeleeDamagedFeedback(
 		bKilled);
 
 	MulticastPlayMeleeImpactSound(
@@ -1888,6 +1890,14 @@ void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
 			this,
 			SoundToPlay);
 	}
+
+	// 낙하 피해가 발생한 착지에만 Camera Shake
+	if (bTookFallDamage || bDied)
+	{
+		PlayLocalCameraShake(
+			FallDamageCameraShakeClass,
+			bDied ? 1.4f : 1.f);
+	}
 }
 
 void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
@@ -1951,14 +1961,22 @@ void ADRPlayerCharacter::ClientPlayMeleeHitFeedback_Implementation(
 	bool bKilled)
 {
 	PlayLocalCameraShake(
-		HitCameraShakeClass,
+		MeleeHitConfirmCameraShakeClass,
 		bKilled ? 1.3f : 1.f);
+}
+
+void ADRPlayerCharacter::ClientPlayMeleeDamagedFeedback_Implementation(
+	bool bKilled)
+{
+	PlayLocalCameraShake(
+		MeleeDamagedCameraShakeClass,
+		bKilled ? 1.2f : 1.f);
 }
 
 void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
 {
 	PlayLocalCameraShake(
-		HitCameraShakeClass,
+		MeleeDamagedCameraShakeClass,
 		1.f);
 }
 
