@@ -1180,73 +1180,7 @@ void ADRPlayerCharacter::PerformMeleeLineTrace()
 
 void ADRPlayerCharacter::PerformMeleeWeaponSweep()
 {
-	if (!HasAuthority() ||
-		!bIsMeleeAttacking ||
-		!IsValid(WorldHandEquipmentMesh) ||
-		!IsValid(WorldHandEquipmentMesh->GetStaticMesh()))
-	{
-		return;
-	}
-
-	if (!WorldHandEquipmentMesh->DoesSocketExist(
-			MeleeSweepBaseSocketName) ||
-		!WorldHandEquipmentMesh->DoesSocketExist(
-			MeleeSweepTipSocketName))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[Melee][Sweep] Missing Socket. "
-				"Mesh=%s Base=%s Tip=%s"),
-			*GetNameSafe(
-				WorldHandEquipmentMesh->GetStaticMesh()),
-			*MeleeSweepBaseSocketName.ToString(),
-			*MeleeSweepTipSocketName.ToString());
-
-		return;
-	}
-
-	const FVector BaseLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepBaseSocketName);
-
-	const FVector TipLocation =
-		WorldHandEquipmentMesh->GetSocketLocation(
-			MeleeSweepTipSocketName);
-
-#if ENABLE_DRAW_DEBUG
-	if (bIsMeleeAttackDrawDebug)
-	{
-		DrawDebugSphere(
-			GetWorld(),
-			BaseLocation,
-			MeleeSweepRadius,
-			16,
-			FColor::Blue,
-			false,
-			1.f);
-
-		DrawDebugSphere(
-			GetWorld(),
-			TipLocation,
-			MeleeSweepRadius,
-			16,
-			FColor::Yellow,
-			false,
-			1.f);
-
-		DrawDebugLine(
-			GetWorld(),
-			BaseLocation,
-			TipLocation,
-			FColor::Cyan,
-			false,
-			1.f,
-			0,
-			2.f);
-	}
-#endif
+	StartMeleeWeaponSweep();
 }
 
 void ADRPlayerCharacter::ProcessMeleeHit(
@@ -1317,7 +1251,251 @@ void ADRPlayerCharacter::FinishMeleeAttack()
 		return;
 	}
 
+	StopMeleeWeaponSweep();
+
 	bIsMeleeAttacking = false;
+}
+
+void ADRPlayerCharacter::StartMeleeWeaponSweep()
+{
+	if (!HasAuthority() ||
+		!bIsMeleeAttacking ||
+		bIsMeleeSweepActive ||
+		!IsValid(WorldHandEquipmentMesh))
+	{
+		return;
+	}
+
+	if (!WorldHandEquipmentMesh->DoesSocketExist(
+			MeleeSweepBaseSocketName) ||
+		!WorldHandEquipmentMesh->DoesSocketExist(
+			MeleeSweepTipSocketName))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[Melee][Sweep] Missing Socket. "
+				"Mesh=%s"),
+			*GetNameSafe(
+				WorldHandEquipmentMesh->GetStaticMesh()));
+
+		return;
+	}
+
+	bIsMeleeSweepActive = true;
+
+	MeleeAlreadyHitActors.Reset();
+
+	PreviousMeleeBaseLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepBaseSocketName);
+
+	PreviousMeleeTipLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepTipSocketName);
+
+	/*
+	 * 시작 시점에 이미 무기와 겹쳐 있는 대상도 잡기 위해
+	 * 현재 Base -> Tip 구간을 한 번 검사한다.
+	 */
+	SweepMeleeSegment(
+		PreviousMeleeBaseLocation,
+		PreviousMeleeTipLocation);
+
+	GetWorldTimerManager().SetTimer(
+		MeleeSweepUpdateTimerHandle,
+		this,
+		&ThisClass::UpdateMeleeWeaponSweep,
+		MeleeSweepUpdateInterval,
+		true);
+
+	/*
+	 * 별도 종료 Timer를 추가하지 않고
+	 * Sweep Timer 자체의 첫 Delay/Duration을 관리해도 되지만,
+	 * 지금은 단순하게 TimerManager로 종료 예약.
+	 */
+	GetWorldTimerManager().SetTimer(
+		MeleeSweepStopTimerHandle,
+		this,
+		&ThisClass::StopMeleeWeaponSweep,
+		MeleeSweepDuration,
+		false);
+}
+
+void ADRPlayerCharacter::UpdateMeleeWeaponSweep()
+{
+	if (!HasAuthority() ||
+		!bIsMeleeAttacking ||
+		!bIsMeleeSweepActive ||
+		!IsValid(WorldHandEquipmentMesh))
+	{
+		StopMeleeWeaponSweep();
+		return;
+	}
+
+	const FVector CurrentBaseLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepBaseSocketName);
+
+	const FVector CurrentTipLocation =
+		WorldHandEquipmentMesh->GetSocketLocation(
+			MeleeSweepTipSocketName);
+
+	const FVector PreviousMiddleLocation =
+		(PreviousMeleeBaseLocation +
+		 PreviousMeleeTipLocation) * 0.5f;
+
+	const FVector CurrentMiddleLocation =
+		(CurrentBaseLocation +
+		 CurrentTipLocation) * 0.5f;
+
+	/*
+	 * 1. 손잡이 쪽 이동 궤적
+	 */
+	SweepMeleeSegment(
+		PreviousMeleeBaseLocation,
+		CurrentBaseLocation);
+
+	/*
+	 * 2. 무기 중앙 이동 궤적
+	 */
+	SweepMeleeSegment(
+		PreviousMiddleLocation,
+		CurrentMiddleLocation);
+
+	/*
+	 * 3. 무기 끝 이동 궤적
+	 */
+	SweepMeleeSegment(
+		PreviousMeleeTipLocation,
+		CurrentTipLocation);
+
+	/*
+	 * 4. 현재 프레임의 무기 자체 길이도 검사.
+	 *
+	 * 두 프레임 사이 이동뿐 아니라
+	 * 현재 Base~Tip 사이에 들어온 대상도 잡는다.
+	 */
+	SweepMeleeSegment(
+		CurrentBaseLocation,
+		CurrentTipLocation);
+
+	PreviousMeleeBaseLocation =
+		CurrentBaseLocation;
+
+	PreviousMeleeTipLocation =
+		CurrentTipLocation;
+}
+
+void ADRPlayerCharacter::StopMeleeWeaponSweep()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(
+		MeleeSweepUpdateTimerHandle);
+
+	GetWorldTimerManager().ClearTimer(
+		MeleeSweepStopTimerHandle);
+
+	bIsMeleeSweepActive = false;
+
+	MeleeAlreadyHitActors.Reset();
+}
+
+void ADRPlayerCharacter::SweepMeleeSegment(
+	const FVector& Start,
+	const FVector& End)
+{
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(MeleeWeaponSweep),
+		false,
+		this);
+
+	QueryParams.AddIgnoredActor(this);
+
+	TArray<FHitResult> HitResults;
+
+	const bool bHit =
+		World->SweepMultiByChannel(
+			HitResults,
+			Start,
+			End,
+			FQuat::Identity,
+			ECC_Visibility,
+			FCollisionShape::MakeSphere(
+				MeleeSweepRadius),
+			QueryParams);
+
+#if ENABLE_DRAW_DEBUG
+	if (bIsMeleeAttackDrawDebug)
+	{
+		DrawDebugLine(
+			World,
+			Start,
+			End,
+			bHit
+				? FColor::Green
+				: FColor::Red,
+			false,
+			0.15f,
+			0,
+			2.f);
+
+		DrawDebugSphere(
+			World,
+			End,
+			MeleeSweepRadius,
+			12,
+			bHit
+				? FColor::Green
+				: FColor::Red,
+			false,
+			0.15f);
+	}
+#endif
+
+	if (!bHit)
+	{
+		return;
+	}
+
+	for (const FHitResult& HitResult : HitResults)
+	{
+		ADRPlayerCharacter* HitPlayer =
+			Cast<ADRPlayerCharacter>(
+				HitResult.GetActor());
+
+		if (!IsValid(HitPlayer) ||
+			HitPlayer == this)
+		{
+			continue;
+		}
+
+		if (MeleeAlreadyHitActors.Contains(
+				HitPlayer))
+		{
+			continue;
+		}
+
+		/*
+		 * 한 공격당 동일 플레이어는 한 번만.
+		 */
+		MeleeAlreadyHitActors.Add(
+			HitPlayer);
+
+		ProcessMeleeHit(HitResult);
+	}
 }
 
 void ADRPlayerCharacter::HandleDeath()

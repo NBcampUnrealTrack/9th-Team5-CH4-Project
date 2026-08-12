@@ -293,6 +293,36 @@ private:
     FTimerHandle MeleeHitTimerHandle;
     FTimerHandle MeleeFinishTimerHandle;
     
+    /** 무기 Sweep 판정 Window를 시작한다. */
+    void StartMeleeWeaponSweep();
+
+    /** Sweep Window 동안 반복 호출되는 실제 판정. */
+    void UpdateMeleeWeaponSweep();
+
+    /** 무기 Sweep 판정을 종료한다. */
+    void StopMeleeWeaponSweep();
+
+    /** 한 구간에 Sphere Sweep을 수행한다. */
+    void SweepMeleeSegment(
+        const FVector& Start,
+        const FVector& End);
+
+    /** 현재 공격에서 이미 맞은 플레이어 */
+    TSet<TWeakObjectPtr<AActor>> MeleeAlreadyHitActors;
+
+    /** 직전 판정 프레임의 Socket 위치 */
+    FVector PreviousMeleeBaseLocation =
+        FVector::ZeroVector;
+
+    FVector PreviousMeleeTipLocation =
+        FVector::ZeroVector;
+
+    bool bIsMeleeSweepActive = false;
+
+    FTimerHandle MeleeSweepUpdateTimerHandle;
+    
+    FTimerHandle MeleeSweepStopTimerHandle;
+    
     // ===== Fall Damage =====
 
     /** 착지 속도를 기준으로 낙하 피해량을 계산한다. */
@@ -453,6 +483,25 @@ protected:
         Category = "Player|Combat|Sweep",
         meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeSweepRadius = 35.f;
+    
+    /** Sweep 판정을 유지할 시간 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat|Sweep",
+        meta = (ClampMin = "0.01", Units = "s"))
+    float MeleeSweepDuration = 0.22f;
+
+    /**
+     * Sweep 위치 샘플링 간격.
+     * 실제 Timer 실행은 Frame Rate의 영향도 받는다.
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat|Sweep",
+        meta = (ClampMin = "0.001", Units = "s"))
+    float MeleeSweepUpdateInterval = 0.016f;
     
     // ===== Death / Respawn =====
 
