@@ -18,12 +18,12 @@
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
 
-#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
+#include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -38,6 +38,7 @@ ADRPlayerController::ADRPlayerController()
     // UI Component Initialize
     InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
     QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
+    TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -238,6 +239,7 @@ void ADRPlayerController::OnPossess(
     {
         QuickSlotComponent->ApplySelectedItemToCharacter();
     }
+
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
