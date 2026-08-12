@@ -337,7 +337,7 @@ void UDRQuickSlotComponent::HandleInventoryChanged()
 			const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
 			if (!IsValid(Definition))
 			{
-				break;
+				continue;
 			}
 			if (Inventory->GetItemCount(Definition) <= 0)
 			{
