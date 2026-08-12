@@ -11,11 +11,15 @@ class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
+class UDRTeleportComponent;
 class UAnimMontage;
 class UDRCharacterMovementComponent;
 class UDRItemDefinition;
 class UTimelineComponent;
 class UCurveFloat;
+class USoundBase;
+class UAudioComponent;
+class UCameraShakeBase;
 
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
@@ -68,7 +72,7 @@ public:
     void HandleJumpReleased();
     
     /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
-    void RequestMine();
+    bool RequestMine();
     
     /** 로컬 플레이어가 근접 공격을 요청한다. */
     void RequestMeleeAttack();
@@ -163,6 +167,9 @@ public:
      * 클라이언트 UX 검사와 서버 권한 검증 양쪽에서 사용한다.
      */
     bool HasHeldItemAction(EDRItemActionType ActionType) const;
+    
+    /** 서버에서의 땅파기 성공 여부 알려줌 */
+    void NotifyMineConfirmedFromServer();
     
 protected:
     virtual void BeginPlay() override;
@@ -560,6 +567,111 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Item Action|Presentation")
     TObjectPtr<UAnimMontage> WorldMeleeAttackMontage;
+
+    // ===== Item Action Sound =====
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> DigSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeSwingSound;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Sound")
+    TObjectPtr<USoundBase> JetpackSound;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAudioComponent> JetpackAudioComponent;
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallSound;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallDamageSound;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallDeadSound;
+
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayFallSound(
+        bool bTookFallDamage,
+        bool bDied);
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> EquipSound;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeAirSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeHitSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeKillSound;
+    
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayMeleeImpactSound(
+        bool bKilled,
+        FVector_NetQuantize ImpactLocation);
+    
+    // ===== Camera Shake =====
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> MeleeHitConfirmCameraShakeClass;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> MeleeDamagedCameraShakeClass;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> JetpackCameraShakeClass;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Camera|Shake")
+    TSubclassOf<UCameraShakeBase> FallDamageCameraShakeClass;
+    
+    UPROPERTY(Transient)
+    TObjectPtr<UCameraShakeBase> JetpackCameraShakeInstance;
+    
+    void PlayLocalCameraShake(
+        TSubclassOf<UCameraShakeBase> ShakeClass,
+        float Scale = 1.f);
+    
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayMeleeHitFeedback(bool bKilled);
+
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayMeleeDamagedFeedback(bool bKilled);
+    
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayDamagedCameraShake();
     
 #pragma region QuickSlot
 public:
@@ -575,4 +687,11 @@ protected:
     void RefreshHeldItemVisual();
     void RefreshHeldItemMiningSettings();
 #pragma endregion
+
+#pragma region Teleport
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRTeleportComponent> TeleportComponent;
+#pragma endregion
+
 };

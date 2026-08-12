@@ -7,6 +7,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
+#include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
@@ -19,6 +20,11 @@
 
 #include "Components/TimelineComponent.h"
 #include "Curves/CurveFloat.h"
+#include "Components/AudioComponent.h"
+
+#include "Camera/CameraShakeBase.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 
 namespace
 {
@@ -38,6 +44,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MiningComponent =
 		CreateDefaultSubobject<UDRMiningComponent>(
 			TEXT("MiningComponent"));
+
+	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -186,7 +194,14 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 	StopJetpackFromServer();
 
+	const float CalculatedFallDamage =
+		CalculateFallDamage(LandingSpeed);
+
 	ApplyFallDamage(LandingSpeed);
+
+	ClientPlayFallSound(
+		CalculatedFallDamage > KINDA_SMALL_NUMBER,
+		IsDead());
 
 	/*
 	 * 낙하 피해로 사망했다면
@@ -320,13 +335,13 @@ void ADRPlayerCharacter::ApplyFallDamage(
 		CurrentHealth);
 }
 
-void ADRPlayerCharacter::RequestMine()
+bool ADRPlayerCharacter::RequestMine()
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
 		!HasHeldItemAction(EDRItemActionType::Dig))
 	{
-		return;
+		return false;
 	}
 
 	if (!IsValid(MiningComponent))
@@ -339,17 +354,10 @@ void ADRPlayerCharacter::RequestMine()
 				"Character=%s"),
 			*GetName());
 
-		return;
+		return false;
 	}
 
-	/*
-	 * Dig 3인칭 Presentation 요청.
-	 *
-	 * 실제 채굴 권한 처리는 MiningComponent가 담당한다.
-	 */
-	ServerRequestDigPresentation();
-
-	MiningComponent->TryMine();
+	return MiningComponent->TryMine();
 }
 
 void ADRPlayerCharacter::RequestMeleeAttack()
@@ -399,7 +407,7 @@ float ADRPlayerCharacter::TakeDamage(
 		CurrentHealth - AppliedDamage,
 		0.f,
 		MaxHealth);
-
+	
 	if (IsDead())
 	{
 		HandleDeath();
@@ -454,6 +462,17 @@ bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
 	}
 
 	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
+}
+
+void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::Dig);
 }
 
 void ADRPlayerCharacter::BeginPlay()
@@ -821,28 +840,68 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 				Movement->WantsJetpack()
 			: bIsJetpackActive;
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Jetpack] Character=%s "
-			"PresentationActive=%d "
-			"ServerActive=%d "
-			"Authority=%d Local=%d"),
-		*GetName(),
-		bPresentationActive,
-		bIsJetpackActive,
-		HasAuthority(),
-		IsLocallyControlled());
+	// 기존 Jetpack Sound
+	if (bPresentationActive)
+	{
+		if (!IsValid(JetpackAudioComponent) &&
+			IsValid(JetpackSound))
+		{
+			JetpackAudioComponent =
+				UGameplayStatics::SpawnSoundAttached(
+					JetpackSound,
+					GetRootComponent());
+		}
+	}
+	else
+	{
+		if (IsValid(JetpackAudioComponent))
+		{
+			JetpackAudioComponent->Stop();
+			JetpackAudioComponent = nullptr;
+		}
+	}
 
-	/*
-	 * 이후 bPresentationActive를 기준으로:
-	 *
-	 * Niagara 불꽃 활성화
-	 * 제트팩 사운드 재생
-	 * 카메라 흔들림
-	 * 장비 흔들림
-	 */
+	// Camera Shake는 자기 화면에만
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(GetController());
+
+	if (!IsValid(PlayerController) ||
+		!IsValid(PlayerController->PlayerCameraManager))
+	{
+		return;
+	}
+
+	if (bPresentationActive)
+	{
+		if (!IsValid(JetpackCameraShakeInstance) &&
+			JetpackCameraShakeClass)
+		{
+			JetpackCameraShakeInstance =
+				PlayerController->PlayerCameraManager
+					->StartCameraShake(
+						JetpackCameraShakeClass,
+						1.f,
+						ECameraShakePlaySpace::CameraLocal,
+						FRotator::ZeroRotator);
+		}
+	}
+	else
+	{
+		if (IsValid(JetpackCameraShakeInstance))
+		{
+			PlayerController->PlayerCameraManager
+				->StopCameraShake(
+					JetpackCameraShakeInstance,
+					false);
+
+			JetpackCameraShakeInstance = nullptr;
+		}
+	}
 }
 
 void ADRPlayerCharacter::PlayOwnerMeleeAttackPresentation()
@@ -974,14 +1033,33 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 
 		return;
 	}
+	
+	const float AppliedDamage =
+		UGameplayStatics::ApplyDamage(
+			HitPlayer,
+			MeleeAttackDamage,
+			GetController(),
+			this,
+			UDamageType::StaticClass());
 
-	UGameplayStatics::ApplyDamage(
-		HitPlayer,
-		MeleeAttackDamage,
-		GetController(),
-		this,
-		UDamageType::StaticClass());
+	if (AppliedDamage <= 0.f)
+	{
+		return;
+	}
 
+	const bool bKilled = HitPlayer->IsDead();
+
+	// 공격자
+	ClientPlayMeleeHitFeedback(bKilled);
+
+	// 피격자
+	HitPlayer->ClientPlayMeleeDamagedFeedback(
+		bKilled);
+
+	MulticastPlayMeleeImpactSound(
+		bKilled,
+		HitResult.ImpactPoint);
+	
 	UE_LOG(
 		LogTemp,
 		Warning,
@@ -1494,27 +1572,39 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(
 		return;
 	}
 
-	const float Cooldown =
-		GetItemActionCooldown(ActionType);
-
-	NextLocalItemActionTime =
-		GetWorld()->GetTimeSeconds() + Cooldown;
-	
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
-		PlayFirstPersonItemActionPresentation(
-			EDRItemActionType::Dig);
+		{
+			if (!RequestMine())
+			{
+				return;
+			}
 
-		RequestMine();
-		break;
+			NextLocalItemActionTime =
+				GetWorld()->GetTimeSeconds() +
+				GetItemActionCooldown(
+					EDRItemActionType::Dig);
+
+			PlayFirstPersonItemActionPresentation(
+				EDRItemActionType::Dig);
+
+			break;
+		}
 
 	case EDRItemActionType::MeleeAttack:
-		PlayFirstPersonItemActionPresentation(
-			EDRItemActionType::MeleeAttack);
+		{
+			NextLocalItemActionTime =
+				GetWorld()->GetTimeSeconds() +
+				GetItemActionCooldown(
+					EDRItemActionType::MeleeAttack);
 
-		RequestMeleeAttack();
-		break;
+			PlayFirstPersonItemActionPresentation(
+				EDRItemActionType::MeleeAttack);
+
+			RequestMeleeAttack();
+			break;
+		}
 
 	case EDRItemActionType::Throw:
 		RequestThrowHeldItem();
@@ -1662,11 +1752,25 @@ void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
 	case EDRItemActionType::Dig:
 		PlayFirstPersonItemSwing(
 			FirstPersonDigPresentation);
+		if (IsValid(DigSound))
+		{
+			UGameplayStatics::PlaySound2D(
+				this,
+				DigSound);
+		}
 		break;
 
 	case EDRItemActionType::MeleeAttack:
 		PlayFirstPersonItemSwing(
 			FirstPersonMeleePresentation);
+
+		if (IsValid(MeleeAirSound))
+		{
+			UGameplayStatics::PlaySound2D(
+				this,
+				MeleeAirSound);
+		}
+		
 		break;
 
 	case EDRItemActionType::Throw:
@@ -1732,28 +1836,176 @@ void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
 void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
 	EDRItemActionType ActionType)
 {
-	/*
-	 * 소유 플레이어는 별도의 1인칭 Presentation을 사용한다.
-	 */
 	if (IsLocallyControlled())
 	{
 		return;
 	}
 
 	PlayWorldItemActionPresentation(ActionType);
+
+	USoundBase* ActionSound = nullptr;
+
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		ActionSound = DigSound;
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		ActionSound = MeleeAirSound;
+		break;
+
+	default:
+		break;
+	}
+
+	if (IsValid(ActionSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			ActionSound,
+			GetActorLocation());
+	}
 }
 
-void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
+void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
+	bool bTookFallDamage,
+	bool bDied)
 {
-	if (!HasAuthority()
-		|| HeldItemDefinition == NewItemDefinition)
+	USoundBase* SoundToPlay = nullptr;
+
+	if (bDied)
+	{
+		SoundToPlay = FallDeadSound;
+	}
+	else if (bTookFallDamage)
+	{
+		SoundToPlay = FallDamageSound;
+	}
+	else
+	{
+		SoundToPlay = FallSound;
+	}
+
+	if (IsValid(SoundToPlay))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			SoundToPlay);
+	}
+
+	// 낙하 피해가 발생한 착지에만 Camera Shake
+	if (bTookFallDamage || bDied)
+	{
+		PlayLocalCameraShake(
+			FallDamageCameraShakeClass,
+			bDied ? 1.4f : 1.f);
+	}
+}
+
+void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
+	bool bKilled,
+	FVector_NetQuantize ImpactLocation)
+{
+	USoundBase* SoundToPlay =
+		bKilled
+			? MeleeKillSound
+			: MeleeHitSound;
+
+	if (!IsValid(SoundToPlay))
 	{
 		return;
 	}
-	
+
+	// 공격한 본인은 1인칭 피드백으로 바로 들음
+	if (IsLocallyControlled())
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			SoundToPlay);
+
+		return;
+	}
+
+	// 다른 플레이어는 실제 맞은 위치에서 들음
+	UGameplayStatics::PlaySoundAtLocation(
+		this,
+		SoundToPlay,
+		ImpactLocation);
+}
+
+void ADRPlayerCharacter::PlayLocalCameraShake(
+	TSubclassOf<UCameraShakeBase> ShakeClass,
+	float Scale)
+{
+	if (!IsLocallyControlled() ||
+		!ShakeClass)
+	{
+		return;
+	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(GetController());
+
+	if (!IsValid(PlayerController) ||
+		!IsValid(PlayerController->PlayerCameraManager))
+	{
+		return;
+	}
+
+	PlayerController->PlayerCameraManager->StartCameraShake(
+		ShakeClass,
+		Scale,
+		ECameraShakePlaySpace::CameraLocal,
+		FRotator::ZeroRotator);
+}
+
+void ADRPlayerCharacter::ClientPlayMeleeHitFeedback_Implementation(
+	bool bKilled)
+{
+	PlayLocalCameraShake(
+		MeleeHitConfirmCameraShakeClass,
+		bKilled ? 1.3f : 1.f);
+}
+
+void ADRPlayerCharacter::ClientPlayMeleeDamagedFeedback_Implementation(
+	bool bKilled)
+{
+	PlayLocalCameraShake(
+		MeleeDamagedCameraShakeClass,
+		bKilled ? 1.2f : 1.f);
+}
+
+void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
+{
+	PlayLocalCameraShake(
+		MeleeDamagedCameraShakeClass,
+		1.f);
+}
+
+void ADRPlayerCharacter::SetHeldItemDefinition(
+	UDRItemDefinition* NewItemDefinition)
+{
+	if (!HasAuthority() ||
+		HeldItemDefinition == NewItemDefinition)
+	{
+		return;
+	}
+
 	HeldItemDefinition = NewItemDefinition;
+
 	RefreshHeldItemVisual();
 	RefreshHeldItemMiningSettings();
+
+	if (IsLocallyControlled() &&
+		IsValid(HeldItemDefinition) &&
+		IsValid(EquipSound))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			EquipSound);
+	}
+
 	ForceNetUpdate();
 }
 
@@ -1761,6 +2013,15 @@ void ADRPlayerCharacter::OnRep_HeldItemDefinition()
 {
 	RefreshHeldItemVisual();
 	RefreshHeldItemMiningSettings();
+
+	if (IsLocallyControlled() &&
+		IsValid(HeldItemDefinition) &&
+		IsValid(EquipSound))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			EquipSound);
+	}
 }
 
 void ADRPlayerCharacter::RefreshHeldItemVisual()

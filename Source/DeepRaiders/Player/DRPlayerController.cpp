@@ -18,15 +18,17 @@
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
 
-#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Storage/DRStorage.h"
+#include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
+#include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
 
-#include "Debug/DebugDrawService.h"
+#include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
 ADRPlayerController::ADRPlayerController()
+    : bCanTeleportInteract(false)
 {
     // QuickSlot Initialize
     InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
@@ -36,6 +38,7 @@ ADRPlayerController::ADRPlayerController()
     // UI Component Initialize
     InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
     QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
+    TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -236,6 +239,7 @@ void ADRPlayerController::OnPossess(
     {
         QuickSlotComponent->ApplySelectedItemToCharacter();
     }
+
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -508,16 +512,20 @@ void ADRPlayerController::HandleInteract(const FInputActionValue&)
     FHitResult Hit;
     
     // 상호작용 가능한 액터 탐색
-    if (!IsLocalController()
-        || !TraceInteractable(Hit))
+    if (!IsLocalController())
     {
+        return;
+    }
+
+    if (!TraceInteractable(Hit))
+    {
+        TryInteractCurrentTeleport();
         return;
     }
     
     // Interface 구현 여부 확인
     AActor* Target = Hit.GetActor();
-    if (!IsValid(Target)
-        || !Target->Implements<UDRInteractableInterface>())
+    if (!IsValid(Target) || !Target->Implements<UDRInteractableInterface>())
     {
         return;
     }
@@ -1004,3 +1012,37 @@ void ADRPlayerController::DRWithDrawFirstItem()
             Entries[0].EntryId);
     }
 }
+
+#pragma region Teleport
+void ADRPlayerController::SetCanTeleportInteract(bool bNewCanTeleportInteract)
+{
+    bCanTeleportInteract = bNewCanTeleportInteract;
+}
+
+void ADRPlayerController::TryInteractCurrentTeleport()
+{
+    if (bCanTeleportInteract)
+    {
+        ServerRequestInteractCurrentTeleport();
+    }
+}
+
+void ADRPlayerController::ServerRequestInteractCurrentTeleport_Implementation()
+{
+    APawn* CachedPawn = GetPawn();
+    const UDRTeleportComponent* TeleportComponent = IsValid(CachedPawn) ? CachedPawn->FindComponentByClass<UDRTeleportComponent>() : nullptr;
+    AActor* Target = IsValid(TeleportComponent) ? TeleportComponent->GetCurrentInteractableTeleport() : nullptr;
+
+    if (!IsValid(CachedPawn) || !IsValid(Target) || !Target->Implements<UDRInteractableInterface>())
+    {
+        return;
+    }
+
+    if (!IDRInteractableInterface::Execute_CanInteract(Target, CachedPawn))
+    {
+        return;
+    }
+
+    IDRInteractableInterface::Execute_Interact(Target, CachedPawn);
+}
+#pragma endregion

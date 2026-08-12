@@ -39,7 +39,7 @@ public:
 	// 현재 조준 위치에 채굴을 시도한다.
 	// 쿨타임, 로컬 소유권, Trace 성공 여부를 확인한 뒤 실제 Voxel을 제거한다.
 	UFUNCTION(BlueprintCallable, Category = "Mining")
-	void TryMine();
+	bool TryMine();
 
 	// 지형은 변경하지 않고 현재 채굴 가능 범위만 표시한다.
 	// Tick에서 호출될 수 있으므로 잔상이 남지 않게 DrawTime 기본값을 0으로 둔다.
