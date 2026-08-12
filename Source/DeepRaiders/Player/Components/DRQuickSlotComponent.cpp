@@ -134,6 +134,26 @@ void UDRQuickSlotComponent::RequestBindSlot(int32 SlotIndex, UDRItemDefinition* 
 	}
 }
 
+void UDRQuickSlotComponent::RequestBindSelectedSlot(UDRItemDefinition* Definition)
+{
+	if (!IsValid(Definition))
+	{
+		return;
+	}
+	
+	if (HasQuickSlotAuthority())
+	{
+		TryBindSelectedSlot(Definition);
+		
+		return;
+	}
+	
+	if (IsLocalPlayer())
+	{
+		ServerBindSelectedSlot(Definition);
+	}
+}
+
 void UDRQuickSlotComponent::RequestClearSlot(int32 SlotIndex)
 {
 	if (!QuickSlots.IsValidIndex(SlotIndex))
@@ -289,6 +309,11 @@ int32 UDRQuickSlotComponent::GetSlotItemCount(int32 SlotIndex) const
 void UDRQuickSlotComponent::ServerBindSlot_Implementation(int32 SlotIndex, UDRItemDefinition* Definition)
 {
 	BindSlotInternal(SlotIndex, Definition);
+}
+
+void UDRQuickSlotComponent::ServerBindSelectedSlot_Implementation(UDRItemDefinition* Definition)
+{
+	TryBindSelectedSlot(Definition);
 }
 
 void UDRQuickSlotComponent::ServerClearSlot_Implementation(int32 SlotIndex)
