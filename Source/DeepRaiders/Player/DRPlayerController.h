@@ -17,6 +17,7 @@ class ADRWorldItemActor;
 class ADRStorage;
 class UDRInventoryUIComponent;
 class UDRQuickSlotUIComponent;
+class UDRTeleportUIComponent;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -289,5 +290,22 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
+
+#pragma endregion 
+	
+#pragma region Teleport
+public:
+	void SetCanTeleportInteract(bool bNewCanTeleportInteract);
+	bool CanTeleportInteract() const { return bCanTeleportInteract; }
+
+private:
+	void TryInteractCurrentTeleport();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestInteractCurrentTeleport();
+
+	uint8 bCanTeleportInteract : 1;
 #pragma endregion 
 };

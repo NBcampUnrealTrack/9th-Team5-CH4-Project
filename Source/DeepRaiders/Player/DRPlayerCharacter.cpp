@@ -7,6 +7,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
+#include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DRPlayerState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
@@ -43,6 +44,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MiningComponent =
 		CreateDefaultSubobject<UDRMiningComponent>(
 			TEXT("MiningComponent"));
+
+	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);

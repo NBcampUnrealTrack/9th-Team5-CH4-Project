@@ -11,6 +11,7 @@ class USceneComponent;
 class UStaticMesh;
 class FLifetimeProperty;
 class UDRMiningComponent;
+class UDRTeleportComponent;
 class UAnimMontage;
 class UDRCharacterMovementComponent;
 class UDRItemDefinition;
@@ -686,4 +687,11 @@ protected:
     void RefreshHeldItemVisual();
     void RefreshHeldItemMiningSettings();
 #pragma endregion
+
+#pragma region Teleport
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRTeleportComponent> TeleportComponent;
+#pragma endregion
+
 };
