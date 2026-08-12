@@ -7,6 +7,8 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Shop/DRShop.h"
+#include "Kismet/GameplayStatics.h"
 
 UDRShopTransactionComponent::UDRShopTransactionComponent()
 {
@@ -62,16 +64,22 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	switch (Request.OfferType)
 	{
 	case EDRShopOfferType::Purchase:
-		TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow);
+		if (TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
 		break;
 
 	case EDRShopOfferType::Upgrade:
-		TryUpgrade(
+		if (TryUpgrade(
 			PlayerState,
 			ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
 			Inventory,
 			ItemRow,
-			Request.TargetLevel);
+			Request.TargetLevel))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
 		break;
 	}
 }
@@ -111,6 +119,17 @@ void UDRShopTransactionComponent::ServerSellAllOres_Implementation(
 
 	PlayerState->SetCoins(
 		PlayerState->GetCoins() + static_cast<int32>(TotalPrice));
+	PlaySellSound(ShopActor);
+}
+
+void UDRShopTransactionComponent::ClientPlayTransactionSound_Implementation(
+	USoundBase* Sound,
+	float VolumeMultiplier)
+{
+	if (IsValid(Sound) && VolumeMultiplier > 0.f)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound, VolumeMultiplier);
+	}
 }
 
 ADRPlayerState* UDRShopTransactionComponent::GetPlayerState() const
@@ -131,6 +150,32 @@ UDRInventoryComponent* UDRShopTransactionComponent::GetInventoryComponent() cons
 	return IsValid(PlayerController)
 		? PlayerController->GetInventoryComponent()
 		: nullptr;
+}
+
+void UDRShopTransactionComponent::PlayPurchaseSound(
+	const AActor* ShopActor)
+{
+	const ADRShop* Shop = Cast<ADRShop>(ShopActor);
+
+	if (IsValid(Shop))
+	{
+		ClientPlayTransactionSound(
+			Shop->GetPurchaseSound(),
+			Shop->GetTransactionSoundVolume());
+	}
+}
+
+void UDRShopTransactionComponent::PlaySellSound(
+	const AActor* ShopActor)
+{
+	const ADRShop* Shop = Cast<ADRShop>(ShopActor);
+
+	if (IsValid(Shop))
+	{
+		ClientPlayTransactionSound(
+			Shop->GetSellSound(),
+			Shop->GetTransactionSoundVolume());
+	}
 }
 
 bool UDRShopTransactionComponent::TryPurchase(

@@ -5,6 +5,8 @@
 #include "DeepRaiders/Shop/Components/DRShopComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 #include "DeepRaiders/Shop/Components/DRUpgradeComponent.h"
+#include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 ADRShop::ADRShop()
 {
@@ -28,4 +30,12 @@ ADRShop::ADRShop()
 
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(
 		TEXT("ShopUIComponent"));
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> PurchaseSoundAsset(
+		TEXT("/Game/DeepRaiders/Sound/SoundWave/Shop_Buy.Shop_Buy"));
+	static ConstructorHelpers::FObjectFinder<USoundBase> SellSoundAsset(
+		TEXT("/Game/DeepRaiders/Sound/SoundWave/Shop_Sell.Shop_Sell"));
+
+	PurchaseSound = PurchaseSoundAsset.Object;
+	SellSound = SellSoundAsset.Object;
 }
