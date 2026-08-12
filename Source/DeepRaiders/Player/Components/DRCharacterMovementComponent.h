@@ -25,6 +25,11 @@ public:
     /** SavedMove에서 받은 입력 플래그를 서버 이동에 복원한다. */
     virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 
+    virtual void SetBase(
+        UPrimitiveComponent* NewBase,
+        const FName BoneName = NAME_None,
+        bool bNotifyActor = true) override;
+
     /** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 

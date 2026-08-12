@@ -9,8 +9,17 @@
 
 class UDRInventoryComponent;
 class ADRPlayerState;
+class AActor;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRStorageOwnerChanged, APlayerState*, PreviousOwner, APlayerState*, NewOwner);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRStorageOwnerChanged, AActor*, PreviousOwner, AActor*, NewOwner);
+
+UENUM()
+enum class EDRStorageAuthority : uint8
+{
+	Common,
+	Private,
+	Team, // 미구현
+};
 
 UCLASS()
 class DEEPRAIDERS_API ADRStorage : public AActor, public IDRInteractableInterface
@@ -29,27 +38,31 @@ public:
 	}
 	
 	UFUNCTION(BlueprintPure, Category = "Storage")
-	APlayerState* GetStorageOwner() const
+	AActor* GetStorageOwner() const
 	{
-		return StorageOwnerPlayerState.Get();
+		return StorageOwner.Get();
 	}
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Storage|Ownership")
-	bool TrySetStorageOwner(APlayerState* NewOwner);
+	bool TrySetStorageOwner(AActor* NewOwner);
 	
 	// 소유권 습득 시도, 이미 소유자가 있는 경우 실패
-	bool TryClaimOwnership(APlayerState* InPlayerState);
+	bool TryClaimOwnership(AActor* NewOwner);
 	bool TryReleaseStorageOwner();
 	
 	UFUNCTION(BlueprintPure, Category = "Storage|Ownership")
-	bool IsOwnerBy(APlayerState* InPlayerState) const;
+	bool IsOwnerBy(AActor* InPlayerState) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Storage|Ownership")
 	FDRStorageOwnerChanged OnStorageOwnerChangedDelegate;
 	
 protected:	
 	UFUNCTION()
-	void OnRep_StorageOwner(APlayerState* PreviousOwner);
+	void OnRep_StorageOwner(TWeakObjectPtr<AActor> PreviousOwner);
+	
+private:
+	UFUNCTION()
+	void HandleOwnerActorDeath();
 	
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Storage")
@@ -59,8 +72,11 @@ protected:
 	TObjectPtr<UDRInventoryComponent> InventoryComponent;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_StorageOwner, VisibleInstanceOnly, BlueprintReadOnly, Category = "Storage|Ownership")
-	TObjectPtr<APlayerState> StorageOwnerPlayerState;
+	TWeakObjectPtr<AActor> StorageOwner;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Storage")
+	EDRStorageAuthority Authority = EDRStorageAuthority::Common;
+	
 #pragma region Interact
 public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")

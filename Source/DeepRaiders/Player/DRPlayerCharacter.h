@@ -20,6 +20,9 @@ class UCurveFloat;
 class USoundBase;
 class UAudioComponent;
 class UCameraShakeBase;
+class UVoxelNoClippingComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
 USTRUCT(BlueprintType)
 struct FDRFirstPersonSwingPresentation
@@ -192,6 +195,12 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Mining")
     TObjectPtr<UDRMiningComponent> MiningComponent;
+
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Voxel")
+    TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
     
     UPROPERTY(
         EditDefaultsOnly,
@@ -297,6 +306,9 @@ private:
     FTimerHandle RespawnTimerHandle;
     
     void ExecuteHeldItemAction(EDRItemActionType ActionType);
+    
+public:
+    FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
     
 protected:
     UPROPERTY(
