@@ -10,6 +10,12 @@
 class UDRItemDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRInventoryChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FDRInventoryEntryDefinitionReplaced,
+	UDRItemDefinition*,
+	SourceDefinition,
+	UDRItemDefinition*,
+	TargetDefinition);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DEEPRAIDERS_API UDRInventoryComponent : public UActorComponent
@@ -25,6 +31,12 @@ public:
 	// 일부 추가 미구현
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryAddItem(UDRItemDefinition* Definition, int32 Quantity);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
+	bool TryReplaceEntryDefinition(
+		FGuid EntryId,
+		UDRItemDefinition* ExpectedSourceDefinition,
+		UDRItemDefinition* TargetDefinition);
 	
 	// 특정 엔트리에서 요청한 수량을 제거
 	// 수량 부족 시 실패
@@ -109,6 +121,9 @@ private:
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDRInventoryChanged OnInventoryChangedDelegate;
+
+	UPROPERTY(BlueprintAssignable, Category = "Inventory")
+	FDRInventoryEntryDefinitionReplaced OnEntryDefinitionReplacedDelegate;
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Inventory", meta = (ClampMin = "1", UIMin = "1"))

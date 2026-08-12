@@ -2,19 +2,19 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DRShopWidget.generated.h"
 
 class UButton;
-class UDRItemDefinition;
 class UDRShopItemWidget;
 class UScrollBox;
 enum class EItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FDRShopPurchaseRequestedSignature,
-	UDRItemDefinition*,
-	ItemDefinition);
+	FDRShopOfferRequestedSignature,
+	FDRShopOfferRequest,
+	Request);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopSellAllOresRequestedSignature);
 
 UCLASS()
@@ -23,15 +23,14 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** 상점 상품 목록을 저장하고 기본 카테고리를 표시한다. */
-	void InitializeShop(
-		const TArray<TObjectPtr<UDRItemDefinition>>& ItemDefinitions);
+	void InitializeShop(const TArray<FDRShopItemOffer>& NewItemOffers);
+	void SetUpgradeOffers(const TArray<FDRShopItemOffer>& NewUpgradeOffers);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
-	FDRShopPurchaseRequestedSignature OnPurchaseRequested;
+	FDRShopOfferRequestedSignature OnOfferRequested;
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopSellAllOresRequestedSignature OnSellAllOresRequested;
@@ -41,14 +40,12 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
-	/** WBP에 버튼이 없으면 카테고리 영역에 전체 판매 버튼을 생성한다. */
 	void InitializeSellAllOresButton();
-
-	/** 선택된 카테고리 버튼 상태와 상품 목록을 갱신한다. */
+	void InitializeUpgradeButton();
 	void SelectCategory(EItemCategory Category);
-
-	/** 선택된 카테고리의 상품 위젯을 다시 생성한다. */
 	void RefreshItems(EItemCategory Category);
+	void RefreshUpgradeItems();
+	bool CreateItemWidget(const FDRShopItemOffer& ItemOffer);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -59,13 +56,14 @@ private:
 	UFUNCTION()
 	void HandleConsumableButtonClicked();
 
-	/** 전체 판매 요청을 상점 컴포넌트로 전달한다. */
+	UFUNCTION()
+	void HandleUpgradeButtonClicked();
+
 	UFUNCTION()
 	void HandleSellAllOresButtonClicked();
 
-	/** 상품 위젯의 구매 요청을 상점 컴포넌트로 전달한다. */
 	UFUNCTION()
-	void HandlePurchaseRequested(UDRItemDefinition* ItemDefinition);
+	void HandleOfferRequested(FDRShopOfferRequest Request);
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
@@ -79,6 +77,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> SellAllOresButton;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> UpgradeButton;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
 
@@ -86,5 +87,10 @@ private:
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UDRItemDefinition>> ItemDefinitions;
+	TArray<FDRShopItemOffer> ItemOffers;
+
+	UPROPERTY(Transient)
+	TArray<FDRShopItemOffer> UpgradeOffers;
+
+	bool IsUpgradeSelected = false;
 };

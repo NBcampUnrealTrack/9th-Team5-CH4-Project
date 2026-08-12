@@ -7,6 +7,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
+#include "DeepRaiders/Item/DRMiningItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelWorld.h"
@@ -114,6 +115,28 @@ void UDRMiningComponent::PreviewMineTarget()
 	{
 		DrawMineArea(MinePosition, FColor::Green, PreviewDebugDrawTime);
 	}
+}
+
+void UDRMiningComponent::ApplyItemDefinition(
+	const UDRItemDefinition* ItemDefinition)
+{
+	const UDRMiningItemDefinition* MiningItemDefinition =
+		Cast<UDRMiningItemDefinition>(ItemDefinition);
+
+	if (!IsValid(MiningItemDefinition))
+	{
+		return;
+	}
+
+	const FDRMiningSettings& MiningSettings =
+		MiningItemDefinition->MiningSettings;
+	MineTraceDistance = FMath::Max(0.f, MiningSettings.MineTraceDistance);
+	MineRadius = FMath::Max(0.f, MiningSettings.MineRadius);
+	MineSurfaceDepthRatio = FMath::Clamp(
+		MiningSettings.MineSurfaceDepthRatio,
+		0.f,
+		1.f);
+	MineCooldown = FMath::Max(0.f, MiningSettings.MineCooldown);
 }
 
 void UDRMiningComponent::Server_RequestMine_Implementation(

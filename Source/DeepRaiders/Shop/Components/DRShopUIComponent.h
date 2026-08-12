@@ -2,14 +2,16 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
-class ADRPlayerState;
 class UDRInteractionComponent;
-class UDRItemDefinition;
+class UDRInventoryComponent;
+class UDRShopComponent;
+class UDRShopTransactionComponent;
 class UDRShopWidget;
-class UDataTable;
+class UDRUpgradeComponent;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
@@ -19,54 +21,40 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 public:
 	UDRShopUIComponent();
 
-	/** Definition이 이 상점의 판매 상품인지 확인한다. */
-	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;
-
-	/** 상품 등록 여부와 플레이어의 상점 범위를 함께 확인한다. */
-	bool CanPurchase(
-		const APawn* Interactor,
-		const UDRItemDefinition* ItemDefinition) const;
-
-	/** 플레이어가 이 상점에서 판매할 수 있는 범위인지 확인한다. */
-	bool IsSellAllowed(const APawn* Interactor) const;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** DataTable의 상점 상품 Definition을 캐시한다. */
-	void LoadItemDefinitions();
-
+	/** 로컬 플레이어가 상점에 진입하면 UI와 관련 컴포넌트를 연결한다. */
 	UFUNCTION()
 	void HandleInteractionEntered(APawn* Interactor);
 
+	/** 상점 상호작용 범위를 벗어나면 열려 있는 UI를 닫는다. */
 	UFUNCTION()
 	void HandleInteractionExited(APawn* Interactor);
 
-	/** 상점 UI를 제거하고 게임 입력으로 복구한다. */
+	/** 상점 UI와 입력 상태를 정리한다. */
 	UFUNCTION()
 	void HideShopWidget();
 
-	/** UI 구매 이벤트를 PlayerState 거래 요청으로 전달한다. */
+	/** UI에서 선택한 Offer를 서버 거래 컴포넌트로 전달한다. */
 	UFUNCTION()
-	void HandlePurchaseRequested(UDRItemDefinition* ItemDefinition);
+	void HandleOfferRequested(FDRShopOfferRequest Request);
 
-	/** UI 전체 판매 이벤트를 PlayerState 거래 요청으로 전달한다. */
+	/** UI의 전체 광물 판매 요청을 서버로 전달한다. */
 	UFUNCTION()
 	void HandleSellAllOresRequested();
 
+	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
+	UFUNCTION()
+	void HandleInventoryChanged();
+
+	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
+	void RefreshUpgradeOffers();
+
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		Category = "Shop|Data",
-		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRShopItemTableRow"))
-	TObjectPtr<UDataTable> ItemTable;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UDRItemDefinition>> ItemDefinitions;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopWidget> ShopWidget;
@@ -75,5 +63,14 @@ private:
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<ADRPlayerState> PlayerState;
+	TObjectPtr<UDRInventoryComponent> InventoryComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopComponent> ShopComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopTransactionComponent> ShopTransactionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
 };

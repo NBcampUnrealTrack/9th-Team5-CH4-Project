@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRShopTransactionComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
@@ -118,8 +119,17 @@ private:
 
 #pragma region QuickSlot
 public:
+	UDRInventoryComponent* GetInventoryComponent() const
+	{
+		return QuickSlotInventoryComponent;
+	}
+
 	UDRInventoryComponent* GetQuickSlotInventoryComponent() const { return QuickSlotInventoryComponent;}
 	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
+	UDRShopTransactionComponent* GetShopTransactionComponent() const
+	{
+		return ShopTransactionComponent;
+	}
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
@@ -127,6 +137,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
 	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shop")
+	TObjectPtr<UDRShopTransactionComponent> ShopTransactionComponent;
 	
 	UPROPERTY(
 		EditDefaultsOnly,
