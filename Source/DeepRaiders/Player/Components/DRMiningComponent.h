@@ -6,6 +6,7 @@
 
 class ADRPlayerCharacter;
 class AVoxelWorld;
+class UDRItemDefinition;
 class UDRVoxelInvokerControlComponent;
 
 UENUM(BlueprintType)
@@ -44,6 +45,9 @@ public:
 	// Tick에서 호출될 수 있으므로 잔상이 남지 않게 DrawTime 기본값을 0으로 둔다.
 	UFUNCTION(BlueprintCallable, Category = "Mining")
 	void PreviewMineTarget();
+
+	/** 장착한 채굴 아이템의 Data Asset 수치를 적용한다. */
+	void ApplyItemDefinition(const UDRItemDefinition* ItemDefinition);
 
 	float GetMineTraceDistance() const { return MineTraceDistance; }
 	float GetMineRadius() const { return MineRadius; }
