@@ -34,7 +34,7 @@ ADRPlayerController::ADRPlayerController()
     InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
-    
+
     // UI Component Initialize
     InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
     QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
@@ -44,14 +44,19 @@ ADRPlayerController::ADRPlayerController()
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    
+
     DOREPLIFETIME(ThisClass, CurrentStorage);
 }
 
 void ADRPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-    
+
+    SetShowMouseCursor(false);
+
+    FInputModeGameOnly InputModeData;
+    SetInputMode(InputModeData);
+
     /*
      * 서버에서 모든 플레이어의 시작 장비를 초기화.
      *
@@ -63,7 +68,7 @@ void ADRPlayerController::BeginPlay()
     {
         InitializeStartingQuickSlot();
     }
-    
+
     // 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
     if (!IsLocalController())
     {
@@ -159,7 +164,7 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleSelectQuickSlot);
     }
-    
+
     if (IsValid(PrimaryAction.Get()))
     {
         EnhancedInput->BindAction(
@@ -180,7 +185,7 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandlePrimaryActionCompleted);
     }
-    
+
     if (IsValid(SecondaryAction.Get()))
     {
         EnhancedInput->BindAction(
@@ -201,7 +206,7 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleSecondaryActionCompleted);
     }
-    
+
     if (IsValid(InteractAction.Get()))
     {
         EnhancedInput->BindAction(
@@ -210,7 +215,7 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleInteract);
     }
-    
+
     if (IsValid(DropHeldItemAction.Get()))
     {
         EnhancedInput->BindAction(
@@ -342,7 +347,7 @@ void ADRPlayerController::InitializeStartingQuickSlot()
                 "[StartingItem] Shovel Add=%d"),
             bAdded);
     }
-    
+
     if (QuickSlotComponent->TryBindFirstEmptySlot(StartingShovelDefinition))
     {
         UE_LOG(
@@ -368,7 +373,7 @@ void ADRPlayerController::HandlePrimaryActionStarted(const FInputActionValue&)
     {
         return;
     }
-    
+
     PlayerCharacter->RequestPrimaryItemAction(
         EDRItemActionTriggerEvent::Started);
 }
@@ -469,7 +474,7 @@ void ADRPlayerController::HandleSelectQuickSlot(
             "InputNumber=%d SlotIndex=%d"),
         InputSlotNumber,
         SlotIndex);
-    
+
     QuickSlotComponent->RequestSelectSlot(SlotIndex);
 }
 
@@ -508,9 +513,9 @@ bool ADRPlayerController::ApplyTerrainDigOnce(
 void ADRPlayerController::HandleInteract(const FInputActionValue&)
 {
     UE_LOG(LogTemp, Log, TEXT("Interact Called"));
-    
+
     FHitResult Hit;
-    
+
     // 상호작용 가능한 액터 탐색
     if (!IsLocalController())
     {
@@ -522,14 +527,14 @@ void ADRPlayerController::HandleInteract(const FInputActionValue&)
         TryInteractCurrentTeleport();
         return;
     }
-    
+
     // Interface 구현 여부 확인
     AActor* Target = Hit.GetActor();
     if (!IsValid(Target) || !Target->Implements<UDRInteractableInterface>())
     {
         return;
     }
-    
+
     // 클라에서 Trace된 액터 전달
     ServerRequestInteract(Target);
 }
@@ -538,19 +543,19 @@ bool ADRPlayerController::TraceInteractable(FHitResult& OutHit)
 {
     const APawn* CachedPawn = GetPawn();
     UWorld* World = GetWorld();
-    
+
     if (!IsValid(CachedPawn)
         ||!IsValid(World))
     {
         return false;
     }
-    
+
     const FVector Start = CachedPawn->GetPawnViewLocation();
     const FVector End = Start + CachedPawn->GetBaseAimRotation().Vector() * InteractionRange;
-    
+
     FCollisionQueryParams Params(SCENE_QUERY_STAT(InteracterTrace));
     Params.AddIgnoredActor(CachedPawn);
-    
+
     return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params);
 }
 
@@ -558,7 +563,7 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* ExpectedT
 {
     APawn* CachedPawn = GetPawn();
     FHitResult ServerHit;
-    
+
     // ExpectedTarget = 클라이언트에서 전달한 상호작용 액터
     // 서버에서 유효한 동작인지 검증
     if (!IsValid(CachedPawn)
@@ -569,35 +574,35 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* ExpectedT
     {
         return;
     }
-    
+
     if (!IDRInteractableInterface::Execute_CanInteract(ExpectedTarget, CachedPawn))
     {
         return;
     }
-    
+
     IDRInteractableInterface::Execute_Interact(ExpectedTarget, CachedPawn);
 }
 
 bool ADRPlayerController::CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const
 {
-    return HasAuthority() && IsValid(InventoryComponent) 
+    return HasAuthority() && IsValid(InventoryComponent)
         && InventoryComponent->CanAddItem(Definition, Quantity);
 }
 
 bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity)
 {
     // 퀵슬롯 여부와는 상관없이 아이템은 추가될 수 있다.
-    if (!CanReceiveItem(Definition,Quantity) 
+    if (!CanReceiveItem(Definition,Quantity)
         || !InventoryComponent->TryAddItem(Definition, Quantity))
     {
         return false;
     }
-    
+
     if (IsValid(QuickSlotComponent))
     {
         QuickSlotComponent->TryBindFirstEmptySlot(Definition);
     }
-    
+
     return true;
 }
 
@@ -666,44 +671,44 @@ ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Defi
     {
         return nullptr;
     }
-    
+
     UWorld* World = GetWorld();
-    
+
     if (!IsValid(World))
     {
         return nullptr;
     }
-    
+
     if (Definition->Category == EItemCategory::Ore)
     {
         UClass* ActorClass = Definition->ActorClass.Get();
-        
+
         if (!IsValid(ActorClass)
             || !ActorClass->IsChildOf(ADROrePoolActor::StaticClass()))
         {
             UE_LOG(LogTemp, Error, TEXT("[%s] Invalid ore ActorClass: %s"), *GetName(), *GetNameSafe(ActorClass));
-            
+
             return nullptr;
         }
-        
+
         TSubclassOf<ADROrePoolActor> OreActorClass = ActorClass;
-        
+
         UDROrePoolSubsystem* OrePoolSubsystem = World->GetSubsystem<UDROrePoolSubsystem>();
         if (!IsValid(OrePoolSubsystem))
         {
             return nullptr;
         }
-        
+
         return OrePoolSubsystem->AcquireOre(Definition, OreActorClass, BaseSpawnTransform, INDEX_NONE);
     }
-    
+
     UDRWorldItemSubsystem* WorldItemSubsystem = World->GetSubsystem<UDRWorldItemSubsystem>();
     if (!IsValid(WorldItemSubsystem))
     {
         return nullptr;
     }
-    
-    return WorldItemSubsystem->SpawnWorldItemFromDefinition(Definition, BaseSpawnTransform, Quantity);    
+
+    return WorldItemSubsystem->SpawnWorldItemFromDefinition(Definition, BaseSpawnTransform, Quantity);
 }
 
 void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) const
@@ -712,12 +717,12 @@ void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) co
     {
         return;
     }
-    
+
     ADROrePoolActor* DroppedOre = Cast<ADROrePoolActor>(DroppedItem);
     if (IsValid(DroppedOre))
     {
         UWorld* World = DroppedOre->GetWorld();
-    
+
         if (!IsValid(World))
         {
             return;
@@ -732,10 +737,10 @@ void ADRPlayerController::RollbackDroppedItem(ADRWorldItemActor* DroppedItem) co
             DroppedOre->Destroy();
             return;
         }
-    
+
         OrePoolSubsystem->ReleaseOre(DroppedOre);
     }
-    
+
     DroppedItem->Destroy();
 }
 
@@ -806,19 +811,19 @@ bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
     {
         return false;
     }
-    
+
     APawn* ControlledPawn = GetPawn();
-    
+
     if (!IsValid(ControlledPawn))
     {
         return false;
     }
-    
+
     if (!Storage->TryClaimOwnership(ControlledPawn))
     {
         return false;
     }
-    
+
     SetCurrentStorage(Storage);
     return true;
 }
@@ -862,9 +867,9 @@ bool ADRPlayerController::TryTransferStorageItemInternal(
         SetCurrentStorage(nullptr);
         return false;
     }
-    
+
     UDRInventoryComponent* StorageInventory = Storage->GetInventoryComponent();
-    
+
     if (!IsValid(InventoryComponent) || !IsValid(StorageInventory))
     {
         return false;
@@ -967,7 +972,7 @@ bool ADRPlayerController::IsStorageWithinInteractionRange(
     {
         return false;
     }
-    
+
     return FVector::DistSquared(
         ControlledPawn->GetActorLocation(),
         Storage->GetActorLocation()) <= FMath::Square(InteractionRange);
