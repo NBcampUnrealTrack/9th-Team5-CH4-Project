@@ -87,18 +87,25 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerStopJetpack();
 
-	/** 서버가 사용 요청을 거절하거나 연료가 소진됨. */
+	/** 서버가 제트팩 사용을 거절하고 권위 Fuel을 알려준다. */
 	UFUNCTION(Client, Reliable)
-	void ClientRejectJetpack();
+	void ClientRejectJetpack(float AuthoritativeFuel);
 
 	UFUNCTION()
 	void OnRep_JetpackActive();
 
-	void InitializeLocalFuelPrediction();
-
 	void RefreshActivePresentation();
 
 	void StopLocalPrediction();
+	
+	void InitializeFuelDisplayFromServer();
+
+	void ApplyServerFuelSnapshot(
+		float ServerFuel,
+		bool bSnapImmediately = false);
+
+	void UpdateFuelInterpolation(
+		float DeltaTime);
 	
 private:
 	UPROPERTY(
@@ -106,11 +113,30 @@ private:
 		VisibleAnywhere,
 		Category = "Jetpack")
 	bool bIsJetpackActive = false;
+	
+	/** HUD에 실제 표시할 Fuel */
+	float DisplayedFuel = 0.f;
 
-	/** 소유 게스트의 HUD 표시용 예측 연료 */
-	float LocalPredictedFuel = 0.f;
+	/** 직전에 받은 서버 Fuel */
+	float PreviousServerFuel = 0.f;
 
-	bool bLocalFuelPredictionInitialized = false;
+	/** 가장 최근에 받은 서버 Fuel */
+	float CurrentServerFuel = 0.f;
+
+	/**
+	 * 새로운 Snapshot을 받았을 때
+	 * 실제 Lerp를 시작할 표시값.
+	 */
+	float FuelLerpStartValue = 0.f;
+
+	float FuelLerpElapsed = 0.f;
+
+	float FuelLerpDuration = 0.1f;
+
+	/** 마지막 서버 Fuel Snapshot 수신 시간 */
+	float LastFuelSnapshotTime = -1.f;
+
+	bool bHasServerFuelSnapshot = false;
 	
 protected:
 	UPROPERTY(
