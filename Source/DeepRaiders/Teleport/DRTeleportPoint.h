@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "GameFramework/Actor.h"
 #include "DRTeleportPoint.generated.h"
 
@@ -12,7 +13,6 @@ class APawn;
 class FLifetimeProperty;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRTeleportPointPawnSignature, APawn*, Interactor);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRTeleportPointTeamSignature, int32, TeamId);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRTeleportPointSimpleSignature);
 
@@ -30,7 +30,7 @@ enum class EDRTeleportAccessType : uint8
 };
 
 UCLASS()
-class DEEPRAIDERS_API ADRTeleportPoint : public AActor
+class DEEPRAIDERS_API ADRTeleportPoint : public AActor, public IDRInteractableInterface
 {
 	GENERATED_BODY()
 
@@ -67,9 +67,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Teleport|Event")
 	FDRTeleportPointSimpleSignature OnTeleportEmptied;
 
-	UPROPERTY(BlueprintAssignable, Category = "Teleport|Event")
-	FDRTeleportPointTeamSignature OnTeleportRegistered;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -80,13 +77,7 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Teleport|Event")
 	void BP_OnTeleportEmptied();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "Teleport|Event")
-	void BP_OnTeleportRegistered(int32 TeamId);
-
 private:
-	UFUNCTION()
-	void OnRep_Registered();
-
 	UFUNCTION()
 	void HandleInteractionVolumeBeginOverlap(
 		UPrimitiveComponent* OverlappedComponent,
@@ -106,7 +97,6 @@ private:
 	bool IsInteractorInRange(APawn* Interactor) const;
 	void NotifyTeleportOccupied(APawn* Interactor);
 	void NotifyTeleportEmptied();
-	void NotifyTeleportRegistered(int32 TeamId);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneComponent> Root;
@@ -131,7 +121,7 @@ private:
 	bool bRequiresRegistration = true;
 
 	// 등록 여부만 복제하고, 이동/목록 UI는 이후 단계에서 붙인다.
-	UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_Registered, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "Teleport", meta = (AllowPrivateAccess = "true"))
 	bool bRegistered = false;
 
 	// Claimable은 등록 순간 설정되고, TeamOwned는 에디터에서 미리 지정한다.
@@ -140,4 +130,13 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<APawn>> OverlappingInteractors;
+	
+#pragma region Interact
+public:
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	bool CanInteract(APawn* Interactor) const;
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	bool Interact(APawn* Interactor);
+#pragma endregion
 };

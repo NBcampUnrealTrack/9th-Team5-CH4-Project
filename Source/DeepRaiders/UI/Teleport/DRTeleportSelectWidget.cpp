@@ -27,7 +27,7 @@ void UDRTeleportSelectWidget::InitializeTeleportList(ADRTeleportPoint* NewCurren
 	RefreshDestinationList();
 }
 
-void UDRTeleportSelectWidget::InitializeRegisteredTeleportList(int32, ADRTeleportPoint* NewCurrentTeleportPoint)
+void UDRTeleportSelectWidget::InitializeRegisteredTeleportList(int32 TeamId, ADRTeleportPoint* NewCurrentTeleportPoint)
 {
 	TArray<ADRTeleportPoint*> RegisteredDestinations;
 

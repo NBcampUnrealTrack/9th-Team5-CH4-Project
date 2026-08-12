@@ -53,7 +53,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	void GetRegisteredTeleportDestinationsForTeam(int32 TeamId, ADRTeleportPoint* CurrentTeleportPoint, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
 
-	bool CanTeamUseRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint) const;
+	bool CanTeamUseRegisteredTeleportPoint(int32 TeamId, const ADRTeleportPoint* TeleportPoint) const;
 
 private:
 	UPROPERTY(Replicated)

@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRTeleportSubsystem.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -107,14 +108,6 @@ FTransform ADRTeleportPoint::GetTeleportArrivalTransform() const
 	return FTransform(GetActorRotation(), GetActorLocation() + GetActorRotation().RotateVector(TeleportArrivalOffset));
 }
 
-void ADRTeleportPoint::OnRep_Registered()
-{
-	if (bRegistered)
-	{
-		NotifyTeleportRegistered(OwnerTeamId);
-	}
-}
-
 bool ADRTeleportPoint::CanRegisterForTeam(int32 TeamId, APawn* Interactor) const
 {
 	if (!IsValid(Interactor) || TeamId == INDEX_NONE || !IsInteractorInRange(Interactor))
@@ -167,8 +160,6 @@ bool ADRTeleportPoint::TryRegisterForTeam(int32 TeamId, APawn* Interactor)
 
 	bRegistered = true;
 	ForceNetUpdate();
-
-	NotifyTeleportRegistered(TeamId);
 
 	return true;
 }
@@ -245,9 +236,65 @@ void ADRTeleportPoint::NotifyTeleportEmptied()
 	BP_OnTeleportEmptied();
 }
 
-void ADRTeleportPoint::NotifyTeleportRegistered(int32 TeamId)
+#pragma region Interact
+bool ADRTeleportPoint::CanInteract_Implementation(APawn* Interactor) const
 {
-	// 등록 상태는 복제되므로 서버와 클라이언트 모두에서 registered MI를 적용할 수 있다.
-	OnTeleportRegistered.Broadcast(TeamId);
-	BP_OnTeleportRegistered(TeamId);
+	if (!IsValid(Interactor) || !IsInteractorInRange(Interactor))
+	{
+		return false;
+	}
+
+	const ADRPlayerState* DRPlayerState = Interactor->GetPlayerState<ADRPlayerState>();
+	const int32 TeamId = IsValid(DRPlayerState) ? DRPlayerState->GetTeamId() : INDEX_NONE;
+	if (TeamId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	if (const UDRTeleportComponent* TeleportComponent = Interactor->FindComponentByClass<UDRTeleportComponent>())
+	{
+		if (TeleportComponent->IsTeleportPointRegistered(this))
+		{
+			return true;
+		}
+	}
+
+	return CanRegisterForTeam(TeamId, Interactor);
 }
+
+bool ADRTeleportPoint::Interact_Implementation(APawn* Interactor)
+{
+	if (!CanInteract(Interactor))
+	{
+		return false;
+	}
+
+	UDRTeleportComponent* TeleportComponent = Interactor->FindComponentByClass<UDRTeleportComponent>();
+	if (!IsValid(TeleportComponent))
+	{
+		return false;
+	}
+
+	if (TeleportComponent->IsTeleportPointRegistered(this))
+	{
+		return TeleportComponent->RequestUseTeleportPoint(this);
+	}
+
+	const ADRPlayerState* DRPlayerState = Interactor->GetPlayerState<ADRPlayerState>();
+	const int32 TeamId = IsValid(DRPlayerState) ? DRPlayerState->GetTeamId() : INDEX_NONE;
+	if (!CanRegisterForTeam(TeamId, Interactor))
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	UDRTeleportSubsystem* TeleportSubsystem = IsValid(World) ? World->GetSubsystem<UDRTeleportSubsystem>() : nullptr;
+	if (!IsValid(TeleportSubsystem) || !TeleportSubsystem->TryRegisterTeleportPoint(this, Interactor, TeamId))
+	{
+		return false;
+	}
+
+	TeleportComponent->NotifyTeleportRegistered(this);
+	return true;
+}
+#pragma endregion 

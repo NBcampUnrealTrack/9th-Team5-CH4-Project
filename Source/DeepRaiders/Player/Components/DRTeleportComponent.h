@@ -7,6 +7,9 @@
 class ADRTeleportPoint;
 class FLifetimeProperty;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRTeleportUseRequestedSignature, ADRTeleportPoint*, CurrentTeleportPoint);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRTeleportRegisteredSignature, ADRTeleportPoint*, RegisteredTeleportPoint);
+
 UCLASS(ClassGroup = (Teleport), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRTeleportComponent : public UActorComponent
 {
@@ -24,17 +27,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Teleport")
 	void RequestTeleportTo(ADRTeleportPoint* DestinationTeleportPoint);
 
+	bool RequestUseTeleportPoint(ADRTeleportPoint* TeleportPoint);
+	void NotifyTeleportRegistered(ADRTeleportPoint* TeleportPoint);
+
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	ADRTeleportPoint* GetCurrentInteractableTeleport() const { return CurrentInteractableTeleport; }
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
-	bool IsTeleportPointRegistered(ADRTeleportPoint* TeleportPoint) const;
+	bool IsTeleportPointRegistered(const ADRTeleportPoint* TeleportPoint) const;
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	void GetRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	void GetRegisteredTeleportDestinations(ADRTeleportPoint* CurrentTeleportPoint, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
+
+	UPROPERTY(BlueprintAssignable, Category = "Teleport|Event")
+	FDRTeleportUseRequestedSignature OnTeleportUseRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "Teleport|Event")
+	FDRTeleportRegisteredSignature OnTeleportRegistered;
 
 	void SetCurrentInteractableTeleport(ADRTeleportPoint* TeleportPoint);
 	void ClearCurrentInteractableTeleport(ADRTeleportPoint* TeleportPoint);
@@ -47,6 +59,12 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerRequestTeleportTo(ADRTeleportPoint* DestinationTeleportPoint);
+
+	UFUNCTION(Client, Reliable)
+	void ClientRequestUseTeleportPoint(ADRTeleportPoint* TeleportPoint);
+
+	UFUNCTION(Client, Reliable)
+	void ClientNotifyTeleportRegistered(ADRTeleportPoint* TeleportPoint);
 
 	UPROPERTY(Replicated)
 	TObjectPtr<ADRTeleportPoint> CurrentInteractableTeleport;

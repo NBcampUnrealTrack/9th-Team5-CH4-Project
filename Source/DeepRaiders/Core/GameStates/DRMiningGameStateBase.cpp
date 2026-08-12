@@ -122,7 +122,7 @@ void ADRMiningGameStateBase::GetRegisteredTeleportDestinationsForTeam(int32 Team
 	OutTeleportPoints.Remove(CurrentTeleportPoint);
 }
 
-bool ADRMiningGameStateBase::CanTeamUseRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint) const
+bool ADRMiningGameStateBase::CanTeamUseRegisteredTeleportPoint(int32 TeamId, const ADRTeleportPoint* TeleportPoint) const
 {
 	if (!IsValid(TeleportPoint) || !TeleportPoint->IsRegisteredForTeam(TeamId))
 	{

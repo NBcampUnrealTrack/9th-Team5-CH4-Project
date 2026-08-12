@@ -43,7 +43,28 @@ void UDRTeleportComponent::RequestTeleportTo(ADRTeleportPoint* DestinationTelepo
 	ServerRequestTeleportTo(DestinationTeleportPoint);
 }
 
-bool UDRTeleportComponent::IsTeleportPointRegistered(ADRTeleportPoint* TeleportPoint) const
+bool UDRTeleportComponent::RequestUseTeleportPoint(ADRTeleportPoint* TeleportPoint)
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (!IsValid(OwnerPawn) || !OwnerPawn->HasAuthority() || !IsValid(TeleportPoint) || !IsTeleportPointRegistered(TeleportPoint))
+	{
+		return false;
+	}
+
+	ClientRequestUseTeleportPoint(TeleportPoint);
+	return true;
+}
+
+void UDRTeleportComponent::NotifyTeleportRegistered(ADRTeleportPoint* TeleportPoint)
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (IsValid(OwnerPawn) && OwnerPawn->HasAuthority() && IsValid(TeleportPoint))
+	{
+		ClientNotifyTeleportRegistered(TeleportPoint);
+	}
+}
+
+bool UDRTeleportComponent::IsTeleportPointRegistered(const ADRTeleportPoint* TeleportPoint) const
 {
 	if (const UWorld* World = GetWorld())
 	{
@@ -132,7 +153,10 @@ void UDRTeleportComponent::ServerRequestRegisterTeleport_Implementation(ADRTelep
 		return;
 	}
 
-	TeleportSubsystem->TryRegisterTeleportPoint(TargetTeleportPoint, OwnerPawn, TeamId);
+	if (TeleportSubsystem->TryRegisterTeleportPoint(TargetTeleportPoint, OwnerPawn, TeamId))
+	{
+		NotifyTeleportRegistered(TargetTeleportPoint);
+	}
 }
 
 void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoint* DestinationTeleportPoint)
@@ -156,4 +180,20 @@ void UDRTeleportComponent::ServerRequestTeleportTo_Implementation(ADRTeleportPoi
 
 	const FTransform ArrivalTransform = DestinationTeleportPoint->GetTeleportArrivalTransform();
 	OwnerPawn->TeleportTo(ArrivalTransform.GetLocation(), ArrivalTransform.Rotator(), false, true);
+}
+
+void UDRTeleportComponent::ClientRequestUseTeleportPoint_Implementation(ADRTeleportPoint* TeleportPoint)
+{
+	if (IsValid(TeleportPoint))
+	{
+		OnTeleportUseRequested.Broadcast(TeleportPoint);
+	}
+}
+
+void UDRTeleportComponent::ClientNotifyTeleportRegistered_Implementation(ADRTeleportPoint* TeleportPoint)
+{
+	if (IsValid(TeleportPoint))
+	{
+		OnTeleportRegistered.Broadcast(TeleportPoint);
+	}
 }
