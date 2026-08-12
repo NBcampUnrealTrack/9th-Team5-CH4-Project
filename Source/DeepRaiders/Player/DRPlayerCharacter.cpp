@@ -135,19 +135,36 @@ void ADRPlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	/*
-	 * 제트팩 이동은 CharacterMovementComponent가
-	 * 소유 클라이언트와 서버에서 예측 처리한다.
-	 *
-	 * Character Tick은 서버의 연료 소비에만 사용한다.
-	 */
-	if (!HasAuthority() ||
-		!bIsJetpackActive)
+	// ================================
+	// 소유 게스트 클라이언트 UI 예측
+	// ================================
+	if (IsLocallyControlled() &&
+		!HasAuthority() &&
+		bLocalJetpackFuelPredictionInitialized)
 	{
-		return;
+		const UDRCharacterMovementComponent* Movement =
+			GetDRCharacterMovementComponent();
+
+		if (IsValid(Movement) &&
+			Movement->WantsJetpack())
+		{
+			LocalPredictedJetpackFuel =
+				FMath::Max(
+					0.f,
+					LocalPredictedJetpackFuel -
+					JetpackFuelConsumptionPerSecond *
+					DeltaSeconds);
+		}
 	}
 
-	UpdateJetpackFuel(DeltaSeconds);
+	// ================================
+	// 실제 연료는 서버만 변경
+	// ================================
+	if (HasAuthority() &&
+		bIsJetpackActive)
+	{
+		UpdateJetpackFuel(DeltaSeconds);
+	}
 }
 
 UDRCharacterMovementComponent* ADRPlayerCharacter::GetDRCharacterMovementComponent() const
@@ -475,6 +492,72 @@ void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
 		EDRItemActionType::Dig);
 }
 
+float ADRPlayerCharacter::GetDisplayedJetpackFuelRatio() const
+{
+	const ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return 0.f;
+	}
+
+	const float MaxFuel =
+		DRPlayerState->GetMaxJetpackFuel();
+
+	if (MaxFuel <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	// 서버/Listen Host는 실제 권위값을 그대로 사용.
+	if (HasAuthority() ||
+		!IsLocallyControlled() ||
+		!bLocalJetpackFuelPredictionInitialized)
+	{
+		return DRPlayerState->GetJetpackFuelRatio();
+	}
+
+	return FMath::Clamp(
+		LocalPredictedJetpackFuel / MaxFuel,
+		0.f,
+		1.f);
+}
+
+void ADRPlayerCharacter::ReconcileJetpackFuelFromServer(
+	float ServerFuel)
+{
+	if (!IsLocallyControlled() ||
+		HasAuthority())
+	{
+		return;
+	}
+
+	const UDRCharacterMovementComponent* Movement =
+		GetDRCharacterMovementComponent();
+
+	const bool bLocallyUsingJetpack =
+		IsValid(Movement) &&
+		Movement->WantsJetpack();
+
+	/*
+	 * 사용 중에는 지연되어 도착한 서버 snapshot을
+	 * 그대로 덮어쓰지 않는다.
+	 *
+	 * 그러면 UI가 다시 계단식으로 튀기 때문.
+	 */
+	if (bLocallyUsingJetpack &&
+		ServerFuel > KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	LocalPredictedJetpackFuel =
+		FMath::Max(0.f, ServerFuel);
+
+	bLocalJetpackFuelPredictionInitialized = true;
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -606,8 +689,9 @@ void ADRPlayerCharacter::OnRep_Controller()
 void ADRPlayerCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
-	
+
 	RefreshJetpackVisual();
+	InitializeLocalJetpackFuelPrediction();
 }
 
 void ADRPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
@@ -676,7 +760,24 @@ void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
 		Movement->SetWantsJetpack(false);
 	}
 
+	if (!HasAuthority())
+	{
+		SetActorTickEnabled(false);
+	}
+
 	RefreshJetpackActivePresentation();
+
+	// 현재 수신해 둔 서버값으로 다시 보정
+	const ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (IsValid(DRPlayerState))
+	{
+		LocalPredictedJetpackFuel =
+			DRPlayerState->GetJetpackFuel();
+
+		bLocalJetpackFuelPredictionInitialized = true;
+	}
 }
 
 void ADRPlayerCharacter::OnRep_JetpackActive()
@@ -902,6 +1003,27 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 			JetpackCameraShakeInstance = nullptr;
 		}
 	}
+}
+
+void ADRPlayerCharacter::InitializeLocalJetpackFuelPrediction()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	const ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return;
+	}
+
+	LocalPredictedJetpackFuel =
+		DRPlayerState->GetJetpackFuel();
+
+	bLocalJetpackFuelPredictionInitialized = true;
 }
 
 void ADRPlayerCharacter::PlayOwnerMeleeAttackPresentation()
@@ -2189,6 +2311,16 @@ void ADRPlayerCharacter::HandleJumpPressed()
 			DRMovement->SetWantsJetpack(true);
 		}
 
+		if (!HasAuthority())
+		{
+			if (!bLocalJetpackFuelPredictionInitialized)
+			{
+				InitializeLocalJetpackFuelPrediction();
+			}
+
+			SetActorTickEnabled(true);
+		}
+		
 		RefreshJetpackActivePresentation();
 		ServerStartJetpack();
 	}
@@ -2209,6 +2341,11 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	if (IsValid(Movement))
 	{
 		Movement->SetWantsJetpack(false);
+	}
+
+	if (!HasAuthority())
+	{
+		SetActorTickEnabled(false);
 	}
 
 	RefreshJetpackActivePresentation();
