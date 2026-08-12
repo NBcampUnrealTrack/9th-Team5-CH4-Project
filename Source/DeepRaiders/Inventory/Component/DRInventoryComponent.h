@@ -97,6 +97,8 @@ public:
 		return Entries.IsEmpty();
 	}
 	
+	const FDRInventoryEntry* GetEntry(FGuid EntryId) const;
+	
 protected:
 	// 클라이언트가 새로운 인벤토리 배열을 받았을 때 호출
 	UFUNCTION()
