@@ -39,6 +39,19 @@ struct FDROreRuntimeSector
     TArray<FDROreSpawnPoint> SpawnPoints;
 };
 
+struct FDROreCaveSample
+{
+    FVector LocalCenter = FVector::ZeroVector;
+    float Radius = 0.f;
+};
+
+struct FDROrePillarProtection
+{
+    FVector LocalCenter = FVector::ZeroVector;
+    float Radius = 0.f;
+    float HalfHeight = 0.f;
+};
+
 // 위치를 선계산하고 최심도에 따라 섹터를 켠다.
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADROreFieldActor : public AActor
@@ -75,6 +88,11 @@ private:
     TArray<FDROreRuntimeSector> RuntimeSectors;
     float DeepestDugDepth = 0.f;
     int32 NextSpawnPointId = 0;
+    TArray<FDROreCaveSample> CaveSamples;
+    TArray<FDROrePillarProtection> PillarProtections;
+    int32 NextCaveSampleIndex = 0;
+    int32 CaveGenerationRetryCount = 0;
+    FTimerHandle CaveGenerationRetryTimer;
 
     void UpdateActiveSectors();
     void SetSectorActive(FDROreRuntimeSector& Sector, bool bNewActive);
@@ -85,4 +103,19 @@ private:
     void BuildSpawnPoints();
     FTransform MakeSpawnTransform(const FDROreDepthSector& Sector, FRandomStream& Random) const;
     const FDROreWeight* ChooseOre(const FDROreDepthSector& Sector, FRandomStream& Random) const;
+    // 시드 기반 동굴 생성
+    void BuildCaveSamples();
+    void GenerateCave();
+    void GenerateLongCave(const FDROreCaveConfig& Config, const FVector& Origin,
+        FRandomStream& Random);
+    void GenerateBigCave(const FDROreCaveConfig& Config, const FVector& Origin,
+        FRandomStream& Random);
+    void GenerateFlatCave(const FDROreCaveConfig& Config, const FVector& Origin,
+        FRandomStream& Random);
+    void GeneratePillarCave(const FDROreCaveConfig& Config, const FVector& Origin,
+        FRandomStream& Random);
+    void AddConnection(const FVector& Start, const FVector& End, float Radius, float Spacing,
+        float BottomRadiusScale);
+    void AddCaveSample(const FVector& Center, float Radius);
+    bool IntersectsProtectedPillar(const FVector& Center, float Radius) const;
 };

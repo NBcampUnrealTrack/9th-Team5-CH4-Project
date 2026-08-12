@@ -15,7 +15,139 @@ enum class EDROrePlacementMode : uint8
     Volume,
 
     // Box의 네 측면에 배치
-    SideWalls
+    SideWalls,
+
+    // 절차적으로 생성된 동굴 표면에 배치
+    CaveSurface
+};
+
+UENUM(BlueprintType)
+enum class EDROreCaveType : uint8
+{
+    LongCave,
+    BigCave,
+    FlatCave,
+    PillarCave
+};
+
+USTRUCT(BlueprintType)
+struct FDROreCaveConfig
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave")
+    EDROreCaveType CaveType = EDROreCaveType::LongCave;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave", meta = (ClampMin = "1"))
+    int32 Count = 1;
+
+    // Seed 기반 랜덤 배치에 더해지는 기준 위치
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave")
+    FVector CenterOffset = FVector::ZeroVector;
+
+    // OreField Bounds 대비 각 축의 랜덤 배치 범위 비율
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave",
+        meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    FVector CenterRandomRangeRatio = FVector(0.49f, 0.49f, 0.35f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave",
+        meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ConnectionChance = 0.42f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave", meta = (ClampMin = "10.0"))
+    float ConnectionRadius = 245.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave", meta = (ClampMin = "10.0"))
+    float ConnectionSpacing = 105.f;
+
+    // OreField 최하단에서 연결 구에 적용할 반경 비율
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Cave",
+        meta = (ClampMin = "0.1", ClampMax = "1.0"))
+    float ConnectionBottomRadiusScale = 0.45f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Long Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::LongCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float LongLength = 2100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Long Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::LongCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float LongRadius = 560.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Long Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::LongCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float LongSpacing = 140.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Long Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::LongCave", EditConditionHides,
+        ClampMin = "0.0"))
+    float LongPathVariation = 245.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Long Cave",
+        meta = (EditCondition = "CaveType == EDROreCaveType::LongCave", EditConditionHides,
+            ClampMin = "0.0", ClampMax = "0.8"))
+    float LongRadiusVariation = 0.175f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Big Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::BigCave", EditConditionHides, ClampMin = "1"))
+    int32 BigSphereCount = 8;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Big Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::BigCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float BigMinSphereRadius = 350.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Big Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::BigCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float BigMaxSphereRadius = 700.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Big Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::BigCave", EditConditionHides))
+    FVector BigCaveSize = FVector(1260.f, 1260.f, 700.f);
+
+    // X=길이, Y=너비, Z=높이
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flat Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::FlatCave", EditConditionHides))
+    FVector FlatSize = FVector(2800.f, 2100.f, 420.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flat Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::FlatCave", EditConditionHides,
+        ClampMin = "10.0"))
+    float FlatSpacing = 168.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flat Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::FlatCave", EditConditionHides,
+        ClampMin = "0.0"))
+    float FlatNoiseStrength = 140.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flat Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::FlatCave", EditConditionHides,
+        ClampMin = "0.1"))
+    float FlatNoiseFrequency = 2.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pillar Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::PillarCave", EditConditionHides))
+    FVector2D PillarRadiusRange = FVector2D(120.f, 1000.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pillar Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::PillarCave", EditConditionHides))
+    FVector2D PillarHeightRange = FVector2D(300.f, 1500.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pillar Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::PillarCave", EditConditionHides))
+    FVector2D PillarCaveRadiusRange = FVector2D(50.f, 150.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pillar Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::PillarCave", EditConditionHides))
+    FVector2D PillarSpacingRange = FVector2D(50.f, 100.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pillar Cave", meta = (
+        EditCondition = "CaveType == EDROreCaveType::PillarCave", EditConditionHides,
+        ClampMin = "0.0"))
+    float PillarPositionNoise = 80.f;
 };
 
 USTRUCT(BlueprintType)
@@ -87,6 +219,14 @@ public:
     // Box 경계에서 안쪽으로 띄울 여백
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "0.0"))
     float BoundsPadding = 100.f;
+
+    // 게임 시작 시 OreField Bounds 안에 가로형 동굴을 생성한다.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cave")
+    bool bGenerateCave = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cave",
+        meta = (EditCondition = "bGenerateCave"))
+    TArray<FDROreCaveConfig> Caves;
 
     // FDROreDepthSector 기반 깊이별 섹터 테이블
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field")
