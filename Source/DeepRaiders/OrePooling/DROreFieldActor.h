@@ -103,19 +103,16 @@ private:
     void BuildSpawnPoints();
     FTransform MakeSpawnTransform(const FDROreDepthSector& Sector, FRandomStream& Random) const;
     const FDROreWeight* ChooseOre(const FDROreDepthSector& Sector, FRandomStream& Random) const;
+    
     // 시드 기반 동굴 생성
     void BuildCaveSamples();
     void GenerateCave();
-    void GenerateLongCave(const FDROreCaveConfig& Config, const FVector& Origin,
-        FRandomStream& Random);
-    void GenerateBigCave(const FDROreCaveConfig& Config, const FVector& Origin,
-        FRandomStream& Random);
-    void GenerateFlatCave(const FDROreCaveConfig& Config, const FVector& Origin,
-        FRandomStream& Random);
-    void GeneratePillarCave(const FDROreCaveConfig& Config, const FVector& Origin,
-        FRandomStream& Random);
+    void GenerateLongCave(const FDROreCaveConfig& Config, const FVector& Origin, FRandomStream& Random);
+    void GenerateBigCave(const FDROreCaveConfig& Config, const FVector& Origin, FRandomStream& Random);
+    void GenerateFlatCave(const FDROreCaveConfig& Config, const FVector& Origin, FRandomStream& Random);
+    void GeneratePillarCave(const FDROreCaveConfig& Config, const FVector& Origin, FRandomStream& Random);
     void AddConnection(const FVector& Start, const FVector& End, float Radius, float Spacing,
-        float BottomRadiusScale);
+        float BottomRadiusScale, FRandomStream& Random);
     void AddCaveSample(const FVector& Center, float Radius);
     bool IntersectsProtectedPillar(const FVector& Center, float Radius) const;
 };

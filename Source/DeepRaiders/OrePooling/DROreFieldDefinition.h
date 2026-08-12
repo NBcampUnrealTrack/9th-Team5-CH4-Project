@@ -220,6 +220,22 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field", meta = (ClampMin = "0.0"))
     float BoundsPadding = 100.f;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cluster")
+    bool bUseOreClusters = true;
+
+    // 각 깊이 섹터에 만들 광맥 중심 개수 범위
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cluster",
+        meta = (EditCondition = "bUseOreClusters", ClampMin = "0"))
+    FIntPoint OreClusterCountRange = FIntPoint(1, 3);
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cluster",
+        meta = (EditCondition = "bUseOreClusters", ClampMin = "0.0", ClampMax = "1.0"))
+    float OreClusterChance = 0.4f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cluster",
+        meta = (EditCondition = "bUseOreClusters", ClampMin = "0.0"))
+    float OreClusterRadius = 300.f;
+
     // 게임 시작 시 OreField Bounds 안에 가로형 동굴을 생성한다.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ore Field|Cave")
     bool bGenerateCave = false;
