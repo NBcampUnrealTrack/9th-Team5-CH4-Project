@@ -760,12 +760,16 @@ void ADRPlayerController::ServerRequestThrowHeldItem_Implementation()
     APawn* CachedPawn = GetPawn();
     ADRWorldItemActor* ThrownItem = ConsumeAndSpawnHeldItem(SpawnTransform, 1);
 
-    if (IsValid(ThrownItem) && !FMath::IsNearlyZero(ThrowImpulseStrength))
+    if (IsValid(ThrownItem))
     {
-        ThrownItem->ApplyDropImpulse(ThrowDirection * ThrowImpulseStrength);
-    }
+        ThrownItem->MarkAsThrown(CachedPawn);
+        NotifyThrownItem(ThrownItem, CachedPawn);
 
-    NotifyThrownItem(ThrownItem, CachedPawn);
+        if (!FMath::IsNearlyZero(ThrowImpulseStrength))
+        {
+            ThrownItem->ApplyDropImpulse(ThrowDirection * ThrowImpulseStrength);
+        }
+    }
 }
 
 bool ADRPlayerController::BuildThrowAim(FTransform& OutSpawnTransform, FVector& OutThrowDirection) const

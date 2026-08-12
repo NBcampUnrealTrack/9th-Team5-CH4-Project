@@ -11,6 +11,13 @@
 class APawn;
 class UPrimitiveComponent;
 
+UENUM(BlueprintType)
+enum class EDRWorldItemState : uint8
+{
+	Dropped,
+	Thrown
+};
+
 UCLASS()
 class DEEPRAIDERS_API ADRWorldItemActor : public AActor, public IDRInteractableInterface
 {
@@ -31,6 +38,9 @@ public:
 	// 버려지는 순간 적용될 Impulse
 	void ApplyDropImpulse(const FVector& Impulse);
 
+	// 투척자만 충돌에서 제외하고 Thrown 상태로 전환한다.
+	void MarkAsThrown(APawn* Thrower);
+
 protected:	
 	virtual void BeginPlay() override;
 	
@@ -46,6 +56,9 @@ protected:
 	
 	UFUNCTION()
 	void OnRep_ItemInstance();
+
+	UFUNCTION()
+	void OnRep_WorldItemState();
 
 	UFUNCTION()
 	void HandleStaticMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
@@ -66,12 +79,20 @@ protected:
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ItemInstance)
 	FDRItemInstance ItemInstance;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WorldItemState, Category = "Item")
+	EDRWorldItemState WorldItemState = EDRWorldItemState::Dropped;
+
+	UPROPERTY(ReplicatedUsing = OnRep_WorldItemState)
+	TObjectPtr<APawn> ThrowingPawn;
 	
 private:
 	// ItemInstance 갱신 시마다 호출
 	// MeshData 갱신
 	void RefreshItemPresentation();
+	void ApplyWorldItemCollision();
 	bool bGroundHitEventArmed = false;
+	TWeakObjectPtr<APawn> IgnoredThrower;
 	
 #pragma region Interactable
 public:
