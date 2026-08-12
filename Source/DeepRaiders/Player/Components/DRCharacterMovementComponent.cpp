@@ -2,6 +2,7 @@
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "VoxelRender/VoxelProceduralMeshComponent.h"
 
 class FSavedMove_DRCharacter : public FSavedMove_Character
 {
@@ -145,6 +146,26 @@ void UDRCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
          FSavedMove_Character::FLAG_Custom_0) != 0;
 
     SetWantsJetpack(bNewWantsJetpack);
+}
+
+void UDRCharacterMovementComponent::SetBase(
+    UPrimitiveComponent* NewBase,
+    const FName BoneName,
+    bool bNotifyActor)
+{
+    // CharacterMovement는 동적 MovementBase를 ServerMove에 실어 보낸다.
+    // Voxel 런타임 메시 컴포넌트는 NetGUID를 지원하지 않으므로
+    // MovementBase로 잡히면 FNetGUIDCache::SupportsObject 경고가 발생한다.
+    if (NewBase && NewBase->IsA<UVoxelProceduralMeshComponent>())
+    {
+        Super::SetBase(nullptr, NAME_None, bNotifyActor);
+        return;
+    }
+
+    Super::SetBase(
+        NewBase,
+        BoneName,
+        bNotifyActor);
 }
 
 FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_Client() const
