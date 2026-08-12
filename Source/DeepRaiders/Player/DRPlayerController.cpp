@@ -961,16 +961,7 @@ bool ADRPlayerController::IsStorageWithinInteractionRange(
     {
         return false;
     }
-
-    DrawDebugSphere(
-        GetWorld(),
-        ControlledPawn->GetActorLocation(),
-        InteractionRange,
-        16,
-        FColor::Red,
-        false,
-        1.f);
-
+    
     return FVector::DistSquared(
         ControlledPawn->GetActorLocation(),
         Storage->GetActorLocation()) <= FMath::Square(InteractionRange);
