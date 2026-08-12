@@ -4,6 +4,7 @@
 #include "DRUpgradeComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 
@@ -183,6 +184,39 @@ bool UDRShopTransactionComponent::TryUpgrade(
 		|| !UpgradeComponent->ApplyUpgrade(Inventory, Operation))
 	{
 		return false;
+	}
+
+	if (Operation.TargetLevel == 1)
+	{
+		ADRPlayerController* PlayerController =
+			Cast<ADRPlayerController>(GetOwner());
+		UDRQuickSlotComponent* QuickSlotComponent =
+			IsValid(PlayerController)
+				? PlayerController->GetQuickSlotComponent()
+				: nullptr;
+		bool IsBindingRestored = false;
+
+		if (IsValid(QuickSlotComponent))
+		{
+			for (int32 Level = 2;
+				Level <= ItemRow.GetMaxUpgradeLevel();
+				++Level)
+			{
+				if (QuickSlotComponent->ReplaceBoundDefinition(
+					ItemRow.GetDefinitionForLevel(Level),
+					Operation.TargetDefinition))
+				{
+					IsBindingRestored = true;
+					break;
+				}
+			}
+
+			if (!IsBindingRestored)
+			{
+				QuickSlotComponent->TryBindFirstEmptySlot(
+					Operation.TargetDefinition);
+			}
+		}
 	}
 
 	PlayerState->SetCoins(
