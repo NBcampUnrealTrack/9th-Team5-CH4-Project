@@ -814,9 +814,7 @@ bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
         return false;
     }
     
-    APlayerState* ControlledPlayerState = ControlledPawn->GetPlayerState();
-    
-    if (!Storage->TryClaimOwnership(ControlledPlayerState))
+    if (!Storage->TryClaimOwnership(ControlledPawn))
     {
         return false;
     }
@@ -969,16 +967,7 @@ bool ADRPlayerController::IsStorageWithinInteractionRange(
     {
         return false;
     }
-
-    DrawDebugSphere(
-        GetWorld(),
-        ControlledPawn->GetActorLocation(),
-        InteractionRange,
-        16,
-        FColor::Red,
-        false,
-        1.f);
-
+    
     return FVector::DistSquared(
         ControlledPawn->GetActorLocation(),
         Storage->GetActorLocation()) <= FMath::Square(InteractionRange);
