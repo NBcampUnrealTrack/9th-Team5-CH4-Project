@@ -171,6 +171,12 @@ public:
     /** 서버에서의 땅파기 성공 여부 알려줌 */
     void NotifyMineConfirmedFromServer();
     
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Melee|Debug")
+    bool bIsMeleeAttackDrawDebug = true;
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -339,7 +345,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Jetpack",
         meta = (ClampMin = "0.0"))
-    float JetpackFuelConsumptionPerSecond = 20.f;
+    float JetpackFuelConsumptionPerSecond = 50.f;
     
     // ===== Melee Attack =====
 
@@ -357,7 +363,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Combat",
         meta = (ClampMin = "0.01"))
-    float MeleeAttackDuration = 0.7f;
+    float MeleeAttackDuration = 0.8f;
 
     /** 공격 피해량 */
     UPROPERTY(
@@ -365,7 +371,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Combat",
         meta = (ClampMin = "0.0"))
-    float MeleeAttackDamage = 20.f;
+    float MeleeAttackDamage = 10.f;
 
     /** 시선 정면으로 검사할 거리 */
     UPROPERTY(

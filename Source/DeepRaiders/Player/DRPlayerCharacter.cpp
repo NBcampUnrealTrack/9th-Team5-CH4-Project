@@ -995,15 +995,18 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 			QueryParams);
 
 #if ENABLE_DRAW_DEBUG
-	DrawDebugLine(
-		GetWorld(),
-		TraceStart,
-		TraceEnd,
-		bHit ? FColor::Green : FColor::Red,
-		false,
-		1.5f,
-		0,
-		2.f);
+	if (bIsMeleeAttackDrawDebug)
+	{
+		DrawDebugLine(
+			GetWorld(),
+			TraceStart,
+			TraceEnd,
+			bHit ? FColor::Green : FColor::Red,
+			false,
+			1.5f,
+			0,
+			2.f);
+	}
 #endif
 
 	if (!bHit)
