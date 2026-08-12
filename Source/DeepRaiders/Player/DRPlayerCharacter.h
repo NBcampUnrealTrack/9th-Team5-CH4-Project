@@ -18,6 +18,8 @@ class UDRCharacterMovementComponent;
 class UDRItemDefinition;
 class UTimelineComponent;
 class UCurveFloat;
+class USoundBase;
+class UAudioComponent;
 class ADRTeleportPoint;
 
 USTRUCT(BlueprintType)
@@ -71,7 +73,7 @@ public:
     void HandleJumpReleased();
     
     /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
-    void RequestMine();
+    bool RequestMine();
     
     /** 로컬 플레이어가 근접 공격을 요청한다. */
     void RequestMeleeAttack();
@@ -116,9 +118,6 @@ public:
 
     void MoveInput(const FVector2D& MoveInput);
     void LookInput(const FVector2D& LookInput);
-
-    // 임시 네트워크 테스트 진입점
-    void RequestNetworkTest();
     
     UFUNCTION(BlueprintPure, Category = "Player|Health")
     float GetCurrentHealth() const
@@ -170,6 +169,9 @@ public:
      */
     bool HasHeldItemAction(EDRItemActionType ActionType) const;
     
+    /** 서버에서의 땅파기 성공 여부 알려줌 */
+    void NotifyMineConfirmedFromServer();
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -196,19 +198,7 @@ protected:
     void OnRep_CurrentHealth();
     
 private:
-
-    // 임시 네트워크 복제 검증용
-    void ApplyNetworkTestState();
-
     void PrintNetworkState(const TCHAR* Context) const;
-
-    /** 소유 클라이언트의 요청을 서버에서 처리한다. */
-    UFUNCTION(Server, Reliable)
-    void ServerToggleNetworkTest();
-
-    /** 복제된 테스트 상태를 클라이언트 외형에 반영한다. */
-    UFUNCTION()
-    void OnRep_NetworkTestActive();
 
     UFUNCTION(Server, Reliable)
     void ServerStartJetpack();
@@ -324,35 +314,6 @@ protected:
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
-    /** 서버가 관리하며, 클라이언트에서는 RepNotify로 외형을 갱신한다. */
-    UPROPERTY(
-        ReplicatedUsing = OnRep_NetworkTestActive,
-        VisibleAnywhere,
-        BlueprintReadOnly,
-        Category = "Player|Network Test")
-    bool bNetworkTestActive = false;
-    
-    /** F키 눌르면 테스트 해볼수있음 */
-    UPROPERTY(
-    EditDefaultsOnly,
-    Category = "Player|Equipment|Test")
-    TObjectPtr<UStaticMesh> EquipmentTestMesh;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestFirstPersonTransform;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestWorldHandTransform;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        Category = "Player|Equipment|Test")
-    FTransform TestWorldBackTransform;
-    
     // ===== Jetpack =====
     
     UPROPERTY(
@@ -547,6 +508,9 @@ protected:
     
     FTransform FirstPersonEquipmentRootBaseTransform;
 
+    bool CanStartLocalItemAction() const;
+    float GetItemActionCooldown(EDRItemActionType ActionType) const;
+
     void PlayFirstPersonItemSwing(
         const FDRFirstPersonSwingPresentation& Presentation);
 
@@ -558,6 +522,15 @@ protected:
     
     // ===== Item Action Presentation =====
 
+    float NextLocalItemActionTime = 0.f;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action",
+        meta = (AllowPrivateAccess = "true", ClampMin = "0.01"))
+    float DigActionCooldown = 0.6f;
+    
     /** 로컬 1인칭에서 Action에 맞는 연출을 재생한다. */
     void PlayFirstPersonItemActionPresentation(
         EDRItemActionType ActionType);
@@ -596,6 +569,84 @@ protected:
         Category = "Player|Item Action|Presentation")
     TObjectPtr<UAnimMontage> WorldMeleeAttackMontage;
 
+    // ===== Item Action Sound =====
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> DigSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeSwingSound;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Sound")
+    TObjectPtr<USoundBase> JetpackSound;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAudioComponent> JetpackAudioComponent;
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallSound;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallDamageSound;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> FallDeadSound;
+
+    UFUNCTION(Client, Unreliable)
+    void ClientPlayFallSound(
+        bool bTookFallDamage,
+        bool bDied);
+    
+    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
+    TObjectPtr<USoundBase> EquipSound;
+    
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeAirSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeHitSound;
+
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Item Action|Sound")
+    TObjectPtr<USoundBase> MeleeKillSound;
+    
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastPlayMeleeImpactSound(
+        bool bKilled,
+        FVector_NetQuantize ImpactLocation);
+    
+#pragma region QuickSlot
+public:
+    void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
+    
+protected:
+    UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
+    TObjectPtr<UDRItemDefinition> HeldItemDefinition;
+    
+    UFUNCTION()
+    void OnRep_HeldItemDefinition();
+    
+    void RefreshHeldItemVisual();
+    void RefreshHeldItemMiningSettings();
+#pragma endregion
+
 #pragma region Teleport
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
@@ -614,18 +665,5 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UDRTeleportSelectWidget> ActiveTeleportSelectWidget;
 #pragma endregion
-    
-#pragma region QuickSlot
-public:
-    void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
-    
-protected:
-    UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
-    TObjectPtr<UDRItemDefinition> HeldItemDefinition;
-    
-    UFUNCTION()
-    void OnRep_HeldItemDefinition();
-    
-    void RefreshHeldItemVisual();    
-#pragma endregion
+
 };

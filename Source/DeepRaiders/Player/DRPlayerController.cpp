@@ -16,6 +16,9 @@
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
+#include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
+
+#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
@@ -28,8 +31,9 @@ ADRPlayerController::ADRPlayerController()
     : bCanTeleportInteract(false)
 {
     // QuickSlot Initialize
-    QuickSlotInventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
+    InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
     QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
+	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
     
     // UI Component Initialize
     InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
@@ -154,15 +158,6 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleSelectQuickSlot);
     }
-
-    if (IsValid(NetworkTestAction.Get()))
-    {
-        EnhancedInput->BindAction(
-            NetworkTestAction.Get(),
-            ETriggerEvent::Started,
-            this,
-            &ThisClass::HandleNetworkTest);
-    }
     
     if (IsValid(PrimaryAction.Get()))
     {
@@ -223,7 +218,7 @@ void ADRPlayerController::SetupInputComponent()
             this,
             &ThisClass::HandleDropHeldItem);
     }
-    
+
     if (IsValid(InventoryAction.Get()))
     {
         EnhancedInput->BindAction(
@@ -304,22 +299,10 @@ void ADRPlayerController::HandleJumpCompleted(
     }
 }
 
-void ADRPlayerController::HandleNetworkTest(
-    const FInputActionValue& Value)
-{
-    ADRPlayerCharacter* PlayerCharacter =
-        GetDRPlayerCharacter();
-
-    if (IsValid(PlayerCharacter))
-    {
-        PlayerCharacter->RequestNetworkTest();
-    }
-}
-
 void ADRPlayerController::InitializeStartingQuickSlot()
 {
     if (!HasAuthority() ||
-        !IsValid(QuickSlotInventoryComponent) ||
+        !IsValid(InventoryComponent) ||
         !IsValid(QuickSlotComponent) ||
         !IsValid(StartingShovelDefinition))
     {
@@ -342,11 +325,11 @@ void ADRPlayerController::InitializeStartingQuickSlot()
     }
 
     // 1. 인벤토리에 시작 삽 지급
-    if (QuickSlotInventoryComponent->GetItemCount(
+    if (InventoryComponent->GetItemCount(
             StartingShovelDefinition) <= 0)
     {
         const bool bAdded =
-            QuickSlotInventoryComponent->TryAddItem(
+            InventoryComponent->TryAddItem(
                 StartingShovelDefinition,
                 1);
 
@@ -595,15 +578,15 @@ void ADRPlayerController::ServerRequestInteract_Implementation(AActor* ExpectedT
 
 bool ADRPlayerController::CanReceiveItem(UDRItemDefinition* Definition, int32 Quantity) const
 {
-    return HasAuthority() && IsValid(QuickSlotInventoryComponent) 
-        && QuickSlotInventoryComponent->CanAddItem(Definition, Quantity);
+    return HasAuthority() && IsValid(InventoryComponent) 
+        && InventoryComponent->CanAddItem(Definition, Quantity);
 }
 
 bool ADRPlayerController::TryReceiveItem(UDRItemDefinition* Definition, int32 Quantity)
 {
     // 퀵슬롯 여부와는 상관없이 아이템은 추가될 수 있다.
     if (!CanReceiveItem(Definition,Quantity) 
-        || !QuickSlotInventoryComponent->TryAddItem(Definition, Quantity))
+        || !InventoryComponent->TryAddItem(Definition, Quantity))
     {
         return false;
     }
@@ -647,14 +630,14 @@ ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform
 {
     APawn* CachedPawn = GetPawn();
 
-    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(QuickSlotInventoryComponent) || Quantity <= 0)
+    if (!HasAuthority() || !IsValid(CachedPawn) || !IsValid(QuickSlotComponent) || !IsValid(InventoryComponent) || Quantity <= 0)
     {
         return nullptr;
     }
 
     UDRItemDefinition* Definition = QuickSlotComponent->GetSelectedItemDefinition();
 
-    if (!IsValid(Definition) || QuickSlotInventoryComponent->GetItemCount(Definition) < Quantity)
+    if (!IsValid(Definition) || InventoryComponent->GetItemCount(Definition) < Quantity)
     {
         return nullptr;
     }
@@ -666,7 +649,7 @@ ADRWorldItemActor* ADRPlayerController::ConsumeAndSpawnHeldItem(const FTransform
         return nullptr;
     }
 
-    if (!QuickSlotInventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
+    if (!InventoryComponent->TryRemoveItemByDefinition(Definition, Quantity))
     {
         RollbackDroppedItem(SpawnedItem);
         return nullptr;
@@ -822,39 +805,58 @@ bool ADRPlayerController::TryOpenStorage(ADRStorage* Storage)
         return false;
     }
     
+    APawn* ControlledPawn = GetPawn();
+    
+    if (!IsValid(ControlledPawn))
+    {
+        return false;
+    }
+    
+    APlayerState* ControlledPlayerState = ControlledPawn->GetPlayerState();
+    
+    if (!Storage->TryClaimOwnership(ControlledPlayerState))
+    {
+        return false;
+    }
+    
     SetCurrentStorage(Storage);
-    return true;    
+    return true;
 }
 
-void ADRPlayerController::RequestTransferStorageItem(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+void ADRPlayerController::RequestTransferStorageItem(
+    EDRStorageTransferDirection Direction,
+    FGuid SourceEntryId)
 {
     if (!SourceEntryId.IsValid())
     {
         return;
     }
-    
+
     if (HasAuthority())
     {
         TryTransferStorageItemInternal(Direction, SourceEntryId);
         return;
     }
-    
+
     if (IsLocalController())
     {
-        ServerRequestTransferStorageItem(Direction,SourceEntryId);
+        ServerRequestTransferStorageItem(Direction, SourceEntryId);
     }
 }
 
-void ADRPlayerController::ServerRequestTransferStorageItem_Implementation(EDRStorageTransferDirection Direction,
+void ADRPlayerController::ServerRequestTransferStorageItem_Implementation(
+    EDRStorageTransferDirection Direction,
     FGuid SourceEntryId)
 {
     TryTransferStorageItemInternal(Direction, SourceEntryId);
 }
 
-bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirection Direction, FGuid SourceEntryId)
+bool ADRPlayerController::TryTransferStorageItemInternal(
+    EDRStorageTransferDirection Direction,
+    FGuid SourceEntryId)
 {
     ADRStorage* Storage = CurrentStorage.Get();
-    
+
     if (!CanAccessStorage(Storage))
     {
         SetCurrentStorage(nullptr);
@@ -863,46 +865,52 @@ bool ADRPlayerController::TryTransferStorageItemInternal(EDRStorageTransferDirec
     
     UDRInventoryComponent* StorageInventory = Storage->GetInventoryComponent();
     
-    if (!IsValid(QuickSlotInventoryComponent) || !IsValid(StorageInventory))
+    if (!IsValid(InventoryComponent) || !IsValid(StorageInventory))
     {
         return false;
     }
-    
+
     UDRInventoryComponent* SourceInventory = nullptr;
     UDRInventoryComponent* DestinationInventory = nullptr;
-    
+
     switch (Direction)
     {
     case EDRStorageTransferDirection::PlayerToStorage:
-        SourceInventory = QuickSlotInventoryComponent;
+        SourceInventory = InventoryComponent;
         DestinationInventory = StorageInventory;
         break;
+
     case EDRStorageTransferDirection::StorageToPlayer:
         SourceInventory = StorageInventory;
-        DestinationInventory = QuickSlotInventoryComponent;
+        DestinationInventory = InventoryComponent;
         break;
+
     default:
         return false;
     }
-    
-    // 테스트 시점, 전달 수량을 1개로 제한
+
     constexpr int32 TransferQuantity = 1;
-    
-    return SourceInventory->TryTransferFromEntry(DestinationInventory, SourceEntryId, TransferQuantity) 
-        == TransferQuantity;   
+
+    return SourceInventory->TryTransferFromEntry(
+        DestinationInventory,
+        SourceEntryId,
+        TransferQuantity) == TransferQuantity;
 }
 
 bool ADRPlayerController::CanAccessStorage(ADRStorage* Storage) const
 {
     APawn* ControlledPawn = GetPawn();
-    
-    if (!HasAuthority() || !IsValid(ControlledPawn) 
+
+    if (!HasAuthority()
+        || !IsValid(ControlledPawn)
         || !IsStorageWithinInteractionRange(Storage))
     {
         return false;
     }
-    
-    return IDRInteractableInterface::Execute_CanInteract(Storage, ControlledPawn);
+
+    return IDRInteractableInterface::Execute_CanInteract(
+        Storage,
+        ControlledPawn);
 }
 
 void ADRPlayerController::RequestCloseStorage()
@@ -912,7 +920,7 @@ void ADRPlayerController::RequestCloseStorage()
         SetCurrentStorage(nullptr);
         return;
     }
-    
+
     if (IsLocalController())
     {
         ServerRequestCloseStorage();
@@ -933,10 +941,11 @@ void ADRPlayerController::SetCurrentStorage(ADRStorage* NewStorage)
 
     CurrentStorage = NewStorage;
     OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
-    ForceNetUpdate();    
+    ForceNetUpdate();
 }
 
-void ADRPlayerController::HandleToggleInventory(const FInputActionValue& Value)
+void ADRPlayerController::HandleToggleInventory(
+    const FInputActionValue&)
 {
     if (IsValid(InventoryUIComponent))
     {
@@ -949,31 +958,38 @@ void ADRPlayerController::OnRep_CurrentStorage()
     OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
 }
 
-bool ADRPlayerController::IsStorageWithinInteractionRange(const ADRStorage* Storage) const
+bool ADRPlayerController::IsStorageWithinInteractionRange(
+    const ADRStorage* Storage) const
 {
     const APawn* ControlledPawn = GetPawn();
-    
+
     if (!IsValid(ControlledPawn) || !IsValid(Storage))
     {
         return false;
     }
-    
-    // 상호작용 가능 여부 체크마다 범위 디버그 드로우
-     DrawDebugSphere(GetWorld(), GetPawn()->GetActorLocation(), InteractionRange
-     , 16, FColor::Red, false, 1.0f);
-    
-    return FVector::DistSquared(ControlledPawn->GetActorLocation(), Storage->GetActorLocation()) 
-        <= FMath::Square(InteractionRange);
+
+    DrawDebugSphere(
+        GetWorld(),
+        ControlledPawn->GetActorLocation(),
+        InteractionRange,
+        16,
+        FColor::Red,
+        false,
+        1.f);
+
+    return FVector::DistSquared(
+        ControlledPawn->GetActorLocation(),
+        Storage->GetActorLocation()) <= FMath::Square(InteractionRange);
 }
 
 void ADRPlayerController::DRDepositFirstItem()
 {
-    if (!IsValid(QuickSlotInventoryComponent))
+    if (!IsValid(InventoryComponent))
     {
         return;
     }
 
-    const TArray<FDRInventoryEntry> Entries = QuickSlotInventoryComponent->GetEntries();
+    const TArray<FDRInventoryEntry> Entries = InventoryComponent->GetEntries();
 
     if (!Entries.IsEmpty())
     {
@@ -987,7 +1003,8 @@ void ADRPlayerController::DRWithDrawFirstItem()
 {
     ADRStorage* Storage = CurrentStorage.Get();
 
-    if (!IsValid(Storage) || !IsValid(Storage->GetInventoryComponent()))
+    if (!IsValid(Storage)
+        || !IsValid(Storage->GetInventoryComponent()))
     {
         return;
     }

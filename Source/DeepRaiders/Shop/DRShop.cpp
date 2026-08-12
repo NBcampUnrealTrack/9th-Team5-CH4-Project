@@ -2,7 +2,9 @@
 
 #include "Components/SceneComponent.h"
 #include "DeepRaiders/Shop/Components/DRInteractionComponent.h"
+#include "DeepRaiders/Shop/Components/DRShopComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
+#include "DeepRaiders/Shop/Components/DRUpgradeComponent.h"
 
 ADRShop::ADRShop()
 {
@@ -17,6 +19,12 @@ ADRShop::ADRShop()
 		CreateDefaultSubobject<UDRInteractionComponent>(
 			TEXT("InteractionComponent"));
 	InteractionComponent->SetupAttachment(Root);
+
+	ShopComponent = CreateDefaultSubobject<UDRShopComponent>(
+		TEXT("ShopComponent"));
+
+	UpgradeComponent = CreateDefaultSubobject<UDRUpgradeComponent>(
+		TEXT("UpgradeComponent"));
 
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(
 		TEXT("ShopUIComponent"));

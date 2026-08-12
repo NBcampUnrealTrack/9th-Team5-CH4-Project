@@ -23,6 +23,7 @@
 
 #include "Components/TimelineComponent.h"
 #include "Curves/CurveFloat.h"
+#include "Components/AudioComponent.h"
 
 namespace
 {
@@ -192,7 +193,14 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 	StopJetpackFromServer();
 
+	const float CalculatedFallDamage =
+		CalculateFallDamage(LandingSpeed);
+
 	ApplyFallDamage(LandingSpeed);
+
+	ClientPlayFallSound(
+		CalculatedFallDamage > KINDA_SMALL_NUMBER,
+		IsDead());
 
 	/*
 	 * 낙하 피해로 사망했다면
@@ -326,13 +334,13 @@ void ADRPlayerCharacter::ApplyFallDamage(
 		CurrentHealth);
 }
 
-void ADRPlayerCharacter::RequestMine()
+bool ADRPlayerCharacter::RequestMine()
 {
 	if (!IsLocallyControlled() ||
 		IsDead() ||
 		!HasHeldItemAction(EDRItemActionType::Dig))
 	{
-		return;
+		return false;
 	}
 
 	if (!IsValid(MiningComponent))
@@ -345,17 +353,10 @@ void ADRPlayerCharacter::RequestMine()
 				"Character=%s"),
 			*GetName());
 
-		return;
+		return false;
 	}
 
-	/*
-	 * Dig 3인칭 Presentation 요청.
-	 *
-	 * 실제 채굴 권한 처리는 MiningComponent가 담당한다.
-	 */
-	ServerRequestDigPresentation();
-
-	MiningComponent->TryMine();
+	return MiningComponent->TryMine();
 }
 
 void ADRPlayerCharacter::RequestMeleeAttack()
@@ -462,6 +463,17 @@ bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
 	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
 }
 
+void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	MulticastPlayWorldItemActionPresentation(
+		EDRItemActionType::Dig);
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -560,16 +572,6 @@ void ADRPlayerCharacter::LookInput(
 	AddControllerPitchInput(LookInput.Y);
 }
 
-void ADRPlayerCharacter::RequestNetworkTest()
-{
-	if (!IsLocallyControlled())
-	{
-		return;
-	}
-
-	ServerToggleNetworkTest();
-}
-
 void ADRPlayerCharacter::PossessedBy(
 	AController* NewController)
 {
@@ -653,10 +655,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
-		bNetworkTestActive);
-
-	DOREPLIFETIME(
-		ADRPlayerCharacter,
 		bIsJetpackActive);
 	
 	DOREPLIFETIME(
@@ -666,22 +664,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
 		HeldItemDefinition);
-}
-
-void ADRPlayerCharacter::ServerToggleNetworkTest_Implementation()
-{
-	bNetworkTestActive = !bNetworkTestActive;
-
-	// 리슨 서버 월드의 외형 갱신
-	ApplyNetworkTestState();
-
-	ForceNetUpdate();
-}
-
-void ADRPlayerCharacter::OnRep_NetworkTestActive()
-{
-	// 복제 값을 받은 클라이언트의 외형 갱신
-	ApplyNetworkTestState();
 }
 
 void ADRPlayerCharacter::ClientRejectJetpack_Implementation()
@@ -858,28 +840,25 @@ void ADRPlayerCharacter::RefreshJetpackActivePresentation()
 				Movement->WantsJetpack()
 			: bIsJetpackActive;
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Jetpack] Character=%s "
-			"PresentationActive=%d "
-			"ServerActive=%d "
-			"Authority=%d Local=%d"),
-		*GetName(),
-		bPresentationActive,
-		bIsJetpackActive,
-		HasAuthority(),
-		IsLocallyControlled());
-
-	/*
-	 * 이후 bPresentationActive를 기준으로:
-	 *
-	 * Niagara 불꽃 활성화
-	 * 제트팩 사운드 재생
-	 * 카메라 흔들림
-	 * 장비 흔들림
-	 */
+	if (bPresentationActive)
+	{
+		if (!IsValid(JetpackAudioComponent) &&
+			IsValid(JetpackSound))
+		{
+			JetpackAudioComponent =
+				UGameplayStatics::SpawnSoundAttached(
+					JetpackSound,
+					GetRootComponent());
+		}
+	}
+	else
+	{
+		if (IsValid(JetpackAudioComponent))
+		{
+			JetpackAudioComponent->Stop();
+			JetpackAudioComponent = nullptr;
+		}
+	}
 }
 
 void ADRPlayerCharacter::PlayOwnerMeleeAttackPresentation()
@@ -1011,14 +990,26 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 
 		return;
 	}
+	
+	const float AppliedDamage =
+		UGameplayStatics::ApplyDamage(
+			HitPlayer,
+			MeleeAttackDamage,
+			GetController(),
+			this,
+			UDamageType::StaticClass());
 
-	UGameplayStatics::ApplyDamage(
-		HitPlayer,
-		MeleeAttackDamage,
-		GetController(),
-		this,
-		UDamageType::StaticClass());
+	if (AppliedDamage <= 0.f)
+	{
+		return;
+	}
 
+	const bool bKilled = HitPlayer->IsDead();
+
+	MulticastPlayMeleeImpactSound(
+		bKilled,
+		HitResult.ImpactPoint);
+	
 	UE_LOG(
 		LogTemp,
 		Warning,
@@ -1526,21 +1517,44 @@ void ADRPlayerCharacter::RestoreControllerInput()
 void ADRPlayerCharacter::ExecuteHeldItemAction(
 	EDRItemActionType ActionType)
 {
+	if (!CanStartLocalItemAction())
+	{
+		return;
+	}
+
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
-		PlayFirstPersonItemActionPresentation(
-			EDRItemActionType::Dig);
+		{
+			if (!RequestMine())
+			{
+				return;
+			}
 
-		RequestMine();
-		break;
+			NextLocalItemActionTime =
+				GetWorld()->GetTimeSeconds() +
+				GetItemActionCooldown(
+					EDRItemActionType::Dig);
+
+			PlayFirstPersonItemActionPresentation(
+				EDRItemActionType::Dig);
+
+			break;
+		}
 
 	case EDRItemActionType::MeleeAttack:
-		PlayFirstPersonItemActionPresentation(
-			EDRItemActionType::MeleeAttack);
+		{
+			NextLocalItemActionTime =
+				GetWorld()->GetTimeSeconds() +
+				GetItemActionCooldown(
+					EDRItemActionType::MeleeAttack);
 
-		RequestMeleeAttack();
-		break;
+			PlayFirstPersonItemActionPresentation(
+				EDRItemActionType::MeleeAttack);
+
+			RequestMeleeAttack();
+			break;
+		}
 
 	case EDRItemActionType::Throw:
 		RequestThrowHeldItem();
@@ -1580,6 +1594,30 @@ void ADRPlayerCharacter::ServerRequestMeleeAttack_Implementation()
 		&ThisClass::FinishMeleeAttack,
 		MeleeAttackDuration,
 		false);
+}
+
+bool ADRPlayerCharacter::CanStartLocalItemAction() const
+{
+	const UWorld* World = GetWorld();
+
+	return IsValid(World) &&
+		World->GetTimeSeconds() >= NextLocalItemActionTime;
+}
+
+float ADRPlayerCharacter::GetItemActionCooldown(
+	EDRItemActionType ActionType) const
+{
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		return DigActionCooldown;
+
+	case EDRItemActionType::MeleeAttack:
+		return MeleeAttackDuration;
+
+	default:
+		return 0.f;
+	}
 }
 
 void ADRPlayerCharacter::PlayFirstPersonItemSwing(
@@ -1664,11 +1702,25 @@ void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
 	case EDRItemActionType::Dig:
 		PlayFirstPersonItemSwing(
 			FirstPersonDigPresentation);
+		if (IsValid(DigSound))
+		{
+			UGameplayStatics::PlaySound2D(
+				this,
+				DigSound);
+		}
 		break;
 
 	case EDRItemActionType::MeleeAttack:
 		PlayFirstPersonItemSwing(
 			FirstPersonMeleePresentation);
+
+		if (IsValid(MeleeAirSound))
+		{
+			UGameplayStatics::PlaySound2D(
+				this,
+				MeleeAirSound);
+		}
+		
 		break;
 
 	case EDRItemActionType::Throw:
@@ -1734,33 +1786,135 @@ void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
 void ADRPlayerCharacter::MulticastPlayWorldItemActionPresentation_Implementation(
 	EDRItemActionType ActionType)
 {
-	/*
-	 * 소유 플레이어는 별도의 1인칭 Presentation을 사용한다.
-	 */
 	if (IsLocallyControlled())
 	{
 		return;
 	}
 
 	PlayWorldItemActionPresentation(ActionType);
+
+	USoundBase* ActionSound = nullptr;
+
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		ActionSound = DigSound;
+		break;
+
+	case EDRItemActionType::MeleeAttack:
+		ActionSound = MeleeAirSound;
+		break;
+
+	default:
+		break;
+	}
+
+	if (IsValid(ActionSound))
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			ActionSound,
+			GetActorLocation());
+	}
 }
 
-void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
+void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
+	bool bTookFallDamage,
+	bool bDied)
 {
-	if (!HasAuthority()
-		|| HeldItemDefinition == NewItemDefinition)
+	USoundBase* SoundToPlay = nullptr;
+
+	if (bDied)
+	{
+		SoundToPlay = FallDeadSound;
+	}
+	else if (bTookFallDamage)
+	{
+		SoundToPlay = FallDamageSound;
+	}
+	else
+	{
+		SoundToPlay = FallSound;
+	}
+
+	if (IsValid(SoundToPlay))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			SoundToPlay);
+	}
+}
+
+void ADRPlayerCharacter::MulticastPlayMeleeImpactSound_Implementation(
+	bool bKilled,
+	FVector_NetQuantize ImpactLocation)
+{
+	USoundBase* SoundToPlay =
+		bKilled
+			? MeleeKillSound
+			: MeleeHitSound;
+
+	if (!IsValid(SoundToPlay))
 	{
 		return;
 	}
-	
+
+	// 공격한 본인은 1인칭 피드백으로 바로 들음
+	if (IsLocallyControlled())
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			SoundToPlay);
+
+		return;
+	}
+
+	// 다른 플레이어는 실제 맞은 위치에서 들음
+	UGameplayStatics::PlaySoundAtLocation(
+		this,
+		SoundToPlay,
+		ImpactLocation);
+}
+
+void ADRPlayerCharacter::SetHeldItemDefinition(
+	UDRItemDefinition* NewItemDefinition)
+{
+	if (!HasAuthority() ||
+		HeldItemDefinition == NewItemDefinition)
+	{
+		return;
+	}
+
 	HeldItemDefinition = NewItemDefinition;
+
 	RefreshHeldItemVisual();
+	RefreshHeldItemMiningSettings();
+
+	if (IsLocallyControlled() &&
+		IsValid(HeldItemDefinition) &&
+		IsValid(EquipSound))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			EquipSound);
+	}
+
 	ForceNetUpdate();
 }
 
 void ADRPlayerCharacter::OnRep_HeldItemDefinition()
 {
 	RefreshHeldItemVisual();
+	RefreshHeldItemMiningSettings();
+
+	if (IsLocallyControlled() &&
+		IsValid(HeldItemDefinition) &&
+		IsValid(EquipSound))
+	{
+		UGameplayStatics::PlaySound2D(
+			this,
+			EquipSound);
+	}
 }
 
 void ADRPlayerCharacter::RefreshHeldItemVisual()
@@ -1782,6 +1936,14 @@ void ADRPlayerCharacter::RefreshHeldItemVisual()
 		, FirstPersonVisualTransform, ThirdPersonVisualTransform);	
 }
 
+void ADRPlayerCharacter::RefreshHeldItemMiningSettings()
+{
+	if (IsValid(MiningComponent))
+	{
+		MiningComponent->ApplyItemDefinition(HeldItemDefinition);
+	}
+}
+
 void ADRPlayerCharacter::OnRep_CurrentHealth()
 {
 	/*
@@ -1793,38 +1955,6 @@ void ADRPlayerCharacter::OnRep_CurrentHealth()
 	{
 		ApplyDeathRagdoll();
 	}
-}
-
-void ADRPlayerCharacter::ApplyNetworkTestState()
-{
-	if (bNetworkTestActive)
-	{
-		ApplyHandEquipmentVisual(
-			EquipmentTestMesh,
-			EquipmentTestMesh,
-			TestFirstPersonTransform,
-			TestWorldHandTransform);
-
-		ApplyBackEquipmentVisual(
-			EquipmentTestMesh,
-			TestWorldBackTransform);
-	}
-	else
-	{
-		ClearHandEquipmentVisual();
-		ClearBackEquipmentVisual();
-	}
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[EquipmentVisualTest] "
-			"Name=%s Active=%d Authority=%d Local=%d"),
-		*GetName(),
-		bNetworkTestActive,
-		HasAuthority(),
-		IsLocallyControlled());
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(

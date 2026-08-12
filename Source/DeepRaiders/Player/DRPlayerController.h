@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRShopTransactionComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
@@ -61,9 +62,6 @@ private:
 	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
 	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
 
-	// 임시 네트워크 검증 입력
-	void HandleNetworkTest(const FInputActionValue& Value);
-	
 	void InitializeStartingQuickSlot();
 	
 protected:
@@ -96,12 +94,6 @@ protected:
 		BlueprintReadOnly,
 		Category = "Player|Input")
 	TObjectPtr<UInputAction> SelectQuickSlotAction;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Player|Input")
-	TObjectPtr<UInputAction> NetworkTestAction;
 	
 	UPROPERTY(
 		EditDefaultsOnly,
@@ -127,15 +119,22 @@ private:
 
 #pragma region QuickSlot
 public:
-	UDRInventoryComponent* GetQuickSlotInventoryComponent() const { return QuickSlotInventoryComponent;}
+	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent;}
 	UDRQuickSlotComponent* GetQuickSlotComponent() {return QuickSlotComponent;}
+	UDRShopTransactionComponent* GetShopTransactionComponent() const
+	{
+		return ShopTransactionComponent;
+	}
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
-	TObjectPtr<UDRInventoryComponent> QuickSlotInventoryComponent;
+	TObjectPtr<UDRInventoryComponent> InventoryComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|QuickSlot")
 	TObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shop")
+	TObjectPtr<UDRShopTransactionComponent> ShopTransactionComponent;
 	
 	UPROPERTY(
 		EditDefaultsOnly,

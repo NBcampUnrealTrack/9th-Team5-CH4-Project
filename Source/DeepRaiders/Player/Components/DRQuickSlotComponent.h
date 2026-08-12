@@ -52,6 +52,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
 	bool TryBindFirstEmptySlot(UDRItemDefinition* Definition);
 	
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
+	bool TryBindSelectedSlot(UDRItemDefinition* Definition);
+	
 	// 로컬 플레이어가 특정 슬롯에 아이템 바인딩 요청
 	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
@@ -70,6 +73,11 @@ public:
 	// 슬롯 수 감소 시 범위 밖 바인딩 제거
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
 	bool SetSlotCount(int32 NewSlotCount);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
+	bool ReplaceBoundDefinition(
+		UDRItemDefinition* SourceDefinition,
+		UDRItemDefinition* TargetDefinition);
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	int32 GetSlotCount() const
@@ -129,6 +137,11 @@ protected:
 	
 	UFUNCTION()
 	void HandleInventoryChanged();
+
+	UFUNCTION()
+	void HandleInventoryEntryDefinitionReplaced(
+		UDRItemDefinition* SourceDefinition,
+		UDRItemDefinition* TargetDefinition);
 	
 private:
 	bool CacheInventoryComponent();

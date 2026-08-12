@@ -7,6 +7,7 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
+#include "DeepRaiders/Item/DRMiningItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelWorld.h"
@@ -30,26 +31,33 @@ void UDRMiningComponent::BeginPlay()
 	CacheVoxelInvokerControl();
 }
 
-void UDRMiningComponent::TryMine()
+bool UDRMiningComponent::TryMine()
 {
 	CacheOwnerCharacter();
 
 	// 입력은 외부에서 들어오지만, 채굴 가능 여부는 컴포넌트가 최종 방어선으로 검사한다.
 	if (!CanMine())
 	{
-		return;
+		return false;
 	}
 
 	FHitResult HitResult;
 	if (!PerformMiningTrace(HitResult))
 	{
-		return;
+		return false;
+	}
+	
+	// 로컬에서도 서버와 동일하게
+	// 실제 채굴 가능한 VoxelWorld인지 확인한다.
+	if (!IsValid(GetVoxelWorldFromHit(HitResult)))
+	{
+		return false;
 	}
 
 	FVector RequestedMinePosition;
 	if (!GetMinePositionFromHit(HitResult, RequestedMinePosition))
 	{
-		return;
+		return false;
 	}
 
 	// 클라 preview에 표시한 중심점을 서버에 함께 보내 서버 확정 위치와 시각 피드백을 맞춘다.
@@ -78,6 +86,8 @@ void UDRMiningComponent::TryMine()
 	{
 		LastMineTime = GetWorld()->GetTimeSeconds();
 	}
+	
+	return bMineRequested;
 }
 
 void UDRMiningComponent::PreviewMineTarget()
@@ -114,6 +124,28 @@ void UDRMiningComponent::PreviewMineTarget()
 	{
 		DrawMineArea(MinePosition, FColor::Green, PreviewDebugDrawTime);
 	}
+}
+
+void UDRMiningComponent::ApplyItemDefinition(
+	const UDRItemDefinition* ItemDefinition)
+{
+	const UDRMiningItemDefinition* MiningItemDefinition =
+		Cast<UDRMiningItemDefinition>(ItemDefinition);
+
+	if (!IsValid(MiningItemDefinition))
+	{
+		return;
+	}
+
+	const FDRMiningSettings& MiningSettings =
+		MiningItemDefinition->MiningSettings;
+	MineTraceDistance = FMath::Max(0.f, MiningSettings.MineTraceDistance);
+	MineRadius = FMath::Max(0.f, MiningSettings.MineRadius);
+	MineSurfaceDepthRatio = FMath::Clamp(
+		MiningSettings.MineSurfaceDepthRatio,
+		0.f,
+		1.f);
+	MineCooldown = FMath::Max(0.f, MiningSettings.MineCooldown);
 }
 
 void UDRMiningComponent::Server_RequestMine_Implementation(
@@ -255,6 +287,12 @@ bool UDRMiningComponent::HandleMineRequestOnServer(
 	if (IsValid(VoxelInvokerControl.Get()))
 	{
 		VoxelInvokerControl->ReportDigLocation(Operation.Location);
+	}
+	
+	// 서버에서의 땅파기 성공 여부를 캐릭터에게 알려줌
+	if (IsValid(OwnerCharacter.Get()))
+	{
+		OwnerCharacter->NotifyMineConfirmedFromServer();
 	}
 
 	return true;

@@ -25,6 +25,10 @@
 		{
 			"Name": "VoxelFree",
 			"Enabled": true
+		},
+		{
+			"Name": "WaveformEditor",
+			"Enabled": true
 		}
 	]
 }
