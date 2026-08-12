@@ -41,12 +41,8 @@ private:
 	
 #pragma region Teleport
 public:
-	void AddPublicRegisteredTeleportPoint(ADRTeleportPoint* TeleportPoint);
 	void AddTeamRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint);
 	void RemoveRegisteredTeleportPoint(ADRTeleportPoint* TeleportPoint);
-
-	UFUNCTION(BlueprintPure, Category = "Teleport")
-	void GetPublicRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
 	void GetTeamRegisteredTeleportPoints(int32 TeamId, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
@@ -60,11 +56,6 @@ public:
 	bool CanTeamUseRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint) const;
 
 private:
-	void AppendValidTeleportPoints(const TArray<TObjectPtr<ADRTeleportPoint>>& Source, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
-
-	UPROPERTY(Replicated)
-	TArray<TObjectPtr<ADRTeleportPoint>> PublicRegisteredTeleports;
-
 	UPROPERTY(Replicated)
 	TArray<FDRTeamRegisteredTeleportPoint> TeamRegisteredTeleports;
 #pragma endregion

@@ -128,7 +128,7 @@ bool ADRTeleportPoint::CanRegisterForTeam(int32 TeamId, APawn* Interactor) const
 		return false;
 	}
 
-	if (bRegistered)
+	if (bRegistered && AccessType != EDRTeleportAccessType::Public)
 	{
 		return false;
 	}

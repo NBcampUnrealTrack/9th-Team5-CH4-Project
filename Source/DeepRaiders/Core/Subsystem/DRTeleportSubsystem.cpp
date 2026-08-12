@@ -44,34 +44,19 @@ bool UDRTeleportSubsystem::TryRegisterTeleportPoint(ADRTeleportPoint* TeleportPo
 		return false;
 	}
 
+	if (GameState->CanTeamUseRegisteredTeleportPoint(TeamId, TeleportPoint))
+	{
+		return false;
+	}
+
 	if (!TeleportPoint->TryRegisterForTeam(TeamId, Interactor))
 	{
 		return false;
 	}
 
-	if (TeleportPoint->GetAccessType() == EDRTeleportAccessType::Public)
-	{
-		GameState->AddPublicRegisteredTeleportPoint(TeleportPoint);
-	}
-	else
-	{
-		GameState->AddTeamRegisteredTeleportPoint(TeamId, TeleportPoint);
-	}
+	GameState->AddTeamRegisteredTeleportPoint(TeamId, TeleportPoint);
 
 	return true;
-}
-
-void UDRTeleportSubsystem::GetPublicRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const
-{
-	OutTeleportPoints.Reset();
-
-	if (const UWorld* World = GetWorld())
-	{
-		if (const ADRMiningGameStateBase* GameState = World->GetGameState<ADRMiningGameStateBase>())
-		{
-			GameState->GetPublicRegisteredTeleportPoints(OutTeleportPoints);
-		}
-	}
 }
 
 void UDRTeleportSubsystem::GetTeamRegisteredTeleportPoints(int32 TeamId, TArray<ADRTeleportPoint*>& OutTeleportPoints) const

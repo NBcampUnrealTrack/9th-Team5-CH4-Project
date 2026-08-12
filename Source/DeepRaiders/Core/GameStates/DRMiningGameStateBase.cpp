@@ -8,7 +8,6 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ADRMiningGameStateBase, PublicRegisteredTeleports);
 	DOREPLIFETIME(ADRMiningGameStateBase, TeamRegisteredTeleports);
 }
 
@@ -54,17 +53,6 @@ bool ADRMiningGameStateBase::ApplyTerrainDigOnce(const FDRTerrainDigOperation& O
 #pragma endregion
 
 #pragma region Teleport
-void ADRMiningGameStateBase::AddPublicRegisteredTeleportPoint(ADRTeleportPoint* TeleportPoint)
-{
-	if (!HasAuthority() || !IsValid(TeleportPoint) || !TeleportPoint->IsRegistered() || TeleportPoint->GetAccessType() != EDRTeleportAccessType::Public)
-	{
-		return;
-	}
-
-	PublicRegisteredTeleports.AddUnique(TeleportPoint);
-	ForceNetUpdate();
-}
-
 void ADRMiningGameStateBase::AddTeamRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint)
 {
 	if (!HasAuthority() || TeamId == INDEX_NONE || !IsValid(TeleportPoint) || !TeleportPoint->IsRegisteredForTeam(TeamId))
@@ -94,19 +82,12 @@ void ADRMiningGameStateBase::RemoveRegisteredTeleportPoint(ADRTeleportPoint* Tel
 		return;
 	}
 
-	PublicRegisteredTeleports.Remove(TeleportPoint);
 	TeamRegisteredTeleports.RemoveAll([TeleportPoint](const FDRTeamRegisteredTeleportPoint& RegisteredTeleport)
 	{
 		return RegisteredTeleport.TeleportPoint == TeleportPoint;
 	});
 
 	ForceNetUpdate();
-}
-
-void ADRMiningGameStateBase::GetPublicRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const
-{
-	OutTeleportPoints.Reset();
-	AppendValidTeleportPoints(PublicRegisteredTeleports, OutTeleportPoints);
 }
 
 void ADRMiningGameStateBase::GetTeamRegisteredTeleportPoints(int32 TeamId, TArray<ADRTeleportPoint*>& OutTeleportPoints) const
@@ -125,7 +106,6 @@ void ADRMiningGameStateBase::GetTeamRegisteredTeleportPoints(int32 TeamId, TArra
 void ADRMiningGameStateBase::GetRegisteredTeleportPointsForTeam(int32 TeamId, TArray<ADRTeleportPoint*>& OutTeleportPoints) const
 {
 	OutTeleportPoints.Reset();
-	AppendValidTeleportPoints(PublicRegisteredTeleports, OutTeleportPoints);
 
 	for (const FDRTeamRegisteredTeleportPoint& RegisteredTeleport : TeamRegisteredTeleports)
 	{
@@ -149,11 +129,6 @@ bool ADRMiningGameStateBase::CanTeamUseRegisteredTeleportPoint(int32 TeamId, ADR
 		return false;
 	}
 
-	if (PublicRegisteredTeleports.Contains(TeleportPoint))
-	{
-		return true;
-	}
-
 	for (const FDRTeamRegisteredTeleportPoint& RegisteredTeleport : TeamRegisteredTeleports)
 	{
 		if (RegisteredTeleport.TeamId == TeamId && RegisteredTeleport.TeleportPoint == TeleportPoint)
@@ -165,14 +140,4 @@ bool ADRMiningGameStateBase::CanTeamUseRegisteredTeleportPoint(int32 TeamId, ADR
 	return false;
 }
 
-void ADRMiningGameStateBase::AppendValidTeleportPoints(const TArray<TObjectPtr<ADRTeleportPoint>>& Source, TArray<ADRTeleportPoint*>& OutTeleportPoints) const
-{
-	for (ADRTeleportPoint* TeleportPoint : Source)
-	{
-		if (IsValid(TeleportPoint))
-		{
-			OutTeleportPoints.AddUnique(TeleportPoint);
-		}
-	}
-}
 #pragma endregion

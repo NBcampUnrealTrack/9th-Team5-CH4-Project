@@ -23,9 +23,6 @@ public:
 	bool TryRegisterTeleportPoint(ADRTeleportPoint* TeleportPoint, APawn* Interactor, int32 TeamId);
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
-	void GetPublicRegisteredTeleportPoints(TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
-
-	UFUNCTION(BlueprintPure, Category = "Teleport")
 	void GetTeamRegisteredTeleportPoints(int32 TeamId, TArray<ADRTeleportPoint*>& OutTeleportPoints) const;
 
 	UFUNCTION(BlueprintPure, Category = "Teleport")
