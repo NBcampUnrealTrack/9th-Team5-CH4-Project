@@ -1102,6 +1102,23 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 		return;
 	}
 
+	switch (MeleeTraceMode)
+	{
+	case EDRMeleeTraceMode::ViewLine:
+		PerformMeleeLineTrace();
+		break;
+
+	case EDRMeleeTraceMode::WeaponSweep:
+		PerformMeleeWeaponSweep();
+		break;
+
+	default:
+		break;
+	}
+}
+
+void ADRPlayerCharacter::PerformMeleeLineTrace()
+{
 	const FVector TraceStart =
 		GetPawnViewLocation();
 
@@ -1113,7 +1130,7 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 		AimRotation.Vector() * MeleeAttackRange;
 
 	FCollisionQueryParams QueryParams(
-		SCENE_QUERY_STAT(MeleeAttackTrace),
+		SCENE_QUERY_STAT(MeleeAttackLineTrace),
 		false,
 		this);
 
@@ -1136,7 +1153,9 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 			GetWorld(),
 			TraceStart,
 			TraceEnd,
-			bHit ? FColor::Green : FColor::Red,
+			bHit
+				? FColor::Green
+				: FColor::Red,
 			false,
 			1.5f,
 			0,
@@ -1149,12 +1168,29 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 		UE_LOG(
 			LogTemp,
 			Log,
-			TEXT("[Melee] Miss Character=%s"),
+			TEXT(
+				"[Melee][Line] Miss Character=%s"),
 			*GetName());
 
 		return;
 	}
 
+	ProcessMeleeHit(HitResult);
+}
+
+void ADRPlayerCharacter::PerformMeleeWeaponSweep()
+{
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[Melee][Sweep] "
+			"Weapon Sweep is not implemented yet."));
+}
+
+void ADRPlayerCharacter::ProcessMeleeHit(
+	const FHitResult& HitResult)
+{
 	ADRPlayerCharacter* HitPlayer =
 		Cast<ADRPlayerCharacter>(
 			HitResult.GetActor());
@@ -1167,11 +1203,12 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 			Log,
 			TEXT(
 				"[Melee] Hit non-player actor=%s"),
-			*GetNameSafe(HitResult.GetActor()));
+			*GetNameSafe(
+				HitResult.GetActor()));
 
 		return;
 	}
-	
+
 	const float AppliedDamage =
 		UGameplayStatics::ApplyDamage(
 			HitPlayer,
@@ -1185,27 +1222,31 @@ void ADRPlayerCharacter::PerformMeleeHitCheck()
 		return;
 	}
 
-	const bool bKilled = HitPlayer->IsDead();
+	const bool bKilled =
+		HitPlayer->IsDead();
 
-	// 공격자
-	ClientPlayMeleeHitFeedback(bKilled);
+	// 공격자 피드백
+	ClientPlayMeleeHitFeedback(
+		bKilled);
 
-	// 피격자
+	// 피격자 피드백
 	HitPlayer->ClientPlayMeleeDamagedFeedback(
 		bKilled);
 
+	// 월드 타격 사운드
 	MulticastPlayMeleeImpactSound(
 		bKilled,
 		HitResult.ImpactPoint);
-	
+
 	UE_LOG(
 		LogTemp,
 		Warning,
 		TEXT(
-			"[Melee] Attacker=%s Target=%s Damage=%.1f"),
+			"[Melee] Attacker=%s "
+			"Target=%s Damage=%.1f"),
 		*GetName(),
 		*GetNameSafe(HitPlayer),
-		MeleeAttackDamage);
+		AppliedDamage);
 }
 
 void ADRPlayerCharacter::FinishMeleeAttack()

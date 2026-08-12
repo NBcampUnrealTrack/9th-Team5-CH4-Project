@@ -51,6 +51,13 @@ struct FDRFirstPersonSwingPresentation
     FVector LocationOffset = FVector::ZeroVector;
 };
 
+UENUM(BlueprintType)
+enum class EDRMeleeTraceMode : uint8
+{
+    ViewLine UMETA(DisplayName = "View Line"),
+    WeaponSweep UMETA(DisplayName = "Weapon Sweep")
+};
+
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
  *
@@ -262,8 +269,17 @@ private:
     /** 서버에서 공격 가능 여부를 검사한다. */
     bool CanStartMeleeAttack() const;
 
-    /** 서버에서 실제 공격 판정을 수행한다. */
+    /** 현재 선택된 판정 방식으로 근접 공격 판정을 수행한다. */
     void PerformMeleeHitCheck();
+
+    /** 카메라 정면 단일 LineTrace 판정. */
+    void PerformMeleeLineTrace();
+
+    /** 무기 Socket 기반 Sweep 판정. 다음 단계에서 구현한다. */
+    void PerformMeleeWeaponSweep();
+
+    /** Trace/Sweep으로 검출된 대상에 실제 공격 결과를 처리한다. */
+    void ProcessMeleeHit(const FHitResult& HitResult);
 
     /** 서버에서 공격 상태를 종료한다. */
     void FinishMeleeAttack();
@@ -271,7 +287,7 @@ private:
     /** 소유 클라이언트의 공격 요청을 서버에서 처리한다. */
     UFUNCTION(Server, Reliable)
     void ServerRequestMeleeAttack();
-    
+
     bool bIsMeleeAttacking = false;
 
     FTimerHandle MeleeHitTimerHandle;
@@ -375,6 +391,13 @@ protected:
     
     // ===== Melee Attack =====
 
+    /** 근접 공격 판정 방식 */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Player|Combat")
+    EDRMeleeTraceMode MeleeTraceMode = EDRMeleeTraceMode::ViewLine;
+    
     /** 공격 시작 후 실제 판정까지의 시간 */
     UPROPERTY(
         EditDefaultsOnly,
@@ -397,7 +420,7 @@ protected:
         BlueprintReadOnly,
         Category = "Player|Combat",
         meta = (ClampMin = "0.0"))
-    float MeleeAttackDamage = 10.f;
+    float MeleeAttackDamage = 40.f;
 
     /** 시선 정면으로 검사할 거리 */
     UPROPERTY(
