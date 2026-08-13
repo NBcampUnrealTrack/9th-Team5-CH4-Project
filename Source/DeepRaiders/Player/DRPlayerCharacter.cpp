@@ -1,35 +1,26 @@
 #include "DRPlayerCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/GameModeBase.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DRPlayerState.h"
-#include "Components/SkeletalMeshComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 #include "DeepRaiders/Player/Components/DRHealthComponent.h"
+#include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
-
-#include "Components/TimelineComponent.h"
-#include "Curves/CurveFloat.h"
-#include "Components/AudioComponent.h"
-
-#include "Camera/CameraShakeBase.h"
-#include "Camera/PlayerCameraManager.h"
-#include "GameFramework/PlayerController.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -62,6 +53,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
 	
 	HealthComponent = CreateDefaultSubobject<UDRHealthComponent>(TEXT("HealthComponent"));
+	
+	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -147,8 +140,8 @@ void ADRPlayerCharacter::Landed(
 	const FHitResult& Hit)
 {
 	/*
-	 * Super::Landed 이후에는 수직 속도가 바뀔 수 있으므로
-	 * 착지 직전 속도를 먼저 저장한다.
+	 * Super 이후 Z Velocity가 바뀔 수 있으므로
+	 * 착지 직전 속도 저장.
 	 */
 	const float LandingSpeed =
 		FMath::Max(
@@ -157,168 +150,19 @@ void ADRPlayerCharacter::Landed(
 
 	Super::Landed(Hit);
 
-	/*
-	 * Jetpack 상태 정리는 Component에게 맡긴다.
-	 */
 	if (IsValid(JetpackComponent))
 	{
-		JetpackComponent->HandleLanded();
+		JetpackComponent->
+			HandleLanded();
 	}
 
-	/*
-	 * 낙하 피해 / 연료 충전은 서버 권한.
-	 */
-	if (!HasAuthority())
+	if (IsValid(
+			PlayerLifecycleComponent))
 	{
-		return;
+		PlayerLifecycleComponent->
+			HandleLanded(
+				LandingSpeed);
 	}
-
-	const float CalculatedFallDamage =
-		CalculateFallDamage(LandingSpeed);
-
-	ApplyFallDamage(LandingSpeed);
-
-	/*
-	 * 기존 착지 / 피해 / 사망 사운드.
-	 */
-	ClientPlayFallSound(
-		CalculatedFallDamage >
-			KINDA_SMALL_NUMBER,
-		IsDead());
-
-	/*
-	 * 낙하 피해로 죽었으면
-	 * 죽은 Pawn의 연료를 다시 채우지 않는다.
-	 */
-	if (IsDead())
-	{
-		return;
-	}
-
-	ADRPlayerState* DRPlayerState =
-		GetPlayerState<ADRPlayerState>();
-
-	if (IsValid(DRPlayerState))
-	{
-		DRPlayerState->RefillJetpackFuel();
-	}
-}
-
-float ADRPlayerCharacter::CalculateFallDamage(
-	float LandingSpeed) const
-{
-	const float CharacterMaxHealth =
-		GetMaxHealth();
-
-	if (LandingSpeed <= MinFallDamageSpeed ||
-		CharacterMaxHealth <=
-			KINDA_SMALL_NUMBER)
-	{
-		return 0.f;
-	}
-
-	if (MaxFallDamageSpeed <=
-		MinFallDamageSpeed +
-		KINDA_SMALL_NUMBER)
-	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[FallDamage] Invalid speed range. "
-				"Character=%s MinSpeed=%.1f "
-				"MaxSpeed=%.1f"),
-			*GetName(),
-			MinFallDamageSpeed,
-			MaxFallDamageSpeed);
-
-		return 0.f;
-	}
-
-	const float NormalizedSpeed =
-		FMath::Clamp(
-			(LandingSpeed -
-				MinFallDamageSpeed) /
-			(MaxFallDamageSpeed -
-				MinFallDamageSpeed),
-			0.f,
-			1.f);
-
-	const float DamageAlpha =
-		FMath::Pow(
-			NormalizedSpeed,
-			FMath::Max(
-				FallDamageExponent,
-				0.01f));
-
-	const float MaximumFallDamage =
-		CharacterMaxHealth *
-		FMath::Clamp(
-			MaxFallDamageRatio,
-			0.f,
-			1.f);
-
-	return MaximumFallDamage *
-		DamageAlpha;
-}
-
-void ADRPlayerCharacter::ApplyFallDamage(
-	float LandingSpeed)
-{
-	if (!HasAuthority() || IsDead())
-	{
-		return;
-	}
-
-	const float CalculatedDamage = CalculateFallDamage(LandingSpeed);
-
-	/*
-	 * 테스트 중 모든 착지 속도를 확인할 수 있도록
-	 * 피해 여부와 관계없이 로그를 남긴다.
-	 */
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT(
-			"[FallDamage] Character=%s "
-			"LandingSpeed=%.1f "
-			"CalculatedDamage=%.1f"),
-		*GetName(),
-		LandingSpeed,
-		CalculatedDamage);
-
-	if (CalculatedDamage <= KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	const float HealthBeforeDamage = GetCurrentHealth();
-
-	/*
-	 * 기존 공격 피해와 동일한 TakeDamage 경로를 사용한다.
-	 * 실제 체력 감소와 사망 판정은 TakeDamage가 담당한다.
-	 */
-	const float AppliedDamage =
-		UGameplayStatics::ApplyDamage(
-			this,
-			CalculatedDamage,
-			GetController(),
-			this,
-			UDamageType::StaticClass());
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[FallDamage] Applied Character=%s "
-			"LandingSpeed=%.1f "
-			"Damage=%.1f "
-			"Health=%.1f->%.1f"),
-		*GetName(),
-		LandingSpeed,
-		AppliedDamage,
-		HealthBeforeDamage,
-		GetCurrentHealth());
 }
 
 bool ADRPlayerCharacter::RequestMine()
@@ -522,14 +366,6 @@ void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (IsValid(HealthComponent))
-	{
-		HealthComponent->
-			OnHealthDepleted.AddUObject(
-				this,
-				&ThisClass::HandleHealthDepleted);
-	}
-
 	PrintNetworkState(TEXT("BeginPlay"));
 }
 
@@ -578,7 +414,10 @@ void ADRPlayerCharacter::PossessedBy(
 {
 	Super::PossessedBy(NewController);
 
-	RestoreControllerInput();
+	if (IsValid(PlayerLifecycleComponent))
+	{
+		PlayerLifecycleComponent->HandleControllerReady();
+	}
 
 	if (HasAuthority())
 	{
@@ -599,7 +438,10 @@ void ADRPlayerCharacter::OnRep_Controller()
 {
 	Super::OnRep_Controller();
 
-	RestoreControllerInput();
+	if (IsValid(PlayerLifecycleComponent))
+	{
+		PlayerLifecycleComponent->HandleControllerReady();
+	}
 
 	PrintNetworkState(TEXT("OnRep_Controller"));
 }
@@ -663,492 +505,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 		HeldItemDefinition);
 }
 
-void ADRPlayerCharacter::HandleDeath()
-{
-	if (!HasAuthority() ||
-		!IsDead())
-	{
-		return;
-	}
-
-	if (IsValid(MeleeCombatComponent))
-	{
-		MeleeCombatComponent->CancelAttack();
-	}
-
-	if (IsValid(JetpackComponent))
-	{
-		JetpackComponent->StopFromServer();
-	}
-
-	/*
-	 * 사망 순간의 Actor 위치는 저장하지 않는다.
-	 * 리스폰 직전에 서버 래그돌 위치를 조회한다.
-	 */
-	ApplyDeathRagdoll();
-
-	GetWorldTimerManager().SetTimer(
-		RespawnTimerHandle,
-		this,
-		&ThisClass::RespawnAtRagdollLocation,
-		RespawnDelay,
-		false);
-	
-	OnPlayerCharacterDeathDelegate.Broadcast();
-	
-	ForceNetUpdate();
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Death] Character=%s RespawnDelay=%.1f"),
-		*GetName(),
-		RespawnDelay);
-}
-
-void ADRPlayerCharacter::ApplyDeathRagdoll()
-{
-	if (bDeathRagdollApplied)
-	{
-		return;
-	}
-
-	bDeathRagdollApplied = true;
-
-	// 공격 몽타주를 포함한 현재 몽타주 정지
-	StopAnimMontage();
-
-	UCharacterMovementComponent* MovementComponent =
-		GetCharacterMovement();
-
-	if (IsValid(MovementComponent))
-	{
-		MovementComponent->StopMovementImmediately();
-		MovementComponent->DisableMovement();
-	}
-
-	UCapsuleComponent* CapsuleComp = GetCapsuleComponent();
-
-	if (IsValid(CapsuleComp))
-	{
-		CapsuleComp->SetCollisionEnabled(
-			ECollisionEnabled::NoCollision);
-	}
-
-	USkeletalMeshComponent* CharacterMesh =
-		GetMesh();
-
-	if (IsValid(CharacterMesh))
-	{
-		/*
-		 * Character Mesh는 원래 Capsule에 붙어 있으므로,
-		 * 월드 위치를 유지하면서 분리한 뒤 물리를 활성화한다.
-		 */
-		CharacterMesh->DetachFromComponent(
-			FDetachmentTransformRules::KeepWorldTransform);
-
-		CharacterMesh->SetCollisionProfileName(
-			TEXT("Ragdoll"));
-
-		CharacterMesh->SetCollisionEnabled(
-			ECollisionEnabled::QueryAndPhysics);
-
-		CharacterMesh->SetAllBodiesSimulatePhysics(true);
-		CharacterMesh->SetSimulatePhysics(true);
-		CharacterMesh->WakeAllRigidBodies();
-	}
-
-	// 본인 화면의 1인칭 장비는 숨김
-	if (IsValid(FirstPersonHandEquipmentMesh))
-	{
-		FirstPersonHandEquipmentMesh->SetVisibility(
-			false,
-			true);
-	}
-
-	// 자신의 입력 차단
-	if (AController* OwningController =
-			GetController())
-	{
-		OwningController->SetIgnoreMoveInput(true);
-		OwningController->SetIgnoreLookInput(true);
-	}
-
-	if (IsLocallyControlled() &&
-		GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			RespawnDelay,
-			FColor::Red,
-			TEXT("YOU DIED"));
-	}
-}
-
-void ADRPlayerCharacter::RespawnAtRagdollLocation()
-{
-    if (!HasAuthority())
-    {
-        return;
-    }
-
-    UWorld* World = GetWorld();
-
-    if (!IsValid(World))
-    {
-        return;
-    }
-
-    AController* RespawnController =
-        GetController();
-
-    AGameModeBase* GameMode =
-        World->GetAuthGameMode();
-
-    if (!IsValid(RespawnController) ||
-        !IsValid(GameMode))
-    {
-        UE_LOG(
-            LogTemp,
-            Error,
-            TEXT(
-                "[Respawn] Invalid Controller or GameMode. "
-                "Character=%s Controller=%s GameMode=%s"),
-            *GetName(),
-            *GetNameSafe(RespawnController),
-            *GetNameSafe(GameMode));
-
-        return;
-    }
-
-    /*
-     * 래그돌 물리를 끄기 전에 서버 래그돌 주변에서
-     * 실제 Capsule이 들어갈 위치를 탐색한다.
-     */
-    FTransform RagdollRespawnTransform;
-
-    const bool bFoundRagdollRespawnLocation =
-        TryFindRagdollRespawnTransform(
-            RagdollRespawnTransform);
-
-    USkeletalMeshComponent* CharacterMesh =
-        GetMesh();
-
-    if (IsValid(CharacterMesh))
-    {
-        CharacterMesh->SetAllBodiesSimulatePhysics(false);
-        CharacterMesh->SetSimulatePhysics(false);
-
-        CharacterMesh->SetCollisionEnabled(
-            ECollisionEnabled::NoCollision);
-
-        CharacterMesh->SetVisibility(
-            false,
-            true);
-    }
-
-    RespawnController->SetIgnoreMoveInput(false);
-    RespawnController->SetIgnoreLookInput(false);
-
-    RespawnController->UnPossess();
-
-    if (bFoundRagdollRespawnLocation)
-    {
-        GameMode->RestartPlayerAtTransform(
-            RespawnController,
-            RagdollRespawnTransform);
-    }
-    else
-    {
-        /*
-         * 래그돌 주변에 안전한 공간이 없으면
-         * 공중의 래그돌 위치에 억지로 생성하지 않는다.
-         * GameMode의 기본 PlayerStart를 사용한다.
-         */
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "[Respawn] Safe ragdoll location not found. "
-                "Fallback to PlayerStart. Character=%s"),
-            *GetName());
-
-        GameMode->RestartPlayer(
-            RespawnController);
-    }
-
-    APawn* NewPawn =
-        RespawnController->GetPawn();
-
-    /*
-     * 안전하다고 판단한 위치에서도 Spawn Collision 설정 등에
-     * 의해 실패할 가능성이 있으므로 PlayerStart를 한 번 더 시도한다.
-     */
-    if ((!IsValid(NewPawn) ||
-         NewPawn == this) &&
-        bFoundRagdollRespawnLocation)
-    {
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "[Respawn] Ragdoll location spawn failed. "
-                "Retrying at PlayerStart. Controller=%s"),
-            *GetNameSafe(RespawnController));
-
-        GameMode->RestartPlayer(
-            RespawnController);
-
-        NewPawn =
-            RespawnController->GetPawn();
-    }
-
-    if (!IsValid(NewPawn) ||
-        NewPawn == this)
-    {
-        UE_LOG(
-            LogTemp,
-            Error,
-            TEXT(
-                "[Respawn] All respawn attempts failed. "
-                "Controller=%s"),
-            *GetNameSafe(RespawnController));
-
-        /*
-         * 새 Pawn 생성에 성공하지 않았으므로
-         * 기존 Pawn을 Destroy하지 않는다.
-         */
-        return;
-    }
-
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT(
-            "[Respawn] OldPawn=%s NewPawn=%s "
-            "UsedRagdollLocation=%d Location=%s"),
-        *GetName(),
-        *GetNameSafe(NewPawn),
-        bFoundRagdollRespawnLocation,
-        *NewPawn->GetActorLocation().ToString());
-
-    Destroy();
-}
-
-bool ADRPlayerCharacter::TryFindRagdollRespawnTransform(
-    FTransform& OutRespawnTransform) const
-{
-    const UWorld* World = GetWorld();
-
-    const USkeletalMeshComponent* CharacterMesh =
-        GetMesh();
-
-    const UCapsuleComponent* CharacterCapsule =
-        GetCapsuleComponent();
-
-    const UCharacterMovementComponent* MovementComponent =
-        GetCharacterMovement();
-
-    if (!IsValid(World) ||
-        !IsValid(CharacterMesh) ||
-        !IsValid(CharacterCapsule) ||
-        !IsValid(MovementComponent))
-    {
-        return false;
-    }
-
-    FVector RagdollLocation =
-        CharacterMesh->GetComponentLocation();
-
-    if (CharacterMesh->DoesSocketExist(
-            RespawnRagdollBoneName))
-    {
-        RagdollLocation =
-            CharacterMesh->GetSocketLocation(
-                RespawnRagdollBoneName);
-    }
-
-    const float CapsuleRadius =
-        CharacterCapsule->GetScaledCapsuleRadius();
-
-    const float CapsuleHalfHeight =
-        CharacterCapsule->GetScaledCapsuleHalfHeight();
-
-    const FCollisionShape CapsuleShape =
-        FCollisionShape::MakeCapsule(
-            CapsuleRadius,
-            CapsuleHalfHeight);
-
-    const FName CapsuleCollisionProfile =
-        CharacterCapsule->GetCollisionProfileName();
-
-    FCollisionQueryParams QueryParams(
-        SCENE_QUERY_STAT(RagdollRespawnCapsuleSweep),
-        false,
-        this);
-
-    // 기존 래그돌과 캡슐은 탐색에서 제외한다.
-    QueryParams.AddIgnoredActor(this);
-
-    /*
-     * 0번은 래그돌 바로 아래다.
-     * 이후에는 8방향으로 탐색 반경을 넓힌다.
-     */
-    TArray<FVector2D> SearchOffsets;
-    SearchOffsets.Add(FVector2D::ZeroVector);
-
-    constexpr int32 DirectionCount = 8;
-
-    for (int32 RingIndex = 1; RingIndex <= RespawnSearchRingCount; ++RingIndex)
-    {
-        const float SearchDistance =
-            RespawnSearchStep * RingIndex;
-
-        for (int32 DirectionIndex = 0; DirectionIndex < DirectionCount; ++DirectionIndex)
-        {
-            const float AngleRadians =
-                2.f *
-                PI *
-                static_cast<float>(DirectionIndex) / static_cast<float>(DirectionCount);
-
-            SearchOffsets.Add(
-                FVector2D(
-                    FMath::Cos(AngleRadians),
-                    FMath::Sin(AngleRadians)) * SearchDistance);
-        }
-    }
-
-    for (const FVector2D& Offset : SearchOffsets)
-    {
-        const FVector SearchCenter(
-            RagdollLocation.X + Offset.X,
-            RagdollLocation.Y + Offset.Y,
-            RagdollLocation.Z);
-
-        /*
-         * 전체 캐릭터 Capsule을 위에서 아래로 Sweep한다.
-         * 따라서 절벽 모서리처럼 Capsule 일부가 걸치는 위치를
-         * LineTrace보다 먼저 걸러낼 수 있다.
-         */
-        const FVector SweepStart =
-            SearchCenter +
-            FVector(
-                0.f,
-                0.f,
-                RespawnSweepStartHeight);
-
-        const FVector SweepEnd =
-            SearchCenter -
-            FVector(
-                0.f,
-                0.f,
-                RespawnGroundTraceDistance);
-
-        FHitResult GroundHit;
-
-        const bool bHitGround =
-            World->SweepSingleByProfile(
-                GroundHit,
-                SweepStart,
-                SweepEnd,
-                FQuat::Identity,
-                CapsuleCollisionProfile,
-                CapsuleShape,
-                QueryParams);
-
-        if (!bHitGround ||
-            GroundHit.bStartPenetrating)
-        {
-            continue;
-        }
-
-        // 벽이나 너무 가파른 경사면은 바닥으로 사용하지 않는다.
-        if (!MovementComponent->IsWalkable(GroundHit))
-        {
-            continue;
-        }
-
-        /*
-         * Capsule Sweep의 Location은 충돌 당시 Capsule 중심점이다.
-         * ImpactPoint에 HalfHeight를 다시 더하지 않는다.
-         */
-        const FVector CandidateLocation =
-            GroundHit.Location +
-            FVector(
-                0.f,
-                0.f,
-                RespawnGroundClearance);
-
-        /*
-         * 최종 위치에서 실제 Capsule 전체가 다른 지형이나
-         * 다른 플레이어와 겹치지 않는지 다시 확인한다.
-         */
-        const bool bBlocked =
-            World->OverlapBlockingTestByProfile(
-                CandidateLocation,
-                FQuat::Identity,
-                CapsuleCollisionProfile,
-                CapsuleShape,
-                QueryParams);
-
-        if (bBlocked)
-        {
-            continue;
-        }
-
-        OutRespawnTransform =
-            FTransform(
-                FRotator(
-                    0.f,
-                    GetActorRotation().Yaw,
-                    0.f),
-                CandidateLocation,
-                FVector::OneVector);
-
-#if ENABLE_DRAW_DEBUG
-        DrawDebugCapsule(
-            World,
-            CandidateLocation,
-            CapsuleHalfHeight,
-            CapsuleRadius,
-            FQuat::Identity,
-            FColor::Green,
-            false,
-            5.f);
-#endif
-
-        return true;
-    }
-
-#if ENABLE_DRAW_DEBUG
-    DrawDebugSphere(
-        World,
-        RagdollLocation,
-        30.f,
-        16,
-        FColor::Red,
-        false,
-        5.f);
-#endif
-
-    return false;
-}
-
-void ADRPlayerCharacter::RestoreControllerInput()
-{
-	AController* OwningController =
-		GetController();
-
-	if (!IsValid(OwningController))
-	{
-		return;
-	}
-
-	OwningController->SetIgnoreMoveInput(false);
-	OwningController->SetIgnoreLookInput(false);
-}
-
 void ADRPlayerCharacter::ExecuteHeldItemAction(
 	EDRItemActionType ActionType)
 {
@@ -1201,26 +557,6 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(
 	}
 }
 
-void ADRPlayerCharacter::HandleHealthDepleted()
-{
-	/*
-	 * 서버:
-	 * 실제 사망 처리 + Respawn 시작.
-	 */
-	if (HasAuthority())
-	{
-		HandleDeath();
-		return;
-	}
-
-	/*
-	 * 클라이언트:
-	 * CurrentHealth == 0 복제 수신 후
-	 * Ragdoll 표현만 적용.
-	 */
-	ApplyDeathRagdoll();
-}
-
 bool ADRPlayerCharacter::CanStartLocalItemAction() const
 {
 	const UWorld* World = GetWorld();
@@ -1271,41 +607,6 @@ void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
 	}
 
 	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
-}
-
-void ADRPlayerCharacter::ClientPlayFallSound_Implementation(
-	bool bTookFallDamage,
-	bool bDied)
-{
-	USoundBase* SoundToPlay = nullptr;
-
-	if (bDied)
-	{
-		SoundToPlay = FallDeadSound;
-	}
-	else if (bTookFallDamage)
-	{
-		SoundToPlay = FallDamageSound;
-	}
-	else
-	{
-		SoundToPlay = FallSound;
-	}
-
-	if (IsValid(SoundToPlay))
-	{
-		UGameplayStatics::PlaySound2D(
-			this,
-			SoundToPlay);
-	}
-
-	// 낙하 피해가 발생한 착지에만 Camera Shake
-	if (bTookFallDamage || bDied)
-	{
-		PlayLocalCameraShake(
-			FallDamageCameraShakeClass,
-			bDied ? 1.4f : 1.f);
-	}
 }
 
 void ADRPlayerCharacter::PlayLocalCameraShake(
