@@ -1,7 +1,6 @@
 ﻿#include "DRPlayerLifecycleComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
 
 #include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
@@ -86,10 +85,6 @@ void UDRPlayerLifecycleComponent::HandleLanded(
 	ApplyFallDamage(
 		LandingSpeed);
 
-	/*
-	 * Fall Damage 적용 과정에서
-	 * Health가 0이 됐을 수도 있다.
-	 */
 	const bool bDied =
 		Character->IsDead();
 
@@ -97,25 +92,6 @@ void UDRPlayerLifecycleComponent::HandleLanded(
 		CalculatedFallDamage >
 			KINDA_SMALL_NUMBER,
 		bDied);
-
-	/*
-	 * 낙하 피해로 죽었으면 Fuel을
-	 * 다시 채우지 않는다.
-	 */
-	if (bDied)
-	{
-		return;
-	}
-
-	ADRPlayerState* DRPlayerState =
-		Character->
-			GetPlayerState<ADRPlayerState>();
-
-	if (IsValid(DRPlayerState))
-	{
-		DRPlayerState->
-			RefillJetpackFuel();
-	}
 }
 
 float UDRPlayerLifecycleComponent::CalculateFallDamage(

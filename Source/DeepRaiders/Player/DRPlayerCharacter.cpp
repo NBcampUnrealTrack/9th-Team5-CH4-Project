@@ -141,10 +141,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 void ADRPlayerCharacter::Landed(
 	const FHitResult& Hit)
 {
-	/*
-	 * Super 이후 Z Velocity가 바뀔 수 있으므로
-	 * 착지 직전 속도 저장.
-	 */
 	const float LandingSpeed =
 		FMath::Max(
 			0.f,
@@ -152,51 +148,32 @@ void ADRPlayerCharacter::Landed(
 
 	Super::Landed(Hit);
 
+	/*
+	 * 1. 착지로 Jetpack 상태 종료
+	 */
 	if (IsValid(JetpackComponent))
 	{
-		JetpackComponent->
-			HandleLanded();
+		JetpackComponent->HandleLanded();
 	}
 
-	if (IsValid(
-			PlayerLifecycleComponent))
+	/*
+	 * 2. 착지 피해 / 사망 처리
+	 */
+	if (IsValid(PlayerLifecycleComponent))
 	{
 		PlayerLifecycleComponent->
 			HandleLanded(
 				LandingSpeed);
 	}
-}
 
-bool ADRPlayerCharacter::RequestMine()
-{
-	if (!IsLocallyControlled() ||
-		IsDead() ||
-		!HasHeldItemAction(EDRItemActionType::Dig))
+	/*
+	 * 3. 살아있을 때만 Fuel 충전
+	 */
+	if (HasAuthority() &&
+		!IsDead() &&
+		IsValid(JetpackComponent))
 	{
-		return false;
-	}
-
-	if (!IsValid(MiningComponent))
-	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[Mining] MiningComponent is invalid. "
-				"Character=%s"),
-			*GetName());
-
-		return false;
-	}
-
-	return MiningComponent->TryMine();
-}
-
-void ADRPlayerCharacter::RequestMeleeAttack()
-{
-	if (IsValid(MeleeCombatComponent))
-	{
-		MeleeCombatComponent->RequestAttack();
+		JetpackComponent->RefillFuelFromServer();
 	}
 }
 

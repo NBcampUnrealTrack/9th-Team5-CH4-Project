@@ -159,6 +159,30 @@ void UDRJetpackComponent::ReconcileFuelFromServer(
 		ServerFuel);
 }
 
+bool UDRJetpackComponent::RefillFuelFromServer()
+{
+	ADRPlayerCharacter* Character =
+		GetOwnerCharacter();
+
+	if (!IsValid(Character) ||
+		!Character->HasAuthority())
+	{
+		return false;
+	}
+
+	ADRPlayerState* DRPlayerState =
+		Character->
+			GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return false;
+	}
+
+	return DRPlayerState->
+		RefillJetpackFuel();
+}
+
 ADRPlayerCharacter* UDRJetpackComponent::GetOwnerCharacter() const
 {
 	return Cast<ADRPlayerCharacter>(

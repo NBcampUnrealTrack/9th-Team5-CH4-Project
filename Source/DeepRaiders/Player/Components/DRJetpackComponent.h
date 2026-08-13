@@ -69,6 +69,11 @@ public:
 	/** PlayerState에서 복제된 서버 연료값과 로컬 표시값을 보정한다. */
 	void ReconcileFuelFromServer(float ServerFuel);
 	
+	/**
+	 * 서버에서 제트팩 연료를 최대치까지 충전한다.
+	 */
+	bool RefillFuelFromServer();
+	
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
