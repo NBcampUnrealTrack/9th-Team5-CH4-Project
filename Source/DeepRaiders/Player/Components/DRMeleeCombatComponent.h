@@ -72,6 +72,12 @@ private:
         const FVector& Start,
         const FVector& End);
 
+    void SweepWeaponMotionFixedSamples(
+        const FVector& PreviousBase,
+        const FVector& PreviousTip,
+        const FVector& CurrentBase,
+        const FVector& CurrentTip);
+
 private:
     bool bIsAttacking = false;
     bool bIsSweepActive = false;
@@ -152,4 +158,33 @@ protected:
         BlueprintReadOnly,
         Category = "Melee|Debug")
     bool bDrawDebug = true;
+    
+    /**
+     * WeaponSweep에서 무기 이동 경로를 나눌
+     * 최대 공간 간격.
+     *
+     * NotifyTick 간격과 무관하게 일정한 밀도로
+     * 공격 궤적을 검사하기 위해 사용한다.
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Melee|Sweep",
+        meta = (
+            ClampMin = "1.0",
+            Units = "cm"))
+    float MeleeSweepSampleSpacing = 15.f;
+
+    /**
+     * 비정상적으로 큰 프레임 간격에서
+     * 한 번에 너무 많은 Sweep이 발생하는 것을 방지한다.
+     */
+    UPROPERTY(
+        EditDefaultsOnly,
+        BlueprintReadOnly,
+        Category = "Melee|Sweep",
+        meta = (
+            ClampMin = "1",
+            ClampMax = "64"))
+    int32 MaxSweepSubstepsPerUpdate = 24;
 };
