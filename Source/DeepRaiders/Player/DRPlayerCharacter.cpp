@@ -15,6 +15,7 @@
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
+#include "DeepRaiders/Player/Components/DRHealthComponent.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
@@ -59,6 +60,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
 	
 	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
+	
+	HealthComponent = CreateDefaultSubobject<UDRHealthComponent>(TEXT("HealthComponent"));
 	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -201,25 +204,30 @@ void ADRPlayerCharacter::Landed(
 	}
 }
 
-float ADRPlayerCharacter::CalculateFallDamage(float LandingSpeed) const
+float ADRPlayerCharacter::CalculateFallDamage(
+	float LandingSpeed) const
 {
+	const float CharacterMaxHealth =
+		GetMaxHealth();
+
 	if (LandingSpeed <= MinFallDamageSpeed ||
-		MaxHealth <= 0.f)
+		CharacterMaxHealth <=
+			KINDA_SMALL_NUMBER)
 	{
 		return 0.f;
 	}
 
-	/*
-	 * 잘못된 설정으로 0 나누기가 발생하지 않도록 방지한다.
-	 */
-	if (MaxFallDamageSpeed <= MinFallDamageSpeed + KINDA_SMALL_NUMBER)
+	if (MaxFallDamageSpeed <=
+		MinFallDamageSpeed +
+		KINDA_SMALL_NUMBER)
 	{
 		UE_LOG(
 			LogTemp,
 			Error,
 			TEXT(
 				"[FallDamage] Invalid speed range. "
-				"Character=%s MinSpeed=%.1f MaxSpeed=%.1f"),
+				"Character=%s MinSpeed=%.1f "
+				"MaxSpeed=%.1f"),
 			*GetName(),
 			MinFallDamageSpeed,
 			MaxFallDamageSpeed);
@@ -227,34 +235,31 @@ float ADRPlayerCharacter::CalculateFallDamage(float LandingSpeed) const
 		return 0.f;
 	}
 
-	/*
-	 * MinFallDamageSpeed부터 MaxFallDamageSpeed까지를
-	 * 0~1 범위로 정규화한다.
-	 */
 	const float NormalizedSpeed =
 		FMath::Clamp(
-			(LandingSpeed - MinFallDamageSpeed) / (MaxFallDamageSpeed - MinFallDamageSpeed),
+			(LandingSpeed -
+				MinFallDamageSpeed) /
+			(MaxFallDamageSpeed -
+				MinFallDamageSpeed),
 			0.f,
 			1.f);
 
-	/*
-	 * 기본값이 2이므로 제곱 곡선이 적용된다.
-	 *
-	 * 0.25 -> 0.0625
-	 * 0.50 -> 0.25
-	 * 0.75 -> 0.5625
-	 * 1.00 -> 1.0
-	 */
 	const float DamageAlpha =
 		FMath::Pow(
 			NormalizedSpeed,
-			FMath::Max(FallDamageExponent,0.01f));
+			FMath::Max(
+				FallDamageExponent,
+				0.01f));
 
 	const float MaximumFallDamage =
-		MaxHealth *
-		FMath::Clamp(MaxFallDamageRatio, 0.f, 1.f);
+		CharacterMaxHealth *
+		FMath::Clamp(
+			MaxFallDamageRatio,
+			0.f,
+			1.f);
 
-	return MaximumFallDamage * DamageAlpha;
+	return MaximumFallDamage *
+		DamageAlpha;
 }
 
 void ADRPlayerCharacter::ApplyFallDamage(
@@ -287,7 +292,7 @@ void ADRPlayerCharacter::ApplyFallDamage(
 		return;
 	}
 
-	const float HealthBeforeDamage = CurrentHealth;
+	const float HealthBeforeDamage = GetCurrentHealth();
 
 	/*
 	 * 기존 공격 피해와 동일한 TakeDamage 경로를 사용한다.
@@ -313,7 +318,7 @@ void ADRPlayerCharacter::ApplyFallDamage(
 		LandingSpeed,
 		AppliedDamage,
 		HealthBeforeDamage,
-		CurrentHealth);
+		GetCurrentHealth());
 }
 
 bool ADRPlayerCharacter::RequestMine()
@@ -362,6 +367,33 @@ void ADRPlayerCharacter::RequestThrowHeldItem()
 	}
 }
 
+float ADRPlayerCharacter::GetCurrentHealth() const
+{
+	return IsValid(HealthComponent)
+		? HealthComponent->GetCurrentHealth()
+		: 0.f;
+}
+
+float ADRPlayerCharacter::GetMaxHealth() const
+{
+	return IsValid(HealthComponent)
+		? HealthComponent->GetMaxHealth()
+		: 0.f;
+}
+
+float ADRPlayerCharacter::GetHealthRatio() const
+{
+	return IsValid(HealthComponent)
+		? HealthComponent->GetHealthRatio()
+		: 0.f;
+}
+
+bool ADRPlayerCharacter::IsDead() const
+{
+	return IsValid(HealthComponent) &&
+		HealthComponent->IsDead();
+}
+
 float ADRPlayerCharacter::TakeDamage(
 	float DamageAmount,
 	const FDamageEvent& DamageEvent,
@@ -369,28 +401,12 @@ float ADRPlayerCharacter::TakeDamage(
 	AActor* DamageCauser)
 {
 	if (!HasAuthority() ||
-		DamageAmount <= 0.f ||
-		IsDead())
+		!IsValid(HealthComponent))
 	{
 		return 0.f;
 	}
 
-	const float AppliedDamage =
-		FMath::Min(DamageAmount, CurrentHealth);
-
-	CurrentHealth = FMath::Clamp(
-		CurrentHealth - AppliedDamage,
-		0.f,
-		MaxHealth);
-	
-	if (IsDead())
-	{
-		HandleDeath();
-	}
-
-	ForceNetUpdate();
-
-	return AppliedDamage;
+	return HealthComponent->ApplyDamage(DamageAmount);
 }
 
 void ADRPlayerCharacter::RequestPrimaryItemAction(
@@ -505,6 +521,14 @@ void ADRPlayerCharacter::ReconcileJetpackFuelFromServer(
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (IsValid(HealthComponent))
+	{
+		HealthComponent->
+			OnHealthDepleted.AddUObject(
+				this,
+				&ThisClass::HandleHealthDepleted);
+	}
 
 	PrintNetworkState(TEXT("BeginPlay"));
 }
@@ -633,10 +657,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	
-	DOREPLIFETIME(
-		ADRPlayerCharacter,
-		CurrentHealth);
 	
 	DOREPLIFETIME(
 		ADRPlayerCharacter,
@@ -1181,6 +1201,26 @@ void ADRPlayerCharacter::ExecuteHeldItemAction(
 	}
 }
 
+void ADRPlayerCharacter::HandleHealthDepleted()
+{
+	/*
+	 * 서버:
+	 * 실제 사망 처리 + Respawn 시작.
+	 */
+	if (HasAuthority())
+	{
+		HandleDeath();
+		return;
+	}
+
+	/*
+	 * 클라이언트:
+	 * CurrentHealth == 0 복제 수신 후
+	 * Ragdoll 표현만 적용.
+	 */
+	ApplyDeathRagdoll();
+}
+
 bool ADRPlayerCharacter::CanStartLocalItemAction() const
 {
 	const UWorld* World = GetWorld();
@@ -1369,19 +1409,6 @@ void ADRPlayerCharacter::RefreshHeldItemMiningSettings()
 	if (IsValid(MiningComponent))
 	{
 		MiningComponent->ApplyItemDefinition(HeldItemDefinition);
-	}
-}
-
-void ADRPlayerCharacter::OnRep_CurrentHealth()
-{
-	/*
-	 * ProgressBar 바인딩 방식이면 비어 있어도 된다.
-	 * 나중에는 HUD 갱신 델리게이트를 호출할 수 있다.
-	 */
-	
-	if (IsDead())
-	{
-		ApplyDeathRagdoll();
 	}
 }
 

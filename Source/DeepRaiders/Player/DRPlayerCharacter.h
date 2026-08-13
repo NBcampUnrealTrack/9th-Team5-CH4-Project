@@ -25,6 +25,7 @@ class UVoxelNoClippingComponent;
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
+class UDRHealthComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -98,42 +99,22 @@ public:
     void LookInput(const FVector2D& LookInput);
     
     UFUNCTION(BlueprintPure, Category = "Player|Health")
-    float GetCurrentHealth() const
-    {
-        return CurrentHealth;
-    }
+    float GetCurrentHealth() const;
 
     UFUNCTION(BlueprintPure, Category = "Player|Health")
-    float GetMaxHealth() const
-    {
-        return MaxHealth;
-    }
+    float GetMaxHealth() const;
 
     UFUNCTION(BlueprintPure, Category = "Player|Health")
-    float GetHealthRatio() const
-    {
-        if (MaxHealth <= 0.f)
-        {
-            return 0.f;
-        }
+    float GetHealthRatio() const;
 
-        return FMath::Clamp(
-            CurrentHealth / MaxHealth,
-            0.f,
-            1.f);
-    }
-
+    UFUNCTION(BlueprintPure, Category = "Player|Health")
+    bool IsDead() const;
+    
     virtual float TakeDamage(
         float DamageAmount,
         const FDamageEvent& DamageEvent,
         AController* EventInstigator,
         AActor* DamageCauser) override;
-    
-    UFUNCTION(BlueprintPure, Category = "Player|Health")
-    bool IsDead() const
-    {
-        return CurrentHealth <= KINDA_SMALL_NUMBER;
-    }
     
     /** 현재 장착 아이템의 Primary Action을 요청한다. */
     void RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
@@ -229,20 +210,11 @@ protected:
     TObjectPtr<UDRItemActionPresentationComponent> ItemActionPresentationComponent;
     
     UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Health")
-    float MaxHealth = 100.f;
-
-    UPROPERTY(
-        ReplicatedUsing = OnRep_CurrentHealth,
         VisibleAnywhere,
         BlueprintReadOnly,
-        Category = "Player|Health")
-    float CurrentHealth = 100.f;
-
-    UFUNCTION()
-    void OnRep_CurrentHealth();
+        Category = "Player|Health",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRHealthComponent> HealthComponent;
     
 private:
     void PrintNetworkState(const TCHAR* Context) const;
@@ -276,6 +248,8 @@ private:
     FTimerHandle RespawnTimerHandle;
     
     void ExecuteHeldItemAction(EDRItemActionType ActionType);
+    
+    void HandleHealthDepleted();
     
 public:
     FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
