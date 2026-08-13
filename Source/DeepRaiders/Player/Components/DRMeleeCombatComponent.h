@@ -27,15 +27,13 @@ public:
     /** 소유 클라이언트가 근접 공격을 요청한다. */
     void RequestAttack();
 
-    /** AnimNotifyState에서 Sweep Window를 연다. */
-    void StartSweepWindow();
-
-    /** AnimNotifyState가 활성화된 동안 매 프레임 호출한다. */
-    void UpdateSweepWindow();
-
-    /** AnimNotifyState에서 Sweep Window를 닫는다. */
-    void EndSweepWindow();
-
+    /**
+     * 공격 Montage의 고정 Sweep Notify에서 호출된다.
+     * 서버에서 현재 Weapon Socket 위치를 이용해
+     * 직전 고정 Sample과 현재 Sample 사이를 판정한다.
+     */
+    void SampleWeaponSweep();
+    
     /** 사망 등으로 현재 공격을 강제 종료한다. */
     void CancelAttack();
 
@@ -70,15 +68,9 @@ private:
         const FVector& Start,
         const FVector& End);
 
-    void SweepWeaponMotionFixedSamples(
-        const FVector& PreviousBase,
-        const FVector& PreviousTip,
-        const FVector& CurrentBase,
-        const FVector& CurrentTip);
-
 private:
     bool bIsAttacking = false;
-    bool bIsSweepActive = false;
+    bool bHasPreviousSweepSample = false;
 
     FTimerHandle MeleeHitTimerHandle;
     FTimerHandle MeleeFinishTimerHandle;
@@ -157,32 +149,4 @@ protected:
         Category = "Melee|Debug")
     bool bDrawDebug = false;
     
-    /**
-     * WeaponSweep에서 무기 이동 경로를 나눌
-     * 최대 공간 간격.
-     *
-     * NotifyTick 간격과 무관하게 일정한 밀도로
-     * 공격 궤적을 검사하기 위해 사용한다.
-     */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep",
-        meta = (
-            ClampMin = "1.0",
-            Units = "cm"))
-    float MeleeSweepSampleSpacing = 15.f;
-
-    /**
-     * 비정상적으로 큰 프레임 간격에서
-     * 한 번에 너무 많은 Sweep이 발생하는 것을 방지한다.
-     */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep",
-        meta = (
-            ClampMin = "1",
-            ClampMax = "64"))
-    int32 MaxSweepSubstepsPerUpdate = 24;
 };

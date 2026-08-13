@@ -78,6 +78,8 @@ void UDRMeleeCombatComponent::ServerRequestAttack_Implementation()
 
 	bIsAttacking = true;
 
+	bHasPreviousSweepSample = false;
+	
 	/*
 	 * 공격 1회 시작.
 	 * 중복 타격 기록은 Notify Window가 아니라
@@ -189,7 +191,7 @@ void UDRMeleeCombatComponent::PerformLineTrace()
 	ProcessHit(HitResult);
 }
 
-void UDRMeleeCombatComponent::StartSweepWindow()
+void UDRMeleeCombatComponent::SampleWeaponSweep()
 {
 	ADRPlayerCharacter* Character =
 		GetOwnerCharacter();
@@ -198,14 +200,14 @@ void UDRMeleeCombatComponent::StartSweepWindow()
 		!Character->HasAuthority() ||
 		!bIsAttacking ||
 		TraceMode !=
-			EDRMeleeTraceMode::WeaponSweep ||
-		bIsSweepActive)
+			EDRMeleeTraceMode::WeaponSweep)
 	{
 		return;
 	}
 
 	UStaticMeshComponent* WeaponMesh =
-		Character->GetWorldHandEquipmentMesh();
+		Character->
+			GetWorldHandEquipmentMesh();
 
 	if (!IsValid(WeaponMesh) ||
 		!WeaponMesh->DoesSocketExist(
@@ -216,75 +218,75 @@ void UDRMeleeCombatComponent::StartSweepWindow()
 		return;
 	}
 
-	bIsSweepActive = true;
-
-	PreviousBaseLocation =
+	const FVector CurrentBase =
 		WeaponMesh->GetSocketLocation(
 			MeleeSweepBaseSocketName);
 
-	PreviousTipLocation =
+	const FVector CurrentTip =
 		WeaponMesh->GetSocketLocation(
 			MeleeSweepTipSocketName);
 
+	/*
+	 * 첫 번째 고정 Sample.
+	 *
+	 * 이전 위치가 없으므로
+	 * 현재 검날 전체만 검사한다.
+	 */
+	if (!bHasPreviousSweepSample)
+	{
+		SweepSegment(
+			CurrentBase,
+			CurrentTip);
+
+		PreviousBaseLocation =
+			CurrentBase;
+
+		PreviousTipLocation =
+			CurrentTip;
+
+		bHasPreviousSweepSample = true;
+
+		return;
+	}
+
+	const FVector PreviousMiddle =
+		(PreviousBaseLocation +
+		 PreviousTipLocation) * 0.5f;
+
+	const FVector CurrentMiddle =
+		(CurrentBase +
+		 CurrentTip) * 0.5f;
+
+	/*
+	 * 직전 고정 Animation Sample
+	 * →
+	 * 현재 고정 Animation Sample
+	 */
 	SweepSegment(
 		PreviousBaseLocation,
-		PreviousTipLocation);
-}
+		CurrentBase);
 
-void UDRMeleeCombatComponent::UpdateSweepWindow()
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	SweepSegment(
+		PreviousMiddle,
+		CurrentMiddle);
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority() ||
-		!bIsAttacking ||
-		!bIsSweepActive)
-	{
-		return;
-	}
-
-	UStaticMeshComponent* WeaponMesh =
-		Character->GetWorldHandEquipmentMesh();
-
-	if (!IsValid(WeaponMesh))
-	{
-		return;
-	}
-
-	const FVector CurrentBaseLocation =
-		WeaponMesh->GetSocketLocation(
-			MeleeSweepBaseSocketName);
-
-	const FVector CurrentTipLocation =
-		WeaponMesh->GetSocketLocation(
-			MeleeSweepTipSocketName);
-
-	SweepWeaponMotionFixedSamples(
-		PreviousBaseLocation,
+	SweepSegment(
 		PreviousTipLocation,
-		CurrentBaseLocation,
-		CurrentTipLocation);
+		CurrentTip);
+
+	/*
+	 * 현재 Sample 시점의
+	 * 검날 전체 공간.
+	 */
+	SweepSegment(
+		CurrentBase,
+		CurrentTip);
 
 	PreviousBaseLocation =
-		CurrentBaseLocation;
+		CurrentBase;
 
 	PreviousTipLocation =
-		CurrentTipLocation;
-}
-
-void UDRMeleeCombatComponent::EndSweepWindow()
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character) ||
-		!Character->HasAuthority())
-	{
-		return;
-	}
-
-	bIsSweepActive = false;
+		CurrentTip;
 }
 
 void UDRMeleeCombatComponent::SweepSegment(
@@ -371,126 +373,6 @@ void UDRMeleeCombatComponent::SweepSegment(
 	}
 }
 
-void UDRMeleeCombatComponent::SweepWeaponMotionFixedSamples(
-    const FVector& PreviousBase,
-    const FVector& PreviousTip,
-    const FVector& CurrentBase,
-    const FVector& CurrentTip)
-{
-    /*
-     * Base와 Tip 중 더 많이 움직인 쪽을 기준으로
-     * 필요한 Substep 수를 계산한다.
-     *
-     * 예:
-     * 최대 이동거리 42cm
-     * SampleSpacing 15cm
-     *
-     * ceil(42 / 15) = 3
-     *
-     * 즉 해당 NotifyTick 구간을
-     * 3개의 작은 Sweep 구간으로 나눈다.
-     */
-    const float BaseTravelDistance =
-        FVector::Distance(
-            PreviousBase,
-            CurrentBase);
-
-    const float TipTravelDistance =
-        FVector::Distance(
-            PreviousTip,
-            CurrentTip);
-
-    const float MaxTravelDistance =
-        FMath::Max(
-            BaseTravelDistance,
-            TipTravelDistance);
-
-    const float SafeSampleSpacing =
-        FMath::Max(
-            MeleeSweepSampleSpacing,
-            1.f);
-
-    int32 SubstepCount =
-        FMath::Max(
-            1,
-            FMath::CeilToInt(
-                MaxTravelDistance /
-                SafeSampleSpacing));
-
-    SubstepCount =
-        FMath::Min(
-            SubstepCount,
-            MaxSweepSubstepsPerUpdate);
-
-    FVector SamplePreviousBase =
-        PreviousBase;
-
-    FVector SamplePreviousTip =
-        PreviousTip;
-
-    for (int32 SampleIndex = 1;
-         SampleIndex <= SubstepCount;
-         ++SampleIndex)
-    {
-        const float Alpha =
-            static_cast<float>(SampleIndex) /
-            static_cast<float>(SubstepCount);
-
-        /*
-         * 직전 Notify Pose와 현재 Notify Pose 사이에
-         * 일정 간격의 중간 Weapon Pose 생성.
-         */
-        const FVector SampleCurrentBase =
-            FMath::Lerp(
-                PreviousBase,
-                CurrentBase,
-                Alpha);
-
-        const FVector SampleCurrentTip =
-            FMath::Lerp(
-                PreviousTip,
-                CurrentTip,
-                Alpha);
-
-        const FVector SamplePreviousMiddle =
-            (SamplePreviousBase +
-             SamplePreviousTip) * 0.5f;
-
-        const FVector SampleCurrentMiddle =
-            (SampleCurrentBase +
-             SampleCurrentTip) * 0.5f;
-
-        /*
-         * Weapon의 이동 궤적.
-         */
-        SweepSegment(
-            SamplePreviousBase,
-            SampleCurrentBase);
-
-        SweepSegment(
-            SamplePreviousMiddle,
-            SampleCurrentMiddle);
-
-        SweepSegment(
-            SamplePreviousTip,
-            SampleCurrentTip);
-
-        /*
-         * 해당 Sample 시점에서
-         * 검날 전체 공간 검사.
-         */
-        SweepSegment(
-            SampleCurrentBase,
-            SampleCurrentTip);
-
-        SamplePreviousBase =
-            SampleCurrentBase;
-
-        SamplePreviousTip =
-            SampleCurrentTip;
-    }
-}
-
 void UDRMeleeCombatComponent::ProcessHit(
 	const FHitResult& HitResult)
 {
@@ -570,8 +452,7 @@ void UDRMeleeCombatComponent::FinishAttack()
 		return;
 	}
 
-	EndSweepWindow();
-
+	bHasPreviousSweepSample = false;
 	bIsAttacking = false;
 }
 
@@ -595,7 +476,6 @@ void UDRMeleeCombatComponent::CancelAttack()
 			MeleeFinishTimerHandle);
 	}
 
-	EndSweepWindow();
-
+	bHasPreviousSweepSample = false;
 	bIsAttacking = false;
 }
