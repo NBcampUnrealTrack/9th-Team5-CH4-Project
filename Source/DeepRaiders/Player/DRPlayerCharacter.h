@@ -9,18 +9,13 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class USceneComponent;
 class UStaticMesh;
+class UAnimMontage;
+class UDRItemDefinition;
+
+class UVoxelNoClippingComponent;
+class UDRCharacterMovementComponent;
 class UDRMiningComponent;
 class UDRTeleportComponent;
-class UAnimMontage;
-class UDRCharacterMovementComponent;
-class UDRItemDefinition;
-class UTimelineComponent;
-class UCurveFloat;
-class USoundBase;
-class UAudioComponent;
-class UCameraShakeBase;
-class UVoxelNoClippingComponent;
-
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
