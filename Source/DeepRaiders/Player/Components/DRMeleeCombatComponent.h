@@ -5,6 +5,8 @@
 #include "DRMeleeCombatComponent.generated.h"
 
 class ADRPlayerCharacter;
+class UAnimSequenceBase;
+class UAnimMontage;
 
 UENUM(BlueprintType)
 enum class EDRMeleeTraceMode : uint8
@@ -29,10 +31,13 @@ public:
 
     /**
      * 공격 Montage의 고정 Sweep Notify에서 호출된다.
-     * 서버에서 현재 Weapon Socket 위치를 이용해
-     * 직전 고정 Sample과 현재 Sample 사이를 판정한다.
+     *
+     * 현재 Runtime Pose를 읽지 않고
+     * SampleTime에 해당하는 Animation Pose를 직접 평가한다.
      */
-    void SampleWeaponSweep();
+    void SampleWeaponSweep(
+        UAnimSequenceBase* Animation,
+        float SampleTime);
     
     /** 사망 등으로 현재 공격을 강제 종료한다. */
     void CancelAttack();
@@ -68,6 +73,12 @@ private:
         const FVector& Start,
         const FVector& End);
 
+    bool EvaluateWeaponSweepSample(
+        const UAnimMontage* Montage,
+        float SampleTime,
+        FVector& OutBase,
+        FVector& OutTip) const;
+    
 private:
     bool bIsAttacking = false;
     bool bHasPreviousSweepSample = false;

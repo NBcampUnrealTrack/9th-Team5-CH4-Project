@@ -6,6 +6,22 @@
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
 
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimationPoseData.h"
+#include "Animation/AnimCurveTypes.h"
+#include "Animation/AttributesContainer.h"
+
+#include "BonePose.h"
+#include "BoneContainer.h"
+
+#include "Components/SkeletalMeshComponent.h"
+
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshSocket.h"
+#include "Animation/AnimCompositeBase.h"
+#include "Misc/MemStack.h"
+
 UDRMeleeCombatComponent::UDRMeleeCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -191,10 +207,36 @@ void UDRMeleeCombatComponent::PerformLineTrace()
 	ProcessHit(HitResult);
 }
 
-void UDRMeleeCombatComponent::SampleWeaponSweep()
+void UDRMeleeCombatComponent::SampleWeaponSweep(
+	UAnimSequenceBase* Animation,
+	const float SampleTime)
 {
+
 	ADRPlayerCharacter* Character =
 		GetOwnerCharacter();
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[V4][Sample] "
+			"Animation=%s Class=%s "
+			"Time=%.4f "
+			"Authority=%d "
+			"Attacking=%d "
+			"TraceMode=%d "
+			"DrawDebug=%d"),
+		*GetNameSafe(Animation),
+		Animation
+			? *GetNameSafe(Animation->GetClass())
+			: TEXT("NULL"),
+		SampleTime,
+		IsValid(Character)
+			? Character->HasAuthority()
+			: false,
+		bIsAttacking,
+		static_cast<int32>(TraceMode),
+		bDrawDebug);
 
 	if (!IsValid(Character) ||
 		!Character->HasAuthority() ||
@@ -202,29 +244,93 @@ void UDRMeleeCombatComponent::SampleWeaponSweep()
 		TraceMode !=
 			EDRMeleeTraceMode::WeaponSweep)
 	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[V4] Sample guard failed"));
+
 		return;
 	}
 
-	UStaticMeshComponent* WeaponMesh =
-		Character->
-			GetWorldHandEquipmentMesh();
+	const UAnimMontage* Montage =
+		Cast<UAnimMontage>(Animation);
 
-	if (!IsValid(WeaponMesh) ||
-		!WeaponMesh->DoesSocketExist(
-			MeleeSweepBaseSocketName) ||
-		!WeaponMesh->DoesSocketExist(
-			MeleeSweepTipSocketName))
+	if (!IsValid(Montage))
 	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4] Animation is NOT Montage: %s"),
+			*GetNameSafe(Animation));
+
 		return;
 	}
 
-	const FVector CurrentBase =
-		WeaponMesh->GetSocketLocation(
-			MeleeSweepBaseSocketName);
+	FVector CurrentBase;
+	FVector CurrentTip;
 
-	const FVector CurrentTip =
-		WeaponMesh->GetSocketLocation(
-			MeleeSweepTipSocketName);
+	if (!EvaluateWeaponSweepSample(
+			Montage,
+			SampleTime,
+			CurrentBase,
+			CurrentTip))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4] EvaluateWeaponSweepSample FAILED "
+				"Time=%.4f"),
+			SampleTime);
+
+		return;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[V4] Evaluate SUCCESS "
+			"Time=%.4f "
+			"Base=%s Tip=%s"),
+		SampleTime,
+		*CurrentBase.ToString(),
+		*CurrentTip.ToString());
+
+#if ENABLE_DRAW_DEBUG
+	if (UWorld* World = GetWorld())
+	{
+		// 진단용. bDrawDebug 무시하고 무조건 그린다.
+		DrawDebugSphere(
+			World,
+			CurrentBase,
+			20.f,
+			12,
+			FColor::Cyan,
+			false,
+			2.f);
+
+		DrawDebugSphere(
+			World,
+			CurrentTip,
+			20.f,
+			12,
+			FColor::Magenta,
+			false,
+			2.f);
+
+		DrawDebugLine(
+			World,
+			CurrentBase,
+			CurrentTip,
+			FColor::Yellow,
+			false,
+			2.f,
+			0,
+			3.f);
+	}
+#endif
 
 	/*
 	 * 첫 번째 고정 Sample.
@@ -371,6 +477,465 @@ void UDRMeleeCombatComponent::SweepSegment(
 
 		ProcessHit(HitResult);
 	}
+}
+
+bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
+	const UAnimMontage* Montage,
+	const float SampleTime,
+	FVector& OutBase,
+	FVector& OutTip) const
+{
+	const ADRPlayerCharacter* Character =
+		GetOwnerCharacter();
+
+	if (!IsValid(Character) ||
+		!IsValid(Montage))
+	{
+		return false;
+	}
+
+	USkeletalMeshComponent* CharacterMesh =
+		Character->GetMesh();
+
+	UStaticMeshComponent* WeaponMesh =
+		Character->GetWorldHandEquipmentMesh();
+
+	if (!IsValid(CharacterMesh) ||
+		!IsValid(WeaponMesh))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] Invalid Mesh "
+				"CharacterMesh=%s WeaponMesh=%s"),
+			*GetNameSafe(CharacterMesh),
+			*GetNameSafe(WeaponMesh));
+
+		return false;
+	}
+
+	/*
+	 * V4에서는 WeaponMesh의 현재 World Socket 위치를
+	 * 절대 판정 기준으로 사용하지 않는다.
+	 *
+	 * GetSocketLocation() 사용 금지.
+	 */
+
+	/*
+	 * Weapon이 실제로 Character SkeletalMesh에
+	 * 붙어 있는지 검증한다.
+	 */
+	if (WeaponMesh->GetAttachParent() !=
+		CharacterMesh)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[Melee] WeaponSweep requires "
+				"weapon to be attached directly "
+				"to Character Mesh."));
+
+		return false;
+	}
+
+	const FName AttachSocketName =
+		WeaponMesh->GetAttachSocketName();
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[V4][Eval] "
+			"AttachParent=%s "
+			"CharacterMesh=%s "
+			"AttachSocket=%s"),
+		*GetNameSafe(WeaponMesh->GetAttachParent()),
+		*GetNameSafe(CharacterMesh),
+		*AttachSocketName.ToString());
+
+	if (AttachSocketName.IsNone())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[V4][Eval] AttachSocketName is NONE"));
+
+		return false;
+	}
+
+	USkeletalMesh* SkeletalMesh =
+		CharacterMesh->GetSkeletalMeshAsset();
+
+	UStaticMesh* StaticMesh =
+		WeaponMesh->GetStaticMesh();
+
+	if (!IsValid(SkeletalMesh) ||
+		!IsValid(StaticMesh))
+	{
+		return false;
+	}
+
+	/*
+	 * ---------------------------------
+	 * 1. Character Animation Pose 평가
+	 * ---------------------------------
+	 */
+
+	const TSharedPtr<FBoneContainer>
+		RequiredBones =
+			CharacterMesh->
+				GetSharedRequiredBones();
+
+	if (!RequiredBones.IsValid())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[V4][Eval] RequiredBones INVALID"));
+
+		return false;
+	}
+
+	/*
+	 * ---------------------------------
+	 * 1. Montage Time
+	 *    → Source Animation Time
+	 * ---------------------------------
+	 */
+
+	/*
+	 * Montage 자체의 GetAnimationPose를 호출하지 않는다.
+	 *
+	 * Montage는 실제 공격 AnimSequence를 담고 있는
+	 * Container / Timeline 역할로만 사용한다.
+	 */
+	const FAnimSegment* ActiveSegment = nullptr;
+
+	for (const FSlotAnimationTrack& SlotTrack :
+		Montage->SlotAnimTracks)
+	{
+		ActiveSegment =
+			SlotTrack.AnimTrack.GetSegmentAtTime(
+				SampleTime);
+
+		if (ActiveSegment != nullptr)
+		{
+			break;
+		}
+	}
+
+	if (ActiveSegment == nullptr)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] "
+				"No AnimSegment at MontageTime=%.4f"),
+			SampleTime);
+
+		return false;
+	}
+
+	/*
+	 * Montage 내부 Segment가 실제로 참조하는
+	 * Animation Asset.
+	 *
+	 * 현재 AM_SwordAttack 안에 들어 있는
+	 * 실제 Sword Attack Sequence가 여기 나온다.
+	 */
+	UAnimSequenceBase* SourceAnimation =
+		ActiveSegment->
+			GetAnimReference().
+			Get();
+
+	if (!IsValid(SourceAnimation))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] "
+				"SourceAnimation INVALID"));
+
+		return false;
+	}
+
+	/*
+	 * Montage Track Time
+	 * →
+	 * Source Animation Time
+	 *
+	 * Segment의 PlayRate,
+	 * Start/End 위치 등을 반영한다.
+	 */
+	const float SourceTime =
+		ActiveSegment->
+			ConvertTrackPosToAnimPos(
+				SampleTime);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[V4][Eval] "
+			"Montage=%s "
+			"MontageTime=%.4f "
+			"Source=%s "
+			"SourceTime=%.4f"),
+		*GetNameSafe(Montage),
+		SampleTime,
+		*GetNameSafe(SourceAnimation),
+		SourceTime);
+
+	/*
+	 * ---------------------------------
+	 * 2. Source Animation Pose 직접 평가
+	 * ---------------------------------
+	 */
+
+	/*
+	 * FCompactPose가 사용하는 stack allocation의
+	 * lifetime을 현재 scope으로 제한한다.
+	 */
+	FMemMark MemMark(
+		FMemStack::Get());
+
+	FCompactPose LocalPose;
+
+	LocalPose.SetBoneContainer(
+		RequiredBones.Get());
+
+	LocalPose.ResetToRefPose();
+
+	FBlendedCurve Curve;
+
+	Curve.InitFrom(
+		*RequiredBones);
+
+	UE::Anim::FStackAttributeContainer
+		Attributes;
+
+	FAnimationPoseData PoseData(
+		LocalPose,
+		Curve,
+		Attributes);
+
+	const FAnimExtractContext
+		ExtractionContext(
+			static_cast<double>(SourceTime),
+			false,
+			FDeltaTimeRecord(),
+			false);
+
+	/*
+	 * 핵심.
+	 *
+	 * Montage를 평가하는 것이 아니라
+	 * Montage Segment가 참조하는 실제 Animation을
+	 * 정확한 SourceTime에서 평가한다.
+	 */
+	SourceAnimation->GetAnimationPose(
+		PoseData,
+		ExtractionContext);
+
+
+	/*
+	 * Local Bone Pose
+	 * →
+	 * Component Space Pose
+	 */
+	FCSPose<FCompactPose> ComponentPose;
+
+	ComponentPose.InitPose(
+		LocalPose);
+
+	/*
+	 * ---------------------------------
+	 * 2. Weapon Attachment Socket 찾기
+	 * ---------------------------------
+	 */
+
+	FTransform AttachSocketLocal =
+		FTransform::Identity;
+
+	int32 AttachBoneMeshIndex =
+		INDEX_NONE;
+
+	int32 AttachSocketIndex =
+		INDEX_NONE;
+
+	USkeletalMeshSocket* AttachSocket =
+		SkeletalMesh->FindSocketInfo(
+			AttachSocketName,
+			AttachSocketLocal,
+			AttachBoneMeshIndex,
+			AttachSocketIndex);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[V4][Eval] "
+			"Socket=%s "
+			"Found=%d "
+			"BoneMeshIndex=%d "
+			"SocketIndex=%d"),
+		*AttachSocketName.ToString(),
+		AttachSocket != nullptr,
+		AttachBoneMeshIndex,
+		AttachSocketIndex);
+
+	if (AttachSocket == nullptr ||
+		AttachBoneMeshIndex == INDEX_NONE)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] FindSocketInfo FAILED"));
+
+		return false;
+	}
+
+	const FCompactPoseBoneIndex
+		AttachBoneCompactIndex =
+			RequiredBones->MakeCompactPoseIndex(
+				FMeshPoseBoneIndex(
+					AttachBoneMeshIndex));
+
+	if (!AttachBoneCompactIndex.IsValid())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] "
+				"CompactPoseIndex INVALID "
+				"MeshBoneIndex=%d"),
+			AttachBoneMeshIndex);
+
+		return false;
+	}
+
+	const FTransform&
+		AttachBoneComponentTransform =
+			ComponentPose.
+				GetComponentSpaceTransform(
+					AttachBoneCompactIndex);
+
+	/*
+	 * ---------------------------------
+	 * 3. Weapon Base / Tip Local 위치
+	 * ---------------------------------
+	 */
+
+	const UStaticMeshSocket* BaseSocket =
+		StaticMesh->FindSocket(
+			MeleeSweepBaseSocketName);
+
+	const UStaticMeshSocket* TipSocket =
+		StaticMesh->FindSocket(
+			MeleeSweepTipSocketName);
+
+	if (!IsValid(BaseSocket) ||
+		!IsValid(TipSocket))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[V4][Eval] "
+				"Weapon socket missing "
+				"Base=%s(%d) "
+				"Tip=%s(%d)"),
+			*MeleeSweepBaseSocketName.ToString(),
+			IsValid(BaseSocket),
+			*MeleeSweepTipSocketName.ToString(),
+			IsValid(TipSocket));
+
+		return false;
+	}
+
+	const FVector BaseWeaponLocal =
+		BaseSocket->RelativeLocation;
+
+	const FVector TipWeaponLocal =
+		TipSocket->RelativeLocation;
+
+	/*
+	 * WeaponMesh의 RelativeTransform은
+	 * Attach Socket 기준 Weapon Transform이다.
+	 *
+	 * 현재 World Transform은 읽지 않는다.
+	 */
+	const FTransform WeaponRelativeTransform =
+		WeaponMesh->GetRelativeTransform();
+
+	const FTransform MeshWorldTransform =
+		CharacterMesh->GetComponentTransform();
+
+	/*
+	 * ---------------------------------
+	 * 4. Weapon Local
+	 *      → Attach Socket
+	 *      → Hand Bone
+	 *      → Character Mesh
+	 *      → World
+	 * ---------------------------------
+	 */
+
+	auto WeaponPointToWorld =
+		[&](
+			const FVector& WeaponLocalPoint)
+		{
+			/*
+			 * Weapon Local
+			 * → Character Attach Socket Local
+			 */
+			const FVector PointInSocket =
+				WeaponRelativeTransform.
+					TransformPosition(
+						WeaponLocalPoint);
+
+			/*
+			 * Attach Socket Local
+			 * → Parent Hand Bone Local
+			 */
+			const FVector PointInBone =
+				AttachSocketLocal.
+					TransformPosition(
+						PointInSocket);
+
+			/*
+			 * Bone Local
+			 * → Character Mesh Component Space
+			 */
+			const FVector PointInMesh =
+				AttachBoneComponentTransform.
+					TransformPosition(
+						PointInBone);
+
+			/*
+			 * Mesh Component Space
+			 * → World Space
+			 */
+			return MeshWorldTransform.
+				TransformPosition(
+					PointInMesh);
+		};
+
+	OutBase =
+		WeaponPointToWorld(
+			BaseWeaponLocal);
+
+	OutTip =
+		WeaponPointToWorld(
+			TipWeaponLocal);
+
+	return true;
 }
 
 void UDRMeleeCombatComponent::ProcessHit(

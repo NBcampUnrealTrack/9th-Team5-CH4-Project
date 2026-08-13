@@ -17,4 +17,13 @@ public:
 		USkeletalMeshComponent* MeshComp,
 		UAnimSequenceBase* Animation,
 		const FAnimNotifyEventReference& EventReference) override;
+
+	virtual void BranchingPointNotify(
+		FBranchingPointNotifyPayload& BranchingPointPayload) override;
+
+private:
+	void HandleSweepSample(
+		USkeletalMeshComponent* MeshComp,
+		UAnimSequenceBase* Animation,
+		FAnimNotifyEvent* NotifyEvent);
 };
