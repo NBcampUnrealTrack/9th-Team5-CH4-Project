@@ -5,10 +5,14 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Net/UnrealNetwork.h"
+#include "Engine/Engine.h"
+#include "Kismet/GameplayStatics.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+
+#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
-#include "DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
@@ -16,11 +20,7 @@
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 #include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
-
-#include "Engine/Engine.h"
-#include "Kismet/GameplayStatics.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -55,6 +55,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	HealthComponent = CreateDefaultSubobject<UDRHealthComponent>(TEXT("HealthComponent"));
 	
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
+	
+	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
@@ -256,47 +258,27 @@ float ADRPlayerCharacter::TakeDamage(
 void ADRPlayerCharacter::RequestPrimaryItemAction(
 	EDRItemActionTriggerEvent TriggerEvent)
 {
-	if (!IsLocallyControlled() ||
-		IsDead() ||
-		!IsValid(HeldItemDefinition))
+	if (IsValid(HeldItemComponent))
 	{
-		return;
+		HeldItemComponent->
+			RequestPrimaryAction(
+				TriggerEvent);
 	}
-
-	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
-	{
-		return;
-	}
-
-	ExecuteHeldItemAction(HeldItemDefinition->PrimaryAction);
 }
 
 void ADRPlayerCharacter::RequestSecondaryItemAction(
 	EDRItemActionTriggerEvent TriggerEvent)
 {
-	if (!IsLocallyControlled() ||
-		IsDead() ||
-		!IsValid(HeldItemDefinition))
+	if (IsValid(HeldItemComponent))
 	{
-		return;
+		HeldItemComponent->RequestSecondaryAction(TriggerEvent);
 	}
-
-	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
-	{
-		return;
-	}
-
-	ExecuteHeldItemAction(HeldItemDefinition->SecondaryAction);
 }
 
 bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
 {
-	if (!IsValid(HeldItemDefinition) || ActionType == EDRItemActionType::None)
-	{
-		return false;
-	}
-
-	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
+	return IsValid(HeldItemComponent) &&
+		HeldItemComponent->HasAction(ActionType);
 }
 
 void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
@@ -499,140 +481,6 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	
-	DOREPLIFETIME(
-		ADRPlayerCharacter,
-		HeldItemDefinition);
-}
-
-void ADRPlayerCharacter::ExecuteHeldItemAction(
-	EDRItemActionType ActionType)
-{
-	if (!CanStartLocalItemAction())
-	{
-		return;
-	}
-
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		{
-			if (!RequestMine())
-			{
-				return;
-			}
-
-			NextLocalItemActionTime =
-				GetWorld()->GetTimeSeconds() +
-				GetItemActionCooldown(
-					EDRItemActionType::Dig);
-
-			PlayFirstPersonItemActionPresentation(
-				EDRItemActionType::Dig);
-
-			break;
-		}
-
-	case EDRItemActionType::MeleeAttack:
-		{
-			NextLocalItemActionTime =
-				GetWorld()->GetTimeSeconds() +
-				GetItemActionCooldown(
-					EDRItemActionType::MeleeAttack);
-
-			PlayFirstPersonItemActionPresentation(
-				EDRItemActionType::MeleeAttack);
-
-			RequestMeleeAttack();
-			break;
-		}
-
-	case EDRItemActionType::Throw:
-		RequestThrowHeldItem();
-		break;
-
-	case EDRItemActionType::None:
-	default:
-		break;
-	}
-}
-
-bool ADRPlayerCharacter::CanStartLocalItemAction() const
-{
-	const UWorld* World = GetWorld();
-
-	return IsValid(World) &&
-		World->GetTimeSeconds() >= NextLocalItemActionTime;
-}
-
-float ADRPlayerCharacter::GetItemActionCooldown(
-	EDRItemActionType ActionType) const
-{
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		return DigActionCooldown;
-
-	case EDRItemActionType::MeleeAttack:
-		return IsValid(MeleeCombatComponent)
-			? MeleeCombatComponent->GetAttackDuration()
-			: 0.f;
-
-	default:
-		return 0.f;
-	}
-}
-
-void ADRPlayerCharacter::PlayFirstPersonItemActionPresentation(
-	EDRItemActionType ActionType)
-{
-	if (IsValid(
-			ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->
-			PlayFirstPersonAction(
-				ActionType);
-	}
-}
-
-void ADRPlayerCharacter::ServerRequestDigPresentation_Implementation()
-{
-	if (IsDead() ||
-		!HasHeldItemAction(
-			EDRItemActionType::Dig) ||
-		!IsValid(
-			ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
-}
-
-void ADRPlayerCharacter::PlayLocalCameraShake(
-	TSubclassOf<UCameraShakeBase> ShakeClass,
-	float Scale)
-{
-	if (!IsLocallyControlled() ||
-		!ShakeClass)
-	{
-		return;
-	}
-
-	APlayerController* PlayerController =
-		Cast<APlayerController>(GetController());
-
-	if (!IsValid(PlayerController) ||
-		!IsValid(PlayerController->PlayerCameraManager))
-	{
-		return;
-	}
-
-	PlayerController->PlayerCameraManager->StartCameraShake(
-		ShakeClass,
-		Scale,
-		ECameraShakePlaySpace::CameraLocal,
-		FRotator::ZeroRotator);
 }
 
 void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
@@ -648,68 +496,9 @@ void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
 void ADRPlayerCharacter::SetHeldItemDefinition(
 	UDRItemDefinition* NewItemDefinition)
 {
-	if (!HasAuthority() ||
-		HeldItemDefinition == NewItemDefinition)
+	if (IsValid(HeldItemComponent))
 	{
-		return;
-	}
-
-	HeldItemDefinition = NewItemDefinition;
-
-	RefreshHeldItemVisual();
-	RefreshHeldItemMiningSettings();
-
-	if (IsLocallyControlled() &&
-		IsValid(HeldItemDefinition) &&
-		IsValid(EquipSound))
-	{
-		UGameplayStatics::PlaySound2D(
-			this,
-			EquipSound);
-	}
-
-	ForceNetUpdate();
-}
-
-void ADRPlayerCharacter::OnRep_HeldItemDefinition()
-{
-	RefreshHeldItemVisual();
-	RefreshHeldItemMiningSettings();
-
-	if (IsLocallyControlled() &&
-		IsValid(HeldItemDefinition) &&
-		IsValid(EquipSound))
-	{
-		UGameplayStatics::PlaySound2D(
-			this,
-			EquipSound);
-	}
-}
-
-void ADRPlayerCharacter::RefreshHeldItemVisual()
-{
-	if (!IsValid(HeldItemDefinition))
-	{
-		ClearHandEquipmentVisual();
-		return;
-	}
-	
-	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
-	FTransform FirstPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform 
-		* HeldItemDefinition->FirstPersonVisualOffsetTransform;
-	
-	// 당장은 특별한 처리 없이 기본 크기 적용.
-	FTransform ThirdPersonVisualTransform = HeldItemDefinition->SpawnOffsetTransform;
-	
-	ApplyHandEquipmentVisual(VisualMesh, VisualMesh
-		, FirstPersonVisualTransform, ThirdPersonVisualTransform);	
-}
-
-void ADRPlayerCharacter::RefreshHeldItemMiningSettings()
-{
-	if (IsValid(MiningComponent))
-	{
-		MiningComponent->ApplyItemDefinition(HeldItemDefinition);
+		HeldItemComponent->SetHeldItemDefinition(NewItemDefinition);
 	}
 }
 

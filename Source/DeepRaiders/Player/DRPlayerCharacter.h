@@ -27,6 +27,7 @@ class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
 class UDRHealthComponent;
 class UDRPlayerLifecycleComponent;
+class UDRHeldItemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -184,6 +185,8 @@ public:
         return FirstPersonHandEquipmentMesh;
     }
     
+    FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
+    
 protected:
     virtual void BeginPlay() override;
 
@@ -234,15 +237,15 @@ protected:
         meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
     
+    UPROPERTY(
+        VisibleAnywhere,
+        BlueprintReadOnly,
+        Category = "Player|Held Item",
+        meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
+    
 private:
     void PrintNetworkState(const TCHAR* Context) const;
-    
-    void ExecuteHeldItemAction(EDRItemActionType ActionType);
-    
-    void HandleHealthDepleted();
-    
-public:
-    FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
     
 protected:
     UPROPERTY(
@@ -279,46 +282,6 @@ protected:
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
-    // ===== First Person Item Action =====
-
-    bool CanStartLocalItemAction() const;
-    float GetItemActionCooldown(EDRItemActionType ActionType) const;
-
-    // ===== Item Action Presentation =====
-
-    float NextLocalItemActionTime = 0.f;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Item Action",
-        meta = (AllowPrivateAccess = "true", ClampMin = "0.01"))
-    float DigActionCooldown = 0.6f;
-    
-    /** 로컬 1인칭에서 Action에 맞는 연출을 재생한다. */
-    void PlayFirstPersonItemActionPresentation(
-        EDRItemActionType ActionType);
-
-    /**
-     * 현재 Dig는 MiningComponent의 서버 처리와
-     * Presentation RPC가 분리되어 있으므로 임시로 사용한다.
-     */
-    UFUNCTION(Server, Unreliable)
-    void ServerRequestDigPresentation();
-    
-    UPROPERTY(EditDefaultsOnly, Category = "Player|Sound")
-    TObjectPtr<USoundBase> EquipSound;
-    
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Player|Item Action|Sound")
-    TObjectPtr<USoundBase> MeleeAirSound;
-    
-    void PlayLocalCameraShake(
-        TSubclassOf<UCameraShakeBase> ShakeClass,
-        float Scale = 1.f);
-    
     UFUNCTION(Client, Unreliable)
     void ClientPlayDamagedCameraShake();
     
@@ -327,14 +290,15 @@ public:
     void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
     
 protected:
-    UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
-    TObjectPtr<UDRItemDefinition> HeldItemDefinition;
+    // 아래 내용 DRHeldItemComponent로 옮김
+    // UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
+    // TObjectPtr<UDRItemDefinition> HeldItemDefinition;
     
-    UFUNCTION()
-    void OnRep_HeldItemDefinition();
-    
-    void RefreshHeldItemVisual();
-    void RefreshHeldItemMiningSettings();
+    // UFUNCTION()
+    // void OnRep_HeldItemDefinition();
+    //
+    // void RefreshHeldItemVisual();
+    // void RefreshHeldItemMiningSettings();
 #pragma endregion
 
 #pragma region Teleport
