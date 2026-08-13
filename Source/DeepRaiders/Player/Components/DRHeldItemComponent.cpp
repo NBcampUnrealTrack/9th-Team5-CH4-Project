@@ -69,6 +69,64 @@ void UDRHeldItemComponent::OnRep_HeldItemDefinition()
 	RefreshHeldItemState();
 }
 
+void UDRHeldItemComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ADRPlayerCharacter* Character =
+		GetOwnerCharacter();
+
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	MiningComponent =
+		Character->FindComponentByClass<
+			UDRMiningComponent>();
+
+	MeleeCombatComponent =
+		Character->FindComponentByClass<
+			UDRMeleeCombatComponent>();
+
+	PresentationComponent =
+		Character->FindComponentByClass<
+			UDRItemActionPresentationComponent>();
+
+	if (!MiningComponent.IsValid())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[HeldItem] MiningComponent missing. "
+				"Character=%s"),
+			*GetNameSafe(Character));
+	}
+
+	if (!MeleeCombatComponent.IsValid())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[HeldItem] MeleeCombatComponent missing. "
+				"Character=%s"),
+			*GetNameSafe(Character));
+	}
+
+	if (!PresentationComponent.IsValid())
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT(
+				"[HeldItem] PresentationComponent missing. "
+				"Character=%s"),
+			*GetNameSafe(Character));
+	}
+}
+
 void UDRHeldItemComponent::RefreshHeldItemState()
 {
 	RefreshVisual();
@@ -121,24 +179,10 @@ void UDRHeldItemComponent::RefreshVisual()
 
 void UDRHeldItemComponent::RefreshMiningSettings()
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character))
+	if (UDRMiningComponent* Mining =
+			MiningComponent.Get())
 	{
-		return;
-	}
-
-	UDRMiningComponent* MiningComponent =
-		Character->
-			FindComponentByClass<
-				UDRMiningComponent>();
-
-	if (IsValid(MiningComponent))
-	{
-		MiningComponent->
-			ApplyItemDefinition(
-				HeldItemDefinition);
+		Mining->ApplyItemDefinition(HeldItemDefinition);
 	}
 }
 
@@ -249,24 +293,11 @@ float UDRHeldItemComponent::GetActionCooldown(
 
 	case EDRItemActionType::MeleeAttack:
 		{
-			const ADRPlayerCharacter*
-				Character =
-					GetOwnerCharacter();
+			const UDRMeleeCombatComponent* Melee =
+				MeleeCombatComponent.Get();
 
-			if (!IsValid(Character))
-			{
-				return 0.f;
-			}
-
-			const UDRMeleeCombatComponent*
-				MeleeCombat =
-					Character->
-						FindComponentByClass<
-							UDRMeleeCombatComponent>();
-
-			return IsValid(MeleeCombat)
-				? MeleeCombat->
-					GetAttackDuration()
+			return IsValid(Melee)
+				? Melee->GetAttackDuration()
 				: 0.f;
 		}
 
@@ -276,80 +307,93 @@ float UDRHeldItemComponent::GetActionCooldown(
 }
 
 void UDRHeldItemComponent::ExecuteAction(
-	EDRItemActionType ActionType)
+    EDRItemActionType ActionType)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+    ADRPlayerCharacter* Character =
+        GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!CanStartLocalAction())
-	{
-		return;
-	}
+    UWorld* World =
+        GetWorld();
 
-	UDRItemActionPresentationComponent*
-		Presentation =
-			Character->
-				FindComponentByClass<
-					UDRItemActionPresentationComponent>();
+    if (!IsValid(Character) ||
+        !IsValid(World) ||
+        !CanStartLocalAction())
+    {
+        return;
+    }
 
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		{
-			/*
-			 * 실제 채굴 요청 실패 시
-			 * Swing/Cooldown도 적용하지 않는다.
-			 */
-			if (!Character->RequestMine())
-			{
-				return;
-			}
+    switch (ActionType)
+    {
+    case EDRItemActionType::Dig:
+        {
+            UDRMiningComponent* Mining =
+                MiningComponent.Get();
 
-			NextLocalActionTime =
-				GetWorld()->GetTimeSeconds() +
-				GetActionCooldown(
-					EDRItemActionType::Dig);
+            if (!IsValid(Mining) ||
+                !Mining->TryMine())
+            {
+                return;
+            }
 
-			if (IsValid(Presentation))
-			{
-				Presentation->
-					PlayFirstPersonAction(
-						EDRItemActionType::Dig);
-			}
+            NextLocalActionTime =
+                World->GetTimeSeconds() +
+                GetActionCooldown(
+                    EDRItemActionType::Dig);
 
-			break;
-		}
+            if (UDRItemActionPresentationComponent*
+                    Presentation =
+                        PresentationComponent.Get())
+            {
+                Presentation->
+                    PlayFirstPersonAction(
+                        EDRItemActionType::Dig);
+            }
 
-	case EDRItemActionType::MeleeAttack:
-		{
-			NextLocalActionTime =
-				GetWorld()->GetTimeSeconds() +
-				GetActionCooldown(
-					EDRItemActionType::
-						MeleeAttack);
+            break;
+        }
 
-			if (IsValid(Presentation))
-			{
-				Presentation->
-					PlayFirstPersonAction(
-						EDRItemActionType::
-							MeleeAttack);
-			}
+    case EDRItemActionType::MeleeAttack:
+        {
+            UDRMeleeCombatComponent* Melee =
+                MeleeCombatComponent.Get();
 
-			Character->
-				RequestMeleeAttack();
+            if (!IsValid(Melee))
+            {
+                return;
+            }
 
-			break;
-		}
+            NextLocalActionTime =
+                World->GetTimeSeconds() +
+                GetActionCooldown(
+                    EDRItemActionType::
+                        MeleeAttack);
 
-	case EDRItemActionType::Throw:
-		Character->
-			RequestThrowHeldItem();
-		break;
+            if (UDRItemActionPresentationComponent*
+                    Presentation =
+                        PresentationComponent.Get())
+            {
+                Presentation->
+                    PlayFirstPersonAction(
+                        EDRItemActionType::
+                            MeleeAttack);
+            }
 
-	case EDRItemActionType::None:
-	default:
-		break;
-	}
+            Melee->RequestAttack();
+
+            break;
+        }
+
+    case EDRItemActionType::Throw:
+        /*
+         * Throw는 아직 실제 구현이
+         * PlayerController에 있으므로
+         * Character Facade 유지.
+         */
+        Character->RequestThrowHeldItem();
+        break;
+
+    case EDRItemActionType::None:
+    default:
+        break;
+    }
 }

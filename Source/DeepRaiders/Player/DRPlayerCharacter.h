@@ -9,7 +9,6 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class USceneComponent;
 class UStaticMesh;
-class FLifetimeProperty;
 class UDRMiningComponent;
 class UDRTeleportComponent;
 class UAnimMontage;
@@ -52,12 +51,6 @@ public:
 
     /** 점프 입력과 제트팩 사용을 종료한다. */
     void HandleJumpReleased();
-    
-    /** 로컬 플레이어의 채굴 요청을 MiningComponent에 전달한다. */
-    bool RequestMine();
-    
-    /** 로컬 플레이어가 근접 공격을 요청한다. */
-    void RequestMeleeAttack();
 
     /** 로컬 플레이어가 손에 든 아이템 던지기를 요청한다. */
     void RequestThrowHeldItem();
@@ -65,9 +58,6 @@ public:
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_Controller() override;
     virtual void OnRep_PlayerState() override;
-
-    virtual void GetLifetimeReplicatedProps(
-        TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     /** 1인칭 및 월드 손 장비 외형을 적용한다. */
     void ApplyHandEquipmentVisual(
@@ -282,23 +272,10 @@ protected:
         Category = "Player|Equipment")
     TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
-    UFUNCTION(Client, Unreliable)
-    void ClientPlayDamagedCameraShake();
-    
 #pragma region QuickSlot
 public:
     void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
     
-protected:
-    // 아래 내용 DRHeldItemComponent로 옮김
-    // UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
-    // TObjectPtr<UDRItemDefinition> HeldItemDefinition;
-    
-    // UFUNCTION()
-    // void OnRep_HeldItemDefinition();
-    //
-    // void RefreshHeldItemVisual();
-    // void RefreshHeldItemMiningSettings();
 #pragma endregion
 
 #pragma region Teleport

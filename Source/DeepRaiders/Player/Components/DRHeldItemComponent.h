@@ -8,6 +8,9 @@
 class ADRPlayerCharacter;
 class UDRItemDefinition;
 class USoundBase;
+class UDRMiningComponent;
+class UDRMeleeCombatComponent;
+class UDRItemActionPresentationComponent;
 
 UCLASS(
     ClassGroup = (Player),
@@ -47,9 +50,14 @@ public:
         EDRItemActionTriggerEvent TriggerEvent);
 
 private:
-    ADRPlayerCharacter*
-    GetOwnerCharacter() const;
+    ADRPlayerCharacter* GetOwnerCharacter() const;
 
+    TWeakObjectPtr<UDRMiningComponent> MiningComponent;
+
+    TWeakObjectPtr<UDRMeleeCombatComponent> MeleeCombatComponent;
+
+    TWeakObjectPtr<UDRItemActionPresentationComponent> PresentationComponent;
+    
     void ExecuteAction(
         EDRItemActionType ActionType);
 
@@ -78,6 +86,9 @@ private:
     float NextLocalActionTime = 0.f;
 
 protected:
+    
+    virtual void BeginPlay() override;
+    
     /**
      * 채굴 Action의 로컬 입력 쿨다운.
      *

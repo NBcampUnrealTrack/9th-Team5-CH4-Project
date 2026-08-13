@@ -477,22 +477,6 @@ void ADRPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
 	);
 }
 
-void ADRPlayerCharacter::GetLifetimeReplicatedProps(
-	TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-}
-
-void ADRPlayerCharacter::ClientPlayDamagedCameraShake_Implementation()
-{
-	if (IsValid(
-			ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->
-			PlayDamagedFeedbackLocal();
-	}
-}
-
 void ADRPlayerCharacter::SetHeldItemDefinition(
 	UDRItemDefinition* NewItemDefinition)
 {
