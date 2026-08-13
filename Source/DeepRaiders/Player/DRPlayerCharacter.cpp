@@ -5,8 +5,6 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Engine/Engine.h"
-#include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -324,8 +322,6 @@ void ADRPlayerCharacter::ReconcileJetpackFuelFromServer(
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
-	PrintNetworkState(TEXT("BeginPlay"));
 }
 
 void ADRPlayerCharacter::MoveInput(
@@ -389,8 +385,6 @@ void ADRPlayerCharacter::PossessedBy(
 			DRPlayerState->GrantJetpack();
 		}
 	}
-
-	PrintNetworkState(TEXT("PossessedBy"));
 }
 
 void ADRPlayerCharacter::OnRep_Controller()
@@ -401,8 +395,6 @@ void ADRPlayerCharacter::OnRep_Controller()
 	{
 		PlayerLifecycleComponent->HandleControllerReady();
 	}
-
-	PrintNetworkState(TEXT("OnRep_Controller"));
 }
 
 void ADRPlayerCharacter::OnRep_PlayerState()
@@ -414,44 +406,6 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 		JetpackComponent->
 			HandlePlayerStateReady();
 	}
-}
-
-void ADRPlayerCharacter::PrintNetworkState(const TCHAR* Context) const
-{
-	const TCHAR* NetModeString = TEXT("Unknown");
-
-	switch (GetNetMode())
-	{
-	case NM_Standalone:
-		NetModeString = TEXT("Standalone");
-		break;
-
-	case NM_ListenServer:
-		NetModeString = TEXT("ListenServer");
-		break;
-
-	case NM_DedicatedServer:
-		NetModeString = TEXT("DedicatedServer");
-		break;
-
-	case NM_Client:
-		NetModeString = TEXT("Client");
-		break;
-	}
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT("[%s] Name=%s NetMode=%s Authority=%d Local=%d Controller=%s Owner=%s LocalRole=%s"),
-		Context,
-		*GetName(),
-		NetModeString,
-		HasAuthority(),
-		IsLocallyControlled(),
-		*GetNameSafe(GetController()),
-		*GetNameSafe(GetOwner()),
-		*UEnum::GetValueAsString(GetLocalRole())
-	);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(

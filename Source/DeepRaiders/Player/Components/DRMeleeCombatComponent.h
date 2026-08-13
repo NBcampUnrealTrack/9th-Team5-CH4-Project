@@ -61,8 +61,6 @@ private:
 
     void PerformLineTrace();
 
-    void PerformWeaponSweep();
-
     void ProcessHit(
         const FHitResult& HitResult);
 
@@ -157,7 +155,7 @@ protected:
         EditDefaultsOnly,
         BlueprintReadOnly,
         Category = "Melee|Debug")
-    bool bDrawDebug = true;
+    bool bDrawDebug = false;
     
     /**
      * WeaponSweep에서 무기 이동 경로를 나눌

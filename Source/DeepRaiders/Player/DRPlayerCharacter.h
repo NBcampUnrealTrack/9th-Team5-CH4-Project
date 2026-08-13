@@ -153,8 +153,14 @@ public:
         return JetpackComponent;
     }
     
-    /** HUD에서 사용할 제트팩 연료 비율. 소유 클라이언트는 예측값을 사용한다. */
-    UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
+    /**
+     * HUD에서 사용할 제트팩 연료 비율.
+     * 소유 게스트는 서버 Fuel Snapshot의
+     * 보간 표시값을 사용한다.
+     */
+    UFUNCTION(
+        BlueprintPure,
+        Category = "Player|Jetpack|UI")
     float GetDisplayedJetpackFuelRatio() const;
 
     /** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
@@ -233,9 +239,6 @@ protected:
         Category = "Player|Held Item",
         meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
-    
-private:
-    void PrintNetworkState(const TCHAR* Context) const;
     
 protected:
     UPROPERTY(

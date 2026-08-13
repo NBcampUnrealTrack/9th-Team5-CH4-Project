@@ -113,24 +113,14 @@ void UDRMeleeCombatComponent::PerformHitCheck()
 
 	if (!IsValid(Character) ||
 		!Character->HasAuthority() ||
-		!bIsAttacking)
+		!bIsAttacking ||
+		TraceMode !=
+			EDRMeleeTraceMode::ViewLine)
 	{
 		return;
 	}
 
-	switch (TraceMode)
-	{
-	case EDRMeleeTraceMode::ViewLine:
-		PerformLineTrace();
-		break;
-
-	case EDRMeleeTraceMode::WeaponSweep:
-		PerformWeaponSweep();
-		break;
-
-	default:
-		break;
-	}
+	PerformLineTrace();
 }
 
 void UDRMeleeCombatComponent::PerformLineTrace()
@@ -197,11 +187,6 @@ void UDRMeleeCombatComponent::PerformLineTrace()
 	}
 
 	ProcessHit(HitResult);
-}
-
-void UDRMeleeCombatComponent::PerformWeaponSweep()
-{
-	StartSweepWindow();
 }
 
 void UDRMeleeCombatComponent::StartSweepWindow()
