@@ -32,6 +32,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	// 이 Actor가 서버에서 클라이언트로 복제되도록 설정
 	bReplicates = true;
 
+	// Actor 이동 정보도 복제
+	SetReplicateMovement(true);
+	
 	GetMesh()->SetOwnerNoSee(false);
 	GetMesh()->SetOnlyOwnerSee(false);
 	GetMesh()->SetHiddenInGame(false);
@@ -40,48 +43,40 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MiningComponent = CreateDefaultSubobject<UDRMiningComponent>(TEXT("MiningComponent"));
 
 	VoxelNoClippingComponent = CreateDefaultSubobject<UVoxelNoClippingComponent>(TEXT("VoxelNoClippingComponent"));
-
 	VoxelNoClippingComponent->SetupAttachment(GetCapsuleComponent());
-
 	VoxelNoClippingComponent->TickRate = 0.03f;
 	VoxelNoClippingComponent->SearchRange = 8;
 	VoxelNoClippingComponent->bEnableDefaultBehavior = true;
 	VoxelNoClippingComponent->Speed = 6000.f;
 
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
-
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
-
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
-
 	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
-
 	HealthComponent = CreateDefaultSubobject<UDRHealthComponent>(TEXT("HealthComponent"));
-
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
-
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
-
-	// Actor 이동 정보도 복제
-	SetReplicateMovement(true);
-
+	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
-
+	
 	GetCharacterMovement()->bOrientRotationToMovement = false;
-
+	
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 350.f;
-	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
+	CameraBoom->TargetArmLength = 420.f;
+	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 70.f));
+	CameraBoom->SocketOffset = FVector(0.f, 0.f, 0.f);
 	CameraBoom->bUsePawnControlRotation = true;
-
-
+	CameraBoom->bDoCollisionTest = true;
+	CameraBoom->bEnableCameraLag = false;
+	CameraBoom->bEnableCameraRotationLag = false;
+	
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
-	FollowCamera->SetAutoActivate(true);
+	FollowCamera->FieldOfView = 90.f;
 
 	// 월드 손 장비
 	WorldHandEquipmentMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WorldHandEquipmentMesh"));

@@ -49,10 +49,7 @@ public:
 
 	virtual void Landed(const FHitResult& Hit) override;
 
-	/** 지상에서는 점프, 공중에서는 제트팩 사용을 요청한다. */
 	void HandleJumpPressed();
-
-	/** 점프 입력과 제트팩 사용을 종료한다. */
 	void HandleJumpReleased();
 
 	/** 로컬 플레이어가 손에 든 아이템 던지기를 요청한다. */
@@ -102,10 +99,7 @@ public:
 
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
-	/** 현재 장착 아이템의 Primary Action을 요청한다. */
 	void RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
-
-	/** 현재 장착 아이템의 Secondary Action을 요청한다. */
 	void RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
 
 	/**
@@ -114,7 +108,6 @@ public:
 	 */
 	bool HasHeldItemAction(EDRItemActionType ActionType) const;
 
-	/** 서버에서의 땅파기 성공 여부 알려줌 */
 	void NotifyMineConfirmedFromServer();
 
 	UDRMeleeCombatComponent* GetMeleeCombatComponent() const
@@ -198,11 +191,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
 	TObjectPtr<UCameraComponent> FollowCamera;
 
-	/** 다른 플레이어에게 보이는 월드 손 장비 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
-
-	/** 다른 플레이어에게 보이는 월드 등 장비 */
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
