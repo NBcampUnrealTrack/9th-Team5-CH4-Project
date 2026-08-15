@@ -2,45 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Components/TimelineComponent.h"
 #include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "DRItemActionPresentationComponent.generated.h"
 
 class ADRPlayerCharacter;
-class UCurveFloat;
 class UAnimMontage;
 class USoundBase;
 class UCameraShakeBase;
-
-USTRUCT(BlueprintType)
-struct DEEPRAIDERS_API FDRFirstPersonSwingPresentation
-{
-    GENERATED_BODY()
-
-    /** 스윙 시간 흐름 Curve */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "First Person")
-    TObjectPtr<UCurveFloat> Curve = nullptr;
-
-    /** Curve 값이 1일 때 적용할 회전 오프셋 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "First Person")
-    FRotator RotationOffset =
-        FRotator::ZeroRotator;
-
-    /** Curve 값이 1일 때 적용할 위치 오프셋 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "First Person")
-    FVector LocationOffset =
-        FVector::ZeroVector;
-};
-
 
 UCLASS(
     ClassGroup = (Player),
@@ -52,19 +20,7 @@ class DEEPRAIDERS_API UDRItemActionPresentationComponent
 
 public:
     UDRItemActionPresentationComponent();
-
-    virtual void BeginPlay() override;
-
-    virtual void TickComponent(
-        float DeltaTime,
-        ELevelTick TickType,
-        FActorComponentTickFunction* ThisTickFunction)
-        override;
-
-    /** Action에 해당하는 로컬 1인칭 스윙을 재생한다. */
-    void PlayFirstPersonAction(
-        EDRItemActionType ActionType);
-
+    
     /**
      * 서버에서 확정된 Action의
      * 3인칭 월드 연출을 전체 인스턴스에 전달한다.
@@ -90,20 +46,6 @@ public:
 private:
     ADRPlayerCharacter*
         GetOwnerCharacter() const;
-
-    void InitializeSwingTimeline(
-        UCurveFloat* InitialCurve);
-
-    void PlayFirstPersonSwing(
-        const FDRFirstPersonSwingPresentation&
-            Presentation);
-
-    UFUNCTION()
-    void UpdateFirstPersonItemSwing(
-        float CurveValue);
-
-    UFUNCTION()
-    void FinishFirstPersonItemSwing();
 
     /** 현재 인스턴스에서 월드 몽타주를 재생한다. */
     void PlayWorldAction(
@@ -139,34 +81,7 @@ private:
         bool bKilled,
         FVector_NetQuantize ImpactLocation);
     
-private:
-    FTimeline FirstPersonItemSwingTimeline;
-
-    bool bSwingTimelineInitialized = false;
-
-    FRotator ActiveSwingRotation =
-        FRotator::ZeroRotator;
-
-    FVector ActiveSwingLocation =
-        FVector::ZeroVector;
-
-    FTransform EquipmentRootBaseTransform;
-
 protected:
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Item Action|First Person")
-    FDRFirstPersonSwingPresentation
-        FirstPersonDigPresentation;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Item Action|First Person")
-    FDRFirstPersonSwingPresentation
-        FirstPersonMeleePresentation;
-    
     // ==============================
     // World Presentation
     // ==============================

@@ -482,25 +482,6 @@ void UDRPlayerLifecycleComponent::ApplyDeathRagdoll()
             WakeAllRigidBodies();
     }
 
-    /*
-     * 본인 화면의 1P 장비 숨김.
-     *
-     * World 장비는 Ragdoll에서도
-     * 계속 보이도록 건드리지 않는다.
-     */
-    UStaticMeshComponent*
-        FirstPersonEquipment =
-            Character->
-                GetFirstPersonHandEquipmentMesh();
-
-    if (IsValid(FirstPersonEquipment))
-    {
-        FirstPersonEquipment->
-            SetVisibility(
-                false,
-                true);
-    }
-
     if (AController* Controller =
             Character->GetController())
     {

@@ -25,160 +25,6 @@ UDRItemActionPresentationComponent::UDRItemActionPresentationComponent()
 	SetIsReplicatedByDefault(true);
 }
 
-void UDRItemActionPresentationComponent::BeginPlay()
-{
-	Super::BeginPlay();
-
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character))
-	{
-		return;
-	}
-
-	USceneComponent* EquipmentRoot =
-		Character->GetFirstPersonEquipmentRoot();
-
-	if (!IsValid(EquipmentRoot))
-	{
-		return;
-	}
-
-	EquipmentRootBaseTransform =
-		EquipmentRoot->GetRelativeTransform();
-
-	/*
-	 * Timeline Track을 최초 1회 생성할 Curve.
-	 * 실제 Action 실행 시 SetFloatCurve로
-	 * Dig / Melee Curve를 교체한다.
-	 */
-	UCurveFloat* InitialCurve = nullptr;
-
-	if (IsValid(
-			FirstPersonDigPresentation.Curve))
-	{
-		InitialCurve =
-			FirstPersonDigPresentation.Curve;
-	}
-	else if (IsValid(
-				 FirstPersonMeleePresentation.Curve))
-	{
-		InitialCurve =
-			FirstPersonMeleePresentation.Curve;
-	}
-
-	if (IsValid(InitialCurve))
-	{
-		InitializeSwingTimeline(
-			InitialCurve);
-	}
-}
-
-void UDRItemActionPresentationComponent::InitializeSwingTimeline(
-	UCurveFloat* InitialCurve)
-{
-	if (bSwingTimelineInitialized ||
-		!IsValid(InitialCurve))
-	{
-		return;
-	}
-
-	FOnTimelineFloat UpdateDelegate;
-
-	UpdateDelegate.BindUFunction(
-		this,
-		FName("UpdateFirstPersonItemSwing"));
-
-	FirstPersonItemSwingTimeline.AddInterpFloat(
-		InitialCurve,
-		UpdateDelegate,
-		NAME_None,
-		FirstPersonSwingTrackName);
-
-	FOnTimelineEvent FinishedDelegate;
-
-	FinishedDelegate.BindUFunction(
-		this,
-		FName("FinishFirstPersonItemSwing"));
-
-	FirstPersonItemSwingTimeline
-		.SetTimelineFinishedFunc(
-			FinishedDelegate);
-
-	FirstPersonItemSwingTimeline.SetLooping(false);
-
-	FirstPersonItemSwingTimeline
-		.SetTimelineLengthMode(
-			TL_LastKeyFrame);
-
-	bSwingTimelineInitialized = true;
-}
-
-void UDRItemActionPresentationComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(
-		DeltaTime,
-		TickType,
-		ThisTickFunction);
-
-	if (!FirstPersonItemSwingTimeline.IsPlaying())
-	{
-		SetComponentTickEnabled(false);
-		return;
-	}
-
-	FirstPersonItemSwingTimeline.TickTimeline(
-		DeltaTime);
-}
-
-void UDRItemActionPresentationComponent::PlayFirstPersonAction(
-	EDRItemActionType ActionType)
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled())
-	{
-		return;
-	}
-
-	switch (ActionType)
-	{
-	case EDRItemActionType::Dig:
-		PlayFirstPersonSwing(
-			FirstPersonDigPresentation);
-		break;
-
-	case EDRItemActionType::MeleeAttack:
-		PlayFirstPersonSwing(
-			FirstPersonMeleePresentation);
-		break;
-
-	case EDRItemActionType::Throw:
-	case EDRItemActionType::None:
-	default:
-		break;
-	}
-
-	/*
-	 * 로컬 1인칭 Action Sound.
-	 */
-	USoundBase* ActionSound =
-		ResolveActionSound(ActionType);
-
-	if (IsValid(ActionSound))
-	{
-		UGameplayStatics::PlaySound2D(
-			Character,
-			ActionSound);
-	}
-}
-
 void UDRItemActionPresentationComponent::PlayWorldActionFromServer(
 	EDRItemActionType ActionType)
 {
@@ -245,128 +91,6 @@ void UDRItemActionPresentationComponent::PlayDamagedFeedbackLocal()
 	PlayLocalCameraShake(
 		MeleeDamagedCameraShakeClass,
 		1.f);
-}
-
-void UDRItemActionPresentationComponent::PlayFirstPersonSwing(
-	const FDRFirstPersonSwingPresentation&
-		Presentation)
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled() ||
-		!IsValid(Presentation.Curve))
-	{
-		return;
-	}
-
-	USceneComponent* EquipmentRoot =
-		Character->GetFirstPersonEquipmentRoot();
-
-	if (!IsValid(EquipmentRoot))
-	{
-		return;
-	}
-
-	/*
-	 * BeginPlay 시 Curve가 없었더라도
-	 * 실행 시점에 설정되어 있으면 초기화 가능.
-	 */
-	if (!bSwingTimelineInitialized)
-	{
-		InitializeSwingTimeline(
-			Presentation.Curve);
-	}
-
-	if (!bSwingTimelineInitialized)
-	{
-		return;
-	}
-
-	FirstPersonItemSwingTimeline.Stop();
-
-	EquipmentRoot->SetRelativeTransform(
-		EquipmentRootBaseTransform);
-
-	ActiveSwingRotation =
-		Presentation.RotationOffset;
-
-	ActiveSwingLocation =
-		Presentation.LocationOffset;
-
-	FirstPersonItemSwingTimeline.SetFloatCurve(
-		Presentation.Curve,
-		FirstPersonSwingTrackName);
-
-	SetComponentTickEnabled(true);
-
-	FirstPersonItemSwingTimeline.PlayFromStart();
-}
-
-void UDRItemActionPresentationComponent::UpdateFirstPersonItemSwing(
-	float CurveValue)
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled())
-	{
-		return;
-	}
-
-	USceneComponent* EquipmentRoot =
-		Character->GetFirstPersonEquipmentRoot();
-
-	if (!IsValid(EquipmentRoot))
-	{
-		return;
-	}
-
-	const FVector BaseLocation =
-		EquipmentRootBaseTransform.GetLocation();
-
-	const FRotator BaseRotation =
-		EquipmentRootBaseTransform.Rotator();
-
-	const FVector NewLocation =
-		BaseLocation +
-		ActiveSwingLocation * CurveValue;
-
-	const FRotator RotationOffset =
-		ActiveSwingRotation * CurveValue;
-
-	const FRotator NewRotation =
-		BaseRotation + RotationOffset;
-
-	EquipmentRoot->
-		SetRelativeLocationAndRotation(
-			NewLocation,
-			NewRotation);
-}
-
-void UDRItemActionPresentationComponent::FinishFirstPersonItemSwing()
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character))
-	{
-		SetComponentTickEnabled(false);
-		return;
-	}
-
-	USceneComponent* EquipmentRoot =
-		Character->GetFirstPersonEquipmentRoot();
-
-	if (IsValid(EquipmentRoot))
-	{
-		EquipmentRoot->SetRelativeTransform(
-			EquipmentRootBaseTransform);
-	}
-
-	SetComponentTickEnabled(false);
 }
 
 void UDRItemActionPresentationComponent::PlayWorldAction(
@@ -546,46 +270,25 @@ void UDRItemActionPresentationComponent::MulticastPlayWorldAction_Implementation
 		return;
 	}
 
-	/*
-	 * 서버는 WeaponSweep Socket 판정을 위해
-	 * Listen Host의 로컬 캐릭터라도
-	 * World Montage를 재생해야 한다.
-	 *
-	 * Remote Client도 다른 플레이어의
-	 * World Montage를 재생한다.
-	 */
-	if (Character->HasAuthority() ||
-		!Character->IsLocallyControlled())
-	{
-		PlayWorldAction(
-			ActionType);
-	}
-
-	/*
-	 * 소유 로컬 플레이어는 이미
-	 * 1P Action Sound를 재생했다.
-	 *
-	 * World Sound까지 재생하면
-	 * 자기 액션 사운드가 두 번 들린다.
-	 */
-	if (Character->IsLocallyControlled())
-	{
-		return;
-	}
+	PlayWorldAction(ActionType);
 
 	USoundBase* ActionSound =
-		ResolveActionSound(
-			ActionType);
+		ResolveActionSound(ActionType);
 
 	if (!IsValid(ActionSound))
 	{
 		return;
 	}
 
-	/*
-	 * 다른 플레이어는
-	 * 실제 캐릭터 위치에서 3D Sound.
-	 */
+	if (Character->IsLocallyControlled())
+	{
+		UGameplayStatics::PlaySound2D(
+			Character,
+			ActionSound);
+
+		return;
+	}
+
 	UGameplayStatics::PlaySoundAtLocation(
 		Character,
 		ActionSound,
