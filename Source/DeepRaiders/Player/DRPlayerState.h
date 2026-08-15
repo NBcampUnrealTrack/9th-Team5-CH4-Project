@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "AbilitySystemInterface.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
+class UAbilitySystemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -12,11 +14,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	NewCoins);
 
 UCLASS()
-class DEEPRAIDERS_API ADRPlayerState : public APlayerState
+class DEEPRAIDERS_API ADRPlayerState 
+	: public APlayerState
+	, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
+	ADRPlayerState();
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -80,6 +88,9 @@ public:
 	FDRCoinsChangedSignature OnCoinsChanged;
 
 protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;
 

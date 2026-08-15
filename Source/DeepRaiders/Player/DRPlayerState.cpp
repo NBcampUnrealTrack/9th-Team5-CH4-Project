@@ -2,6 +2,33 @@
 
 #include "DRPlayerCharacter.h"
 #include "Net/UnrealNetwork.h"
+#include "AbilitySystemComponent.h"
+
+ADRPlayerState::ADRPlayerState()
+{
+	AbilitySystemComponent =
+		CreateDefaultSubobject<UAbilitySystemComponent>(
+			TEXT("AbilitySystemComponent"));
+
+	AbilitySystemComponent->SetIsReplicated(true);
+
+	AbilitySystemComponent->SetReplicationMode(
+		EGameplayEffectReplicationMode::Mixed);
+	
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[GAS] PlayerState=%s ASC=%s Authority=%d"),
+		*GetNameSafe(this),
+		*GetNameSafe(AbilitySystemComponent),
+		HasAuthority());
+}
+
+UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
 
 void ADRPlayerState::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
