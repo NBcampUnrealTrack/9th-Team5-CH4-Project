@@ -22,7 +22,7 @@
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 
 #include "AbilitySystemComponent.h"
-#include "GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GAS/DRPlayerAttributeSet.h"
 
 #include "GameFramework/SpringArmComponent.h"
 
