@@ -163,32 +163,10 @@ void ADRPlayerCharacter::Landed(
 
 	Super::Landed(Hit);
 
-	/*
-	 * 1. 착지로 Jetpack 상태 종료
-	 */
-	if (IsValid(JetpackComponent))
-	{
-		JetpackComponent->HandleLanded();
-	}
-
-	/*
-	 * 2. 착지 피해 / 사망 처리
-	 */
 	if (IsValid(PlayerLifecycleComponent))
 	{
-		PlayerLifecycleComponent->
-			HandleLanded(
-				LandingSpeed);
-	}
-
-	/*
-	 * 3. 살아있을 때만 Fuel 충전
-	 */
-	if (HasAuthority() &&
-		!IsDead() &&
-		IsValid(JetpackComponent))
-	{
-		JetpackComponent->RefillFuelFromServer();
+		PlayerLifecycleComponent->HandleLanded(
+			LandingSpeed);
 	}
 }
 
@@ -458,18 +436,6 @@ void ADRPlayerCharacter::PossessedBy(
 	{
 		PlayerLifecycleComponent->HandleControllerReady();
 	}
-
-	if (HasAuthority())
-	{
-		ADRPlayerState* DRPlayerState =
-			GetPlayerState<ADRPlayerState>();
-
-		if (IsValid(DRPlayerState))
-		{
-			// 임시 테스트: 스폰 즉시 제트팩 지급
-			DRPlayerState->GrantJetpack();
-		}
-	}
 }
 
 void ADRPlayerCharacter::OnRep_Controller()
@@ -505,12 +471,6 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 		static_cast<int32>(GetLocalRole()),
 		*GetNameSafe(GetPlayerState()),
 		*GetNameSafe(GetAbilitySystemComponent()));
-	
-	if (IsValid(JetpackComponent))
-	{
-		JetpackComponent->
-			HandlePlayerStateReady();
-	}
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(
@@ -589,25 +549,7 @@ void ADRPlayerCharacter::HandleJumpPressed()
 		return;
 	}
 
-	UCharacterMovementComponent* Movement =
-		GetCharacterMovement();
-
-	if (!IsValid(Movement))
-	{
-		return;
-	}
-
-	if (Movement->IsMovingOnGround())
-	{
-		Jump();
-		return;
-	}
-
-	if (Movement->IsFalling() &&
-		IsValid(JetpackComponent))
-	{
-		JetpackComponent->RequestStart();
-	}
+	Jump();
 }
 
 void ADRPlayerCharacter::HandleJumpReleased()
@@ -618,9 +560,4 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	}
 
 	StopJumping();
-
-	if (IsValid(JetpackComponent))
-	{
-		JetpackComponent->RequestStop();
-	}
 }
