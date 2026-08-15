@@ -5,8 +5,9 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "Engine/World.h"
 
+#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
@@ -19,6 +20,9 @@
 #include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
+
+#include "AbilitySystemComponent.h"
+#include "GAS/DRPlayerAttributeSet.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -134,6 +138,19 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetOwnerNoSee(true);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+}
+
+UAbilitySystemComponent* ADRPlayerCharacter::GetAbilitySystemComponent() const
+{
+	const ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return nullptr;
+	}
+
+	return DRPlayerState->GetAbilitySystemComponent();
 }
 
 void ADRPlayerCharacter::Landed(
@@ -324,6 +341,40 @@ void ADRPlayerCharacter::BeginPlay()
 	Super::BeginPlay();
 }
 
+void ADRPlayerCharacter::InitializeAbilitySystem()
+{
+	ADRPlayerState* DRPlayerState =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		DRPlayerState->GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	ASC->InitAbilityActorInfo(
+		DRPlayerState,
+		this);
+	
+	const UDRPlayerAttributeSet* RegisteredAttributeSet =
+		ASC->GetSet<UDRPlayerAttributeSet>();
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[GAS][AttributeSet] Direct=%s Registered=%s Same=%d"),
+		*GetNameSafe(DRPlayerState->GetPlayerAttributeSet()),
+		*GetNameSafe(RegisteredAttributeSet),
+		DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
+}
+
 void ADRPlayerCharacter::MoveInput(
 	const FVector2D& MoveInput)
 {
@@ -369,6 +420,51 @@ void ADRPlayerCharacter::PossessedBy(
 {
 	Super::PossessedBy(NewController);
 
+	InitializeAbilitySystem();
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		if (IsValid(TestAddSnowEffect))
+		{
+			FGameplayEffectContextHandle EffectContext =
+				ASC->MakeEffectContext();
+
+			ASC->BP_ApplyGameplayEffectToSelf(
+				TestAddSnowEffect,
+				1.f,
+				EffectContext);
+		}
+		
+		const UDRPlayerAttributeSet* AttributeSet =
+			ASC->GetSet<UDRPlayerAttributeSet>();
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[GAS][GE_TestAddSnow] Snow=%.1f"),
+			AttributeSet
+				? AttributeSet->GetSnowGauge()
+				: -1.f);
+	}
+	
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[GAS][PossessedBy] "
+			"Character=%s "
+			"Authority=%d "
+			"Local=%d "
+			"LocalRole=%d "
+			"PlayerState=%s "
+			"ASC=%s"),
+		*GetNameSafe(this),
+		HasAuthority(),
+		IsLocallyControlled(),
+		static_cast<int32>(GetLocalRole()),
+		*GetNameSafe(GetPlayerState()),
+		*GetNameSafe(GetAbilitySystemComponent()));
+	
 	if (IsValid(PlayerLifecycleComponent))
 	{
 		PlayerLifecycleComponent->HandleControllerReady();
@@ -401,6 +497,26 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 
+	InitializeAbilitySystem();
+	
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[GAS][OnRep_PlayerState] "
+			"Character=%s "
+			"Authority=%d "
+			"Local=%d "
+			"LocalRole=%d "
+			"PlayerState=%s "
+			"ASC=%s"),
+		*GetNameSafe(this),
+		HasAuthority(),
+		IsLocallyControlled(),
+		static_cast<int32>(GetLocalRole()),
+		*GetNameSafe(GetPlayerState()),
+		*GetNameSafe(GetAbilitySystemComponent()));
+	
 	if (IsValid(JetpackComponent))
 	{
 		JetpackComponent->

@@ -3,6 +3,7 @@
 #include "DRPlayerCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
+#include "GAS/DRPlayerAttributeSet.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -15,14 +16,9 @@ ADRPlayerState::ADRPlayerState()
 	AbilitySystemComponent->SetReplicationMode(
 		EGameplayEffectReplicationMode::Mixed);
 	
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[GAS] PlayerState=%s ASC=%s Authority=%d"),
-		*GetNameSafe(this),
-		*GetNameSafe(AbilitySystemComponent),
-		HasAuthority());
+	PlayerAttributeSet =
+		CreateDefaultSubobject<UDRPlayerAttributeSet>(
+			TEXT("PlayerAttributeSet"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const

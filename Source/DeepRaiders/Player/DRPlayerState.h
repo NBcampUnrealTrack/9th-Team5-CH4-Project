@@ -7,6 +7,7 @@
 
 class FLifetimeProperty;
 class UAbilitySystemComponent;
+class UDRPlayerAttributeSet;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -24,6 +25,11 @@ public:
 	ADRPlayerState();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
+	{
+		return PlayerAttributeSet;
+	}
 	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -90,6 +96,9 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;
