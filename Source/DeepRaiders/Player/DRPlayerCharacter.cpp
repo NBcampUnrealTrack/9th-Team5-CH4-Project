@@ -424,17 +424,6 @@ void ADRPlayerCharacter::PossessedBy(
 
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
-		if (IsValid(TestAddSnowEffect))
-		{
-			FGameplayEffectContextHandle EffectContext =
-				ASC->MakeEffectContext();
-
-			ASC->BP_ApplyGameplayEffectToSelf(
-				TestAddSnowEffect,
-				1.f,
-				EffectContext);
-		}
-		
 		const UDRPlayerAttributeSet* AttributeSet =
 			ASC->GetSet<UDRPlayerAttributeSet>();
 

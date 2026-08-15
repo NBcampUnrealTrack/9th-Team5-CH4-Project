@@ -47,9 +47,6 @@ public:
 
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
     
-    UPROPERTY(EditDefaultsOnly, Category = "GAS|Test")
-    TSubclassOf<UGameplayEffect> TestAddSnowEffect;
-    
     virtual void Landed(const FHitResult& Hit) override;
 
     /** 지상에서는 점프, 공중에서는 제트팩 사용을 요청한다. */

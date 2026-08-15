@@ -27,6 +27,9 @@
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameplayAbilitySpec.h"
+
 ADRPlayerController::ADRPlayerController()
     : bCanTeleportInteract(false)
 {
@@ -1013,6 +1016,72 @@ void ADRPlayerController::DRWithDrawFirstItem()
             EDRStorageTransferDirection::StorageToPlayer,
             Entries[0].EntryId);
     }
+}
+
+void ADRPlayerController::DRTestAddSnow()
+{
+    ADRPlayerCharacter* PlayerCharacter =
+        GetDRPlayerCharacter();
+
+    if (!IsValid(PlayerCharacter))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("[GAS][TestActivate] Character invalid"));
+
+        return;
+    }
+
+    UAbilitySystemComponent* ASC =
+        PlayerCharacter->GetAbilitySystemComponent();
+
+    if (!IsValid(ASC) ||
+        !IsValid(TestAddSnowAbilityClass))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("[GAS][TestActivate] ASC or AbilityClass invalid"));
+
+        return;
+    }
+
+    FGameplayAbilitySpec* AbilitySpec =
+        ASC->FindAbilitySpecFromClass(
+            TestAddSnowAbilityClass);
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT(
+            "[GAS][TestActivate] "
+            "NetMode=%s "
+            "LocalController=%d "
+            "SpecFound=%d "
+            "Ability=%s"),
+        *ToString(GetNetMode()),
+        IsLocalController(),
+        AbilitySpec != nullptr,
+        *GetNameSafe(TestAddSnowAbilityClass));
+
+    if (AbilitySpec == nullptr)
+    {
+        return;
+    }
+
+    const bool bRequested =
+        ASC->TryActivateAbility(
+            AbilitySpec->Handle,
+            true);
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT(
+            "[GAS][TestActivate] "
+            "TryActivateAbility=%d"),
+        bRequested);
 }
 
 #pragma region Teleport

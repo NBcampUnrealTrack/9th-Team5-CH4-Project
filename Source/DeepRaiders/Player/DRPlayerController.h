@@ -19,6 +19,8 @@ class UDRInventoryUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRTeleportUIComponent;
 
+class UGameplayAbility;
+
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
 
@@ -251,6 +253,15 @@ public:
 	
 	UFUNCTION(Exec)
 	void DRWithDrawFirstItem();
+	
+	UFUNCTION(Exec)
+	void DRTestAddSnow();
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "GAS|Test")
+	TSubclassOf<UGameplayAbility> TestAddSnowAbilityClass;
 	
 private:
 	UFUNCTION(Server, Reliable)
