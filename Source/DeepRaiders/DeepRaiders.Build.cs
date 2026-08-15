@@ -17,6 +17,9 @@ public class DeepRaiders : ModuleRules
 			
 			// Voxel
 			"Voxel",
+			
+			// GAS
+			"GameplayAbilities", "GameplayTags", "GameplayTasks"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
