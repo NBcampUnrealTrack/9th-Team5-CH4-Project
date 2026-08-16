@@ -157,24 +157,12 @@ void UDRHeldItemComponent::RefreshVisual()
 	UStaticMesh* VisualMesh =
 		HeldItemDefinition->WorldMesh;
 
-	const FTransform
-		FirstPersonVisualTransform =
-			HeldItemDefinition->
-				SpawnOffsetTransform *
-			HeldItemDefinition->
-				FirstPersonVisualOffsetTransform;
+	const FTransform WorldVisualTransform =
+		HeldItemDefinition->SpawnOffsetTransform;
 
-	const FTransform
-		ThirdPersonVisualTransform =
-			HeldItemDefinition->
-				SpawnOffsetTransform;
-
-	Character->
-		ApplyHandEquipmentVisual(
-			VisualMesh,
-			VisualMesh,
-			FirstPersonVisualTransform,
-			ThirdPersonVisualTransform);
+	Character->ApplyHandEquipmentVisual(
+		VisualMesh,
+		WorldVisualTransform);
 }
 
 void UDRHeldItemComponent::RefreshMiningSettings()
@@ -340,15 +328,6 @@ void UDRHeldItemComponent::ExecuteAction(
                 GetActionCooldown(
                     EDRItemActionType::Dig);
 
-            if (UDRItemActionPresentationComponent*
-                    Presentation =
-                        PresentationComponent.Get())
-            {
-                Presentation->
-                    PlayFirstPersonAction(
-                        EDRItemActionType::Dig);
-            }
-
             break;
         }
 
@@ -367,17 +346,7 @@ void UDRHeldItemComponent::ExecuteAction(
                 GetActionCooldown(
                     EDRItemActionType::
                         MeleeAttack);
-
-            if (UDRItemActionPresentationComponent*
-                    Presentation =
-                        PresentationComponent.Get())
-            {
-                Presentation->
-                    PlayFirstPersonAction(
-                        EDRItemActionType::
-                            MeleeAttack);
-            }
-
+    		
             Melee->RequestAttack();
 
             break;
