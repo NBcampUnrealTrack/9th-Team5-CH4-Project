@@ -67,7 +67,7 @@ void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySyst
 	FDRItemAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject) const
 {
 	if (!IsValid(AbilitySystemComponent)
-		|| AbilitySystemComponent->IsOwnerActorAuthoritative())
+		|| !AbilitySystemComponent->IsOwnerActorAuthoritative())
 	{
 		return;
 	}
