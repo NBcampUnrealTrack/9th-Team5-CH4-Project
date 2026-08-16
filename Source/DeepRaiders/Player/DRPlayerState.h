@@ -2,9 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "AbilitySystemInterface.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
+class UAbilitySystemComponent;
+class UDRPlayerAttributeSet;
+class UGameplayAbility;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -12,11 +16,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	NewCoins);
 
 UCLASS()
-class DEEPRAIDERS_API ADRPlayerState : public APlayerState
+class DEEPRAIDERS_API ADRPlayerState 
+	: public APlayerState
+	, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
+	ADRPlayerState();
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
+	{
+		return PlayerAttributeSet;
+	}
+	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -80,6 +95,22 @@ public:
 	FDRCoinsChangedSignature OnCoinsChanged;
 
 protected:
+	virtual void BeginPlay() override;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "GAS|Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
+
+	void GrantDefaultAbilities();
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;
 

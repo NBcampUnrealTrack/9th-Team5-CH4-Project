@@ -215,28 +215,28 @@ void UDRMeleeCombatComponent::SampleWeaponSweep(
 	ADRPlayerCharacter* Character =
 		GetOwnerCharacter();
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Sample] "
-			"Animation=%s Class=%s "
-			"Time=%.4f "
-			"Authority=%d "
-			"Attacking=%d "
-			"TraceMode=%d "
-			"DrawDebug=%d"),
-		*GetNameSafe(Animation),
-		Animation
-			? *GetNameSafe(Animation->GetClass())
-			: TEXT("NULL"),
-		SampleTime,
-		IsValid(Character)
-			? Character->HasAuthority()
-			: false,
-		bIsAttacking,
-		static_cast<int32>(TraceMode),
-		bDrawDebug);
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[V4][Sample] "
+	// 		"Animation=%s Class=%s "
+	// 		"Time=%.4f "
+	// 		"Authority=%d "
+	// 		"Attacking=%d "
+	// 		"TraceMode=%d "
+	// 		"DrawDebug=%d"),
+	// 	*GetNameSafe(Animation),
+	// 	Animation
+	// 		? *GetNameSafe(Animation->GetClass())
+	// 		: TEXT("NULL"),
+	// 	SampleTime,
+	// 	IsValid(Character)
+	// 		? Character->HasAuthority()
+	// 		: false,
+	// 	bIsAttacking,
+	// 	static_cast<int32>(TraceMode),
+	// 	bDrawDebug);
 
 	if (!IsValid(Character) ||
 		!Character->HasAuthority() ||
@@ -244,10 +244,10 @@ void UDRMeleeCombatComponent::SampleWeaponSweep(
 		TraceMode !=
 			EDRMeleeTraceMode::WeaponSweep)
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("[V4] Sample guard failed"));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT("[V4] Sample guard failed"));
 
 		return;
 	}
@@ -257,12 +257,12 @@ void UDRMeleeCombatComponent::SampleWeaponSweep(
 
 	if (!IsValid(Montage))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4] Animation is NOT Montage: %s"),
-			*GetNameSafe(Animation));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4] Animation is NOT Montage: %s"),
+		// 	*GetNameSafe(Animation));
 
 		return;
 	}
@@ -276,27 +276,27 @@ void UDRMeleeCombatComponent::SampleWeaponSweep(
 			CurrentBase,
 			CurrentTip))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4] EvaluateWeaponSweepSample FAILED "
-				"Time=%.4f"),
-			SampleTime);
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4] EvaluateWeaponSweepSample FAILED "
+		// 		"Time=%.4f"),
+		// 	SampleTime);
 
 		return;
 	}
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4] Evaluate SUCCESS "
-			"Time=%.4f "
-			"Base=%s Tip=%s"),
-		SampleTime,
-		*CurrentBase.ToString(),
-		*CurrentTip.ToString());
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[V4] Evaluate SUCCESS "
+	// 		"Time=%.4f "
+	// 		"Base=%s Tip=%s"),
+	// 	SampleTime,
+	// 	*CurrentBase.ToString(),
+	// 	*CurrentTip.ToString());
 
 #if ENABLE_DRAW_DEBUG
 	if (UWorld* World = GetWorld())
@@ -503,14 +503,14 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 	if (!IsValid(CharacterMesh) ||
 		!IsValid(WeaponMesh))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] Invalid Mesh "
-				"CharacterMesh=%s WeaponMesh=%s"),
-			*GetNameSafe(CharacterMesh),
-			*GetNameSafe(WeaponMesh));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] Invalid Mesh "
+		// 		"CharacterMesh=%s WeaponMesh=%s"),
+		// 	*GetNameSafe(CharacterMesh),
+		// 	*GetNameSafe(WeaponMesh));
 
 		return false;
 	}
@@ -529,13 +529,13 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 	if (WeaponMesh->GetAttachParent() !=
 		CharacterMesh)
 	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[Melee] WeaponSweep requires "
-				"weapon to be attached directly "
-				"to Character Mesh."));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Warning,
+		// 	TEXT(
+		// 		"[Melee] WeaponSweep requires "
+		// 		"weapon to be attached directly "
+		// 		"to Character Mesh."));
 
 		return false;
 	}
@@ -543,24 +543,24 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 	const FName AttachSocketName =
 		WeaponMesh->GetAttachSocketName();
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Eval] "
-			"AttachParent=%s "
-			"CharacterMesh=%s "
-			"AttachSocket=%s"),
-		*GetNameSafe(WeaponMesh->GetAttachParent()),
-		*GetNameSafe(CharacterMesh),
-		*AttachSocketName.ToString());
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[V4][Eval] "
+	// 		"AttachParent=%s "
+	// 		"CharacterMesh=%s "
+	// 		"AttachSocket=%s"),
+	// 	*GetNameSafe(WeaponMesh->GetAttachParent()),
+	// 	*GetNameSafe(CharacterMesh),
+	// 	*AttachSocketName.ToString());
 
 	if (AttachSocketName.IsNone())
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("[V4][Eval] AttachSocketName is NONE"));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT("[V4][Eval] AttachSocketName is NONE"));
 
 		return false;
 	}
@@ -590,10 +590,10 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 
 	if (!RequiredBones.IsValid())
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("[V4][Eval] RequiredBones INVALID"));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT("[V4][Eval] RequiredBones INVALID"));
 
 		return false;
 	}
@@ -628,13 +628,13 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 
 	if (ActiveSegment == nullptr)
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] "
-				"No AnimSegment at MontageTime=%.4f"),
-			SampleTime);
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] "
+		// 		"No AnimSegment at MontageTime=%.4f"),
+			// SampleTime);
 
 		return false;
 	}
@@ -653,12 +653,12 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 
 	if (!IsValid(SourceAnimation))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] "
-				"SourceAnimation INVALID"));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] "
+		// 		"SourceAnimation INVALID"));
 
 		return false;
 	}
@@ -676,19 +676,19 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 			ConvertTrackPosToAnimPos(
 				SampleTime);
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Eval] "
-			"Montage=%s "
-			"MontageTime=%.4f "
-			"Source=%s "
-			"SourceTime=%.4f"),
-		*GetNameSafe(Montage),
-		SampleTime,
-		*GetNameSafe(SourceAnimation),
-		SourceTime);
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[V4][Eval] "
+	// 		"Montage=%s "
+	// 		"MontageTime=%.4f "
+	// 		"Source=%s "
+	// 		"SourceTime=%.4f"),
+	// 	*GetNameSafe(Montage),
+	// 	SampleTime,
+	// 	*GetNameSafe(SourceAnimation),
+	// 	SourceTime);
 
 	/*
 	 * ---------------------------------
@@ -774,28 +774,28 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 			AttachBoneMeshIndex,
 			AttachSocketIndex);
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Eval] "
-			"Socket=%s "
-			"Found=%d "
-			"BoneMeshIndex=%d "
-			"SocketIndex=%d"),
-		*AttachSocketName.ToString(),
-		AttachSocket != nullptr,
-		AttachBoneMeshIndex,
-		AttachSocketIndex);
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[V4][Eval] "
+	// 		"Socket=%s "
+	// 		"Found=%d "
+	// 		"BoneMeshIndex=%d "
+	// 		"SocketIndex=%d"),
+	// 	*AttachSocketName.ToString(),
+	// 	AttachSocket != nullptr,
+	// 	AttachBoneMeshIndex,
+	// 	AttachSocketIndex);
 
 	if (AttachSocket == nullptr ||
 		AttachBoneMeshIndex == INDEX_NONE)
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] FindSocketInfo FAILED"));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] FindSocketInfo FAILED"));
 
 		return false;
 	}
@@ -808,14 +808,14 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 
 	if (!AttachBoneCompactIndex.IsValid())
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] "
-				"CompactPoseIndex INVALID "
-				"MeshBoneIndex=%d"),
-			AttachBoneMeshIndex);
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] "
+		// 		"CompactPoseIndex INVALID "
+		// 		"MeshBoneIndex=%d"),
+		// 	AttachBoneMeshIndex);
 
 		return false;
 	}
@@ -843,18 +843,18 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 	if (!IsValid(BaseSocket) ||
 		!IsValid(TipSocket))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Eval] "
-				"Weapon socket missing "
-				"Base=%s(%d) "
-				"Tip=%s(%d)"),
-			*MeleeSweepBaseSocketName.ToString(),
-			IsValid(BaseSocket),
-			*MeleeSweepTipSocketName.ToString(),
-			IsValid(TipSocket));
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Error,
+		// 	TEXT(
+		// 		"[V4][Eval] "
+		// 		"Weapon socket missing "
+		// 		"Base=%s(%d) "
+		// 		"Tip=%s(%d)"),
+		// 	*MeleeSweepBaseSocketName.ToString(),
+		// 	IsValid(BaseSocket),
+		// 	*MeleeSweepTipSocketName.ToString(),
+		// 	IsValid(TipSocket));
 
 		return false;
 	}
@@ -995,15 +995,15 @@ void UDRMeleeCombatComponent::ProcessHit(
 		bKilled,
 		HitResult.ImpactPoint);
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Melee] Attacker=%s "
-			"Target=%s Damage=%.1f"),
-		*GetNameSafe(Character),
-		*GetNameSafe(HitPlayer),
-		AppliedDamage);
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Warning,
+	// 	TEXT(
+	// 		"[Melee] Attacker=%s "
+	// 		"Target=%s Damage=%.1f"),
+	// 	*GetNameSafe(Character),
+	// 	*GetNameSafe(HitPlayer),
+	// 	AppliedDamage);
 }
 
 void UDRMeleeCombatComponent::FinishAttack()

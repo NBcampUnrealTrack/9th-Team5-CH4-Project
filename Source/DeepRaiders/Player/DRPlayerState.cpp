@@ -2,6 +2,31 @@
 
 #include "DRPlayerCharacter.h"
 #include "Net/UnrealNetwork.h"
+#include "AbilitySystemComponent.h"
+#include "GAS/DRPlayerAttributeSet.h"
+#include "Abilities/GameplayAbility.h"
+#include "GameplayAbilitySpec.h"
+
+ADRPlayerState::ADRPlayerState()
+{
+	AbilitySystemComponent =
+		CreateDefaultSubobject<UAbilitySystemComponent>(
+			TEXT("AbilitySystemComponent"));
+
+	AbilitySystemComponent->SetIsReplicated(true);
+
+	AbilitySystemComponent->SetReplicationMode(
+		EGameplayEffectReplicationMode::Mixed);
+	
+	PlayerAttributeSet =
+		CreateDefaultSubobject<UDRPlayerAttributeSet>(
+			TEXT("PlayerAttributeSet"));
+}
+
+UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
 
 void ADRPlayerState::GetLifetimeReplicatedProps(
 	TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -97,6 +122,51 @@ void ADRPlayerState::SetCoins(int32 NewCoins)
 	Coins = ClampedCoins;
 	OnRep_Coins(PreviousCoins);
 	ForceNetUpdate();
+}
+
+void ADRPlayerState::BeginPlay()
+{
+	Super::BeginPlay();
+
+	GrantDefaultAbilities();
+}
+
+void ADRPlayerState::GrantDefaultAbilities()
+{
+	if (!HasAuthority() ||
+		!IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	for (const TSubclassOf<UGameplayAbility>& AbilityClass
+		 : DefaultAbilities)
+	{
+		if (!IsValid(AbilityClass))
+		{
+			continue;
+		}
+
+		FGameplayAbilitySpec AbilitySpec(
+			AbilityClass,
+			1);
+
+		const FGameplayAbilitySpecHandle Handle =
+			AbilitySystemComponent->GiveAbility(
+				AbilitySpec);
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[GAS][GiveAbility] "
+				"PlayerState=%s "
+				"Ability=%s "
+				"HandleValid=%d"),
+			*GetNameSafe(this),
+			*GetNameSafe(AbilityClass),
+			Handle.IsValid());
+	}
 }
 
 void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)

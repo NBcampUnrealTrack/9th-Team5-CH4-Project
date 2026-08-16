@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "DeepRaiders/Item/DRItemActionTypes.h"
+#include "AbilitySystemInterface.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -23,6 +24,9 @@ class UDRHealthComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
 
+class UAbilitySystemComponent;
+class UGameplayEffect;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
 /**
@@ -32,13 +36,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
  * 인벤토리, 퀵슬롯과 실제 장착 상태는 별도 컴포넌트가 관리한다.
  */
 UCLASS()
-class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter
+class DEEPRAIDERS_API ADRPlayerCharacter 
+    : public ACharacter
+    , public IAbilitySystemInterface
 {
     GENERATED_BODY()
 
 public:
     ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
+    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    
     virtual void Landed(const FHitResult& Hit) override;
 
     /** 지상에서는 점프, 공중에서는 제트팩 사용을 요청한다. */
@@ -180,7 +188,9 @@ public:
     
 protected:
     virtual void BeginPlay() override;
-
+    
+    void InitializeAbilitySystem();
+    
     UPROPERTY(
         VisibleAnywhere,
         BlueprintReadOnly,
