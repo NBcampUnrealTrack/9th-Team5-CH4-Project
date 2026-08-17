@@ -6,9 +6,12 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
+#include "AbilitySystemComponent.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
 {
@@ -556,7 +559,35 @@ void UDRQuickSlotComponent::RefreshHandedItem()
 	}
 	
 	HeldItemDefinition = NewHandedItem;
-	
+
+	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(GetOwner()))
+	{
+		if (ADRPlayerState* DRPS = DRPC->GetPlayerState<ADRPlayerState>())
+		{
+			if (UAbilitySystemComponent* ASC = DRPS->GetAbilitySystemComponent())
+			{
+				// 기존 장비의 Ability, Effect 회수
+				if (!GrantedHandles.IsEmpty())
+				{
+					GrantedHandles.TakeFromAbilitySystem(ASC);
+					UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Take"));
+				}
+
+				// 새 장비의 Ability, Effect 부여
+				if (NewHandedItem
+					&& NewHandedItem->ItemAbilitySet)
+				{
+					NewHandedItem->ItemAbilitySet->GiveToAbilitySystem(ASC, &GrantedHandles, NewHandedItem);
+				}
+				
+				if (!GrantedHandles.IsEmpty())
+				{
+					UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Grant"));
+				}
+			}			
+		}
+	}
+
 	// 캐릭터 외형에 반영
 	ApplySelectedItemToCharacter();
 	
