@@ -3,7 +3,7 @@
 #include "DRPlayerCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
-#include "GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpec.h"
 

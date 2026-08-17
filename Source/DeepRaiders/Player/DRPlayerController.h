@@ -238,9 +238,18 @@ public:
 
 	UFUNCTION(Exec)
 	void DRTestAddSnow();
-
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Test")
 	TSubclassOf<UGameplayAbility> TestAddSnowAbilityClass;
+	
+	UFUNCTION(Exec)
+	void DRTestFrozen();
+
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Test")
+	TSubclassOf<UGameplayAbility> TestFrozenAbilityClass;
+
+	UFUNCTION(Exec)
+	void DRCheckFrozen();
 
 private:
 	UFUNCTION(Server, Reliable)
