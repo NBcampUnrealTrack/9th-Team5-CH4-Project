@@ -4,8 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "DRShop.generated.h"
 
-class UDRInteractionComponent;
 class UDRShopComponent;
+class UDRShopAreaComponent;
 class UDRShopUIComponent;
 class UDRUpgradeComponent;
 class USceneComponent;
@@ -39,7 +39,7 @@ private:
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRShopComponent> ShopComponent;

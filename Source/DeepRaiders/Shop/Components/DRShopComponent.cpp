@@ -1,6 +1,6 @@
 #include "DRShopComponent.h"
 
-#include "DRInteractionComponent.h"
+#include "DRShopAreaComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
@@ -65,26 +65,26 @@ bool UDRShopComponent::IsItemAvailable(
 }
 
 bool UDRShopComponent::CanPurchase(
-	const APawn* Interactor,
+	const APawn* Pawn,
 	const UDRItemDefinition* ItemDefinition) const
 {
 	return IsItemAvailable(ItemDefinition)
-		&& IsTransactionAllowed(Interactor);
+		&& IsTransactionAllowed(Pawn);
 }
 
-bool UDRShopComponent::IsTransactionAllowed(const APawn* Interactor) const
+bool UDRShopComponent::IsTransactionAllowed(const APawn* Pawn) const
 {
-	return IsValid(InteractionComponent)
-		&& IsValid(Interactor)
-		&& InteractionComponent->IsOverlappingActor(Interactor);
+	return IsValid(ShopAreaComponent)
+		&& IsValid(Pawn)
+		&& ShopAreaComponent->IsOverlappingActor(Pawn);
 }
 
 void UDRShopComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	InteractionComponent =
-		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
+	ShopAreaComponent =
+		GetOwner()->FindComponentByClass<UDRShopAreaComponent>();
 	LoadItemOffers();
 }
 

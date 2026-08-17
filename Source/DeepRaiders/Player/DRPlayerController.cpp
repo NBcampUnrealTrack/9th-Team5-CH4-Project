@@ -4,6 +4,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 
@@ -17,6 +18,7 @@
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
+#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
@@ -98,6 +100,13 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
+
+	if (IsValid(ShopAction))
+	{
+		ShopMappingContext = NewObject<UInputMappingContext>(this);
+		ShopMappingContext->MapKey(ShopAction, EKeys::B);
+		InputSubsystem->AddMappingContext(ShopMappingContext, 0);
+	}
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -171,6 +180,11 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(InventoryAction.Get()))
 	{
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
+	}
+
+	if (IsValid(ShopAction))
+	{
+		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
 	}
 }
 
@@ -812,6 +826,30 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	if (IsValid(InventoryUIComponent))
 	{
 		InventoryUIComponent->TogglePlayerInventory();
+	}
+}
+
+void ADRPlayerController::SetAvailableShop(UDRShopUIComponent* ShopUIComponent)
+{
+	if (IsLocalController() && IsValid(ShopUIComponent))
+	{
+		AvailableShop = ShopUIComponent;
+	}
+}
+
+void ADRPlayerController::ClearAvailableShop(UDRShopUIComponent* ShopUIComponent)
+{
+	if (AvailableShop == ShopUIComponent)
+	{
+		AvailableShop = nullptr;
+	}
+}
+
+void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
+{
+	if (IsValid(AvailableShop))
+	{
+		AvailableShop->ToggleShopWidget();
 	}
 }
 

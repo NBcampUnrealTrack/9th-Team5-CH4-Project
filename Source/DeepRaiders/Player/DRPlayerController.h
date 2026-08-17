@@ -12,6 +12,7 @@ class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
 class UDRShopTransactionComponent;
+class UDRShopUIComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
@@ -268,12 +269,26 @@ protected:
 
 #pragma region UI
 
+public:
+	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
+
 private:
 	void HandleToggleInventory(const FInputActionValue& Value);
+	void HandleToggleShop(const FInputActionValue& Value);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> ShopAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> ShopMappingContext;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopUIComponent> AvailableShop;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;

@@ -1,6 +1,6 @@
 #include "DRShopUIComponent.h"
 
-#include "DRInteractionComponent.h"
+#include "DRShopAreaComponent.h"
 #include "DRShopComponent.h"
 #include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
@@ -19,48 +19,76 @@ void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	InteractionComponent =
-		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
+	ShopAreaComponent =
+		GetOwner()->FindComponentByClass<UDRShopAreaComponent>();
 	ShopComponent = GetOwner()->FindComponentByClass<UDRShopComponent>();
 	UpgradeComponent = GetOwner()->FindComponentByClass<UDRUpgradeComponent>();
 
-	if (!IsValid(InteractionComponent)
+	if (!IsValid(ShopAreaComponent)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(UpgradeComponent))
 	{
 		return;
 	}
 
-	InteractionComponent->OnInteractionEntered.AddDynamic(
+	ShopAreaComponent->OnPawnEntered.AddDynamic(
 		this,
-		&ThisClass::HandleInteractionEntered);
-	InteractionComponent->OnInteractionExited.AddDynamic(
+		&ThisClass::HandlePawnEntered);
+	ShopAreaComponent->OnPawnExited.AddDynamic(
 		this,
-		&ThisClass::HandleInteractionExited);
+		&ThisClass::HandlePawnExited);
 }
 
 void UDRShopUIComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
-	if (IsValid(InteractionComponent))
+	if (IsValid(ShopAreaComponent))
 	{
-		InteractionComponent->OnInteractionEntered.RemoveDynamic(
+		ShopAreaComponent->OnPawnEntered.RemoveDynamic(
 			this,
-			&ThisClass::HandleInteractionEntered);
-		InteractionComponent->OnInteractionExited.RemoveDynamic(
+			&ThisClass::HandlePawnEntered);
+		ShopAreaComponent->OnPawnExited.RemoveDynamic(
 			this,
-			&ThisClass::HandleInteractionExited);
+			&ThisClass::HandlePawnExited);
 	}
 
 	HideShopWidget();
 	Super::EndPlay(EndPlayReason);
 }
 
-void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
+void UDRShopUIComponent::HandlePawnEntered(APawn* Pawn)
 {
-	if (!IsValid(Interactor)
-		|| !Interactor->IsLocallyControlled()
-		|| IsValid(ShopWidget)
+	if (!IsValid(Pawn)
+		|| !Pawn->IsLocallyControlled())
+	{
+		return;
+	}
+
+	ADRPlayerController* PlayerController =
+		Cast<ADRPlayerController>(Pawn->GetController());
+
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	PlayerController->SetAvailableShop(this);
+}
+
+void UDRShopUIComponent::ToggleShopWidget()
+{
+	if (IsValid(ShopWidget))
+	{
+		HideShopWidget();
+		return;
+	}
+
+	ShowShopWidget();
+}
+
+void UDRShopUIComponent::ShowShopWidget()
+{
+	if (IsValid(ShopWidget)
 		|| !ShopWidgetClass
 		|| !IsValid(ShopComponent)
 		|| !IsValid(UpgradeComponent))
@@ -69,7 +97,7 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 	}
 
 	ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(Interactor->GetController());
+		Cast<ADRPlayerController>(GetWorld()->GetFirstPlayerController());
 
 	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
 	{
@@ -111,17 +139,23 @@ void UDRShopUIComponent::HandleInteractionEntered(APawn* Interactor)
 		&ThisClass::HandleInventoryChanged);
 	ShopWidget->AddToViewport();
 
-	FInputModeUIOnly InputMode;
+	FInputModeGameAndUI InputMode;
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	PlayerController->FlushPressedKeys();
 	PlayerController->SetInputMode(InputMode);
 	PlayerController->bShowMouseCursor = true;
 }
 
-void UDRShopUIComponent::HandleInteractionExited(APawn* Interactor)
+void UDRShopUIComponent::HandlePawnExited(APawn* Pawn)
 {
-	if (IsValid(Interactor) && Interactor->IsLocallyControlled())
+	if (IsValid(Pawn) && Pawn->IsLocallyControlled())
 	{
+		if (ADRPlayerController* PlayerController =
+			Cast<ADRPlayerController>(Pawn->GetController()))
+		{
+			PlayerController->ClearAvailableShop(this);
+		}
+
 		HideShopWidget();
 	}
 }
