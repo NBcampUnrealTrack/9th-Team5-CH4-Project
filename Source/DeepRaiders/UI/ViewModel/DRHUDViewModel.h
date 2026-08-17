@@ -6,7 +6,6 @@
 
 class ADRPlayerCharacter;
 class UAbilitySystemComponent;
-class UDRHealthComponent;
 struct FOnAttributeChangeData;
 
 /** 플레이어의 체력과 눈 게이지를 HUD 바인딩용 값으로 제공한다. */
@@ -43,14 +42,16 @@ protected:
 	float SnowGaugeRatio = 0.f;
 
 private:
-	void HandleHealthChanged(float OldHealth, float NewHealth);
+	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void RefreshHealth();
 	void RefreshSnowGauge();
 
-	TWeakObjectPtr<UDRHealthComponent> HealthComponent;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	FDelegateHandle HealthChangedHandle;
+	FDelegateHandle MaxHealthChangedHandle;
 	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle MaxSnowGaugeChangedHandle;
 };

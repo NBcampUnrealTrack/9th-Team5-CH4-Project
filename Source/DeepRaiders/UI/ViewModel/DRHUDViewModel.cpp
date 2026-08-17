@@ -1,7 +1,6 @@
 #include "DRHUDViewModel.h"
 
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 
@@ -14,18 +13,17 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		return;
 	}
 
-	HealthComponent = InPlayerCharacter->GetHealthComponent();
 	AbilitySystemComponent = InPlayerCharacter->GetAbilitySystemComponent();
 
-	// 헬스 컴포넌트 HP 변경 구독
-	if (HealthComponent.IsValid())
-	{
-		HealthComponent->OnHealthChanged.AddUObject(this, &ThisClass::HandleHealthChanged);
-	}
-
-	// GAS 델리게이트 연결
+	// GAS 속성 변경 델리게이트 연결
 	if (AbilitySystemComponent.IsValid())
 	{
+		HealthChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetHealthAttribute()).AddUObject(
+				this, &ThisClass::HandleHealthChanged);
+		MaxHealthChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetMaxHealthAttribute()).AddUObject(
+				this, &ThisClass::HandleMaxHealthChanged);
 		SnowGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleSnowGaugeChanged);
@@ -41,26 +39,31 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 
 void UDRHUDViewModel::Deinitialize()
 {
-	if (HealthComponent.IsValid())
-	{
-		HealthComponent->OnHealthChanged.RemoveAll(this);
-	}
-
 	if (AbilitySystemComponent.IsValid())
 	{
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetHealthAttribute()).Remove(HealthChangedHandle);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetMaxHealthAttribute()).Remove(MaxHealthChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).Remove(SnowGaugeChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()).Remove(MaxSnowGaugeChangedHandle);
 	}
 
-	HealthComponent.Reset();
 	AbilitySystemComponent.Reset();
+	HealthChangedHandle.Reset();
+	MaxHealthChangedHandle.Reset();
 	SnowGaugeChangedHandle.Reset();
 	MaxSnowGaugeChangedHandle.Reset();
 }
 
-void UDRHUDViewModel::HandleHealthChanged(float OldHealth, float NewHealth)
+void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshHealth();
+}
+
+void UDRHUDViewModel::HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
 	RefreshHealth();
 }
@@ -77,10 +80,11 @@ void UDRHUDViewModel::HandleMaxSnowGaugeChanged(const FOnAttributeChangeData& Ch
 
 void UDRHUDViewModel::RefreshHealth()
 {
-	const float NewCurrentHealth = HealthComponent.IsValid()
-		? HealthComponent->GetCurrentHealth()
-		: 0.f;
-	const float NewMaxHealth = HealthComponent.IsValid() ? HealthComponent->GetMaxHealth() : 0.f;
+	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
+		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
+		: nullptr;
+	const float NewCurrentHealth = IsValid(AttributeSet) ? AttributeSet->GetHealth() : 0.f;
+	const float NewMaxHealth = IsValid(AttributeSet) ? AttributeSet->GetMaxHealth() : 0.f;
 	const float NewHealthRatio = NewMaxHealth > KINDA_SMALL_NUMBER
 		? FMath::Clamp(NewCurrentHealth / NewMaxHealth, 0.f, 1.f)
 		: 0.f;
