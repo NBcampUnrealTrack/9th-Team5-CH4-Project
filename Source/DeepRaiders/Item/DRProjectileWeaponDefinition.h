@@ -34,4 +34,9 @@ public:
 	// ProjectileSpawn 높이 오프셋
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Projectile", meta = (ClampMin = 0.0, UIMin=0.0))
 	float SpawnHeightOffset = 60.0f;
+	
+	// 다음 발사까지의 발사 간격
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fire", meta = (ClampMin = 0.01, UIMin=0.01, Units = "s"))
+	float BaseFireInterval = 0.25f;
+	
 };

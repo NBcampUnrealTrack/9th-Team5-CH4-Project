@@ -12,6 +12,9 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "GameplayEffect.h"
+
+#include "DeepRaiders/DeepRaiders.h"
 
 UDRGA_FireProjectile::UDRGA_FireProjectile()
 {
@@ -38,6 +41,8 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
+		DR_LOG(TEXT("[Fire Test cooldown"));
+		
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -56,8 +61,40 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);	
 }
 
+void UDRGA_FireProjectile::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	// 부모 클래스의 ApplyCooldown 함수를 완전히 대체한다.
+	//Super::ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+	
+	const UGameplayEffect* CooldownEffect = GetCooldownGameplayEffect();
+	
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(
+		GetSourceObject(Handle, ActorInfo));
+	
+	if (!IsValid(CooldownEffect)
+		|| !IsValid(WeaponDefinition))
+	{
+		return;
+	}
+	
+	FGameplayEffectSpecHandle CoolDownSpec = MakeOutgoingGameplayEffectSpec(Handle, ActorInfo
+		, ActivationInfo, CooldownEffect->GetClass(), GetAbilityLevel(Handle, ActorInfo));
+	
+	if (!CoolDownSpec.IsValid())
+	{
+		return;
+	}
+	
+	CoolDownSpec.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.Cooldown.Duration"))
+		, WeaponDefinition->BaseFireInterval);
+	
+	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CoolDownSpec);
+}
+
 void UDRGA_FireProjectile::BuildImpactEffectSpecs(UAbilitySystemComponent* AbilitySystemComponent,
-	UDRProjectileWeaponItemDefinition* WeaponDefinition, TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
+                                                  UDRProjectileWeaponItemDefinition* WeaponDefinition, TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
 {
 	OutEffectSpecs.Reset();
 	
