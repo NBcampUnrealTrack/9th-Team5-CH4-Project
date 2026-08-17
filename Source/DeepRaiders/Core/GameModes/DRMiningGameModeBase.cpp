@@ -3,7 +3,7 @@
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
-
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
@@ -14,12 +14,29 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(NewPlayer);
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(NewPlayer);
+
 	if (!IsValid(PlayerController))
 	{
 		return;
 	}
+
+	// =============================
+	// TEMP: Team assignment
+	// =============================
+
+	if (ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>())
+	{
+		const int32 AssignedTeamId = PlayerState->GetPlayerId() % 2;
+
+		PlayerState->SetTeamId(AssignedTeamId);
+
+		UE_LOG(LogTemp, Warning, TEXT( "[Team] Player=%s " "PlayerId=%d TeamId=%d"), *GetNameSafe(PlayerState), PlayerState->GetPlayerId(), AssignedTeamId);
+	}
+
+	// =============================
+	// Existing terrain sync
+	// =============================
 
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
@@ -27,20 +44,19 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	UDRVoxelTerrainSubsystem* TerrainSubsystem =
-		World->GetSubsystem<UDRVoxelTerrainSubsystem>();
+	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
+
 	if (!IsValid(TerrainSubsystem))
 	{
 		return;
 	}
 
-	const TArray<FDRTerrainDigOperation>& DigHistory =
-		TerrainSubsystem->GetDigHistory();
+	const TArray<FDRTerrainDigOperation>& DigHistory = TerrainSubsystem->GetDigHistory();
+
 	if (DigHistory.Num() == 0)
 	{
 		return;
 	}
 
-	// 중도난입한 플레이어에게 서버가 확정한 지형 변경 이력을 한 번에 전달한다.
 	PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
 }
