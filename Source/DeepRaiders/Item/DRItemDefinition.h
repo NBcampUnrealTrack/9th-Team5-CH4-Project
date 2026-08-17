@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Engine/DataTable.h"
 #include "DRItemActionTypes.h"
 #include "DRItemDefinition.generated.h"
 
@@ -21,9 +22,21 @@ enum class EItemCategory : uint8
 	End,
 };
 
-/**
- * 
- */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString DisplayName;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Description;
+};
+
 UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))
 class DEEPRAIDERS_API UDRItemDefinition : public UPrimaryDataAsset
 {
