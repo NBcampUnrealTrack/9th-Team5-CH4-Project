@@ -145,6 +145,8 @@ public:
 
 	FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
 	
+	bool IsFrozen() const;
+	
 protected:
 	virtual void BeginPlay() override;
 

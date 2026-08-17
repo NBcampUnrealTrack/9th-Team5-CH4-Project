@@ -6,6 +6,8 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpec.h"
+#include "GameplayEffect.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -129,6 +131,19 @@ void ADRPlayerState::BeginPlay()
 	Super::BeginPlay();
 
 	GrantDefaultAbilities();
+
+	if (HasAuthority())
+	{
+		BindStatusPolicy();
+		EvaluateFrozenState();
+	}
+}
+
+void ADRPlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	UnbindStatusPolicy();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRPlayerState::GrantDefaultAbilities()
@@ -167,6 +182,104 @@ void ADRPlayerState::GrantDefaultAbilities()
 			*GetNameSafe(AbilityClass),
 			Handle.IsValid());
 	}
+}
+
+void ADRPlayerState::BindStatusPolicy()
+{
+	if (!IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	FreezeGaugeChangedHandle =
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetFreezeGaugeAttribute())
+			.AddUObject(
+				this,
+				&ThisClass::HandleFreezeGaugeChanged);
+
+	MaxFreezeGaugeChangedHandle =
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetMaxFreezeGaugeAttribute())
+			.AddUObject(
+				this,
+				&ThisClass::HandleMaxFreezeGaugeChanged);
+}
+
+void ADRPlayerState::UnbindStatusPolicy()
+{
+	if (!IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	if (FreezeGaugeChangedHandle.IsValid())
+	{
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetFreezeGaugeAttribute())
+			.Remove(FreezeGaugeChangedHandle);
+	}
+
+	if (MaxFreezeGaugeChangedHandle.IsValid())
+	{
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetMaxFreezeGaugeAttribute())
+			.Remove(MaxFreezeGaugeChangedHandle);
+	}
+
+	FreezeGaugeChangedHandle.Reset();
+	MaxFreezeGaugeChangedHandle.Reset();
+}
+
+void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData&)
+{
+	EvaluateFrozenState();
+}
+
+void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
+{
+	EvaluateFrozenState();
+}
+
+void ADRPlayerState::EvaluateFrozenState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !FrozenEffectClass)
+	{
+		return;
+	}
+
+	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Frozen))
+	{
+		return;
+	}
+
+	const UDRPlayerAttributeSet* Attributes = AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>();
+	if (!IsValid(Attributes))
+	{
+		return;
+	}
+	
+	if (Attributes->GetFreezeGauge() < Attributes->GetMaxFreezeGauge())
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(FrozenEffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 }
 
 void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)

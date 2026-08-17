@@ -21,6 +21,7 @@ class UDRQuickSlotUIComponent;
 class UDRTeleportUIComponent;
 class UGameplayAbility;
 class UUserWidget;
+class UDRPlayerHUDWidget;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -52,10 +53,20 @@ protected:
 	
 	virtual void OnPossess(APawn* InPawn) override;
 
+	virtual void OnRep_PlayerState() override;
+
+	void InitializePlayerHUD();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|UI")
+	TSubclassOf<UDRPlayerHUDWidget> PlayerHUDWidgetClass;
+	
 private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UDRPlayerHUDWidget> PlayerHUDWidget;
+	
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
 
@@ -243,21 +254,6 @@ public:
 
 	UFUNCTION(Exec)
 	void DRWithDrawFirstItem();
-
-	UFUNCTION(Exec)
-	void DRTestAddSnow();
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Test")
-	TSubclassOf<UGameplayAbility> TestAddSnowAbilityClass;
-	
-	UFUNCTION(Exec)
-	void DRTestFrozen();
-
-	UPROPERTY(EditDefaultsOnly, Category = "GAS|Test")
-	TSubclassOf<UGameplayAbility> TestFrozenAbilityClass;
-
-	UFUNCTION(Exec)
-	void DRCheckFrozen();
 
 private:
 	UFUNCTION(Server, Reliable)

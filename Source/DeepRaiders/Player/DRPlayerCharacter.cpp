@@ -217,7 +217,7 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 void ADRPlayerCharacter::HandleJumpPressed()
 {
-	if (!IsLocallyControlled() || IsDead())
+	if (!IsLocallyControlled() || IsDead() || IsFrozen())
 	{
 		return;
 	}
@@ -237,7 +237,7 @@ void ADRPlayerCharacter::HandleJumpReleased()
 
 void ADRPlayerCharacter::RequestThrowHeldItem()
 {
-	if (!IsLocallyControlled() || IsDead() || !HasHeldItemAction(EDRItemActionType::Throw))
+	if (!IsLocallyControlled() || IsDead() || IsFrozen() || !HasHeldItemAction(EDRItemActionType::Throw))
 	{
 		return;
 	}
@@ -332,7 +332,9 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 {
-	if (!Controller)
+	if (!Controller ||
+		IsDead() ||
+		IsFrozen())
 	{
 		return;
 	}
@@ -358,6 +360,11 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 
 void ADRPlayerCharacter::RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
 {
+	if (IsDead() || IsFrozen())
+	{
+		return;
+	}
+
 	if (IsValid(HeldItemComponent))
 	{
 		HeldItemComponent->RequestPrimaryAction(TriggerEvent);
@@ -418,6 +425,13 @@ void ADRPlayerCharacter::ReconcileJetpackFuelFromServer(float ServerFuel)
 	{
 		JetpackComponent->ReconcileFuelFromServer(ServerFuel);
 	}
+}
+
+bool ADRPlayerCharacter::IsFrozen() const
+{
+	const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	return IsValid(ASC) && ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
 }
 
 void ADRPlayerCharacter::BeginPlay()

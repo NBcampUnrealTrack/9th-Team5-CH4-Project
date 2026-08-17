@@ -32,6 +32,7 @@
 #include "GameplayAbilitySpec.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/UI/Player/DRPlayerHUDWidget.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -70,6 +71,8 @@ void ADRPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	InitializePlayerHUD();
+	
 	/*
 	 * 서버에서 모든 플레이어의 시작 장비를 초기화.
 	 *
@@ -218,6 +221,55 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 	{
 		QuickSlotComponent->ApplySelectedItemToCharacter();
 	}
+}
+
+void ADRPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	InitializePlayerHUD();
+}
+
+void ADRPlayerController::InitializePlayerHUD()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	if (!IsValid(PlayerHUDWidget))
+	{
+		if (!PlayerHUDWidgetClass)
+		{
+			UE_LOG(LogTemp, Warning, TEXT( "[HUD] PlayerHUDWidgetClass is not assigned."));
+			return;
+		}
+
+		PlayerHUDWidget = CreateWidget<UDRPlayerHUDWidget>(this, PlayerHUDWidgetClass);
+
+		if (!IsValid(PlayerHUDWidget))
+		{
+			return;
+		}
+
+		PlayerHUDWidget->AddToViewport();
+	}
+
+	PlayerHUDWidget->InitializeWithAbilitySystem(ASC);
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -934,73 +986,6 @@ void ADRPlayerController::DRWithDrawFirstItem()
 	{
 		RequestTransferStorageItem(EDRStorageTransferDirection::StorageToPlayer, Entries[0].EntryId);
 	}
-}
-
-void ADRPlayerController::DRTestAddSnow()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GAS][TestActivate] Character invalid"));
-
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
-
-	if (!IsValid(ASC) || !IsValid(TestAddSnowAbilityClass))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GAS][TestActivate] ASC or AbilityClass invalid"));
-
-		return;
-	}
-
-	FGameplayAbilitySpec* AbilitySpec = ASC->FindAbilitySpecFromClass(TestAddSnowAbilityClass);
-
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "NetMode=%s " "LocalController=%d " "SpecFound=%d " "Ability=%s"), *ToString(GetNetMode()), IsLocalController(), AbilitySpec != nullptr, *GetNameSafe(TestAddSnowAbilityClass));
-
-	if (AbilitySpec == nullptr)
-	{
-		return;
-	}
-
-	const bool bRequested = ASC->TryActivateAbility(AbilitySpec->Handle, true);
-
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "TryActivateAbility=%d"), bRequested);
-}
-
-void ADRPlayerController::DRTestFrozen()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
-
-	if (!IsValid(ASC) || !IsValid(TestFrozenAbilityClass))
-	{
-		return;
-	}
-
-	ASC->TryActivateAbilityByClass(TestFrozenAbilityClass, true);
-}
-
-void ADRPlayerController::DRCheckFrozen()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	UAbilitySystemComponent* ASC = IsValid(PlayerCharacter) ? PlayerCharacter->GetAbilitySystemComponent() : nullptr;
-
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[GAS][Frozen][ClientCheck] Frozen=%d"), ASC->HasMatchingGameplayTag( DRGameplayTags::State_Frozen));
 }
 
 #pragma region Teleport
