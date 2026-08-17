@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
+#include "TimerManager.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
@@ -126,13 +127,26 @@ protected:
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();
 
-	void HandleFreezeGaugeChanged(
-		const FOnAttributeChangeData& Data);
-
-	void HandleMaxFreezeGaugeChanged(
-		const FOnAttributeChangeData& Data);
+	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 
 	void EvaluateFrozenState();
+
+	// Freeze Decay
+	void RestartFreezeDecay();
+	void TickFreezeDecay();
+	void StopFreezeDecay();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0", Units = "s"))
+	float FreezeDecayDelay = 3.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.01", Units = "s"))
+	float FreezeDecayInterval = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0"))
+	float FreezeDecayRatePerSecond = 10.f;
+
+	FTimerHandle FreezeDecayTimerHandle;
 
 	FDelegateHandle FreezeGaugeChangedHandle;
 	FDelegateHandle MaxFreezeGaugeChangedHandle;

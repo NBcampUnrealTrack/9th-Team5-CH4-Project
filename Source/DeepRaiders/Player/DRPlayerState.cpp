@@ -149,7 +149,6 @@ void ADRPlayerState::ResetForRespawn()
 
 	// Respawn Attribute 초기화
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), Attributes->GetMaxHealth());
-	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 
 	// 현재 Snow Absorb가 없으므로 전투 루프를 위해 Full로 리스폰.
 	// Snow Absorb 구현 후 정책에 맞게 0.f 등으로 변경.
@@ -168,11 +167,12 @@ void ADRPlayerState::ClearFrozenState()
 		return;
 	}
 
+	StopFreezeDecay();
+	
 	FGameplayTagContainer FrozenTags;
 	FrozenTags.AddTag(DRGameplayTags::State_Frozen);
 
 	AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(FrozenTags);
-
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 }
 
@@ -191,6 +191,7 @@ void ADRPlayerState::BeginPlay()
 
 void ADRPlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopFreezeDecay();
 	UnbindStatusPolicy();
 
 	Super::EndPlay(EndPlayReason);
@@ -289,9 +290,36 @@ void ADRPlayerState::UnbindStatusPolicy()
 	MaxFreezeGaugeChangedHandle.Reset();
 }
 
-void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData&)
+void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	EvaluateFrozenState();
+
+	// 100에 도달해서 Frozen이 됐다면
+	// 자연 감소는 더 이상 하지 않는다.
+	if (IsFrozen())
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	// 값이 증가했다 = 새로운 빙결 공격을 맞았다.
+	// 마지막 피격 시점부터 Delay를 다시 센다.
+	if (Data.NewValue > Data.OldValue + KINDA_SMALL_NUMBER)
+	{
+		RestartFreezeDecay();
+		return;
+	}
+
+	// 자연 감소 등으로 0에 도달했다면 종료.
+	if (Data.NewValue <= KINDA_SMALL_NUMBER)
+	{
+		StopFreezeDecay();
+	}
 }
 
 void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
@@ -330,6 +358,57 @@ void ADRPlayerState::EvaluateFrozenState()
 	}
 
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+}
+
+void ADRPlayerState::RestartFreezeDecay()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen())
+	{
+		return;
+	}
+
+	const float CurrentFreeze = AbilitySystemComponent->GetNumericAttribute(UDRPlayerAttributeSet::GetFreezeGaugeAttribute());
+
+	if (CurrentFreeze <= KINDA_SMALL_NUMBER)
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	if (FreezeDecayInterval <= 0.f || FreezeDecayRatePerSecond <= 0.f)
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		FreezeDecayTimerHandle, this, &ThisClass::TickFreezeDecay, FreezeDecayInterval, true, FreezeDecayDelay);
+}
+
+void ADRPlayerState::TickFreezeDecay()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen())
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	const FGameplayAttribute FreezeAttribute = UDRPlayerAttributeSet::GetFreezeGaugeAttribute();
+	const float CurrentFreeze = AbilitySystemComponent->GetNumericAttribute(FreezeAttribute);
+	if (CurrentFreeze <= KINDA_SMALL_NUMBER)
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	const float DecayAmount = FreezeDecayRatePerSecond * FreezeDecayInterval;
+	const float NewFreeze = FMath::Max(0.f, CurrentFreeze - DecayAmount);
+	AbilitySystemComponent->SetNumericAttributeBase(FreezeAttribute, NewFreeze);
+}
+
+void ADRPlayerState::StopFreezeDecay()
+{
+	GetWorldTimerManager().ClearTimer(FreezeDecayTimerHandle);
 }
 
 void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
