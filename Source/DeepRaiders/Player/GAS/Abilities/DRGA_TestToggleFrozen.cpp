@@ -2,7 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
-#include "DeepRaiders/GAS/DRGameplayTags.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRGA_TestToggleFrozen::UDRGA_TestToggleFrozen()
 {

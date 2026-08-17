@@ -15,7 +15,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 
 UDRPlayerLifecycleComponent::UDRPlayerLifecycleComponent()
 {

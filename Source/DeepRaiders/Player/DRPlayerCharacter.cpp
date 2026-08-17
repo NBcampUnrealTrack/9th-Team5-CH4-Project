@@ -20,8 +20,8 @@
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
-#include "DeepRaiders/GAS/DRPlayerAttributeSet.h"
-#include "DeepRaiders/GAS/DRGameplayTags.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"

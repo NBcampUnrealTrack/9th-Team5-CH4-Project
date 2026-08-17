@@ -30,7 +30,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
 
-#include "DeepRaiders/GAS/DRGameplayTags.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
