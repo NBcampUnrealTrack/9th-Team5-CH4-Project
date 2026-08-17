@@ -125,6 +125,7 @@ FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	Request.Radius = RemovalSettings.AbsorbRadius;
 	Request.RequestedAmount = RemovalSettings.AbsorbStrength;
 	Request.bInvertSurfaceStrength = RemovalSettings.bInvertSurfaceStrength;
+	Request.EditTool = RemovalSettings.EditTool;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }

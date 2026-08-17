@@ -47,6 +47,11 @@ struct DEEPRAIDERS_API FDRSnowRemovalSettings
 	// 기본 방향이 확정되면 데이터 에셋에서 고정값으로 관리하는 것을 권장한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
 	bool bInvertSurfaceStrength = false;
+
+	// Voxel 표면을 어떤 방식으로 낮출지 선택한다.
+	// SurfaceTool은 현재 방식, SphereTool은 채굴 RemoveSphere와 비슷한 감각을 테스트한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(

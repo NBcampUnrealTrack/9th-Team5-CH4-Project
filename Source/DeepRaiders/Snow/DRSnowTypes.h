@@ -7,6 +7,13 @@
 class AActor;
 class APawn;
 
+UENUM(BlueprintType)
+enum class EDRSnowVoxelEditTool : uint8
+{
+	SurfaceTool UMETA(DisplayName = "Surface Tool"),
+	SphereTool UMETA(DisplayName = "Sphere Tool")
+};
+
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.
 // 팀 판정은 별도 enum을 만들지 않고 PlayerState의 TeamId 체계를 그대로 따른다.
 USTRUCT(BlueprintType)
@@ -47,6 +54,9 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 	float Amount = 1.f;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
 };
 
@@ -75,6 +85,9 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	bool bInvertSurfaceStrength = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;

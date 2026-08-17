@@ -2,10 +2,28 @@
 
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "EngineUtils.h"
+#include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelTools/Gen/VoxelSurfaceEditTools.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
 #include "VoxelWorld.h"
+
+namespace
+{
+constexpr float SnowSurfaceDistanceDivisor = 4.f;
+constexpr float SnowSurfaceFalloff = 0.35f;
+
+float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
+{
+	float ModifiedValueAmount = 0.f;
+	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+	{
+		ModifiedValueAmount += FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue);
+	}
+
+	return ModifiedValueAmount;
+}
+}
 
 bool UDRSnowSurfaceSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
@@ -27,8 +45,37 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 		return 0.f;
 	}
 
-	constexpr float DistanceDivisor = 4.f;
-	constexpr float SurfaceFalloff = 0.35f;
+	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
+	{
+		TArray<FModifiedVoxelValue> ModifiedValues;
+		FVoxelIntBox EditedBounds;
+		UVoxelSphereTools::AddSphere(
+			ModifiedValues,
+			EditedBounds,
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius,
+			true,
+			true,
+			true,
+			true);
+
+		UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius,
+			Request.Context.TeamId);
+
+		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
+
+		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+		if (AddedAmount > 0.f)
+		{
+			OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
+		}
+
+		return AddedAmount;
+	}
 
 	// 눈 쌓기도 SurfaceTool 객체 대신 함수형 API로 처리한다.
 	// 이 경계를 유지해야 투사체/장판/맵 장치가 같은 Voxel 표현 함수를 공유할 수 있다.
@@ -56,7 +103,7 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 			EVoxelFalloff::Smooth,
 			Request.WorldLocation,
 			Request.Radius,
-			SurfaceFalloff));
+			SnowSurfaceFalloff));
 	SurfaceStack.Add(
 		UVoxelSurfaceTools::ApplyConstantStrength(-Request.Amount));
 
@@ -78,16 +125,12 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 		EditedBounds,
 		VoxelWorld,
 		ProcessedVoxels,
-		DistanceDivisor,
+		SnowSurfaceDistanceDivisor,
 		true,
 		true,
 		true);
 
-	float ModifiedValueAmount = 0.f;
-	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
-	{
-		ModifiedValueAmount += FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue);
-	}
+	const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
 	const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
 	if (AddedAmount > 0.f)
@@ -111,8 +154,37 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 		return 0.f;
 	}
 
-	constexpr float DistanceDivisor = 4.f;
-	constexpr float SurfaceFalloff = 0.35f;
+	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
+	{
+		TArray<FModifiedVoxelValue> ModifiedValues;
+		FVoxelIntBox EditedBounds;
+		UVoxelSphereTools::RemoveSphere(
+			ModifiedValues,
+			EditedBounds,
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius,
+			true,
+			true,
+			true,
+			true);
+
+		UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius,
+			INDEX_NONE);
+
+		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
+
+		const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+		if (RemovedAmount > 0.f)
+		{
+			OnSnowRemovedFromSurface.Broadcast(Request, RemovedAmount);
+		}
+
+		return RemovedAmount;
+	}
 
 	// SurfaceTool 객체를 직접 쓰지 않고 함수형 API만 감싼다.
 	// 이 Subsystem은 Voxel Plugin 세부 호출을 숨기는 wrapper 역할을 한다.
@@ -143,7 +215,7 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 			EVoxelFalloff::Smooth,
 			Request.WorldLocation,
 			Request.Radius,
-			SurfaceFalloff));
+			SnowSurfaceFalloff));
 	SurfaceStack.Add(
 		UVoxelSurfaceTools::ApplyConstantStrength(
 			Request.RequestedAmount *
@@ -158,16 +230,12 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 		EditedBounds,
 		VoxelWorld,
 		ProcessedVoxels,
-		DistanceDivisor,
+		SnowSurfaceDistanceDivisor,
 		true,
 		true,
 		true);
 
-	float ModifiedValueAmount = 0.f;
-	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
-	{
-		ModifiedValueAmount += FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue);
-	}
+	const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
 	// 실제 Voxel 값 변화량만 흡수량으로 인정한다.
 	// 이 값이 이후 SnowAmmo 회복과 SnowLedger 감소량의 기준이 된다.

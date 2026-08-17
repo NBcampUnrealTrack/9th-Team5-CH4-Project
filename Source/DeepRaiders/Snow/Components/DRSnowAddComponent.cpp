@@ -165,7 +165,7 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 	const bool bHandled = ExecuteAddSnow(Request);
 	OnSnowAdded.Broadcast(Request, bHandled);
 
-	// 이 색은 DrawDebugSphere용이다.
+	// 이 색은 DrawDebugSphere용이다. 실제 지형 material index는 DRVoxelTeamColorLibrary가 결정한다.
 	const FColor DebugColor = FColor::Green;
 
 	UWorld* World = GetWorld();
@@ -247,6 +247,7 @@ FDRSnowSurfaceAddRequest UDRSnowAddComponent::MakeAddRequest(
 			: SurfaceNormal.GetSafeNormal();
 	Request.Radius = AddRadius;
 	Request.Amount = AddAmount;
+	Request.EditTool = AddEditTool;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }
