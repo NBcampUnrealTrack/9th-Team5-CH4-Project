@@ -104,7 +104,7 @@ bool UDRGA_FireProjectile::SpawnProjectile(const FGameplayAbilityActorInfo* Acto
 	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const
 {
 	if (ActorInfo == nullptr 
-		|| IsValid(WeaponDefinition))
+		|| !IsValid(WeaponDefinition))
 	{
 		return false;
 	}
