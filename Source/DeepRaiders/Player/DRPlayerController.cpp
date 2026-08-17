@@ -195,22 +195,40 @@ void ADRPlayerController::SetupInputComponent()
 
 void ADRPlayerController::SetupGASInputComponent()
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	if (bGASInputBound || !IsLocalController() || !IsValid(InputComponent))
 	{
-		if (IsValid(InputComponent))
-		{
-			UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
-			
-			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered
-				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
-			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed
-				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
-			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered
-				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
-			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed
-				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
-		}
+		return;
 	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		// PlayerState가 아직 복제되지 않았다.
+		// OnRep_PlayerState에서 다시 시도.
+		return;
+	}
+
+	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent);
+
+	if (!IsValid(EnhancedInputComponent))
+	{
+		return;
+	}
+
+	if (IsValid(PrimaryAction))
+	{
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
+	}
+
+	if (IsValid(SecondaryAction))
+	{
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
+	}
+
+	bGASInputBound = true;
 }
 
 void ADRPlayerController::OnPossess(APawn* InPawn)
@@ -228,6 +246,7 @@ void ADRPlayerController::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	InitializePlayerHUD();
+	SetupGASInputComponent();
 }
 
 void ADRPlayerController::InitializePlayerHUD()
@@ -323,34 +342,53 @@ void ADRPlayerController::HandleJumpCompleted(const FInputActionValue&)
 
 void ADRPlayerController::InitializeStartingQuickSlot()
 {
-	if (!HasAuthority() || !IsValid(InventoryComponent) || !IsValid(QuickSlotComponent) || !IsValid(StartingShovelDefinition))
+	if (!HasAuthority() ||
+		!IsValid(InventoryComponent) ||
+		!IsValid(QuickSlotComponent) ||
+		!IsValid(StartingShovelDefinition) ||
+		!IsValid(StartingProjectileWeaponDefinition))
 	{
 		return;
 	}
 
-	// QuickSlotComponent::BeginPlay가 정상적으로
-	// 완료됐는지 방어적으로 확인
-	if (QuickSlotComponent->GetSlotCount() <= 0)
+	// 1번 = 삽, 2번 = 눈총이 필요
+	if (QuickSlotComponent->GetSlotCount() < 2)
 	{
-		UE_LOG(LogTemp, Error, TEXT( "[StartingItem] QuickSlot is not initialized. " "Controller=%s"), *GetName());
+		UE_LOG(LogTemp, Error, TEXT( "[StartingItem] " "At least 2 quick slots are required. " "Controller=%s"), *GetName());
 
 		return;
 	}
 
-	// 1. 인벤토리에 시작 삽 지급
+	// ===== 1. 시작 삽 지급 =====
+
 	if (InventoryComponent->GetItemCount(StartingShovelDefinition) <= 0)
 	{
-		const bool bAdded = InventoryComponent->TryAddItem(StartingShovelDefinition, 1);
-
-		UE_LOG(LogTemp, Warning, TEXT( "[StartingItem] Shovel Add=%d"), bAdded);
+		InventoryComponent->TryAddItem(StartingShovelDefinition, 1);
 	}
 
-	if (QuickSlotComponent->TryBindFirstEmptySlot(StartingShovelDefinition))
+	// ===== 2. 시작 눈총 지급 =====
+
+	if (InventoryComponent->GetItemCount(StartingProjectileWeaponDefinition) <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT( "[StartingItem] Success Bind"));
+		InventoryComponent->TryAddItem(StartingProjectileWeaponDefinition, 1);
 	}
 
-	// 아무 슬롯도 선택되지 않았다면 1번 선택
+	// ===== 3. 퀵슬롯 고정 배치 =====
+
+	// 사용자 기준 1번 슬롯 = Index 0 = 삽
+	if (!QuickSlotComponent->IsSlotBound(0))
+	{
+		QuickSlotComponent->RequestBindSlot(0, StartingShovelDefinition);
+	}
+
+	// 사용자 기준 2번 슬롯 = Index 1 = 눈총
+	if (!QuickSlotComponent->IsSlotBound(1))
+	{
+		QuickSlotComponent->RequestBindSlot(1, StartingProjectileWeaponDefinition);
+	}
+
+	// ===== 4. 기본 장비는 삽 =====
+
 	if (QuickSlotComponent->GetSelectedSlotIndex() == INDEX_NONE)
 	{
 		QuickSlotComponent->RequestSelectSlot(0);

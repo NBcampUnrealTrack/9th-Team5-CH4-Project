@@ -15,6 +15,8 @@
 #include "GameplayEffect.h"
 
 #include "DeepRaiders/DeepRaiders.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRGA_FireProjectile::UDRGA_FireProjectile()
 {
@@ -91,6 +93,77 @@ void UDRGA_FireProjectile::ApplyCooldown(const FGameplayAbilitySpecHandle Handle
 		, WeaponDefinition->BaseFireInterval);
 	
 	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CoolDownSpec);
+}
+
+bool UDRGA_FireProjectile::CheckCost(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	if (ActorInfo == nullptr)
+	{
+		return false;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
+
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(WeaponDefinition) || !IsValid(ASC))
+	{
+		return false;
+	}
+
+	if (WeaponDefinition->SnowCostPerShot <= 0.f)
+	{
+		return true;
+	}
+
+	if (!WeaponDefinition->SnowCostEffectClass)
+	{
+		return false;
+	}
+
+	const float CurrentSnow = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
+
+	return CurrentSnow + KINDA_SMALL_NUMBER >= WeaponDefinition->SnowCostPerShot;
+}
+
+void UDRGA_FireProjectile::ApplyCost(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
+
+	if (!IsValid(WeaponDefinition) || WeaponDefinition->SnowCostPerShot <= 0.f || !WeaponDefinition->SnowCostEffectClass)
+	{
+		return;
+	}
+
+	FGameplayEffectSpecHandle CostSpec = 
+		MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo, WeaponDefinition->SnowCostEffectClass, GetAbilityLevel(Handle, ActorInfo));
+
+	if (!CostSpec.IsValid())
+	{
+		return;
+	}
+
+	CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
+
+	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CostSpec);
 }
 
 void UDRGA_FireProjectile::BuildImpactEffectSpecs(UAbilitySystemComponent* AbilitySystemComponent,

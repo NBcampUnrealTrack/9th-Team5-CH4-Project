@@ -50,6 +50,7 @@ protected:
 	virtual void SetupInputComponent() override;
 	
 	void SetupGASInputComponent();
+	bool bGASInputBound = false;
 	
 	virtual void OnPossess(APawn* InPawn) override;
 
@@ -85,7 +86,7 @@ private:
 	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
-
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -141,6 +142,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+	
 #pragma endregion
 
 #pragma region Interact
