@@ -14,19 +14,35 @@ void UDRQuickSlotUIComponent::BeginPlay()
 	Super::BeginPlay();
 	
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
-	
-	if (!IsValid(PlayerController)
-		|| !PlayerController->IsLocalController()
-		|| !QuickSlotWidgetClass)
+
+	if (!IsValid(PlayerController))
 	{
+		UE_LOG(LogTemp, Error, TEXT("QuickSlot UI owner is not DRPlayerController: %s"),
+			*GetNameSafe(GetOwner()));
+		return;
+	}
+
+	if (!PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	if (!QuickSlotWidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("QuickSlotWidgetClass is not set on %s"),
+			*GetNameSafe(PlayerController));
 		return;
 	}
 	
 	QuickSlotWidget = CreateWidget<UDRQuickSlotWidget>(PlayerController, QuickSlotWidgetClass);
 	if (!IsValid(QuickSlotWidget))
 	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to create QuickSlot widget class: %s"),
+			*GetNameSafe(QuickSlotWidgetClass));
 		return;
 	}
+
+	UE_LOG(LogTemp, Log, TEXT("QuickSlot widget created: %s"), *GetNameSafe(QuickSlotWidget));
 	
 	// 위젯에 QuickSlot을 연결
 	QuickSlotWidget->InitializeQuickSlot(PlayerController->GetQuickSlotComponent());

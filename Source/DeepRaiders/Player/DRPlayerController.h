@@ -18,6 +18,7 @@ class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRInventoryUIComponent;
+class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRTeleportUIComponent;
 class UGameplayAbility;
@@ -52,6 +53,7 @@ protected:
 	void SetupGASInputComponent();
 	
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnRep_Pawn() override;
 
 private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
@@ -312,6 +314,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
