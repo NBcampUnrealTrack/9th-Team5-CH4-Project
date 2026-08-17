@@ -35,10 +35,8 @@ public:
      * 현재 Runtime Pose를 읽지 않고
      * SampleTime에 해당하는 Animation Pose를 직접 평가한다.
      */
-    void SampleWeaponSweep(
-        UAnimSequenceBase* Animation,
-        float SampleTime);
-    
+    void SampleWeaponSweep(UAnimSequenceBase* Animation, float SampleTime);
+
     /** 사망 등으로 현재 공격을 강제 종료한다. */
     void CancelAttack();
 
@@ -64,20 +62,13 @@ private:
 
     void PerformLineTrace();
 
-    void ProcessHit(
-        const FHitResult& HitResult);
+    void ProcessHit(const FHitResult& HitResult);
 
     void FinishAttack();
 
-    void SweepSegment(
-        const FVector& Start,
-        const FVector& End);
+    void SweepSegment(const FVector& Start, const FVector& End);
 
-    bool EvaluateWeaponSweepSample(
-        const UAnimMontage* Montage,
-        float SampleTime,
-        FVector& OutBase,
-        FVector& OutTip) const;
+    bool EvaluateWeaponSweepSample(const UAnimMontage* Montage, float SampleTime, FVector& OutBase, FVector& OutTip) const;
     
 private:
     bool bIsAttacking = false;
@@ -86,78 +77,39 @@ private:
     FTimerHandle MeleeHitTimerHandle;
     FTimerHandle MeleeFinishTimerHandle;
 
-    TSet<TWeakObjectPtr<AActor>>
-        AlreadyHitActors;
+    TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
-    FVector PreviousBaseLocation =
-        FVector::ZeroVector;
-
-    FVector PreviousTipLocation =
-        FVector::ZeroVector;
+    FVector PreviousBaseLocation = FVector::ZeroVector;
+    FVector PreviousTipLocation = FVector::ZeroVector;
 
 protected:
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee")
-    EDRMeleeTraceMode TraceMode =
-        EDRMeleeTraceMode::ViewLine;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee")
+    EDRMeleeTraceMode TraceMode = EDRMeleeTraceMode::ViewLine;
 
     /** ViewLine 방식에서 공격 시작 후 판정 시점 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0"))
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee", meta = (ClampMin = "0.0"))
     float MeleeAttackHitTime = 0.25f;
 
     /** 다음 공격이 가능해지는 시간 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.01"))
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee", meta = (ClampMin = "0.01"))
     float MeleeAttackDuration = 0.8f;
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0"))
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee", meta = (ClampMin = "0.0"))
     float MeleeAttackDamage = 40.f;
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0", Units = "cm"))
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee", meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeAttackRange = 200.f;
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep")
-    FName MeleeSweepBaseSocketName =
-        TEXT("S_MeleeBase");
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Sweep")
+    FName MeleeSweepBaseSocketName = TEXT("S_MeleeBase");
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep")
-    FName MeleeSweepTipSocketName =
-        TEXT("S_MeleeTip");
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Sweep")
+    FName MeleeSweepTipSocketName = TEXT("S_MeleeTip");
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep",
-        meta = (ClampMin = "0.0", Units = "cm"))
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Sweep", meta = (ClampMin = "0.0", Units = "cm"))
     float MeleeSweepRadius = 35.f;
 
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Debug")
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Debug")
     bool bDrawDebug = false;
     
 };

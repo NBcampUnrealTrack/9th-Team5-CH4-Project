@@ -96,6 +96,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
 	FDRCoinsChangedSignature OnCoinsChanged;
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
+	void ResetForRespawn();
+	
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsFrozen() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
+	void ClearFrozenState();
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

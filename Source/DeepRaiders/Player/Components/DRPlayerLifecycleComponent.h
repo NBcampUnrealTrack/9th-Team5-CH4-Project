@@ -9,6 +9,7 @@ class USoundBase;
 class UCameraShakeBase;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
+class UGameplayEffect;
 
 UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRPlayerLifecycleComponent : public UActorComponent
@@ -38,6 +39,9 @@ public:
 
 	void BindAbilitySystem(UAbilitySystemComponent* ASC);
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Death")
+	TSubclassOf<UGameplayEffect> DeadEffectClass;
+	
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
@@ -65,7 +69,7 @@ private:
 
 	/** 각 인스턴스에서 Ragdoll 표현을 적용한다. */
 	void ApplyDeathRagdoll();
-
+	
 	// ==============================
 	// Respawn
 	// ==============================

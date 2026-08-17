@@ -476,28 +476,19 @@ const UDRPlayerAttributeSet* ADRPlayerCharacter::GetPlayerAttributeSet() const
 
 void ADRPlayerCharacter::ApplySpawnAttributeReset()
 {
-	if (!HasAuthority() || !RespawnRestoreHealthEffectClass)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
 
-	if (!IsValid(ASC))
+	if (!IsValid(DRPlayerState))
 	{
 		return;
 	}
 
-	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-
-	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(RespawnRestoreHealthEffectClass, 1.f, Context);
-
-	if (!SpecHandle.IsValid())
-	{
-		return;
-	}
-
-	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	DRPlayerState->ResetForRespawn();
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)

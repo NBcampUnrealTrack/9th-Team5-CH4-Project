@@ -38,10 +38,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, bHasDeepestDigLocation);
 	DOREPLIFETIME(ADRPlayerState, DeepestDigLocation);
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
-	DOREPLIFETIME_CONDITION(
-		ADRPlayerState,
-		CurrentJetpackFuel,
-		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, Coins);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 }
@@ -124,6 +121,59 @@ void ADRPlayerState::SetCoins(int32 NewCoins)
 	Coins = ClampedCoins;
 	OnRep_Coins(PreviousCoins);
 	ForceNetUpdate();
+}
+
+void ADRPlayerState::ResetForRespawn()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	const UDRPlayerAttributeSet* Attributes = AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>();
+
+	if (!IsValid(Attributes))
+	{
+		return;
+	}
+
+	ClearFrozenState();
+	
+	// Dead 상태도 이후 BP_GE_Dead를 사용하게 될 것을 고려해 제거
+	{
+		FGameplayTagContainer TempTags;
+		TempTags.AddTag(DRGameplayTags::State_Dead);
+
+		AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(TempTags);
+	}
+
+	// Respawn Attribute 초기화
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), Attributes->GetMaxHealth());
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
+
+	// 현재 Snow Absorb가 없으므로 전투 루프를 위해 Full로 리스폰.
+	// Snow Absorb 구현 후 정책에 맞게 0.f 등으로 변경.
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetSnowGaugeAttribute(), Attributes->GetMaxSnowGauge());
+}
+
+bool ADRPlayerState::IsFrozen() const
+{
+	return IsValid(AbilitySystemComponent) && AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
+}
+
+void ADRPlayerState::ClearFrozenState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	FGameplayTagContainer FrozenTags;
+	FrozenTags.AddTag(DRGameplayTags::State_Frozen);
+
+	AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(FrozenTags);
+
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 }
 
 void ADRPlayerState::BeginPlay()

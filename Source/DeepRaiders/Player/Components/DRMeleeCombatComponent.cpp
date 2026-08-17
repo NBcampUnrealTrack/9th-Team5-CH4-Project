@@ -21,6 +21,7 @@
 #include "Engine/StaticMeshSocket.h"
 #include "Animation/AnimCompositeBase.h"
 #include "Misc/MemStack.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 UDRMeleeCombatComponent::UDRMeleeCombatComponent()
 {
@@ -57,18 +58,21 @@ void UDRMeleeCombatComponent::RequestAttack()
 
 bool UDRMeleeCombatComponent::CanStartAttack() const
 {
-	const ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	const ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority() ||
-		Character->IsDead())
+	if (!IsValid(Character) || !Character->HasAuthority() || Character->IsDead())
 	{
 		return false;
 	}
 
-	if (!Character->HasHeldItemAction(
-			EDRItemActionType::MeleeAttack))
+	const ADRPlayerState* PlayerState = Character->GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(PlayerState) || PlayerState->IsFrozen())
+	{
+		return false;
+	}
+
+	if (!Character->HasHeldItemAction(EDRItemActionType::MeleeAttack))
 	{
 		return false;
 	}
@@ -938,72 +942,84 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(
 	return true;
 }
 
-void UDRMeleeCombatComponent::ProcessHit(
-	const FHitResult& HitResult)
+void UDRMeleeCombatComponent::ProcessHit(const FHitResult& HitResult)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	ADRPlayerCharacter* HitPlayer =
-		Cast<ADRPlayerCharacter>(
-			HitResult.GetActor());
+	ADRPlayerCharacter* HitPlayer = Cast<ADRPlayerCharacter>(HitResult.GetActor());
 
-	if (!IsValid(Character) ||
-		!IsValid(HitPlayer) ||
-		HitPlayer == Character ||
-		!bIsAttacking)
+	if (!IsValid(Character) || !IsValid(HitPlayer) || HitPlayer == Character || HitPlayer->IsDead() || !bIsAttacking)
 	{
 		return;
 	}
 
-	/*
-	 * 공격 1회당 같은 Actor는 딱 한 번만.
-	 *
-	 * Sweep Segment가 여러 개이거나
-	 * Notify Window가 재진입해도 여기서 최종 차단한다.
-	 */
 	if (AlreadyHitActors.Contains(HitPlayer))
 	{
 		return;
 	}
 
-	/*
-	 * Damage보다 먼저 기록한다.
-	 * 같은 프레임의 다른 Sweep Segment가 다시 들어와도
-	 * 중복 처리를 못 하게 한다.
-	 */
+	ADRPlayerState* AttackerPlayerState = Character->GetPlayerState<ADRPlayerState>();
+
+	ADRPlayerState* TargetPlayerState = HitPlayer->GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(AttackerPlayerState) || !IsValid(TargetPlayerState))
+	{
+		return;
+	}
+
 	AlreadyHitActors.Add(HitPlayer);
 
-	const float AppliedDamage =
+	const bool bSameTeam = AttackerPlayerState->GetTeamId() == TargetPlayerState->GetTeamId();
+
+	const bool bTargetFrozen = TargetPlayerState->IsFrozen();
+
+	// ==============================
+	// Ally
+	// ==============================
+
+	if (bSameTeam)
+	{
+		// 아군 일반 상태는 피해 없음
+		if (!bTargetFrozen)
+		{
+			return;
+		}
+
+		// 아군 Frozen -> 구조
+		TargetPlayerState->ClearFrozenState();
+
+		Character->PlayMeleeHitPresentationFromServer(HitPlayer, false, HitResult.ImpactPoint);
+
+		return;
+	}
+
+	// ==============================
+	// Enemy
+	// ==============================
+
+	const float DamageToApply = bTargetFrozen
+		                            // Frozen 적은 즉시 처형
+		                            ? HitPlayer->GetCurrentHealth()
+		                            // 일반 적은 기존 근접 피해
+		                            : MeleeAttackDamage;
+
+	const float AppliedDamage = 
 		UGameplayStatics::ApplyDamage(
-			HitPlayer,
-			MeleeAttackDamage,
-			Character->GetController(),
-			Character,
-			UDamageType::StaticClass());
+			HitPlayer, 
+			DamageToApply, 
+			Character->GetController(), 
+			Character, 
+			UDamageType::StaticClass()
+			);
 
 	if (AppliedDamage <= 0.f)
 	{
 		return;
 	}
 
-	const bool bKilled =
-		HitPlayer->IsDead();
+	const bool bKilled = HitPlayer->IsDead();
 
-	Character->PlayMeleeHitPresentationFromServer(
-		HitPlayer,
-		bKilled,
-		HitResult.ImpactPoint);
-
-	// UE_LOG(
-	// 	LogTemp,
-	// 	Warning,
-	// 	TEXT(
-	// 		"[Melee] Attacker=%s "
-	// 		"Target=%s Damage=%.1f"),
-	// 	*GetNameSafe(Character),
-	// 	*GetNameSafe(HitPlayer),
-	// 	AppliedDamage);
+	Character->PlayMeleeHitPresentationFromServer(HitPlayer, bKilled, HitResult.ImpactPoint);
 }
 
 void UDRMeleeCombatComponent::FinishAttack()

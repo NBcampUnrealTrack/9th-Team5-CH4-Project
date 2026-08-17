@@ -16,6 +16,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "GameplayEffect.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRPlayerLifecycleComponent::UDRPlayerLifecycleComponent()
 {
@@ -322,6 +324,21 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 		!Character->IsDead())
 	{
 		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = BoundASC.Get())
+	{
+		if (DeadEffectClass && !ASC->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+		{
+			FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+
+			FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(DeadEffectClass, 1.f, Context);
+
+			if (SpecHandle.IsValid())
+			{
+				ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			}
+		}
 	}
 
 	if (UDRMeleeCombatComponent*
