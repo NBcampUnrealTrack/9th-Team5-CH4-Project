@@ -87,6 +87,9 @@ void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySyst
 		
 		if (AbilityToGrant.InputTag.IsValid())
 		{
+			// 테스트 신다인
+			AbilitySpec.InputID = static_cast<int32>(AbilityToGrant.InputID);
+			// =====================
 			AbilitySpec.GetDynamicSpecSourceTags().AddTag(
 				AbilityToGrant.InputTag);
 		}

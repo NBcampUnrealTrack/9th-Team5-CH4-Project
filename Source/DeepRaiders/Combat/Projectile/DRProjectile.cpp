@@ -23,8 +23,7 @@ ADRProjectile::ADRProjectile()
 	SetRootComponent(CollisionComponent);
 	
 	CollisionComponent->InitSphereRadius(12.0f);
-	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	CollisionComponent->SetCollisionObjectType(ECC_WorldDynamic);
+	CollisionComponent->SetCollisionProfileName(TEXT("DRProjectile"));
 	CollisionComponent->SetCanEverAffectNavigation(false);
 	
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
