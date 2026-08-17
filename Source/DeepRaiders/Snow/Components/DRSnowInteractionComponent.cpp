@@ -24,6 +24,16 @@ FDRSnowInteractionContext UDRSnowInteractionComponent::MakeInteractionContext() 
 	return Context;
 }
 
+void UDRSnowInteractionComponent::SetTeamIdOverride(int32 InTeamId)
+{
+	TeamIdOverride = InTeamId;
+}
+
+void UDRSnowInteractionComponent::ClearTeamIdOverride()
+{
+	TeamIdOverride = INDEX_NONE;
+}
+
 AActor* UDRSnowInteractionComponent::GetInteractableActorFromHit(
 	const FHitResult& HitResult) const
 {

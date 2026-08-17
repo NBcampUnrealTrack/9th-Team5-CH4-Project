@@ -1,5 +1,6 @@
 #include "DRSnowSurfaceSubsystem.h"
 
+#include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "EngineUtils.h"
 #include "VoxelTools/Gen/VoxelSurfaceEditTools.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
@@ -10,6 +11,91 @@ bool UDRSnowSurfaceSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
 	const UWorld* World = Cast<UWorld>(Outer);
 	return IsValid(World) && World->IsGameWorld();
+}
+
+float UDRSnowSurfaceSubsystem::AddSnowAtArea(
+	const FDRSnowSurfaceAddRequest& Request)
+{
+	if (Request.Radius <= 0.f || Request.Amount <= 0.f)
+	{
+		return 0.f;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return 0.f;
+	}
+
+	constexpr float DistanceDivisor = 4.f;
+	constexpr float SurfaceFalloff = 0.35f;
+
+	// 눈 쌓기도 SurfaceTool 객체 대신 함수형 API로 처리한다.
+	// 이 경계를 유지해야 투사체/장판/맵 장치가 같은 Voxel 표현 함수를 공유할 수 있다.
+	const FVoxelIntBox SurfaceBounds =
+		UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius);
+	if (!SurfaceBounds.IsValid())
+	{
+		return 0.f;
+	}
+
+	FVoxelSurfaceEditsVoxels SurfaceVoxels;
+	UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+		SurfaceVoxels,
+		VoxelWorld,
+		SurfaceBounds,
+		true);
+
+	FVoxelSurfaceEditsStack SurfaceStack;
+	SurfaceStack.Add(
+		UVoxelSurfaceTools::ApplyFalloff(
+			VoxelWorld,
+			EVoxelFalloff::Smooth,
+			Request.WorldLocation,
+			Request.Radius,
+			SurfaceFalloff));
+	SurfaceStack.Add(
+		UVoxelSurfaceTools::ApplyConstantStrength(-Request.Amount));
+
+	const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
+		UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
+
+	// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
+	// bUpdateRender=false로 두고 아래 값 편집에서 한 번에 render update가 일어나게 한다.
+	UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+		VoxelWorld,
+		ProcessedVoxels,
+		Request.Context.TeamId,
+		false);
+
+	TArray<FModifiedVoxelValue> ModifiedValues;
+	FVoxelIntBox EditedBounds;
+	UVoxelSurfaceEditTools::EditVoxelValues(
+		ModifiedValues,
+		EditedBounds,
+		VoxelWorld,
+		ProcessedVoxels,
+		DistanceDivisor,
+		true,
+		true,
+		true);
+
+	float ModifiedValueAmount = 0.f;
+	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+	{
+		ModifiedValueAmount += FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue);
+	}
+
+	const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+	if (AddedAmount > 0.f)
+	{
+		OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
+	}
+
+	return AddedAmount;
 }
 
 float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request)
@@ -92,6 +178,30 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 	}
 
 	return RemovedAmount;
+}
+
+AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const
+{
+	if (IsValid(Request.TargetVoxelWorld.Get()))
+	{
+		return Request.TargetVoxelWorld.Get();
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			return *It;
+		}
+	}
+
+	return nullptr;
 }
 
 AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const

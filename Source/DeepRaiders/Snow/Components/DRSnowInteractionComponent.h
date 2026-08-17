@@ -21,6 +21,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Interaction")
 	FDRSnowInteractionContext MakeInteractionContext() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Snow|Interaction")
+	void SetTeamIdOverride(int32 InTeamId);
+
+	UFUNCTION(BlueprintCallable, Category = "Snow|Interaction")
+	void ClearTeamIdOverride();
+
 protected:
 	AActor* GetInteractableActorFromHit(const FHitResult& HitResult) const;
 
