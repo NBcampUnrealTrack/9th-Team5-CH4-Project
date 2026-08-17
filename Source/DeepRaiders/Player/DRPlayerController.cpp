@@ -30,7 +30,8 @@
 #include "AbilitySystemComponent.h"
 #include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
-#include "Blueprint/UserWidget.h"
+
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -967,6 +968,39 @@ void ADRPlayerController::DRTestAddSnow()
 	const bool bRequested = ASC->TryActivateAbility(AbilitySpec->Handle, true);
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "TryActivateAbility=%d"), bRequested);
+}
+
+void ADRPlayerController::DRTestFrozen()
+{
+	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+
+	if (!IsValid(PlayerCharacter))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
+
+	if (!IsValid(ASC) || !IsValid(TestFrozenAbilityClass))
+	{
+		return;
+	}
+
+	ASC->TryActivateAbilityByClass(TestFrozenAbilityClass, true);
+}
+
+void ADRPlayerController::DRCheckFrozen()
+{
+	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+
+	UAbilitySystemComponent* ASC = IsValid(PlayerCharacter) ? PlayerCharacter->GetAbilitySystemComponent() : nullptr;
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[GAS][Frozen][ClientCheck] Frozen=%d"), ASC->HasMatchingGameplayTag( DRGameplayTags::State_Frozen));
 }
 
 #pragma region Teleport
