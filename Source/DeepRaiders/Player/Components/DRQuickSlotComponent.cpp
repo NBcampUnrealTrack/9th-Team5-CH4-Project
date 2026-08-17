@@ -6,12 +6,11 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
 {
@@ -560,31 +559,25 @@ void UDRQuickSlotComponent::RefreshHandedItem()
 	
 	HeldItemDefinition = NewHandedItem;
 
-	if (ADRPlayerController* DRPC = Cast<ADRPlayerController>(GetOwner()))
+	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
 	{
-		if (ADRPlayerState* DRPS = DRPC->GetPlayerState<ADRPlayerState>())
+		// 기존 장비의 Ability, Effect 회수
+		if (!GrantedHandles.IsEmpty())
 		{
-			if (UAbilitySystemComponent* ASC = DRPS->GetAbilitySystemComponent())
-			{
-				// 기존 장비의 Ability, Effect 회수
-				if (!GrantedHandles.IsEmpty())
-				{
-					GrantedHandles.TakeFromAbilitySystem(ASC);
-					UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Take"));
-				}
+			GrantedHandles.TakeFromAbilitySystem(ASC);
+			UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Take"));
+		}
 
-				// 새 장비의 Ability, Effect 부여
-				if (NewHandedItem
-					&& NewHandedItem->ItemAbilitySet)
-				{
-					NewHandedItem->ItemAbilitySet->GiveToAbilitySystem(ASC, &GrantedHandles, NewHandedItem);
-				}
-				
-				if (!GrantedHandles.IsEmpty())
-				{
-					UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Grant"));
-				}
-			}			
+		// 새 장비의 Ability, Effect 부여
+		if (NewHandedItem
+			&& NewHandedItem->ItemAbilitySet)
+		{
+			NewHandedItem->ItemAbilitySet->GiveToAbilitySystem(ASC, &GrantedHandles, NewHandedItem);
+		}
+
+		if (!GrantedHandles.IsEmpty())
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Grant"));
 		}
 	}
 

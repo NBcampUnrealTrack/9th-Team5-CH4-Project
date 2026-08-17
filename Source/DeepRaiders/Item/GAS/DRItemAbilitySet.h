@@ -33,15 +33,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability", meta = (ClampMin = 1, UIMin = 1))
 	int32 AbilityLevel = 1;
 	
-	// Ability를 활성화할 입력 태그
-	// ex : Input.Ability.Primary
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability", meta = (Categories = "Input.Ability"))
-	FGameplayTag InputTag;
-	
-	// 테스트 신다인
-	// 테스트를 위한 임시 InputID
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
-	EDRAbilityInputID InputID;
+	EDRAbilityInputID InputID = EDRAbilityInputID::Primary;
 };
 
 // 아이템이 장착된 동안 적용할 GameplayEffect 항목
