@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/SpringArmComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -17,14 +18,13 @@
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
-#include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
-
-#include "AbilitySystemComponent.h"
 #include "DeepRaiders/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GAS/DRGameplayTags.h"
 
-#include "GameFramework/SpringArmComponent.h"
+#include "GameplayEffect.h"
+#include "AbilitySystemComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -34,12 +34,12 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 
 	// Actor 이동 정보도 복제
 	SetReplicateMovement(true);
-	
+
 	GetMesh()->SetOwnerNoSee(false);
 	GetMesh()->SetOnlyOwnerSee(false);
 	GetMesh()->SetHiddenInGame(false);
 	GetMesh()->SetVisibility(true);
-	
+
 	MiningComponent = CreateDefaultSubobject<UDRMiningComponent>(TEXT("MiningComponent"));
 
 	VoxelNoClippingComponent = CreateDefaultSubobject<UVoxelNoClippingComponent>(TEXT("VoxelNoClippingComponent"));
@@ -53,16 +53,15 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
 	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
-	HealthComponent = CreateDefaultSubobject<UDRHealthComponent>(TEXT("HealthComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
-	
+
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
-	
+
 	GetCharacterMovement()->bOrientRotationToMovement = false;
-	
+
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 420.f;
@@ -72,7 +71,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	CameraBoom->bDoCollisionTest = true;
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
-	
+
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
@@ -111,6 +110,97 @@ UAbilitySystemComponent* ADRPlayerCharacter::GetAbilitySystemComponent() const
 	}
 
 	return DRPlayerState->GetAbilitySystemComponent();
+}
+
+float ADRPlayerCharacter::TakeDamage(
+	float DamageAmount,
+	const FDamageEvent& DamageEvent,
+	AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	if (!HasAuthority() ||
+		DamageAmount <= 0.f ||
+		IsDead() ||
+		!DamageEffectClass)
+	{
+		return 0.f;
+	}
+
+	UAbilitySystemComponent* ASC =
+		GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return 0.f;
+	}
+
+	const float HealthBefore =
+		GetCurrentHealth();
+
+	FGameplayEffectContextHandle Context =
+		ASC->MakeEffectContext();
+
+	Context.AddInstigator(
+		EventInstigator,
+		DamageCauser);
+
+	FGameplayEffectSpecHandle SpecHandle =
+		ASC->MakeOutgoingSpec(
+			DamageEffectClass,
+			1.f,
+			Context);
+
+	if (!SpecHandle.IsValid())
+	{
+		return 0.f;
+	}
+
+	SpecHandle.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Damage,
+		DamageAmount);
+
+	ASC->ApplyGameplayEffectSpecToSelf(
+		*SpecHandle.Data.Get());
+
+	return FMath::Max(
+		0.f,
+		HealthBefore - GetCurrentHealth());
+}
+
+float ADRPlayerCharacter::GetCurrentHealth() const
+{
+	const UDRPlayerAttributeSet* Attributes = GetPlayerAttributeSet();
+
+	return IsValid(Attributes) ? Attributes->GetHealth() : 0.f;
+}
+
+float ADRPlayerCharacter::GetHealthRatio() const
+{
+	const UDRPlayerAttributeSet* Attributes = GetPlayerAttributeSet();
+
+	if (!IsValid(Attributes) || Attributes->GetMaxHealth() <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	return FMath::Clamp(Attributes->GetHealth() / Attributes->GetMaxHealth(), 0.f, 1.f);
+}
+
+bool ADRPlayerCharacter::IsDead() const
+{
+	return GetCurrentHealth() <= KINDA_SMALL_NUMBER;
+}
+
+float ADRPlayerCharacter::GetMaxHealth() const
+{
+	const UDRPlayerAttributeSet* Attributes = GetPlayerAttributeSet();
+
+	if (!IsValid(Attributes) || Attributes->GetMaxHealth() <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	return Attributes->GetMaxHealth();
 }
 
 void ADRPlayerCharacter::Landed(const FHitResult& Hit)
@@ -164,6 +254,11 @@ void ADRPlayerCharacter::PossessedBy(AController* NewController)
 
 	InitializeAbilitySystem();
 
+	if (HasAuthority())
+	{
+		ApplySpawnAttributeReset();
+	}
+	
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		const UDRPlayerAttributeSet* AttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
@@ -198,19 +293,13 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][OnRep_PlayerState] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), *GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe(GetAbilitySystemComponent()));
 }
 
-void ADRPlayerCharacter::ApplyHandEquipmentVisual(
-	UStaticMesh* WorldMesh,
-	const FTransform& WorldTransform)
+void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)
 {
-	WorldHandEquipmentMesh->SetStaticMesh(
-		WorldMesh);
+	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
 
-	WorldHandEquipmentMesh->SetRelativeTransform(
-		WorldTransform);
+	WorldHandEquipmentMesh->SetRelativeTransform(WorldTransform);
 
-	WorldHandEquipmentMesh->SetVisibility(
-		IsValid(WorldMesh),
-		true);
+	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
 }
 
 void ADRPlayerCharacter::ClearHandEquipmentVisual()
@@ -265,36 +354,6 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 {
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);
-}
-
-float ADRPlayerCharacter::GetCurrentHealth() const
-{
-	return IsValid(HealthComponent) ? HealthComponent->GetCurrentHealth() : 0.f;
-}
-
-float ADRPlayerCharacter::GetMaxHealth() const
-{
-	return IsValid(HealthComponent) ? HealthComponent->GetMaxHealth() : 0.f;
-}
-
-float ADRPlayerCharacter::GetHealthRatio() const
-{
-	return IsValid(HealthComponent) ? HealthComponent->GetHealthRatio() : 0.f;
-}
-
-bool ADRPlayerCharacter::IsDead() const
-{
-	return IsValid(HealthComponent) && HealthComponent->IsDead();
-}
-
-float ADRPlayerCharacter::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
-{
-	if (!HasAuthority() || !IsValid(HealthComponent))
-	{
-		return 0.f;
-	}
-
-	return HealthComponent->ApplyDamage(DamageAmount);
 }
 
 void ADRPlayerCharacter::RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
@@ -384,9 +443,47 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 
 	ASC->InitAbilityActorInfo(DRPlayerState, this);
 
+	if (IsValid(PlayerLifecycleComponent))
+	{
+		PlayerLifecycleComponent->BindAbilitySystem(ASC);
+	}
+	
 	const UDRPlayerAttributeSet* RegisteredAttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
 
 	UE_LOG(LogTemp, Warning, TEXT("[GAS][AttributeSet] Direct=%s Registered=%s Same=%d"), *GetNameSafe(DRPlayerState->GetPlayerAttributeSet()), *GetNameSafe(RegisteredAttributeSet), DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
+}
+
+const UDRPlayerAttributeSet* ADRPlayerCharacter::GetPlayerAttributeSet() const
+{
+	const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	return IsValid(ASC) ? ASC->GetSet<UDRPlayerAttributeSet>() : nullptr;
+}
+
+void ADRPlayerCharacter::ApplySpawnAttributeReset()
+{
+	if (!HasAuthority() || !RespawnRestoreHealthEffectClass)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+
+	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(RespawnRestoreHealthEffectClass, 1.f, Context);
+
+	if (!SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
