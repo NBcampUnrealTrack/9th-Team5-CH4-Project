@@ -28,6 +28,7 @@
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
 #include "AbilitySystemComponent.h"
+#include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -51,6 +52,18 @@ void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, CurrentStorage);
+}
+
+UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
+{
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return nullptr;
+	}
+
+	return DRPlayerState->GetAbilitySystemComponent();
 }
 
 void ADRPlayerController::BeginPlay()
@@ -172,6 +185,28 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(InventoryAction.Get()))
 	{
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
+	}
+	
+	SetupGASInputComponent();
+}
+
+void ADRPlayerController::SetupGASInputComponent()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		if (IsValid(InputComponent))
+		{
+			UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
+			
+			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered
+				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
+			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed
+				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
+			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered
+				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
+			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed
+				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
+		}
 	}
 }
 
@@ -340,6 +375,42 @@ void ADRPlayerController::HandleSecondaryActionCompleted(const FInputActionValue
 	}
 
 	PlayerCharacter->RequestSecondaryItemAction(EDRItemActionTriggerEvent::Completed);
+}
+
+void ADRPlayerController::HandleGASInputPressed(int32 InputId)
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
+		if (Spec)
+		{
+			Spec->InputPressed = true;
+			if (Spec->IsActive())
+			{
+				ASC->AbilitySpecInputPressed(*Spec);
+			}
+			else
+			{
+				ASC->TryActivateAbility(Spec->Handle);
+			}
+		}
+	}
+}
+
+void ADRPlayerController::HandleGASInputReleased(int32 InputId)
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
+		if (Spec)
+		{
+			Spec->InputPressed = false;
+			if (Spec->IsActive())
+			{
+				ASC->AbilitySpecInputReleased(*Spec);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)

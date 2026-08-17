@@ -13,6 +13,14 @@ class UAbilitySystemComponent;
 class UGameplayAbility;
 class UGameplayEffect;
 
+UENUM(BlueprintType)
+enum class EDRAbilityInputID : uint8
+{
+	Primary = 0,
+	Secondary = 1,
+	
+};
+
 // ItemAbilitySet이 부여할 하나의 GameplayAbility 항목
 USTRUCT(BlueprintType)
 struct FDRItemAbilitySet_GameplayAbility
@@ -25,10 +33,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability", meta = (ClampMin = 1, UIMin = 1))
 	int32 AbilityLevel = 1;
 	
-	// Ability를 활성화할 입력 태그
-	// ex : Input.Ability.Primary
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability", meta = (Categories = "Input.Ability"))
-	FGameplayTag InputTag;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
+	EDRAbilityInputID InputID = EDRAbilityInputID::Primary;
 };
 
 // 아이템이 장착된 동안 적용할 GameplayEffect 항목
