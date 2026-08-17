@@ -50,7 +50,7 @@ void ADRProjectile::BeginPlay()
 	
 	if (IsValid(GetInstigator()))
 	{
-		CollisionComponent->IgnoreActorWhenMoving(GetOwner(), true);
+		CollisionComponent->IgnoreActorWhenMoving(GetInstigator(), true);
 	}
 	
 	ProjectileMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleProjectileStop);
@@ -62,7 +62,7 @@ void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilit
 	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs, const FDRProjectileWorldImpactData& InWorldImpactData,
 	int32 InSourceTeamId)
 {
-	if (HasAuthority())
+	if (!HasAuthority())
 	{
 		return;
 	}
