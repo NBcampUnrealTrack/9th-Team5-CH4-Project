@@ -7,6 +7,13 @@
 class UAnimSequenceBase;
 class UAnimMontage;
 
+UENUM(BlueprintType)
+enum class EDRLocomotionStyle : uint8
+{
+	Unarmed,
+	Rifle
+};
+
 /**
  * 아이템 장착 시 사용할 캐릭터 애니메이션 프로필.
  *
@@ -19,6 +26,9 @@ class DEEPRAIDERS_API UDRItemAnimationSet : public UDataAsset
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation|Locomotion")
+	EDRLocomotionStyle LocomotionStyle = EDRLocomotionStyle::Unarmed;
+	
 	/** 아이템 장착 중 사용할 기본 자세 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation|Pose")
 	TObjectPtr<UAnimSequenceBase> AimIdle;
