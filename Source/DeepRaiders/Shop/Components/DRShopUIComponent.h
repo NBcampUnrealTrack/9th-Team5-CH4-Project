@@ -6,8 +6,8 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
-class UDRInteractionComponent;
 class UDRInventoryComponent;
+class UDRShopAreaComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
 class UDRShopWidget;
@@ -21,18 +21,24 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 public:
 	UDRShopUIComponent();
 
+	/** 상점 범위 안에서 UI를 열거나 닫는다. */
+	void ToggleShopWidget();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** 로컬 플레이어가 상점에 진입하면 UI와 관련 컴포넌트를 연결한다. */
+	/** 로컬 플레이어가 사용할 수 있는 상점으로 등록한다. */
 	UFUNCTION()
-	void HandleInteractionEntered(APawn* Interactor);
+	void HandlePawnEntered(APawn* Pawn);
 
-	/** 상점 상호작용 범위를 벗어나면 열려 있는 UI를 닫는다. */
+	/** 상점 범위를 벗어나면 열려 있는 UI를 닫는다. */
 	UFUNCTION()
-	void HandleInteractionExited(APawn* Interactor);
+	void HandlePawnExited(APawn* Pawn);
+
+	/** 상점 UI와 관련 컴포넌트를 연결한다. */
+	void ShowShopWidget();
 
 	/** 상점 UI와 입력 상태를 정리한다. */
 	UFUNCTION()
@@ -60,7 +66,7 @@ private:
 	TObjectPtr<UDRShopWidget> ShopWidget;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInventoryComponent> InventoryComponent;
