@@ -17,13 +17,17 @@
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
+#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -44,6 +48,7 @@ ADRPlayerController::ADRPlayerController()
 
 	// UI Component Initialize
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 }
@@ -69,6 +74,18 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 
 void ADRPlayerController::BeginPlay()
 {
+	// UI 컴포넌트 BeginPlay 전에 로컬 플레이어 UI 설정을 준비한다.
+	if (IsLocalController())
+	{
+		if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
+		{
+			if (UDRUIManagerSubsystem* UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
+			{
+				UIManager->Configure(this, UIConfig);
+			}
+		}
+	}
+
 	Super::BeginPlay();
 
 	InitializePlayerHUD();
@@ -190,6 +207,11 @@ void ADRPlayerController::SetupInputComponent()
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
 	}
 	
+	if (IsValid(ShopAction.Get()))
+	{
+		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
+	}
+	
 	SetupGASInputComponent();
 }
 
@@ -238,6 +260,21 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->ApplySelectedItemToCharacter();
+	}
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
+	}
+}
+
+void ADRPlayerController::OnRep_Pawn()
+{
+	Super::OnRep_Pawn();
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
 	}
 }
 
@@ -974,6 +1011,29 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	if (IsValid(InventoryUIComponent))
 	{
 		InventoryUIComponent->TogglePlayerInventory();
+	}
+}
+
+void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
+{
+	if (IsValid(AvailableShop))
+	{
+		AvailableShop->ToggleShopWidget();
+	}
+}
+
+void ADRPlayerController::SetAvailableShop(
+	UDRShopUIComponent* ShopUIComponent)
+{
+	AvailableShop = ShopUIComponent;
+}
+
+void ADRPlayerController::ClearAvailableShop(
+	UDRShopUIComponent* ShopUIComponent)
+{
+	if (AvailableShop == ShopUIComponent)
+	{
+		AvailableShop = nullptr;
 	}
 }
 

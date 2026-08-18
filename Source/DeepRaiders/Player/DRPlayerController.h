@@ -13,12 +13,15 @@ class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
 class UDRShopTransactionComponent;
+class UDRShopUIComponent;
 class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRInventoryUIComponent;
+class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRTeleportUIComponent;
+class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRPlayerHUDWidget;
@@ -53,6 +56,7 @@ protected:
 	bool bGASInputBound = false;
 	
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnRep_Pawn() override;
 
 	virtual void OnRep_PlayerState() override;
 
@@ -253,6 +257,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Storage")
 	bool IsStorageWithinInteractionRange(const ADRStorage* Storage) const;
 
+	float GetStorageDistanceCheckInterval() const { return StorageDistanceCheckInterval; }
+
 	// 테스트 명령
 	UFUNCTION(Exec)
 	void DRDepositFirstItem();
@@ -282,24 +288,53 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentStorage, VisibleInstanceOnly, Category = "Player|Storage")
 	TObjectPtr<ADRStorage> CurrentStorage;
 
+	/** 열린 창고와의 거리를 다시 검사하는 주기다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Storage",
+		meta = (ClampMin = "0.05", Units = "s"))
+	float StorageDistanceCheckInterval = 0.2f;
+
 #pragma endregion
 
 #pragma region UI
 
+public:
+	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
+	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+
+	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
+	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
+
 private:
 	void HandleToggleInventory(const FInputActionValue& Value);
 
+	/** 현재 상점의 UI를 열거나 닫는다. */
+	void HandleToggleShop(const FInputActionValue& Value);
+
 protected:
+	/** 로컬 플레이어 UI에서 사용할 위젯 클래스 설정이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TObjectPtr<UDRUIConfig> UIConfig;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> ShopAction;
+
+	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점이다. */
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopUIComponent> AvailableShop;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
 #pragma endregion

@@ -7,7 +7,7 @@
 
 class APawn;
 class UDataTable;
-class UDRInteractionComponent;
+class UDRShopAreaComponent;
 class UDRItemDefinition;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
@@ -35,11 +35,11 @@ public:
 
 	/** 상점 접근 상태와 판매 목록을 기준으로 구매 가능 여부를 확인한다. */
 	bool CanPurchase(
-		const APawn* Interactor,
+		const APawn* Pawn,
 		const UDRItemDefinition* ItemDefinition) const;
 
-	/** 플레이어가 현재 상점 상호작용 범위 안에 있는지 확인한다. */
-	bool IsTransactionAllowed(const APawn* Interactor) const;
+	/** 플레이어가 현재 상점 범위 안에 있는지 확인한다. */
+	bool IsTransactionAllowed(const APawn* Pawn) const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -61,5 +61,5 @@ private:
 	TArray<FDRShopItemOffer> ItemOffers;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 };

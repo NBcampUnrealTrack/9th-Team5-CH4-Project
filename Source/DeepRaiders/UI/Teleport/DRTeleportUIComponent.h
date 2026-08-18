@@ -8,6 +8,7 @@ class ADRPlayerController;
 class ADRTeleportPoint;
 class UDRTeleportComponent;
 class UDRTeleportSelectWidget;
+class UDRUIManagerSubsystem;
 
 UCLASS()
 class DEEPRAIDERS_API UDRTeleportUIComponent : public UActorComponent
@@ -22,9 +23,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Teleport|UI")
-	TSubclassOf<UDRTeleportSelectWidget> TeleportSelectWidgetClass;
-
 private:
 	void BindTeleportComponent(UDRTeleportComponent* NewTeleportComponent);
 	void CloseTeleportSelectWidget();
@@ -32,8 +30,14 @@ private:
 	UFUNCTION()
 	void HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint);
 
+	UFUNCTION()
+	void HandleTeleportCloseRequested();
+
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRTeleportComponent> BoundTeleportComponent;
