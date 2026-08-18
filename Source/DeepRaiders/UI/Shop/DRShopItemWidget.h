@@ -19,7 +19,7 @@ class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void SetItemOffer(const FDRShopItemOffer& NewItemOffer);
+	void SetOffer(const FDRShopOfferView& NewOffer);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopItemOfferRequestedSignature OnOfferRequested;
@@ -29,7 +29,7 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
-	void ApplyItemDefinition();
+	void ApplyOffer();
 
 	UFUNCTION()
 	void HandleBuyButtonClicked();
@@ -47,7 +47,7 @@ private:
 	TObjectPtr<UTextBlock> DescriptionText;
 
 	UPROPERTY(Transient)
-	FDRShopItemOffer ItemOffer;
+	FDRShopOfferView Offer;
 
 	bool IsWidgetConstructed = false;
 };

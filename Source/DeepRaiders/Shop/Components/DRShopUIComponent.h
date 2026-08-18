@@ -7,6 +7,7 @@
 
 class APawn;
 class UDRInventoryComponent;
+class UDRPerkComponent;
 class UDRShopAreaComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
@@ -56,8 +57,20 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
+	/** 퍽 등급이 변경되면 다음 구매 가능 등급을 다시 표시한다. */
+	UFUNCTION()
+	void HandlePerksChanged();
+
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
+
+	/** 현재 퍽 등급에 맞는 다음 등급 Offer로 UI를 갱신한다. */
+	void RefreshPerkOffers();
+
+	TArray<FDRShopOfferView> MakeOfferViews(
+		const TArray<FDRShopItemOffer>& Offers,
+		EDRShopOfferType OfferType) const;
+	TArray<FDRShopOfferView> BuildPerkOfferViews() const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
@@ -79,4 +92,7 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRPerkComponent> PerkComponent;
 };

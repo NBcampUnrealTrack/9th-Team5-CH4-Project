@@ -7,6 +7,7 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Shop/DRShop.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -49,14 +50,14 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		: nullptr;
 	UDRInventoryComponent* Inventory = GetInventoryComponent();
 	FDRShopItemTableRow ItemRow;
+	FDRPerkTableRow PerkRow;
 
 	// 클라이언트 요청을 신뢰하지 않고 상점 접근 상태와 Row를 서버에서 다시 확인한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
 		|| Request.RowName.IsNone()
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn())
-		|| !ShopComponent->GetItemRow(Request.RowName, ItemRow))
+		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
 	{
 		return;
 	}
@@ -64,19 +65,33 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	switch (Request.OfferType)
 	{
 	case EDRShopOfferType::Purchase:
-		if (TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
+		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
+			&& TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
 		break;
 
 	case EDRShopOfferType::Upgrade:
-		if (TryUpgrade(
+		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
+			&& TryUpgrade(
 			PlayerState,
 			ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
 			Inventory,
 			ItemRow,
 			Request.TargetLevel))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
+		break;
+
+	case EDRShopOfferType::Perk:
+		if (ShopComponent->GetPerkRow(Request.RowName, PerkRow)
+			&& TryPurchasePerk(
+				PlayerState,
+				PlayerState->GetPerkComponent(),
+				Request.RowName,
+				PerkRow))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
@@ -266,6 +281,34 @@ bool UDRShopTransactionComponent::TryUpgrade(
 
 	PlayerState->SetCoins(
 		PlayerState->GetCoins() - Operation.TargetDefinition->Price);
+	return true;
+}
+
+bool UDRShopTransactionComponent::TryPurchasePerk(
+	ADRPlayerState* PlayerState,
+	UDRPerkComponent* PerkComponent,
+	FName RowName,
+	const FDRPerkTableRow& PerkRow) const
+{
+	if (!IsValid(PlayerState)
+		|| !IsValid(PerkComponent)
+		|| !PerkComponent->CanApplyNextRank(RowName, PerkRow))
+	{
+		return false;
+	}
+
+	const int32 TargetRank = PerkComponent->GetPerkRank(RowName) + 1;
+	const FDRPerkRankData* RankData = PerkRow.GetRankData(TargetRank);
+
+	if (!RankData
+		|| RankData->Price < 0
+		|| PlayerState->GetCoins() < RankData->Price
+		|| !PerkComponent->ApplyNextRank(RowName, PerkRow))
+	{
+		return false;
+	}
+
+	PlayerState->SetCoins(PlayerState->GetCoins() - RankData->Price);
 	return true;
 }
 

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Perk/DRPerkTable.h"
 #include "DeepRaiders/Shop/DRShopItemTable.h"
 #include "DRShopComponent.generated.h"
 
@@ -20,6 +21,7 @@ public:
 
 	/** 상점에서 사용할 DataTable을 설정하고 Offer 목록을 다시 생성한다. */
 	void SetItemTable(UDataTable* NewItemTable);
+	void SetPerkTable(UDataTable* NewPerkTable);
 
 	/** 유효한 상점 DataTable이 설정되어 있는지 확인한다. */
 	bool HasItemTable() const;
@@ -29,6 +31,8 @@ public:
 
 	/** RowName에 해당하는 원본 상점 데이터를 반환한다. */
 	bool GetItemRow(FName RowName, FDRShopItemTableRow& OutItemRow) const;
+	bool GetPerkRow(FName RowName, FDRPerkTableRow& OutPerkRow) const;
+	TArray<FName> GetPerkRowNames() const;
 
 	/** 일반 구매 Offer에 포함된 아이템인지 확인한다. */
 	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;
@@ -56,6 +60,12 @@ private:
 		Category = "Shop|Data",
 		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRShopItemTableRow"))
 	TObjectPtr<UDataTable> ItemTable;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		Category = "Shop|Data",
+		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRPerkTableRow"))
+	TObjectPtr<UDataTable> PerkTable;
 
 	UPROPERTY(Transient)
 	TArray<FDRShopItemOffer> ItemOffers;

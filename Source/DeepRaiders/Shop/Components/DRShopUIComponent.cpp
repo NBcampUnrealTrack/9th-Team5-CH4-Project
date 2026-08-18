@@ -5,7 +5,10 @@
 #include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -109,9 +112,14 @@ void UDRShopUIComponent::ShowShopWidget()
 	ShopTransactionComponent =
 		PlayerController->GetShopTransactionComponent();
 	InventoryComponent = PlayerController->GetInventoryComponent();
+	ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>();
+	PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
 
 	if (!IsValid(ShopTransactionComponent)
-		|| !IsValid(InventoryComponent))
+		|| !IsValid(InventoryComponent)
+		|| !IsValid(PerkComponent))
 	{
 		return;
 	}
@@ -126,8 +134,11 @@ void UDRShopUIComponent::ShowShopWidget()
 	}
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
-	ShopWidget->InitializeShop(ShopComponent->GetItemOffers());
+	ShopWidget->InitializeShop(MakeOfferViews(
+		ShopComponent->GetItemOffers(),
+		EDRShopOfferType::Purchase));
 	RefreshUpgradeOffers();
+	RefreshPerkOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(
 		this,
 		&ThisClass::HideShopWidget);
@@ -140,6 +151,9 @@ void UDRShopUIComponent::ShowShopWidget()
 	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
 		this,
 		&ThisClass::HandleInventoryChanged);
+	PerkComponent->OnPerksChanged.AddDynamic(
+		this,
+		&ThisClass::HandlePerksChanged);
 	ShopWidget->AddToViewport();
 
 	// 상점 UI를 조작할 수 있도록 마우스와 입력 모드를 전환한다.
@@ -174,6 +188,13 @@ void UDRShopUIComponent::HideShopWidget()
 			&ThisClass::HandleInventoryChanged);
 	}
 
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->OnPerksChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandlePerksChanged);
+	}
+
 	APlayerController* PlayerController = IsValid(ShopWidget)
 		? ShopWidget->GetOwningPlayer()
 		: nullptr;
@@ -195,6 +216,7 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopWidget = nullptr;
 	InventoryComponent = nullptr;
 	ShopTransactionComponent = nullptr;
+	PerkComponent = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -226,6 +248,11 @@ void UDRShopUIComponent::HandleInventoryChanged()
 	RefreshUpgradeOffers();
 }
 
+void UDRShopUIComponent::HandlePerksChanged()
+{
+	RefreshPerkOffers();
+}
+
 void UDRShopUIComponent::RefreshUpgradeOffers()
 {
 	if (!IsValid(ShopWidget)
@@ -236,8 +263,113 @@ void UDRShopUIComponent::RefreshUpgradeOffers()
 		return;
 	}
 
-	ShopWidget->SetUpgradeOffers(
+	ShopWidget->SetUpgradeOffers(MakeOfferViews(
 		UpgradeComponent->GetNextUpgradeOffers(
 			ShopComponent,
-			InventoryComponent));
+			InventoryComponent),
+		EDRShopOfferType::Upgrade));
+}
+
+void UDRShopUIComponent::RefreshPerkOffers()
+{
+	if (IsValid(ShopWidget))
+	{
+		ShopWidget->SetPerkOffers(BuildPerkOfferViews());
+	}
+}
+
+TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
+	const TArray<FDRShopItemOffer>& Offers,
+	EDRShopOfferType OfferType) const
+{
+	TArray<FDRShopOfferView> OfferViews;
+
+	for (const FDRShopItemOffer& Offer : Offers)
+	{
+		if (!IsValid(Offer.ItemDefinition))
+		{
+			continue;
+		}
+
+		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
+		OfferView.Request = Offer.MakeRequest();
+		OfferView.Request.OfferType = OfferType;
+		OfferView.Section = OfferType == EDRShopOfferType::Upgrade
+			? EDRShopOfferSection::Upgrade
+			: Offer.ItemDefinition->Category == EItemCategory::Consumable
+				? EDRShopOfferSection::Consumable
+				: EDRShopOfferSection::Equipment;
+		OfferView.DisplayName = Offer.ItemDefinition->DisplayName;
+
+		if (OfferType == EDRShopOfferType::Upgrade
+			&& IsValid(Offer.UpgradeSourceDefinition))
+		{
+			OfferView.DisplayName = FText::Format(
+				FText::FromString(TEXT("{0} → {1}")),
+				Offer.UpgradeSourceDefinition->DisplayName,
+				Offer.ItemDefinition->DisplayName);
+		}
+
+		OfferView.Description = Offer.ItemDefinition->Description;
+		OfferView.Price = Offer.ItemDefinition->Price;
+	}
+
+	return OfferViews;
+}
+
+TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
+{
+	TArray<FDRShopOfferView> OfferViews;
+
+	if (!IsValid(ShopComponent) || !IsValid(PerkComponent))
+	{
+		return OfferViews;
+	}
+
+	for (const FName RowName : ShopComponent->GetPerkRowNames())
+	{
+		FDRPerkTableRow PerkRow;
+
+		if (!ShopComponent->GetPerkRow(RowName, PerkRow))
+		{
+			continue;
+		}
+
+		const int32 CurrentRank = PerkComponent->GetPerkRank(RowName);
+		const int32 TargetRank = CurrentRank + 1;
+		const FDRPerkRankData* RankData = PerkRow.GetRankData(TargetRank);
+
+		if (PerkRow.Ranks.IsEmpty())
+		{
+			FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
+			OfferView.Request.RowName = RowName;
+			OfferView.Request.OfferType = EDRShopOfferType::Perk;
+			OfferView.Section = EDRShopOfferSection::Perk;
+			OfferView.DisplayName = PerkRow.DisplayName;
+			OfferView.IsPurchasable = false;
+			continue;
+		}
+
+		if (!RankData)
+		{
+			continue;
+		}
+
+		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
+		OfferView.Request.RowName = RowName;
+		OfferView.Request.OfferType = EDRShopOfferType::Perk;
+		OfferView.Section = EDRShopOfferSection::Perk;
+		OfferView.DisplayName = FText::Format(
+			FText::FromString(TEXT("{0} 퍽")),
+			PerkRow.DisplayName);
+		// OfferView.DisplayName = FText::Format(
+		// 	FText::FromString(TEXT("{0} Lv.{1} → Lv.{2}")),
+		// 	PerkRow.DisplayName,
+		// 	FText::AsNumber(CurrentRank),
+		// 	FText::AsNumber(TargetRank));
+		OfferView.Description = RankData->Description;
+		OfferView.Price = RankData->Price;
+	}
+
+	return OfferViews;
 }

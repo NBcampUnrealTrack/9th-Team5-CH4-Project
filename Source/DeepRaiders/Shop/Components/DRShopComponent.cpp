@@ -21,6 +21,14 @@ void UDRShopComponent::SetItemTable(UDataTable* NewItemTable)
 	LoadItemOffers();
 }
 
+void UDRShopComponent::SetPerkTable(UDataTable* NewPerkTable)
+{
+	if (IsValid(NewPerkTable))
+	{
+		PerkTable = NewPerkTable;
+	}
+}
+
 bool UDRShopComponent::HasItemTable() const
 {
 	return IsValid(ItemTable);
@@ -50,6 +58,34 @@ bool UDRShopComponent::GetItemRow(
 
 	OutItemRow = *ItemRow;
 	return true;
+}
+
+bool UDRShopComponent::GetPerkRow(
+	FName RowName,
+	FDRPerkTableRow& OutPerkRow) const
+{
+	if (!IsValid(PerkTable) || RowName.IsNone())
+	{
+		return false;
+	}
+
+	const FDRPerkTableRow* PerkRow =
+		PerkTable->FindRow<FDRPerkTableRow>(RowName, TEXT("GetPerkRow"));
+
+	if (!PerkRow || !PerkRow->EffectClass)
+	{
+		return false;
+	}
+
+	OutPerkRow = *PerkRow;
+	return true;
+}
+
+TArray<FName> UDRShopComponent::GetPerkRowNames() const
+{
+	return IsValid(PerkTable)
+		? PerkTable->GetRowNames()
+		: TArray<FName>();
 }
 
 bool UDRShopComponent::IsItemAvailable(
