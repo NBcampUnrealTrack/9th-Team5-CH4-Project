@@ -148,5 +148,8 @@ bool ADRStorage::Interact_Implementation(APawn* Interactor)
 	
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(Interactor->GetController());
 	
-	return IsValid(PlayerController) && PlayerController->TryOpenStorage(this);
+	// DRPlayerController 리팩토링으로 인해 정상적인 사용이 불가능합니다.
+	//return IsValid(PlayerController) && PlayerController->TryOpenStorage(this);
+	ensure(true);
+	return IsValid(PlayerController);
 }

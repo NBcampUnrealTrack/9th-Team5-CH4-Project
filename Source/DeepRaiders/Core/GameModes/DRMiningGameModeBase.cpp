@@ -58,5 +58,6 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
+	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
+	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
 }

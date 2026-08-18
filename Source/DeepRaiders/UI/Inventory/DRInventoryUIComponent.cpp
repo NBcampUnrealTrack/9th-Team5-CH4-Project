@@ -13,8 +13,13 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "GameFramework/PlayerState.h"
 
+// 현재 이 클래스는 사라진 DRPlayerController 코드를 상당수 의존하고 있었기에
+// 사용이 불가능한 클래스입니다.
+
 UDRInventoryUIComponent::UDRInventoryUIComponent()
 {
+	check(true);
+	
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
@@ -35,11 +40,11 @@ void UDRInventoryUIComponent::BeginPlay()
 		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
 	}
 	
-	PlayerController->OnCurrentStorageChangedDelegate.AddDynamic(this, &ThisClass::HandleCurrentStorageChanged);
+	//PlayerController->OnCurrentStorageChangedDelegate.AddDynamic(this, &ThisClass::HandleCurrentStorageChanged);
 	
 	
 	// 최초 실행 초기화
-	HandleCurrentStorageChanged(PlayerController->GetCurrentStorage());
+	//HandleCurrentStorageChanged(PlayerController->GetCurrentStorage());
 }
 
 void UDRInventoryUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -48,7 +53,7 @@ void UDRInventoryUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	
 	if (IsValid(PlayerController))
 	{
-		PlayerController->OnCurrentStorageChangedDelegate.RemoveDynamic(this, &ThisClass::HandleCurrentStorageChanged);
+		//PlayerController->OnCurrentStorageChangedDelegate.RemoveDynamic(this, &ThisClass::HandleCurrentStorageChanged);
 	}
 	
 	HideStorageInventory();
@@ -96,7 +101,7 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 		
 	case EDRInventoryUIState::PlayerAndStorage:
 		CloseInventoryScreen();
-		PlayerController->RequestCloseStorage();
+		//PlayerController->RequestCloseStorage();
 		break;
 	}
 }
@@ -227,7 +232,7 @@ void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid EntryId)
 {
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
-		PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::PlayerToStorage, EntryId);
+		//PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::PlayerToStorage, EntryId);
 	}
 	else if (UIState == EDRInventoryUIState::PlayerOnly)
 	{
@@ -252,7 +257,7 @@ void UDRInventoryUIComponent::HandleStorageEntryClicked(FGuid EntryId)
 {
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
-		PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::StorageToPlayer, EntryId);
+		//PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::StorageToPlayer, EntryId);
 	}
 }
 
@@ -263,7 +268,7 @@ void UDRInventoryUIComponent::HandleCloseRequested()
 	CloseInventoryScreen();
 	if (bHadStorage)
 	{
-		PlayerController->RequestCloseStorage();
+		//PlayerController->RequestCloseStorage();
 	}
 }
 
@@ -280,7 +285,7 @@ void UDRInventoryUIComponent::HandleStorageOwnerChanged(AActor* PreviousOwner, A
 	
 	if (bHadStorage)
 	{
-		PlayerController->RequestCloseStorage();
+		//PlayerController->RequestCloseStorage();
 	}
 }
 
@@ -297,8 +302,8 @@ void UDRInventoryUIComponent::StartStorageDistanceCheck()
 {
 	if (UWorld* World = GetWorld(); IsValid(PlayerController) && IsValid(World))
 	{
-		World->GetTimerManager().SetTimer(StorageDistanceTimerHandle, this, &ThisClass::CheckStorageDistance
-			, PlayerController->GetStorageDistanceCheckInterval(), true);
+		//World->GetTimerManager().SetTimer(StorageDistanceTimerHandle, this, &ThisClass::CheckStorageDistance
+		//	, PlayerController->GetStorageDistanceCheckInterval(), true);
 	}
 }
 
@@ -312,12 +317,12 @@ void UDRInventoryUIComponent::StopStorageDistanceCheck()
 
 void UDRInventoryUIComponent::CheckStorageDistance()
 {
-	ADRStorage* Storage = PlayerController->GetCurrentStorage();
+	//ADRStorage* Storage = PlayerController->GetCurrentStorage();
 	
 	// 플레이어가 창고와 상호작용 가능한 거리인지 체크
-	if (!PlayerController->IsStorageWithinInteractionRange(Storage))
+	//if (!PlayerController->IsStorageWithinInteractionRange(Storage))
 	{
 		CloseInventoryScreen();
-		PlayerController->RequestCloseStorage();
+		//PlayerController->RequestCloseStorage();
 	}
 }
