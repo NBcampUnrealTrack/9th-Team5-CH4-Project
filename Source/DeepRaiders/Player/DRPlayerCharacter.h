@@ -31,6 +31,8 @@ class UAnimMontage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FDROnAbilitySystemReady, UAbilitySystemComponent*);
+
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
  *
@@ -170,6 +172,13 @@ public:
 
 	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
 	
+	FDROnAbilitySystemReady OnAbilitySystemReady;
+
+	bool IsAbilitySystemReady() const
+	{
+		return bAbilitySystemReady;
+	}
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -226,6 +235,10 @@ private:
 	bool bCombatAiming = false;
 
 	FTimerHandle CombatAimTimerHandle;
+	
+	bool bAbilitySystemReady = false;
+
+	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
 	
 #pragma region QuickSlot
 

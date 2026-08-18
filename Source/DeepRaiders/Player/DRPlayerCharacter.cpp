@@ -568,10 +568,27 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 	{
 		PlayerLifecycleComponent->BindAbilitySystem(ASC);
 	}
-	
+
 	const UDRPlayerAttributeSet* RegisteredAttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
 
-	UE_LOG(LogTemp, Warning, TEXT("[GAS][AttributeSet] Direct=%s Registered=%s Same=%d"), *GetNameSafe(DRPlayerState->GetPlayerAttributeSet()), *GetNameSafe(RegisteredAttributeSet), DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
+	if (!IsValid(RegisteredAttributeSet))
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT( "[GAS][AttributeSet] " "Direct=%s Registered=%s Same=%d"), *GetNameSafe(DRPlayerState->GetPlayerAttributeSet()), *GetNameSafe(RegisteredAttributeSet), DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
+
+	/*
+	 * 이 Character에서 PlayerState / ASC /
+	 * AttributeSet을 사용할 준비가 완료된 시점.
+	 */
+	if (!bAbilitySystemReady || ReadyAbilitySystemComponent.Get() != ASC)
+	{
+		ReadyAbilitySystemComponent = ASC;
+		bAbilitySystemReady = true;
+
+		OnAbilitySystemReady.Broadcast(ASC);
+	}
 }
 
 const UDRPlayerAttributeSet* ADRPlayerCharacter::GetPlayerAttributeSet() const

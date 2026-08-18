@@ -36,7 +36,6 @@
 #include "GameplayAbilitySpec.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/UI/Player/DRPlayerHUDWidget.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -88,8 +87,6 @@ void ADRPlayerController::BeginPlay()
 
 	Super::BeginPlay();
 
-	InitializePlayerHUD();
-	
 	/*
 	 * 서버에서 모든 플레이어의 시작 장비를 초기화.
 	 *
@@ -282,50 +279,7 @@ void ADRPlayerController::OnRep_PlayerState()
 {
 	Super::OnRep_PlayerState();
 
-	InitializePlayerHUD();
 	SetupGASInputComponent();
-}
-
-void ADRPlayerController::InitializePlayerHUD()
-{
-	if (!IsLocalController())
-	{
-		return;
-	}
-
-	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-
-	if (!IsValid(DRPlayerState))
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
-
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-
-	if (!IsValid(PlayerHUDWidget))
-	{
-		if (!PlayerHUDWidgetClass)
-		{
-			UE_LOG(LogTemp, Warning, TEXT( "[HUD] PlayerHUDWidgetClass is not assigned."));
-			return;
-		}
-
-		PlayerHUDWidget = CreateWidget<UDRPlayerHUDWidget>(this, PlayerHUDWidgetClass);
-
-		if (!IsValid(PlayerHUDWidget))
-		{
-			return;
-		}
-
-		PlayerHUDWidget->AddToViewport();
-	}
-
-	PlayerHUDWidget->InitializeWithAbilitySystem(ASC);
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
