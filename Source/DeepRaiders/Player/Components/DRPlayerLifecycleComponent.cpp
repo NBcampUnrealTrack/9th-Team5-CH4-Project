@@ -1,7 +1,6 @@
 ﻿#include "DRPlayerLifecycleComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
@@ -15,9 +14,8 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
-#include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 UDRPlayerLifecycleComponent::UDRPlayerLifecycleComponent()
 {
@@ -39,194 +37,98 @@ void UDRPlayerLifecycleComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 
 ADRPlayerCharacter* UDRPlayerLifecycleComponent::GetOwnerCharacter() const
 {
-	return Cast<ADRPlayerCharacter>(
-		GetOwner());
+	return Cast<ADRPlayerCharacter>(GetOwner());
 }
 
-void UDRPlayerLifecycleComponent::HandleLanded(
-	float LandingSpeed)
+void UDRPlayerLifecycleComponent::HandleLanded(float LandingSpeed)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority())
+	if (!IsValid(Character) || !Character->HasAuthority())
 	{
 		return;
 	}
 
-	const float CalculatedFallDamage =
-		CalculateFallDamage(
-			LandingSpeed);
+	const float CalculatedFallDamage = CalculateFallDamage(LandingSpeed);
 
-	ApplyFallDamage(
-		LandingSpeed);
+	ApplyFallDamage(LandingSpeed);
 
-	const bool bDied =
-		Character->IsDead();
-
-	ClientPlayFallFeedback(
-		CalculatedFallDamage >
-			KINDA_SMALL_NUMBER,
-		bDied);
+	const bool bDied = Character->IsDead();
+	ClientPlayFallFeedback(CalculatedFallDamage > KINDA_SMALL_NUMBER, bDied);
 }
 
-float UDRPlayerLifecycleComponent::CalculateFallDamage(
-	float LandingSpeed) const
+float UDRPlayerLifecycleComponent::CalculateFallDamage(float LandingSpeed) const
 {
-	const ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	const ADRPlayerCharacter* Character = GetOwnerCharacter();
 
 	if (!IsValid(Character))
 	{
 		return 0.f;
 	}
 
-	const float CharacterMaxHealth =
-		Character->GetMaxHealth();
+	const float CharacterMaxHealth = Character->GetMaxHealth();
 
-	if (LandingSpeed <=
-			MinFallDamageSpeed ||
-		CharacterMaxHealth <=
-			KINDA_SMALL_NUMBER)
+	if (LandingSpeed <= MinFallDamageSpeed || CharacterMaxHealth <= KINDA_SMALL_NUMBER)
 	{
 		return 0.f;
 	}
 
-	if (MaxFallDamageSpeed <=
-		MinFallDamageSpeed +
-			KINDA_SMALL_NUMBER)
+	if (MaxFallDamageSpeed <= MinFallDamageSpeed + KINDA_SMALL_NUMBER)
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[FallDamage] "
-				"Invalid speed range. "
-				"Character=%s "
-				"MinSpeed=%.1f "
-				"MaxSpeed=%.1f"),
-			*GetNameSafe(Character),
-			MinFallDamageSpeed,
-			MaxFallDamageSpeed);
-
 		return 0.f;
 	}
 
-	const float NormalizedSpeed =
-		FMath::Clamp(
-			(LandingSpeed -
-				MinFallDamageSpeed) /
-			(MaxFallDamageSpeed -
-				MinFallDamageSpeed),
-			0.f,
-			1.f);
-
-	const float DamageAlpha =
-		FMath::Pow(
-			NormalizedSpeed,
-			FMath::Max(
-				FallDamageExponent,
-				0.01f));
-
-	const float MaximumFallDamage =
-		CharacterMaxHealth *
-		FMath::Clamp(
-			MaxFallDamageRatio,
-			0.f,
-			1.f);
-
-	return MaximumFallDamage *
-		DamageAlpha;
+	const float NormalizedSpeed = FMath::Clamp((LandingSpeed - MinFallDamageSpeed) / (MaxFallDamageSpeed - MinFallDamageSpeed), 0.f, 1.f);
+	const float DamageAlpha = FMath::Pow(NormalizedSpeed, FMath::Max(FallDamageExponent, 0.01f));
+	const float MaximumFallDamage = CharacterMaxHealth * FMath::Clamp(MaxFallDamageRatio, 0.f, 1.f);
+	return MaximumFallDamage * DamageAlpha;
 }
 
-void UDRPlayerLifecycleComponent::ApplyFallDamage(
-	float LandingSpeed)
+void UDRPlayerLifecycleComponent::ApplyFallDamage(float LandingSpeed)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority() ||
-		Character->IsDead())
+	if (!IsValid(Character) || !Character->HasAuthority() || Character->IsDead())
 	{
 		return;
 	}
 
-	const float CalculatedDamage =
-		CalculateFallDamage(
-			LandingSpeed);
+	const float CalculatedDamage = CalculateFallDamage(LandingSpeed);
 
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT(
-			"[FallDamage] "
-			"Character=%s "
-			"LandingSpeed=%.1f "
-			"CalculatedDamage=%.1f"),
-		*GetNameSafe(Character),
-		LandingSpeed,
-		CalculatedDamage);
+	UE_LOG(LogTemp, Log, TEXT( "[FallDamage] " "Character=%s " "LandingSpeed=%.1f " "CalculatedDamage=%.1f"), 
+		*GetNameSafe(Character), LandingSpeed, CalculatedDamage);
 
-	if (CalculatedDamage <=
-		KINDA_SMALL_NUMBER)
+	if (CalculatedDamage <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	const float HealthBeforeDamage =
-		Character->GetCurrentHealth();
+	const float HealthBeforeDamage = Character->GetCurrentHealth();
 
-	const float AppliedDamage =
-		UGameplayStatics::ApplyDamage(
-			Character,
-			CalculatedDamage,
-			Character->GetController(),
-			Character,
-			UDamageType::StaticClass());
+	const float AppliedDamage = UGameplayStatics::ApplyDamage(Character, CalculatedDamage, Character->GetController(), Character, UDamageType::StaticClass());
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[FallDamage] "
-			"Applied Character=%s "
-			"LandingSpeed=%.1f "
-			"Damage=%.1f "
-			"Health=%.1f->%.1f"),
-		*GetNameSafe(Character),
-		LandingSpeed,
-		AppliedDamage,
-		HealthBeforeDamage,
-		Character->GetCurrentHealth());
+	UE_LOG(LogTemp, Warning, TEXT( "[FallDamage] " "Applied Character=%s " "LandingSpeed=%.1f " "Damage=%.1f " "Health=%.1f->%.1f"), 
+		*GetNameSafe(Character), LandingSpeed, AppliedDamage, HealthBeforeDamage, Character->GetCurrentHealth());
 }
 
-void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(
-	bool bTookFallDamage,
-	bool bDied)
+void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(bool bTookFallDamage, bool bDied)
 {
-	USoundBase* SoundToPlay =
-		nullptr;
+	USoundBase* SoundToPlay = nullptr;
 
 	if (bDied)
 	{
-		SoundToPlay =
-			FallDeadSound;
+		SoundToPlay = FallDeadSound;
 	}
 	else if (bTookFallDamage)
 	{
-		SoundToPlay =
-			FallDamageSound;
+		SoundToPlay = FallDamageSound;
 	}
 	else
 	{
-		SoundToPlay =
-			FallSound;
+		SoundToPlay = FallSound;
 	}
 
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
 	if (!IsValid(Character))
 	{
@@ -235,693 +137,391 @@ void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(
 
 	if (IsValid(SoundToPlay))
 	{
-		UGameplayStatics::PlaySound2D(
-			Character,
-			SoundToPlay);
+		UGameplayStatics::PlaySound2D(Character, SoundToPlay);
 	}
 
-	if (bTookFallDamage ||
-		bDied)
+	if (bTookFallDamage || bDied)
 	{
-		PlayLocalCameraShake(
-			FallDamageCameraShakeClass,
-			bDied ? 1.4f : 1.f);
+		PlayLocalCameraShake(FallDamageCameraShakeClass, bDied ? 1.4f : 1.f);
 	}
 }
 
-void UDRPlayerLifecycleComponent::PlayLocalCameraShake(
-	TSubclassOf<UCameraShakeBase>
-		ShakeClass,
-	float Scale)
+void UDRPlayerLifecycleComponent::PlayLocalCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, float Scale)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled() ||
-		!ShakeClass)
+	if (!IsValid(Character) || !Character->IsLocallyControlled() || !ShakeClass)
 	{
 		return;
 	}
 
-	APlayerController* PlayerController =
-		Cast<APlayerController>(
-			Character->GetController());
+	APlayerController* PlayerController = Cast<APlayerController>(Character->GetController());
 
-	if (!IsValid(PlayerController) ||
-		!IsValid(
-			PlayerController->
-				PlayerCameraManager))
+	if (!IsValid(PlayerController) || !IsValid(PlayerController->PlayerCameraManager))
 	{
 		return;
 	}
 
-	PlayerController->
-		PlayerCameraManager->
-		StartCameraShake(
-			ShakeClass,
-			Scale,
-			ECameraShakePlaySpace::
-				CameraLocal,
-			FRotator::ZeroRotator);
-}
-
-void UDRPlayerLifecycleComponent::HandleHealthDepleted()
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	if (!IsValid(Character))
-	{
-		return;
-	}
-
-	/*
-	 * 서버:
-	 * 사망 확정 + Respawn Timer.
-	 */
-	if (Character->HasAuthority())
-	{
-		HandleDeathFromServer();
-		return;
-	}
-
-	/*
-	 * Client:
-	 * Health 0 replication을 받은 시점에
-	 * Ragdoll presentation만 적용.
-	 */
-	ApplyDeathRagdoll();
+	PlayerController->PlayerCameraManager->StartCameraShake(
+		ShakeClass, Scale, ECameraShakePlaySpace::CameraLocal, FRotator::ZeroRotator);
 }
 
 void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	if (bDeathRagdollApplied)
+	{
+		return;
+	}
+	
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority() ||
-		!Character->IsDead())
+	if (!IsValid(Character) || !Character->HasAuthority() || !Character->IsDead())
 	{
 		return;
 	}
 
-	if (UAbilitySystemComponent* ASC = BoundASC.Get())
+	if (UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent())
 	{
-		if (DeadEffectClass && !ASC->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
-		{
-			FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		FGameplayTagContainer AttackTags;
 
-			FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(DeadEffectClass, 1.f, Context);
+		AttackTags.AddTag(DRGameplayTags::Ability_Attack);
 
-			if (SpecHandle.IsValid())
-			{
-				ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-			}
-		}
+		ASC->CancelAbilities(&AttackTags, nullptr, nullptr);
 	}
 
-	if (UDRMeleeCombatComponent*
-			MeleeCombat =
-				Character->
-					GetMeleeCombatComponent())
-	{
-		MeleeCombat->CancelAttack();
-	}
-
-	if (UDRJetpackComponent*
-			Jetpack =
-				Character->
-					GetJetpackComponent())
+	if (UDRJetpackComponent* Jetpack = Character->GetJetpackComponent())
 	{
 		Jetpack->StopFromServer();
 	}
 
 	ApplyDeathRagdoll();
 
-	Character->
-		GetWorldTimerManager().
-		SetTimer(
-			RespawnTimerHandle,
-			this,
-			&ThisClass::
-				RespawnAtRagdollLocation,
-			RespawnDelay,
-			false);
+	Character->GetWorldTimerManager().SetTimer(
+		RespawnTimerHandle, this, &ThisClass::RespawnAtRagdollLocation, RespawnDelay, false);
 
 	/*
 	 * 기존 외부 참조를 깨지 않기 위해
 	 * Character Delegate는 그대로 유지.
 	 */
-	Character->
-		OnPlayerCharacterDeathDelegate.
-		Broadcast();
+	Character->OnPlayerCharacterDeathDelegate.Broadcast();
 
 	Character->ForceNetUpdate();
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[Death] "
-			"Character=%s "
-			"RespawnDelay=%.1f"),
-		*GetNameSafe(Character),
-		RespawnDelay);
+	UE_LOG(LogTemp, Warning, TEXT( "[Death] " "Character=%s " "RespawnDelay=%.1f"), *GetNameSafe(Character), RespawnDelay);
 }
 
 void UDRPlayerLifecycleComponent::ApplyDeathRagdoll()
 {
-    if (bDeathRagdollApplied)
-    {
-        return;
-    }
-
-    ADRPlayerCharacter* Character =
-        GetOwnerCharacter();
-
-    if (!IsValid(Character))
-    {
-        return;
-    }
-
-    bDeathRagdollApplied = true;
-
-    /*
-     * 공격 등 현재 재생 중인 Montage 종료.
-     */
-    Character->StopAnimMontage();
-
-    UCharacterMovementComponent* Movement =
-        Character->
-            GetCharacterMovement();
-
-    if (IsValid(Movement))
-    {
-        Movement->
-            StopMovementImmediately();
-
-        Movement->
-            DisableMovement();
-    }
-
-    UCapsuleComponent* Capsule =
-        Character->
-            GetCapsuleComponent();
-
-    if (IsValid(Capsule))
-    {
-        Capsule->SetCollisionEnabled(
-            ECollisionEnabled::
-                NoCollision);
-    }
-
-    USkeletalMeshComponent* CharacterMesh =
-        Character->GetMesh();
-
-    if (IsValid(CharacterMesh))
-    {
-        CharacterMesh->
-            DetachFromComponent(
-                FDetachmentTransformRules::
-                    KeepWorldTransform);
-
-        CharacterMesh->
-            SetCollisionProfileName(
-                TEXT("Ragdoll"));
-
-        CharacterMesh->
-            SetCollisionEnabled(
-                ECollisionEnabled::
-                    QueryAndPhysics);
-
-        CharacterMesh->
-            SetAllBodiesSimulatePhysics(
-                true);
-
-        CharacterMesh->
-            SetSimulatePhysics(
-                true);
-
-        CharacterMesh->
-            WakeAllRigidBodies();
-    }
-
-    if (AController* Controller =
-            Character->GetController())
-    {
-        Controller->
-            SetIgnoreMoveInput(true);
-
-        Controller->
-            SetIgnoreLookInput(true);
-    }
-
-    if (Character->IsLocallyControlled() &&
-        GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(
-            -1,
-            RespawnDelay,
-            FColor::Red,
-            TEXT("YOU DIED"));
-    }
-}
-
-void UDRPlayerLifecycleComponent::RespawnAtRagdollLocation()
-{
-    ADRPlayerCharacter* Character =
-        GetOwnerCharacter();
-
-    if (!IsValid(Character) ||
-        !Character->HasAuthority())
-    {
-        return;
-    }
-
-    UWorld* World =
-        GetWorld();
-
-    if (!IsValid(World))
-    {
-        return;
-    }
-
-    AController* RespawnController =
-        Character->GetController();
-
-    AGameModeBase* GameMode =
-        World->GetAuthGameMode();
-
-    if (!IsValid(RespawnController) ||
-        !IsValid(GameMode))
-    {
-        UE_LOG(
-            LogTemp,
-            Error,
-            TEXT(
-                "[Respawn] "
-                "Invalid Controller or GameMode. "
-                "Character=%s Controller=%s "
-                "GameMode=%s"),
-            *GetNameSafe(Character),
-            *GetNameSafe(
-                RespawnController),
-            *GetNameSafe(GameMode));
-
-        return;
-    }
-
-    /*
-     * 물리를 끄기 전에
-     * Ragdoll 주변의 안전 위치를 찾는다.
-     */
-    FTransform RagdollRespawnTransform;
-
-    const bool
-        bFoundRagdollRespawnLocation =
-            TryFindRagdollRespawnTransform(
-                RagdollRespawnTransform);
-
-    USkeletalMeshComponent* CharacterMesh =
-        Character->GetMesh();
-
-    if (IsValid(CharacterMesh))
-    {
-        CharacterMesh->
-            SetAllBodiesSimulatePhysics(
-                false);
-
-        CharacterMesh->
-            SetSimulatePhysics(
-                false);
-
-        CharacterMesh->
-            SetCollisionEnabled(
-                ECollisionEnabled::
-                    NoCollision);
-
-        CharacterMesh->
-            SetVisibility(
-                false,
-                true);
-    }
-
-    RespawnController->
-        SetIgnoreMoveInput(false);
-
-    RespawnController->
-        SetIgnoreLookInput(false);
-
-    RespawnController->UnPossess();
-
-    if (bFoundRagdollRespawnLocation)
-    {
-        GameMode->
-            RestartPlayerAtTransform(
-                RespawnController,
-                RagdollRespawnTransform);
-    }
-    else
-    {
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "[Respawn] "
-                "Safe ragdoll location "
-                "not found. "
-                "Fallback to PlayerStart. "
-                "Character=%s"),
-            *GetNameSafe(Character));
-
-        GameMode->
-            RestartPlayer(
-                RespawnController);
-    }
-
-    APawn* NewPawn =
-        RespawnController->GetPawn();
-
-    /*
-     * 안전 위치 Spawn 자체가 실패했다면
-     * PlayerStart로 한 번 더 시도.
-     */
-    if ((!IsValid(NewPawn) ||
-         NewPawn == Character) &&
-        bFoundRagdollRespawnLocation)
-    {
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT(
-                "[Respawn] "
-                "Ragdoll location spawn "
-                "failed. Retrying at "
-                "PlayerStart. "
-                "Controller=%s"),
-            *GetNameSafe(
-                RespawnController));
-
-        GameMode->
-            RestartPlayer(
-                RespawnController);
-
-        NewPawn =
-            RespawnController->
-                GetPawn();
-    }
-
-    if (!IsValid(NewPawn) ||
-        NewPawn == Character)
-    {
-        UE_LOG(
-            LogTemp,
-            Error,
-            TEXT(
-                "[Respawn] "
-                "All respawn attempts "
-                "failed. Controller=%s"),
-            *GetNameSafe(
-                RespawnController));
-
-        /*
-         * 새 Pawn 생성 실패.
-         * 기존 Pawn은 Destroy하지 않는다.
-         */
-        return;
-    }
-
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT(
-            "[Respawn] "
-            "OldPawn=%s NewPawn=%s "
-            "UsedRagdollLocation=%d "
-            "Location=%s"),
-        *GetNameSafe(Character),
-        *GetNameSafe(NewPawn),
-        bFoundRagdollRespawnLocation,
-        *NewPawn->
-            GetActorLocation().
-            ToString());
-
-    Character->Destroy();
-}
-
-bool UDRPlayerLifecycleComponent::TryFindRagdollRespawnTransform(
-    FTransform& OutRespawnTransform) const
-{
-    ADRPlayerCharacter* Character =
-        GetOwnerCharacter();
-
-    if (!IsValid(Character))
-    {
-        return false;
-    }
-
-    const UWorld* World =
-        GetWorld();
-
-    const USkeletalMeshComponent*
-        CharacterMesh =
-            Character->GetMesh();
-
-    const UCapsuleComponent*
-        CharacterCapsule =
-            Character->
-                GetCapsuleComponent();
-
-    const UCharacterMovementComponent*
-        MovementComponent =
-            Character->
-                GetCharacterMovement();
-
-    if (!IsValid(World) ||
-        !IsValid(CharacterMesh) ||
-        !IsValid(CharacterCapsule) ||
-        !IsValid(MovementComponent))
-    {
-        return false;
-    }
-
-    FVector RagdollLocation =
-        CharacterMesh->
-            GetComponentLocation();
-
-    if (CharacterMesh->DoesSocketExist(
-            RespawnRagdollBoneName))
-    {
-        RagdollLocation =
-            CharacterMesh->
-                GetSocketLocation(
-                    RespawnRagdollBoneName);
-    }
-
-    const float CapsuleRadius =
-        CharacterCapsule->
-            GetScaledCapsuleRadius();
-
-    const float CapsuleHalfHeight =
-        CharacterCapsule->
-            GetScaledCapsuleHalfHeight();
-
-    const FCollisionShape CapsuleShape =
-        FCollisionShape::MakeCapsule(
-            CapsuleRadius,
-            CapsuleHalfHeight);
-
-    const FName CapsuleCollisionProfile =
-        CharacterCapsule->
-            GetCollisionProfileName();
-
-    FCollisionQueryParams QueryParams(
-        SCENE_QUERY_STAT(
-            RagdollRespawnCapsuleSweep),
-        false,
-        Character);
-
-    QueryParams.AddIgnoredActor(
-        Character);
-
-    TArray<FVector2D> SearchOffsets;
-
-    SearchOffsets.Add(
-        FVector2D::ZeroVector);
-
-    constexpr int32 DirectionCount =
-        8;
-
-    for (int32 RingIndex = 1;
-         RingIndex <=
-            RespawnSearchRingCount;
-         ++RingIndex)
-    {
-        const float SearchDistance =
-            RespawnSearchStep *
-            RingIndex;
-
-        for (int32 DirectionIndex = 0;
-             DirectionIndex <
-                DirectionCount;
-             ++DirectionIndex)
-        {
-            const float AngleRadians =
-                2.f *
-                PI *
-                static_cast<float>(
-                    DirectionIndex) /
-                static_cast<float>(
-                    DirectionCount);
-
-            SearchOffsets.Add(
-                FVector2D(
-                    FMath::Cos(
-                        AngleRadians),
-                    FMath::Sin(
-                        AngleRadians)) *
-                SearchDistance);
-        }
-    }
-
-    for (const FVector2D& Offset :
-         SearchOffsets)
-    {
-        const FVector SearchCenter(
-            RagdollLocation.X +
-                Offset.X,
-            RagdollLocation.Y +
-                Offset.Y,
-            RagdollLocation.Z);
-
-        const FVector SweepStart =
-            SearchCenter +
-            FVector(
-                0.f,
-                0.f,
-                RespawnSweepStartHeight);
-
-        const FVector SweepEnd =
-            SearchCenter -
-            FVector(
-                0.f,
-                0.f,
-                RespawnGroundTraceDistance);
-
-        FHitResult GroundHit;
-
-        const bool bHitGround =
-            World->
-                SweepSingleByProfile(
-                    GroundHit,
-                    SweepStart,
-                    SweepEnd,
-                    FQuat::Identity,
-                    CapsuleCollisionProfile,
-                    CapsuleShape,
-                    QueryParams);
-
-        if (!bHitGround ||
-            GroundHit.bStartPenetrating)
-        {
-            continue;
-        }
-
-        if (!MovementComponent->
-                IsWalkable(GroundHit))
-        {
-            continue;
-        }
-
-        const FVector CandidateLocation =
-            GroundHit.Location +
-            FVector(
-                0.f,
-                0.f,
-                RespawnGroundClearance);
-
-        const bool bBlocked =
-            World->
-                OverlapBlockingTestByProfile(
-                    CandidateLocation,
-                    FQuat::Identity,
-                    CapsuleCollisionProfile,
-                    CapsuleShape,
-                    QueryParams);
-
-        if (bBlocked)
-        {
-            continue;
-        }
-
-        OutRespawnTransform =
-            FTransform(
-                FRotator(
-                    0.f,
-                    Character->
-                        GetActorRotation().
-                        Yaw,
-                    0.f),
-                CandidateLocation,
-                FVector::OneVector);
-
-#if ENABLE_DRAW_DEBUG
-
-        DrawDebugCapsule(
-            World,
-            CandidateLocation,
-            CapsuleHalfHeight,
-            CapsuleRadius,
-            FQuat::Identity,
-            FColor::Green,
-            false,
-            5.f);
-
-#endif
-
-        return true;
-    }
-
-#if ENABLE_DRAW_DEBUG
-
-    DrawDebugSphere(
-        World,
-        RagdollLocation,
-        30.f,
-        16,
-        FColor::Red,
-        false,
-        5.f);
-
-#endif
-
-    return false;
-}
-
-void UDRPlayerLifecycleComponent::HandleControllerReady()
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	if (bDeathRagdollApplied)
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
 	if (!IsValid(Character))
 	{
 		return;
 	}
 
-	AController* Controller =
-		Character->GetController();
+	bDeathRagdollApplied = true;
+
+	/*
+	 * 공격 등 현재 재생 중인 Montage 종료.
+	 */
+	Character->StopAnimMontage();
+
+	UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+
+	if (IsValid(Movement))
+	{
+		Movement->StopMovementImmediately();
+
+		Movement->DisableMovement();
+	}
+
+	UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+
+	if (IsValid(Capsule))
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+
+	if (IsValid(CharacterMesh))
+	{
+		CharacterMesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		CharacterMesh->SetCollisionProfileName(TEXT("Ragdoll"));
+		CharacterMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		CharacterMesh->SetAllBodiesSimulatePhysics(true);
+		CharacterMesh->SetSimulatePhysics(true);
+		CharacterMesh->WakeAllRigidBodies();
+	}
+
+	if (AController* Controller = Character->GetController())
+	{
+		Controller->SetIgnoreMoveInput(true);
+		Controller->SetIgnoreLookInput(true);
+	}
+
+	if (Character->IsLocallyControlled() && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, RespawnDelay, FColor::Red, TEXT("YOU DIED"));
+	}
+}
+
+void UDRPlayerLifecycleComponent::ClearDeathRagdollPresentation()
+{
+	if (!bDeathRagdollApplied)
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+
+	if (IsValid(CharacterMesh))
+	{
+		/*
+		 * 이전 Pawn은 곧 Destroy될 것이므로
+		 * 다시 Capsule에 붙이거나 Walking으로
+		 * 복구하지 않는다.
+		 *
+		 * 남아있는 Ragdoll 표현만 제거한다.
+		 */
+		CharacterMesh->SetAllBodiesSimulatePhysics(false);
+		CharacterMesh->SetSimulatePhysics(false);
+		CharacterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CharacterMesh->SetVisibility(false, true);
+	}
+
+	bDeathRagdollApplied = false;
+}
+
+void UDRPlayerLifecycleComponent::RespawnAtRagdollLocation()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character) || !Character->HasAuthority())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	AController* RespawnController = Character->GetController();
+
+	AGameModeBase* GameMode = World->GetAuthGameMode();
+
+	if (!IsValid(RespawnController) || !IsValid(GameMode))
+	{
+		UE_LOG(LogTemp, Error, TEXT( "[Respawn] " "Invalid Controller or GameMode. " "Character=%s Controller=%s " "GameMode=%s"), 
+			*GetNameSafe(Character), *GetNameSafe( RespawnController), *GetNameSafe(GameMode));
+
+		return;
+	}
+
+	/*
+	 * 물리를 끄기 전에
+	 * Ragdoll 주변의 안전 위치를 찾는다.
+	 */
+	FTransform RagdollRespawnTransform;
+
+	const bool bFoundRagdollRespawnLocation = TryFindRagdollRespawnTransform(RagdollRespawnTransform);
+	
+	/*
+	 * ASC는 PlayerState에 유지되므로
+	 * 새 Pawn을 생성하기 전에 이전 생명주기의
+	 * 상태를 먼저 정리한다.
+	 */
+	if (ADRPlayerState* PlayerState =
+		Character->GetPlayerState<ADRPlayerState>())
+	{
+		PlayerState->ResetForRespawn();
+	}
+	
+	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+
+	if (IsValid(CharacterMesh))
+	{
+		CharacterMesh->SetAllBodiesSimulatePhysics(false);
+		CharacterMesh->SetSimulatePhysics(false);
+		CharacterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CharacterMesh->SetVisibility(false, true);
+	}
+
+	RespawnController->SetIgnoreMoveInput(false);
+	RespawnController->SetIgnoreLookInput(false);
+	RespawnController->UnPossess();
+
+	if (bFoundRagdollRespawnLocation)
+	{
+		GameMode->RestartPlayerAtTransform(RespawnController, RagdollRespawnTransform);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT( "[Respawn] " "Safe ragdoll location " "not found. " "Fallback to PlayerStart. " "Character=%s"), *GetNameSafe(Character));
+
+		GameMode->RestartPlayer(RespawnController);
+	}
+
+	APawn* NewPawn = RespawnController->GetPawn();
+
+	/*
+	 * 안전 위치 Spawn 자체가 실패했다면
+	 * PlayerStart로 한 번 더 시도.
+	 */
+	if ((!IsValid(NewPawn) || NewPawn == Character) && bFoundRagdollRespawnLocation)
+	{
+		UE_LOG(LogTemp, Warning, TEXT( "[Respawn] " "Ragdoll location spawn " "failed. Retrying at " "PlayerStart. " "Controller=%s"), 
+			*GetNameSafe( RespawnController));
+
+		GameMode->RestartPlayer(RespawnController);
+		NewPawn = RespawnController->GetPawn();
+	}
+
+	if (!IsValid(NewPawn) || NewPawn == Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT( "[Respawn] " "All respawn attempts " "failed. Controller=%s"), *GetNameSafe( RespawnController));
+
+		/*
+		 * 새 Pawn 생성 실패.
+		 * 기존 Pawn은 Destroy하지 않는다.
+		 */
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT( "[Respawn] " "OldPawn=%s NewPawn=%s " "UsedRagdollLocation=%d " "Location=%s"), 
+		*GetNameSafe(Character), *GetNameSafe(NewPawn), bFoundRagdollRespawnLocation, *NewPawn-> GetActorLocation(). ToString());
+
+	Character->Destroy();
+}
+
+bool UDRPlayerLifecycleComponent::TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character))
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+	const USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+	const UCapsuleComponent* CharacterCapsule = Character->GetCapsuleComponent();
+	const UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement();
+
+	if (!IsValid(World) || !IsValid(CharacterMesh) || !IsValid(CharacterCapsule) || !IsValid(MovementComponent))
+	{
+		return false;
+	}
+
+	FVector RagdollLocation = CharacterMesh->GetComponentLocation();
+
+	if (CharacterMesh->DoesSocketExist(RespawnRagdollBoneName))
+	{
+		RagdollLocation = CharacterMesh->GetSocketLocation(RespawnRagdollBoneName);
+	}
+
+	const float CapsuleRadius = CharacterCapsule->GetScaledCapsuleRadius();
+	const float CapsuleHalfHeight = CharacterCapsule->GetScaledCapsuleHalfHeight();
+	const FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
+	const FName CapsuleCollisionProfile = CharacterCapsule->GetCollisionProfileName();
+	
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(RagdollRespawnCapsuleSweep), false, Character);
+	QueryParams.AddIgnoredActor(Character);
+	
+	TArray<FVector2D> SearchOffsets;
+	SearchOffsets.Add(FVector2D::ZeroVector);
+
+	constexpr int32 DirectionCount = 8;
+	for (int32 RingIndex = 1; RingIndex <= RespawnSearchRingCount; ++RingIndex)
+	{
+		const float SearchDistance = RespawnSearchStep * RingIndex;
+
+		for (int32 DirectionIndex = 0; DirectionIndex < DirectionCount; ++DirectionIndex)
+		{
+			const float AngleRadians = 2.f * PI * static_cast<float>(DirectionIndex) / static_cast<float>(DirectionCount);
+			SearchOffsets.Add(FVector2D(FMath::Cos(AngleRadians), FMath::Sin(AngleRadians)) * SearchDistance);
+		}
+	}
+
+	for (const FVector2D& Offset : SearchOffsets)
+	{
+		const FVector SearchCenter(RagdollLocation.X + Offset.X, RagdollLocation.Y + Offset.Y, RagdollLocation.Z);
+		const FVector SweepStart = SearchCenter + FVector(0.f, 0.f, RespawnSweepStartHeight);
+		const FVector SweepEnd = SearchCenter - FVector(0.f, 0.f, RespawnGroundTraceDistance);
+
+		FHitResult GroundHit;
+		const bool bHitGround = World->SweepSingleByProfile(GroundHit, SweepStart, SweepEnd, FQuat::Identity, CapsuleCollisionProfile, CapsuleShape, QueryParams);
+		if (!bHitGround || GroundHit.bStartPenetrating)
+		{
+			continue;
+		}
+
+		if (!MovementComponent->IsWalkable(GroundHit))
+		{
+			continue;
+		}
+
+		const FVector CandidateLocation = GroundHit.Location + FVector(0.f, 0.f, RespawnGroundClearance);
+		const bool bBlocked = World->OverlapBlockingTestByProfile(CandidateLocation, FQuat::Identity, CapsuleCollisionProfile, CapsuleShape, QueryParams);
+
+		if (bBlocked)
+		{
+			continue;
+		}
+
+		OutRespawnTransform = FTransform(FRotator(0.f, Character->GetActorRotation().Yaw, 0.f), CandidateLocation, FVector::OneVector);
+
+#if ENABLE_DRAW_DEBUG
+
+		DrawDebugCapsule(World, CandidateLocation, CapsuleHalfHeight, CapsuleRadius, FQuat::Identity, FColor::Green, false, 5.f);
+
+#endif
+
+		return true;
+	}
+
+#if ENABLE_DRAW_DEBUG
+
+	DrawDebugSphere(World, RagdollLocation, 30.f, 16, FColor::Red, false, 5.f);
+
+#endif
+
+	return false;
+}
+
+void UDRPlayerLifecycleComponent::HandleControllerReady()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	AController* Controller = Character->GetController();
 
 	if (!IsValid(Controller))
 	{
 		return;
 	}
 
-	Controller->
-		SetIgnoreMoveInput(false);
-
-	Controller->
-		SetIgnoreLookInput(false);
+	Controller->SetIgnoreMoveInput(false);
+	Controller->SetIgnoreLookInput(false);
 }
 
 void UDRPlayerLifecycleComponent::BindAbilitySystem(UAbilitySystemComponent* ASC)
@@ -935,37 +535,56 @@ void UDRPlayerLifecycleComponent::BindAbilitySystem(UAbilitySystemComponent* ASC
 
 	BoundASC = ASC;
 
-	HealthChangedDelegateHandle =
-		ASC->GetGameplayAttributeValueChangeDelegate(
-			UDRPlayerAttributeSet::GetHealthAttribute())
-		.AddUObject(
-			this,
-			&ThisClass::HandleHealthChanged);
+	DeadTagChangedHandle = ASC->RegisterGameplayTagEvent(
+		DRGameplayTags::State_Dead, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::HandleDeadTagChanged);
 }
 
 void UDRPlayerLifecycleComponent::UnbindAbilitySystem()
 {
-	if (BoundASC.IsValid() &&
-		HealthChangedDelegateHandle.IsValid())
+	if (BoundASC.IsValid() && DeadTagChangedHandle.IsValid())
 	{
-		BoundASC->
-			GetGameplayAttributeValueChangeDelegate(
-				UDRPlayerAttributeSet::
-					GetHealthAttribute())
-			.Remove(
-				HealthChangedDelegateHandle);
+		BoundASC->RegisterGameplayTagEvent(DRGameplayTags::State_Dead, EGameplayTagEventType::NewOrRemoved).Remove(DeadTagChangedHandle);
 	}
 
-	HealthChangedDelegateHandle.Reset();
+	DeadTagChangedHandle.Reset();
 	BoundASC.Reset();
 }
 
-void UDRPlayerLifecycleComponent::HandleHealthChanged(const FOnAttributeChangeData& Data)
+void UDRPlayerLifecycleComponent::HandleDeadTagChanged(const FGameplayTag CallbackTag, int32 NewCount)
 {
-	if (Data.NewValue > KINDA_SMALL_NUMBER)
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character))
 	{
 		return;
 	}
 
-	HandleHealthDepleted();
+	/*
+	 * State.Dead 제거.
+	 *
+	 * ASC가 PlayerState에 있기 때문에 Respawn 시
+	 * 기존 Pawn의 Lifecycle도 이 이벤트를 받을 수 있다.
+	 *
+	 * 기존 Pawn의 Client Ragdoll 표현을 여기서 정리한다.
+	 */
+	if (NewCount <= 0)
+	{
+		ClearDeathRagdollPresentation();
+		return;
+	}
+
+	/*
+	 * State.Dead 추가.
+	 */
+	if (Character->HasAuthority())
+	{
+		HandleDeathFromServer();
+		return;
+	}
+
+	/*
+	 * Client는 State.Dead 복제를 통해
+	 * 사망 표현만 실행한다.
+	 */
+	ApplyDeathRagdoll();
 }

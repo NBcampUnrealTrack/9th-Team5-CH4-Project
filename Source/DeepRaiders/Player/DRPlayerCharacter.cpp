@@ -191,7 +191,8 @@ float ADRPlayerCharacter::GetHealthRatio() const
 
 bool ADRPlayerCharacter::IsDead() const
 {
-	return GetCurrentHealth() <= KINDA_SMALL_NUMBER;
+	const UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	return IsValid(ASC) && ASC->HasMatchingGameplayTag(DRGameplayTags::State_Dead);
 }
 
 float ADRPlayerCharacter::GetMaxHealth() const
@@ -255,21 +256,24 @@ void ADRPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 
-	InitializeAbilitySystem();
-
+	/*
+	 * ASC가 PlayerState에 있으므로
+	 * 이전 Pawn의 Dead/Frozen/Attribute 상태를
+	 * 새 Avatar와 연결하기 전에 먼저 정리한다.
+	 */
 	if (HasAuthority())
 	{
 		ApplySpawnAttributeReset();
 	}
-	
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		const UDRPlayerAttributeSet* AttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
 
-		UE_LOG(LogTemp, Warning, TEXT("[GAS][GE_TestAddSnow] Snow=%.1f"), AttributeSet ? AttributeSet->GetSnowGauge() : -1.f);
-	}
+	/*
+	 * 깨끗한 ASC 상태가 된 후
+	 * 새 Character를 Avatar로 연결한다.
+	 */
+	InitializeAbilitySystem();
 
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][PossessedBy] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), *GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe(GetAbilitySystemComponent()));
+	UE_LOG(LogTemp, Warning, TEXT( "[GAS][PossessedBy] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), 
+		*GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe( GetAbilitySystemComponent()));
 
 	if (IsValid(PlayerLifecycleComponent))
 	{

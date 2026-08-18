@@ -112,7 +112,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
 	TSubclassOf<UGameplayEffect> FrozenEffectClass;
-
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
+	TSubclassOf<UGameplayEffect> DeadEffectClass;
+	
+	void HandleHealthChanged(const FOnAttributeChangeData& Data);
+	void EvaluateDeadState();
+	FDelegateHandle HealthChangedHandle;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
 
@@ -129,7 +136,7 @@ protected:
 
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
-
+	
 	void EvaluateFrozenState();
 
 	// Freeze Decay
@@ -147,7 +154,6 @@ protected:
 	float FreezeDecayRatePerSecond = 10.f;
 
 	FTimerHandle FreezeDecayTimerHandle;
-
 	FDelegateHandle FreezeGaugeChangedHandle;
 	FDelegateHandle MaxFreezeGaugeChangedHandle;
 	

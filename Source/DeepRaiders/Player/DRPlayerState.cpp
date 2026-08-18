@@ -139,7 +139,7 @@ void ADRPlayerState::ResetForRespawn()
 
 	ClearFrozenState();
 	
-	// Dead 상태도 이후 BP_GE_Dead를 사용하게 될 것을 고려해 제거
+	// 이전 생명주기의 Dead 상태 Effect 제거
 	{
 		FGameplayTagContainer TempTags;
 		TempTags.AddTag(DRGameplayTags::State_Dead);
@@ -185,6 +185,8 @@ void ADRPlayerState::BeginPlay()
 	if (HasAuthority())
 	{
 		BindStatusPolicy();
+
+		EvaluateDeadState();
 		EvaluateFrozenState();
 	}
 }
@@ -195,6 +197,58 @@ void ADRPlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	UnbindStatusPolicy();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRPlayerState::HandleHealthChanged(const FOnAttributeChangeData& Data)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	/*
+	 * 살아있다가 Health가 0 이하가 된
+	 * 순간만 Death 상태 평가.
+	 */
+	if (Data.OldValue > KINDA_SMALL_NUMBER && Data.NewValue <= KINDA_SMALL_NUMBER)
+	{
+		EvaluateDeadState();
+	}
+}
+
+void ADRPlayerState::EvaluateDeadState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !DeadEffectClass)
+	{
+		return;
+	}
+
+	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	{
+		return;
+	}
+
+	const UDRPlayerAttributeSet* Attributes = AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>();
+
+	if (!IsValid(Attributes) || Attributes->GetHealth() > KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	/*
+	 * 죽은 동안 Freeze Decay 같은
+	 * 살아있는 플레이어용 Timer는 중단.
+	 */
+	StopFreezeDecay();
+
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(DeadEffectClass, 1.f, Context);
+	if (!SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 }
 
 void ADRPlayerState::GrantDefaultAbilities()
@@ -259,6 +313,15 @@ void ADRPlayerState::BindStatusPolicy()
 			.AddUObject(
 				this,
 				&ThisClass::HandleMaxFreezeGaugeChanged);
+	
+	HealthChangedHandle =
+		AbilitySystemComponent->
+			GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetHealthAttribute())
+			.AddUObject(
+				this,
+				&ThisClass::HandleHealthChanged);
 }
 
 void ADRPlayerState::UnbindStatusPolicy()
@@ -275,6 +338,7 @@ void ADRPlayerState::UnbindStatusPolicy()
 				UDRPlayerAttributeSet::
 					GetFreezeGaugeAttribute())
 			.Remove(FreezeGaugeChangedHandle);
+		FreezeGaugeChangedHandle.Reset();
 	}
 
 	if (MaxFreezeGaugeChangedHandle.IsValid())
@@ -284,10 +348,19 @@ void ADRPlayerState::UnbindStatusPolicy()
 				UDRPlayerAttributeSet::
 					GetMaxFreezeGaugeAttribute())
 			.Remove(MaxFreezeGaugeChangedHandle);
+		MaxFreezeGaugeChangedHandle.Reset();
 	}
-
-	FreezeGaugeChangedHandle.Reset();
-	MaxFreezeGaugeChangedHandle.Reset();
+	
+	if (HealthChangedHandle.IsValid())
+	{
+		AbilitySystemComponent->
+			GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetHealthAttribute())
+			.Remove(
+				HealthChangedHandle);
+		HealthChangedHandle.Reset();
+	}
 }
 
 void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data)
@@ -329,6 +402,11 @@ void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
 
 void ADRPlayerState::EvaluateFrozenState()
 {
+	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	{
+		return;
+	}
+	
 	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !FrozenEffectClass)
 	{
 		return;
