@@ -9,6 +9,7 @@
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
+class UDRPerkComponent;
 class UGameplayAbility;
 class UGameplayEffect;
 struct FOnAttributeChangeData;
@@ -33,6 +34,11 @@ public:
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
 	{
 		return PlayerAttributeSet;
+	}
+
+	UDRPerkComponent* GetPerkComponent() const
+	{
+		return PerkComponent;
 	}
 	
 	virtual void GetLifetimeReplicatedProps(
@@ -130,6 +136,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
+	TObjectPtr<UDRPerkComponent> PerkComponent;
 
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();
