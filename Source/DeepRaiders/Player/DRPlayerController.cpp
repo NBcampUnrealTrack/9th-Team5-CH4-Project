@@ -887,6 +887,21 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	}
 }
 
+void ADRPlayerController::SetAvailableShop(
+	UDRShopUIComponent* ShopUIComponent)
+{
+	AvailableShop = ShopUIComponent;
+}
+
+void ADRPlayerController::ClearAvailableShop(
+	UDRShopUIComponent* ShopUIComponent)
+{
+	if (AvailableShop == ShopUIComponent)
+	{
+		AvailableShop = nullptr;
+	}
+}
+
 void ADRPlayerController::OnRep_CurrentStorage()
 {
 	OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
