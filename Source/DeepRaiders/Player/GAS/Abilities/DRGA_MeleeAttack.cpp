@@ -1,7 +1,8 @@
 ﻿#include "DRGA_MeleeAttack.h"
 
 #include "AbilitySystemComponent.h"
-#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/DRMeleeWeaponDefinition.h"
@@ -15,11 +16,7 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 }
 
-void UDRGA_MeleeAttack::ActivateAbility(
-	const FGameplayAbilitySpecHandle Handle, 
-	const FGameplayAbilityActorInfo* ActorInfo, 
-	const FGameplayAbilityActivationInfo ActivationInfo, 
-	const FGameplayEventData* TriggerEventData)
+void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
@@ -32,7 +29,7 @@ void UDRGA_MeleeAttack::ActivateAbility(
 
 	UDRMeleeWeaponItemDefinition* WeaponDefinition = Cast<UDRMeleeWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
-	if (!IsValid(WeaponDefinition) || !IsValid(Character) || !WeaponDefinition->DamageEffectClass)
+	if (!IsValid(WeaponDefinition) || !IsValid(Character) || !WeaponDefinition->DamageEffectClass || !IsValid(WeaponDefinition->ItemAnimationSet) || !IsValid(WeaponDefinition->ItemAnimationSet->PrimaryActionMontage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 
@@ -83,25 +80,24 @@ void UDRGA_MeleeAttack::ActivateAbility(
 			return;
 		}
 	}
+	UAnimMontage* AttackMontage = WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
 
-	/*
-	 * Client/Server 양쪽의 Ability Lifetime을
-	 * AttackDuration과 맞춘다.
-	 */
-	UAbilityTask_WaitDelay* WaitTask = UAbilityTask_WaitDelay::WaitDelay(this, WeaponDefinition->AttackDuration);
+	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, 1.f, NAME_None, true);
 
-	if (!IsValid(WaitTask))
+	if (!IsValid(MontageTask))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 
 		return;
 	}
 
-	const FName FunctionName = GET_FUNCTION_NAME_CHECKED(UDRGA_MeleeAttack, HandleAttackDurationFinished);
-	ensureMsgf(FindFunction(FunctionName) != nullptr, TEXT( "[MeleeGA] Reflected function missing: %s"), *FunctionName.ToString());
-	WaitTask->OnFinish.AddDynamic(this, &UDRGA_MeleeAttack::HandleAttackDurationFinished);
+	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
 
-	WaitTask->ReadyForActivation();
+	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+
+	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+
+	MontageTask->ReadyForActivation();
 }
 
 void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
@@ -176,7 +172,7 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	const float HealthBefore = Target->GetCurrentHealth();
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddSourceObject(WeaponDefinition);
-	
+
 	FGameplayEffectSpecHandle DamageSpec = SourceASC->MakeOutgoingSpec(WeaponDefinition->DamageEffectClass, GetAbilityLevel(), Context);
 	if (!DamageSpec.IsValid())
 	{
@@ -195,17 +191,7 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	Attacker->PlayMeleeHitPresentationFromServer(Target, bKilled, HitResult.ImpactPoint);
 }
 
-void UDRGA_MeleeAttack::HandleAttackDurationFinished()
-{
-	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
-}
-
-void UDRGA_MeleeAttack::EndAbility(
-	const FGameplayAbilitySpecHandle Handle, 
-	const FGameplayAbilityActorInfo* ActorInfo, 
-	const FGameplayAbilityActivationInfo ActivationInfo, 
-	bool bReplicateEndAbility, 
-	bool bWasCancelled)
+void UDRGA_MeleeAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
 	{
@@ -226,4 +212,24 @@ void UDRGA_MeleeAttack::EndAbility(
 	ActiveWeaponDefinition.Reset();
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+}
+
+void UDRGA_MeleeAttack::HandleMontageCompleted()
+{
+	if (!IsActive())
+	{
+		return;
+	}
+
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
+}
+
+void UDRGA_MeleeAttack::HandleMontageInterrupted()
+{
+	if (!IsActive())
+	{
+		return;
+	}
+
+	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
 }

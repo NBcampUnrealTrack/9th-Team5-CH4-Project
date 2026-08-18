@@ -35,11 +35,7 @@ UDRMeleeCombatComponent::UDRMeleeCombatComponent()
 
 bool UDRMeleeCombatComponent::StartAttackFromAbility(UDRMeleeWeaponItemDefinition* WeaponDefinition)
 {
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	UWorld* World = GetWorld();
-
-	if (!IsValid(Character) || !IsValid(World) || !CanStartAttackFromAbility(WeaponDefinition))
+	if (!CanStartAttackFromAbility(WeaponDefinition))
 	{
 		return false;
 	}
@@ -50,25 +46,6 @@ bool UDRMeleeCombatComponent::StartAttackFromAbility(UDRMeleeWeaponItemDefinitio
 	bHasPreviousSweepSample = false;
 
 	AlreadyHitActors.Reset();
-
-	/*
-	 * 공격 자체의 월드 연출은
-	 * 기존 Presentation 시스템 재사용.
-	 */
-	Character->PlayMeleeWorldPresentationFromServer();
-
-	if (TraceMode == EDRMeleeTraceMode::ViewLine)
-	{
-		World->GetTimerManager().SetTimer(
-			MeleeHitTimerHandle, this, &ThisClass::PerformHitCheck, WeaponDefinition->AttackHitTime, false);
-	}
-
-	/*
-	 * Component도 안전장치로 공격 Window를
-	 * 자체 종료시킨다.
-	 */
-	World->GetTimerManager().SetTimer(
-		MeleeFinishTimerHandle, this, &ThisClass::FinishAttack, WeaponDefinition->AttackDuration, false);
 
 	return true;
 }
@@ -104,63 +81,11 @@ ADRPlayerCharacter* UDRMeleeCombatComponent::GetOwnerCharacter() const
 	return Cast<ADRPlayerCharacter>(GetOwner());
 }
 
-void UDRMeleeCombatComponent::PerformHitCheck()
-{
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	if (!IsValid(Character) || !Character->HasAuthority() || !bIsAttacking || TraceMode != EDRMeleeTraceMode::ViewLine)
-	{
-		return;
-	}
-
-	PerformLineTrace();
-}
-
-void UDRMeleeCombatComponent::PerformLineTrace()
-{
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	UWorld* World = GetWorld();
-
-	if (!IsValid(Character) || !IsValid(World))
-	{
-		return;
-	}
-
-	const FVector TraceStart = Character->GetPawnViewLocation();
-	const FRotator AimRotation = Character->GetBaseAimRotation();
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(MeleeAttackLineTrace), false, Character);
-	QueryParams.AddIgnoredActor(Character);
-
-	UDRMeleeWeaponItemDefinition* WeaponDefinition = ActiveWeaponDefinition.Get();
-	if (!IsValid(WeaponDefinition))
-	{
-		return;
-	}
-	const FVector TraceEnd = TraceStart + AimRotation.Vector() * WeaponDefinition->AttackRange;
-	FHitResult HitResult;
-	const bool bHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams);
-
-#if ENABLE_DRAW_DEBUG
-	if (bDrawDebug)
-	{
-		DrawDebugLine(World, TraceStart, TraceEnd, bHit ? FColor::Green : FColor::Red, false, 1.5f, 0, 2.f);
-	}
-#endif
-
-	if (!bHit)
-	{
-		return;
-	}
-
-	ProcessHit(HitResult);
-}
-
 void UDRMeleeCombatComponent::SampleWeaponSweep(UAnimSequenceBase* Animation, const float SampleTime)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) || !Character->HasAuthority() || !bIsAttacking || TraceMode != EDRMeleeTraceMode::WeaponSweep)
+	if (!IsValid(Character) || !Character->HasAuthority() || !bIsAttacking)
 	{
 		return;
 	}
@@ -555,22 +480,6 @@ void UDRMeleeCombatComponent::ProcessHit(const FHitResult& HitResult)
 	OnMeleeHitDetected.Broadcast(HitResult);
 }
 
-void UDRMeleeCombatComponent::FinishAttack()
-{
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	if (!IsValid(Character) || !Character->HasAuthority())
-	{
-		return;
-	}
-
-	bHasPreviousSweepSample = false;
-	bIsAttacking = false;
-	
-	AlreadyHitActors.Reset();
-	ActiveWeaponDefinition.Reset();
-}
-
 void UDRMeleeCombatComponent::CancelAttack()
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
@@ -580,15 +489,9 @@ void UDRMeleeCombatComponent::CancelAttack()
 		return;
 	}
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(MeleeHitTimerHandle);
-		World->GetTimerManager().ClearTimer(MeleeFinishTimerHandle);
-	}
-
 	bHasPreviousSweepSample = false;
 	bIsAttacking = false;
-	
+
 	AlreadyHitActors.Reset();
 	ActiveWeaponDefinition.Reset();
 }

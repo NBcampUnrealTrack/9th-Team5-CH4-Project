@@ -49,11 +49,11 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
 
-	UAnimMontage* FireMontage = nullptr;
+	UAnimMontage* PrimaryActionMontage = nullptr;
 
 	if (IsValid(WeaponDefinition->ItemAnimationSet))
 	{
-		FireMontage = WeaponDefinition->ItemAnimationSet->FireMontage;
+		PrimaryActionMontage = WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
 	}
 
 	if (IsValid(Character))
@@ -63,18 +63,18 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		Character->RefreshCombatAim(AimHoldDuration);
 
 		// Remote owning client 예측 재생
-		if (!ActorInfo->IsNetAuthority() && Character->IsLocallyControlled() && IsValid(FireMontage))
+		if (!ActorInfo->IsNetAuthority() && Character->IsLocallyControlled() && IsValid(PrimaryActionMontage))
 		{
-			Character->PlayWeaponFirePresentationLocal(FireMontage);
+			Character->PlayWeaponFirePresentationLocal(PrimaryActionMontage);
 		}
 	}
 
 	// 실제 게임 결과는 서버
 	if (ActorInfo->IsNetAuthority())
 	{
-		if (IsValid(Character) && IsValid(FireMontage))
+		if (IsValid(Character) && IsValid(PrimaryActionMontage))
 		{
-			Character->PlayWeaponFirePresentationFromServer(FireMontage);
+			Character->PlayWeaponFirePresentationFromServer(PrimaryActionMontage);
 		}
 
 		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
