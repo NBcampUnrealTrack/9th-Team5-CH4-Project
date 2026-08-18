@@ -29,14 +29,15 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility,
 		bool bWasCancelled) override;
+	
+	UFUNCTION()
+	void HandleMontageCompleted();
 
 	UFUNCTION()
-	void HandleAttackDurationFinished();
+	void HandleMontageInterrupted();
 
 private:
 	void HandleMeleeHit(const FHitResult& HitResult);
-
-	UDRMeleeCombatComponent* ResolveMeleeComponent() const;
 
 	TWeakObjectPtr<UDRMeleeCombatComponent> ActiveMeleeComponent;
 	TWeakObjectPtr<UDRMeleeWeaponItemDefinition> ActiveWeaponDefinition;

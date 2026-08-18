@@ -11,12 +11,6 @@
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 
-namespace
-{
-	const FName FirstPersonSwingTrackName(
-		TEXT("FirstPersonSwing"));
-}
-
 UDRItemActionPresentationComponent::UDRItemActionPresentationComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -159,10 +153,6 @@ UAnimMontage* UDRItemActionPresentationComponent::ResolveWorldActionMontage(
 	{
 	case EDRItemActionType::Dig:
 		return WorldDigMontage;
-
-	case EDRItemActionType::MeleeAttack:
-		return WorldMeleeAttackMontage;
-
 	case EDRItemActionType::Throw:
 	case EDRItemActionType::None:
 	default:
@@ -273,8 +263,8 @@ void UDRItemActionPresentationComponent::MulticastPlayMeleeImpactSound_Implement
 	}
 
 	/*
-	 * 공격한 본인은 1인칭 피드백이므로
-	 * 2D Sound.
+	 * 공격한 로컬 플레이어에게는
+	 * 위치 감쇠 없이 즉시 피드백한다.
 	 */
 	if (Character->IsLocallyControlled())
 	{
