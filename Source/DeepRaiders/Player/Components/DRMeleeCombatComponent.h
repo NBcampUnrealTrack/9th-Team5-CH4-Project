@@ -7,157 +7,72 @@
 class ADRPlayerCharacter;
 class UAnimSequenceBase;
 class UAnimMontage;
+class UDRMeleeWeaponItemDefinition;
 
-UENUM(BlueprintType)
-enum class EDRMeleeTraceMode : uint8
-{
-    ViewLine UMETA(DisplayName = "View Line"),
-    WeaponSweep UMETA(DisplayName = "Weapon Sweep")
-};
+DECLARE_MULTICAST_DELEGATE_OneParam(FDRMeleeHitDetected, const FHitResult&);
 
-UCLASS(
-    ClassGroup = (Player),
-    meta = (BlueprintSpawnableComponent))
-class DEEPRAIDERS_API UDRMeleeCombatComponent
-    : public UActorComponent
+UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
+class DEEPRAIDERS_API UDRMeleeCombatComponent : public UActorComponent
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    UDRMeleeCombatComponent();
+	UDRMeleeCombatComponent();
 
-    /** 소유 클라이언트가 근접 공격을 요청한다. */
-    void RequestAttack();
+	/** 서버 GameplayAbility가 공격 판정을 시작한다. */
+	bool StartAttackFromAbility(UDRMeleeWeaponItemDefinition* WeaponDefinition);
 
-    /**
-     * 공격 Montage의 고정 Sweep Notify에서 호출된다.
-     *
-     * 현재 Runtime Pose를 읽지 않고
-     * SampleTime에 해당하는 Animation Pose를 직접 평가한다.
-     */
-    void SampleWeaponSweep(
-        UAnimSequenceBase* Animation,
-        float SampleTime);
-    
-    /** 사망 등으로 현재 공격을 강제 종료한다. */
-    void CancelAttack();
+	/** GA 종료/취소 시 현재 공격 판정을 종료한다. */
+	void EndAttackFromAbility();
 
-    float GetAttackDuration() const
-    {
-        return MeleeAttackDuration;
-    }
+	bool CanStartAttackFromAbility(const UDRMeleeWeaponItemDefinition* WeaponDefinition) const;
 
-    bool IsAttacking() const
-    {
-        return bIsAttacking;
-    }
+	/** 실제 Hit 결과를 GA에 전달 */
+	FDRMeleeHitDetected OnMeleeHitDetected;
+
+	/**
+	 * Montage의 고정 Sweep Notify에서 호출한다.
+	 *
+	 * Runtime Pose가 아니라 SampleTime에 해당하는
+	 * Animation Pose를 직접 평가해서 무기 위치를 계산한다.
+	 */
+	void SampleWeaponSweep(UAnimSequenceBase* Animation, float SampleTime);
+
+	/** 사망 등 외부 상태에 의한 강제 취소 */
+	void CancelAttack();
+
+	bool IsAttacking() const
+	{
+		return bIsAttacking;
+	}
 
 private:
-    ADRPlayerCharacter* GetOwnerCharacter() const;
+	ADRPlayerCharacter* GetOwnerCharacter() const;
 
-    bool CanStartAttack() const;
+	void ProcessHit(const FHitResult& HitResult);
 
-    UFUNCTION(Server, Reliable)
-    void ServerRequestAttack();
+	void SweepSegment(const FVector& Start, const FVector& End);
 
-    void PerformHitCheck();
+	bool EvaluateWeaponSweepSample(const UAnimMontage* Montage, float SampleTime, FVector& OutBase, FVector& OutTip) const;
 
-    void PerformLineTrace();
-
-    void ProcessHit(
-        const FHitResult& HitResult);
-
-    void FinishAttack();
-
-    void SweepSegment(
-        const FVector& Start,
-        const FVector& End);
-
-    bool EvaluateWeaponSweepSample(
-        const UAnimMontage* Montage,
-        float SampleTime,
-        FVector& OutBase,
-        FVector& OutTip) const;
-    
 private:
-    bool bIsAttacking = false;
-    bool bHasPreviousSweepSample = false;
+	TWeakObjectPtr<UDRMeleeWeaponItemDefinition> ActiveWeaponDefinition;
 
-    FTimerHandle MeleeHitTimerHandle;
-    FTimerHandle MeleeFinishTimerHandle;
+	bool bIsAttacking = false;
+	bool bHasPreviousSweepSample = false;
 
-    TSet<TWeakObjectPtr<AActor>>
-        AlreadyHitActors;
+	TSet<TWeakObjectPtr<AActor>> AlreadyHitActors;
 
-    FVector PreviousBaseLocation =
-        FVector::ZeroVector;
-
-    FVector PreviousTipLocation =
-        FVector::ZeroVector;
+	FVector PreviousBaseLocation = FVector::ZeroVector;
+	FVector PreviousTipLocation = FVector::ZeroVector;
 
 protected:
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee")
-    EDRMeleeTraceMode TraceMode =
-        EDRMeleeTraceMode::ViewLine;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Sweep")
+	FName MeleeSweepBaseSocketName = TEXT("S_MeleeBase");
 
-    /** ViewLine 방식에서 공격 시작 후 판정 시점 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0"))
-    float MeleeAttackHitTime = 0.25f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Sweep")
+	FName MeleeSweepTipSocketName = TEXT("S_MeleeTip");
 
-    /** 다음 공격이 가능해지는 시간 */
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.01"))
-    float MeleeAttackDuration = 0.8f;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0"))
-    float MeleeAttackDamage = 40.f;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee",
-        meta = (ClampMin = "0.0", Units = "cm"))
-    float MeleeAttackRange = 200.f;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep")
-    FName MeleeSweepBaseSocketName =
-        TEXT("S_MeleeBase");
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep")
-    FName MeleeSweepTipSocketName =
-        TEXT("S_MeleeTip");
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Sweep",
-        meta = (ClampMin = "0.0", Units = "cm"))
-    float MeleeSweepRadius = 35.f;
-
-    UPROPERTY(
-        EditDefaultsOnly,
-        BlueprintReadOnly,
-        Category = "Melee|Debug")
-    bool bDrawDebug = false;
-    
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Melee|Debug")
+	bool bDrawDebug = false;
 };

@@ -3,12 +3,15 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
+#include "TimerManager.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
 class UGameplayAbility;
+class UGameplayEffect;
+struct FOnAttributeChangeData;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -94,13 +97,30 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
 	FDRCoinsChangedSignature OnCoinsChanged;
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
+	void ResetForRespawn();
+	
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsFrozen() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
+	void ClearFrozenState();
+	
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "GAS|Abilities")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
+	TSubclassOf<UGameplayEffect> FrozenEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
+	TSubclassOf<UGameplayEffect> DeadEffectClass;
+	
+	void HandleHealthChanged(const FOnAttributeChangeData& Data);
+	void EvaluateDeadState();
+	FDelegateHandle HealthChangedHandle;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
 
 	void GrantDefaultAbilities();
@@ -110,6 +130,32 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	void BindStatusPolicy();
+	void UnbindStatusPolicy();
+
+	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	
+	void EvaluateFrozenState();
+
+	// Freeze Decay
+	void RestartFreezeDecay();
+	void TickFreezeDecay();
+	void StopFreezeDecay();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0", Units = "s"))
+	float FreezeDecayDelay = 3.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.01", Units = "s"))
+	float FreezeDecayInterval = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0"))
+	float FreezeDecayRatePerSecond = 10.f;
+
+	FTimerHandle FreezeDecayTimerHandle;
+	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle MaxFreezeGaugeChangedHandle;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;
@@ -118,26 +164,15 @@ protected:
 	FVector_NetQuantize DeepestDigLocation = FVector::ZeroVector;
 
 	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
-	UPROPERTY(
-		ReplicatedUsing = OnRep_HasJetpack,
-		VisibleAnywhere,
-		BlueprintReadOnly,
-		Category = "Player|Jetpack")
+	UPROPERTY(ReplicatedUsing = OnRep_HasJetpack, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack")
 	bool bHasJetpack = false;
 
 	/** 소유 플레이어 UI에서 사용할 현재 연료 */
-	UPROPERTY(
-		ReplicatedUsing = OnRep_JetpackFuel,
-		VisibleAnywhere,
-		BlueprintReadOnly,
-		Category = "Player|Jetpack")
+	UPROPERTY(ReplicatedUsing = OnRep_JetpackFuel, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack")
 	float CurrentJetpackFuel = 0.f;
 
 	/** 프로토타입에서는 모든 인스턴스가 같은 기본값을 사용한다. */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Player|Jetpack")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Jetpack")
 	float MaxJetpackFuel = 100.f;
 
 	UFUNCTION()
@@ -149,11 +184,7 @@ protected:
 	UFUNCTION()
 	void OnRep_Coins(int32 PreviousCoins);
 
-	UPROPERTY(
-		EditDefaultsOnly,
-		ReplicatedUsing = OnRep_Coins,
-		Category = "Player|Coin",
-		meta = (ClampMin = "0"))
+	UPROPERTY(EditDefaultsOnly, ReplicatedUsing = OnRep_Coins, Category = "Player|Coin", meta = (ClampMin = "0"))
 	int32 Coins = 1000;
 
 private:

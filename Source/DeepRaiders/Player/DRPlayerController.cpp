@@ -17,13 +17,17 @@
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
+#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -43,6 +47,7 @@ ADRPlayerController::ADRPlayerController()
 
 	// UI Component Initialize
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 }
@@ -68,6 +73,18 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 
 void ADRPlayerController::BeginPlay()
 {
+	// UI 컴포넌트 BeginPlay 전에 로컬 플레이어 UI 설정을 준비한다.
+	if (IsLocalController())
+	{
+		if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
+		{
+			if (UDRUIManagerSubsystem* UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
+			{
+				UIManager->Configure(this, UIConfig);
+			}
+		}
+	}
+
 	Super::BeginPlay();
 
 	/*
@@ -187,27 +204,50 @@ void ADRPlayerController::SetupInputComponent()
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
 	}
 	
+	if (IsValid(ShopAction.Get()))
+	{
+		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
+	}
+	
 	SetupGASInputComponent();
 }
 
 void ADRPlayerController::SetupGASInputComponent()
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	if (bGASInputBound || !IsLocalController() || !IsValid(InputComponent))
 	{
-		if (IsValid(InputComponent))
-		{
-			UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
-			
-			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered
-				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
-			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed
-				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
-			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered
-				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
-			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed
-				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
-		}
+		return;
 	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		// PlayerState가 아직 복제되지 않았다.
+		// OnRep_PlayerState에서 다시 시도.
+		return;
+	}
+
+	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent);
+
+	if (!IsValid(EnhancedInputComponent))
+	{
+		return;
+	}
+
+	if (IsValid(PrimaryAction))
+	{
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
+	}
+
+	if (IsValid(SecondaryAction))
+	{
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
+	}
+
+	bGASInputBound = true;
 }
 
 void ADRPlayerController::OnPossess(APawn* InPawn)
@@ -218,6 +258,28 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 	{
 		QuickSlotComponent->ApplySelectedItemToCharacter();
 	}
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
+	}
+}
+
+void ADRPlayerController::OnRep_Pawn()
+{
+	Super::OnRep_Pawn();
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
+	}
+}
+
+void ADRPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	SetupGASInputComponent();
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
@@ -271,34 +333,53 @@ void ADRPlayerController::HandleJumpCompleted(const FInputActionValue&)
 
 void ADRPlayerController::InitializeStartingQuickSlot()
 {
-	if (!HasAuthority() || !IsValid(InventoryComponent) || !IsValid(QuickSlotComponent) || !IsValid(StartingShovelDefinition))
+	if (!HasAuthority() ||
+		!IsValid(InventoryComponent) ||
+		!IsValid(QuickSlotComponent) ||
+		!IsValid(StartingShovelDefinition) ||
+		!IsValid(StartingProjectileWeaponDefinition))
 	{
 		return;
 	}
 
-	// QuickSlotComponent::BeginPlay가 정상적으로
-	// 완료됐는지 방어적으로 확인
-	if (QuickSlotComponent->GetSlotCount() <= 0)
+	// 1번 = 삽, 2번 = 눈총이 필요
+	if (QuickSlotComponent->GetSlotCount() < 2)
 	{
-		UE_LOG(LogTemp, Error, TEXT( "[StartingItem] QuickSlot is not initialized. " "Controller=%s"), *GetName());
+		UE_LOG(LogTemp, Error, TEXT( "[StartingItem] " "At least 2 quick slots are required. " "Controller=%s"), *GetName());
 
 		return;
 	}
 
-	// 1. 인벤토리에 시작 삽 지급
+	// ===== 1. 시작 삽 지급 =====
+
 	if (InventoryComponent->GetItemCount(StartingShovelDefinition) <= 0)
 	{
-		const bool bAdded = InventoryComponent->TryAddItem(StartingShovelDefinition, 1);
-
-		UE_LOG(LogTemp, Warning, TEXT( "[StartingItem] Shovel Add=%d"), bAdded);
+		InventoryComponent->TryAddItem(StartingShovelDefinition, 1);
 	}
 
-	if (QuickSlotComponent->TryBindFirstEmptySlot(StartingShovelDefinition))
+	// ===== 2. 시작 눈총 지급 =====
+
+	if (InventoryComponent->GetItemCount(StartingProjectileWeaponDefinition) <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT( "[StartingItem] Success Bind"));
+		InventoryComponent->TryAddItem(StartingProjectileWeaponDefinition, 1);
 	}
 
-	// 아무 슬롯도 선택되지 않았다면 1번 선택
+	// ===== 3. 퀵슬롯 고정 배치 =====
+
+	// 사용자 기준 1번 슬롯 = Index 0 = 삽
+	if (!QuickSlotComponent->IsSlotBound(0))
+	{
+		QuickSlotComponent->RequestBindSlot(0, StartingShovelDefinition);
+	}
+
+	// 사용자 기준 2번 슬롯 = Index 1 = 눈총
+	if (!QuickSlotComponent->IsSlotBound(1))
+	{
+		QuickSlotComponent->RequestBindSlot(1, StartingProjectileWeaponDefinition);
+	}
+
+	// ===== 4. 기본 장비는 삽 =====
+
 	if (QuickSlotComponent->GetSelectedSlotIndex() == INDEX_NONE)
 	{
 		QuickSlotComponent->RequestSelectSlot(0);
@@ -887,6 +968,14 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	}
 }
 
+void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
+{
+	if (IsValid(AvailableShop))
+	{
+		AvailableShop->ToggleShopWidget();
+	}
+}
+
 void ADRPlayerController::SetAvailableShop(
 	UDRShopUIComponent* ShopUIComponent)
 {
@@ -949,73 +1038,6 @@ void ADRPlayerController::DRWithDrawFirstItem()
 	{
 		RequestTransferStorageItem(EDRStorageTransferDirection::StorageToPlayer, Entries[0].EntryId);
 	}
-}
-
-void ADRPlayerController::DRTestAddSnow()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GAS][TestActivate] Character invalid"));
-
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
-
-	if (!IsValid(ASC) || !IsValid(TestAddSnowAbilityClass))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GAS][TestActivate] ASC or AbilityClass invalid"));
-
-		return;
-	}
-
-	FGameplayAbilitySpec* AbilitySpec = ASC->FindAbilitySpecFromClass(TestAddSnowAbilityClass);
-
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "NetMode=%s " "LocalController=%d " "SpecFound=%d " "Ability=%s"), *ToString(GetNetMode()), IsLocalController(), AbilitySpec != nullptr, *GetNameSafe(TestAddSnowAbilityClass));
-
-	if (AbilitySpec == nullptr)
-	{
-		return;
-	}
-
-	const bool bRequested = ASC->TryActivateAbility(AbilitySpec->Handle, true);
-
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "TryActivateAbility=%d"), bRequested);
-}
-
-void ADRPlayerController::DRTestFrozen()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
-
-	if (!IsValid(ASC) || !IsValid(TestFrozenAbilityClass))
-	{
-		return;
-	}
-
-	ASC->TryActivateAbilityByClass(TestFrozenAbilityClass, true);
-}
-
-void ADRPlayerController::DRCheckFrozen()
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	UAbilitySystemComponent* ASC = IsValid(PlayerCharacter) ? PlayerCharacter->GetAbilitySystemComponent() : nullptr;
-
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[GAS][Frozen][ClientCheck] Frozen=%d"), ASC->HasMatchingGameplayTag( DRGameplayTags::State_Frozen));
 }
 
 #pragma region Teleport

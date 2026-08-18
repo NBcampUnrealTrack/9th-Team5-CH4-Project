@@ -12,7 +12,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitFreezeGauge(0.f);
 
 	InitMaxSnowGauge(100.f);
-	InitSnowGauge(0.f);
+	InitSnowGauge(100.f);
 }
 
 void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
