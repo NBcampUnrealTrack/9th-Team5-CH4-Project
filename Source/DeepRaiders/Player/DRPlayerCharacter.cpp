@@ -57,10 +57,12 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 
 	bUseControllerRotationPitch = false;
-	bUseControllerRotationYaw = true;
+	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	GetCharacterMovement()->bOrientRotationToMovement = false;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
@@ -332,9 +334,7 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 {
-	if (!Controller ||
-		IsDead() ||
-		IsFrozen())
+	if (!Controller)
 	{
 		return;
 	}
