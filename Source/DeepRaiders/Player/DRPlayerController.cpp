@@ -17,6 +17,7 @@
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
+#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
@@ -201,6 +202,11 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(InventoryAction.Get()))
 	{
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
+	}
+	
+	if (IsValid(ShopAction.Get()))
+	{
+		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
 	}
 	
 	SetupGASInputComponent();
@@ -915,6 +921,14 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	if (IsValid(InventoryUIComponent))
 	{
 		InventoryUIComponent->TogglePlayerInventory();
+	}
+}
+
+void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
+{
+	if (IsValid(AvailableShop))
+	{
+		AvailableShop->ToggleShopWidget();
 	}
 }
 
