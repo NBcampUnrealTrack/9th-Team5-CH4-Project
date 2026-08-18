@@ -285,9 +285,6 @@ protected:
 	TObjectPtr<UInputAction> ShopAction;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UInputMappingContext> ShopMappingContext;
-
-	UPROPERTY(Transient)
 	TObjectPtr<UDRShopUIComponent> AvailableShop;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")

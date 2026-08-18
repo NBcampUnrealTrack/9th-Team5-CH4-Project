@@ -101,12 +101,6 @@ void ADRPlayerController::BeginPlay()
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
 
-	if (IsValid(ShopAction))
-	{
-		ShopMappingContext = NewObject<UInputMappingContext>(this);
-		ShopMappingContext->MapKey(ShopAction, EKeys::B);
-		InputSubsystem->AddMappingContext(ShopMappingContext, 0);
-	}
 }
 
 void ADRPlayerController::SetupInputComponent()
