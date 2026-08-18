@@ -95,4 +95,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	bool IsMoveInputBlocked = false;
 };

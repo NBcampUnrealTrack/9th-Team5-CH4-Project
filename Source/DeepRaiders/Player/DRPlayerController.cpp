@@ -288,6 +288,11 @@ void ADRPlayerController::HandleLook(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleJumpStarted(const FInputActionValue&)
 {
+	if (IsMoveInputIgnored())
+	{
+		return;
+	}
+
 	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
 
 	if (IsValid(PlayerCharacter))

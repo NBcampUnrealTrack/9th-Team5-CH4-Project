@@ -160,6 +160,13 @@ void UDRShopUIComponent::ShowShopWidget()
 	FInputModeGameAndUI InputMode;
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	PlayerController->FlushPressedKeys();
+
+	if (!IsMoveInputBlocked)
+	{
+		PlayerController->SetIgnoreMoveInput(true);
+		IsMoveInputBlocked = true;
+	}
+
 	PlayerController->SetInputMode(InputMode);
 	PlayerController->bShowMouseCursor = true;
 }
@@ -222,9 +229,18 @@ void UDRShopUIComponent::HideShopWidget()
 	{
 		// 상점 종료 후 게임 입력 상태로 복구한다.
 		PlayerController->FlushPressedKeys();
+
+		if (IsMoveInputBlocked)
+		{
+			PlayerController->SetIgnoreMoveInput(false);
+			IsMoveInputBlocked = false;
+		}
+
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
 	}
+
+	IsMoveInputBlocked = false;
 }
 
 void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
