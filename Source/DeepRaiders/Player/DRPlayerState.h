@@ -8,6 +8,7 @@
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
+class UDRPerkComponent;
 class UGameplayAbility;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -30,6 +31,11 @@ public:
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
 	{
 		return PlayerAttributeSet;
+	}
+
+	UDRPerkComponent* GetPerkComponent() const
+	{
+		return PerkComponent;
 	}
 	
 	virtual void GetLifetimeReplicatedProps(
@@ -110,6 +116,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
+	TObjectPtr<UDRPerkComponent> PerkComponent;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;

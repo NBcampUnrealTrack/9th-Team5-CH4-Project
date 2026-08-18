@@ -6,6 +6,7 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpec.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -21,6 +22,10 @@ ADRPlayerState::ADRPlayerState()
 	PlayerAttributeSet =
 		CreateDefaultSubobject<UDRPlayerAttributeSet>(
 			TEXT("PlayerAttributeSet"));
+
+	PerkComponent =
+		CreateDefaultSubobject<UDRPerkComponent>(
+			TEXT("PerkComponent"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
