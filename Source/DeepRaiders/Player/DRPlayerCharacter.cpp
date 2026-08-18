@@ -434,6 +434,52 @@ bool ADRPlayerCharacter::IsFrozen() const
 	return IsValid(ASC) && ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
 }
 
+void ADRPlayerCharacter::RefreshAttackFacing()
+{
+	if (!Controller || IsDead() || IsFrozen())
+	{
+		return;
+	}
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	// 평상시 이동 방향 회전을 잠시 끈다.
+	Movement->bOrientRotationToMovement = false;
+
+	// Controller(Camera) Yaw를 바라보도록 한다.
+	Movement->bUseControllerDesiredRotation = true;
+
+	// 일단 공격 반응성을 보기 위해 Yaw는 즉시 맞춘다.
+	const FRotator ControlRotation = Controller->GetControlRotation();
+
+	SetActorRotation(FRotator(0.f, ControlRotation.Yaw, 0.f));
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(AttackFacingTimerHandle, this, &ThisClass::EndAttackFacing, AttackFacingReleaseDelay, false);
+	}
+}
+
+void ADRPlayerCharacter::EndAttackFacing()
+{
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	Movement->bUseControllerDesiredRotation = false;
+
+	// 다시 평상시 이동 방향 회전으로 복귀
+	Movement->bOrientRotationToMovement = true;
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();

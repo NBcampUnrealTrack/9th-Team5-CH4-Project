@@ -17,6 +17,7 @@
 #include "DeepRaiders/DeepRaiders.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 
 UDRGA_FireProjectile::UDRGA_FireProjectile()
 {
@@ -47,6 +48,11 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
+	}
+	
+	if (ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get()))
+	{
+		Character->RefreshAttackFacing();
 	}
 	
 	// LocalPredicted GA는 클라이언트와 서버 양쪽에서 실행된다.

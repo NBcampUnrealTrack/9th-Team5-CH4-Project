@@ -147,6 +147,8 @@ public:
 	
 	bool IsFrozen() const;
 	
+	void RefreshAttackFacing();
+	
 protected:
 	virtual void BeginPlay() override;
 
@@ -197,6 +199,14 @@ private:
 	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
 	
 	void ApplySpawnAttributeReset();
+
+
+	void EndAttackFacing();
+
+	FTimerHandle AttackFacingTimerHandle;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", Units = "s"))
+	float AttackFacingReleaseDelay = 0.3f;
 	
 #pragma region QuickSlot
 
