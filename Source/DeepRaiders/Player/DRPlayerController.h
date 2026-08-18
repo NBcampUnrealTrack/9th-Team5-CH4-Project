@@ -287,11 +287,16 @@ protected:
 #pragma region UI
 
 public:
+	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
 	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+
+	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
 	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
 
 private:
 	void HandleToggleInventory(const FInputActionValue& Value);
+
+	/** 현재 상점의 UI를 열거나 닫는다. */
 	void HandleToggleShop(const FInputActionValue& Value);
 
 protected:
@@ -301,6 +306,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
+	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점이다. */
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopUIComponent> AvailableShop;
 

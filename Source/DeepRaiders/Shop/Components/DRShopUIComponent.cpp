@@ -31,6 +31,7 @@ void UDRShopUIComponent::BeginPlay()
 		return;
 	}
 
+	// 상점 범위 진입과 이탈에 맞춰 상호작용 가능 상태를 변경한다.
 	ShopAreaComponent->OnPawnEntered.AddDynamic(
 		this,
 		&ThisClass::HandlePawnEntered);
@@ -72,6 +73,7 @@ void UDRShopUIComponent::HandlePawnEntered(APawn* Pawn)
 		return;
 	}
 
+	// 입력을 처리할 로컬 플레이어에게 현재 상점을 등록한다.
 	PlayerController->SetAvailableShop(this);
 }
 
@@ -123,6 +125,7 @@ void UDRShopUIComponent::ShowShopWidget()
 		return;
 	}
 
+	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
 	ShopWidget->InitializeShop(ShopComponent->GetItemOffers());
 	RefreshUpgradeOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(
@@ -139,6 +142,7 @@ void UDRShopUIComponent::ShowShopWidget()
 		&ThisClass::HandleInventoryChanged);
 	ShopWidget->AddToViewport();
 
+	// 상점 UI를 조작할 수 있도록 마우스와 입력 모드를 전환한다.
 	FInputModeGameAndUI InputMode;
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	PlayerController->FlushPressedKeys();
@@ -156,6 +160,7 @@ void UDRShopUIComponent::HandlePawnExited(APawn* Pawn)
 			PlayerController->ClearAvailableShop(this);
 		}
 
+		// 범위를 벗어나면 열려 있는 상점 UI도 함께 닫는다.
 		HideShopWidget();
 	}
 }
@@ -193,6 +198,7 @@ void UDRShopUIComponent::HideShopWidget()
 
 	if (IsValid(PlayerController))
 	{
+		// 상점 종료 후 게임 입력 상태로 복구한다.
 		PlayerController->FlushPressedKeys();
 		PlayerController->SetInputMode(FInputModeGameOnly());
 		PlayerController->bShowMouseCursor = false;
