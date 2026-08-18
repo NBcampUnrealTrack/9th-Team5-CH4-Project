@@ -14,7 +14,10 @@ enum class EDRSnowVoxelEditTool : uint8
 	SurfaceTool UMETA(DisplayName = "Surface Tool"),
 
 	// 지정 반경의 구 부피를 직접 더하거나 뺀다. SurfaceTool과 제거 느낌을 비교할 때 사용한다.
-	SphereTool UMETA(DisplayName = "Sphere Tool")
+	SphereTool UMETA(DisplayName = "Sphere Tool"),
+
+	// surface footprint만 표면에서 찾고, 실제 값 변경은 DRVoxelCustomTool이 부피 voxel을 직접 추가/제거한다.
+	CustomTool UMETA(DisplayName = "Custom Tool")
 };
 
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.

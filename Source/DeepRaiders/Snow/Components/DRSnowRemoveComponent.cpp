@@ -82,14 +82,17 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 
 		if (RemovedAmount > 0.f)
 		{
-			if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-				World->GetSubsystem<UDRSnowVolumeSubsystem>())
+			if (Request.EditTool != EDRSnowVoxelEditTool::CustomTool)
 			{
-				// 표면이 실제로 깎인 양만 원본 density에서도 제거한다.
-				// 이렇게 해야 Voxel 표현과 팀별 진행도 데이터가 같은 속도로 줄어든다.
-				FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-				VolumeRequest.RequestedAmount = RemovedAmount;
-				SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+					World->GetSubsystem<UDRSnowVolumeSubsystem>())
+				{
+					// 표면이 실제로 깎인 양만 원본 density에서도 제거한다.
+					// CustomTool은 SurfaceSubsystem에서 실제 변화 voxel 기준으로 이미 처리한다.
+					FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
+					VolumeRequest.RequestedAmount = RemovedAmount;
+					SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+				}
 			}
 
 			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
@@ -130,12 +133,15 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 
 		if (RemovedAmount > 0.f)
 		{
-			if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-				World->GetSubsystem<UDRSnowVolumeSubsystem>())
+			if (Request.EditTool != EDRSnowVoxelEditTool::CustomTool)
 			{
-				FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-				VolumeRequest.RequestedAmount = RemovedAmount;
-				SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+					World->GetSubsystem<UDRSnowVolumeSubsystem>())
+				{
+					FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
+					VolumeRequest.RequestedAmount = RemovedAmount;
+					SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+				}
 			}
 
 			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =

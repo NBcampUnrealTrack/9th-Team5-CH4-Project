@@ -5,7 +5,6 @@
 #include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
-#include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -165,11 +164,8 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 	const bool bHandled = ExecuteAddSnow(Request);
 	OnSnowAdded.Broadcast(Request, bHandled);
 
-	// 이 색은 DrawDebugSphere용이다. 실제 지형 material index는 DRVoxelTeamColorLibrary가 결정한다.
+	// 이 색은 debug message용이다. 실제 지형 material index는 DRVoxelTeamColorLibrary가 결정한다.
 	const FColor DebugColor = FColor::Green;
-
-	UWorld* World = GetWorld();
-	const bool bCanDrawDebug = IsValid(World);
 
 	const FString DebugMessage = FString::Printf(
 		TEXT("[Snow][DebugAdd] Handled=%d TeamId=%d Location=%s Radius=%.1f Amount=%.2f Color=%s HitActor=%s"),
@@ -191,18 +187,6 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 			DebugMessage);
 	}
 
-	if (bCanDrawDebug)
-	{
-		DrawDebugSphere(
-			World,
-			HitResult.ImpactPoint,
-			AddRadius,
-			16,
-			bHandled ? DebugColor : FColor::Red,
-			false,
-			2.f);
-	}
-
 	return bHandled;
 }
 
@@ -212,6 +196,18 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 	bool bHandled = false;
 	if (UWorld* World = GetWorld())
 	{
+		if (Request.EditTool == EDRSnowVoxelEditTool::CustomTool)
+		{
+			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
+				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+			{
+				// CustomTool은 실제 생성 voxel 기준으로 SnowVolume을 기록하므로 SurfaceSubsystem이 먼저 처리한다.
+				bHandled = SnowSurfaceSubsystem->AddSnowAtArea(Request) > 0.f;
+			}
+
+			return bHandled;
+		}
+
 		if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
 			World->GetSubsystem<UDRSnowVolumeSubsystem>())
 		{

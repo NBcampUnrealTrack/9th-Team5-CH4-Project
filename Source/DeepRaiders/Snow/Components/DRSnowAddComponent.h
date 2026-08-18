@@ -92,7 +92,7 @@ protected:
 	float AddAmount = 1.f;
 
 	// Voxel 표면을 어떤 방식으로 올릴지 선택한다.
-	// SurfaceTool은 표면을 따라 부드럽게, SphereTool은 구 형태로 직접 값을 추가한다.
+	// CustomTool은 DRVoxelCustomTool 경로로 표면 기준 부피를 직접 추가한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Add")
 	EDRSnowVoxelEditTool AddEditTool = EDRSnowVoxelEditTool::SurfaceTool;
 };

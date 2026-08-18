@@ -49,7 +49,7 @@ struct DEEPRAIDERS_API FDRSnowRemovalSettings
 	bool bInvertSurfaceStrength = false;
 
 	// Voxel 표면을 어떤 방식으로 낮출지 선택한다.
-	// SurfaceTool은 현재 방식, SphereTool은 채굴 RemoveSphere와 비슷한 감각을 테스트한다.
+	// CustomTool은 DRVoxelCustomTool 경로로 표면 기준 부피를 직접 제거한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
 };

@@ -1,6 +1,7 @@
 #include "DRSnowSurfaceSubsystem.h"
 
 #include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
+#include "DeepRaiders/Voxel/DRVoxelCustomTool.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "EngineUtils.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
@@ -63,6 +64,111 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 
 	return MakeProcessedVoxelGroup(SourceVoxels, MoveTemp(NewVoxels));
 }
+
+float ApplyVolumeRemovalFromSurfaceChanges(
+	UWorld* World,
+	AVoxelWorld* VoxelWorld,
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const TArray<FModifiedVoxelValue>& ModifiedValues,
+	float MaxRemovedAmount)
+{
+	if (!IsValid(World) ||
+		!IsValid(VoxelWorld) ||
+		MaxRemovedAmount <= 0.f)
+	{
+		return 0.f;
+	}
+
+	UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+		World->GetSubsystem<UDRSnowVolumeSubsystem>();
+	if (!SnowVolumeSubsystem)
+	{
+		return 0.f;
+	}
+
+	float RemovedAmount = 0.f;
+	const float VoxelRadius = FMath::Max(1.f, VoxelWorld->VoxelSize * 0.75f);
+	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+	{
+		const float RemainingAmount = MaxRemovedAmount - RemovedAmount;
+		if (RemainingAmount <= 0.f)
+		{
+			break;
+		}
+
+		// 제거 방향으로 실제 값이 움직인 voxel만 SnowVolume 감소 대상으로 쓴다.
+		if (ModifiedValue.NewValue <= ModifiedValue.OldValue)
+		{
+			continue;
+		}
+
+		FDRSnowSurfaceRemoveRequest CellRequest = Request;
+		CellRequest.WorldLocation = VoxelWorld->LocalToGlobal(ModifiedValue.Position);
+		CellRequest.Radius = VoxelRadius;
+		CellRequest.RequestedAmount = FMath::Min(
+			RemainingAmount,
+			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
+
+		const FDRSnowRemoveResult Result =
+			SnowVolumeSubsystem->RemoveSnow(CellRequest);
+		RemovedAmount += Result.RemovedAmount;
+	}
+
+	return RemovedAmount;
+}
+
+float ApplyVolumeAddFromSurfaceChanges(
+	UWorld* World,
+	AVoxelWorld* VoxelWorld,
+	const FDRSnowSurfaceAddRequest& Request,
+	const TArray<FModifiedVoxelValue>& ModifiedValues,
+	float MaxAddedAmount)
+{
+	if (!IsValid(World) ||
+		!IsValid(VoxelWorld) ||
+		MaxAddedAmount <= 0.f)
+	{
+		return 0.f;
+	}
+
+	UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+		World->GetSubsystem<UDRSnowVolumeSubsystem>();
+	if (!SnowVolumeSubsystem)
+	{
+		return 0.f;
+	}
+
+	float AddedAmount = 0.f;
+	const float VoxelRadius = FMath::Max(1.f, VoxelWorld->VoxelSize * 0.75f);
+	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+	{
+		const float RemainingAmount = MaxAddedAmount - AddedAmount;
+		if (RemainingAmount <= 0.f)
+		{
+			break;
+		}
+
+		// 생성 방향으로 실제 값이 움직인 voxel만 SnowVolume 추가 대상으로 쓴다.
+		if (ModifiedValue.NewValue >= ModifiedValue.OldValue)
+		{
+			continue;
+		}
+
+		FDRSnowSurfaceAddRequest CellRequest = Request;
+		CellRequest.WorldLocation = VoxelWorld->LocalToGlobal(ModifiedValue.Position);
+		CellRequest.Radius = VoxelRadius;
+		CellRequest.Amount = FMath::Min(
+			RemainingAmount,
+			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
+
+		const FDRSnowAddResult Result =
+			SnowVolumeSubsystem->AddSnow(CellRequest);
+		AddedAmount += Result.AddedAmount;
+	}
+
+	return AddedAmount;
+}
+
 }
 
 bool UDRSnowSurfaceSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -83,6 +189,55 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
 		return 0.f;
+	}
+
+	if (Request.EditTool == EDRSnowVoxelEditTool::CustomTool)
+	{
+		const FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint =
+			UDRVoxelCustomTool::FindSurfaceFootprint(
+				VoxelWorld,
+				Request.WorldLocation,
+				Request.Radius,
+				SnowSurfaceFalloff,
+				Request.Amount,
+				true);
+
+		TArray<FModifiedVoxelValue> ModifiedValues;
+		FVoxelIntBox EditedBounds;
+		const float ModifiedValueAmount = UDRVoxelCustomTool::ApplySurfaceVolumeEdit(
+			VoxelWorld,
+			SurfaceFootprint,
+			SnowSurfaceDistanceDivisor,
+			true,
+			ModifiedValues,
+			EditedBounds);
+		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+		if (AddedAmount > 0.f)
+		{
+			// CustomTool은 surface footprint에서 만든 실제 생성 voxel만 원본 density로 기록한다.
+			ApplyVolumeAddFromSurfaceChanges(
+				GetWorld(),
+				VoxelWorld,
+				Request,
+				ModifiedValues,
+				AddedAmount);
+
+			if (SurfaceFootprint.Bounds.IsValid())
+			{
+				UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+					VoxelWorld,
+					UDRVoxelCustomTool::MakeModifiedValueVoxelGroup(
+						EditedBounds,
+						ModifiedValues,
+						true),
+					Request.Context.TeamId,
+					true);
+			}
+
+			OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
+		}
+
+		return AddedAmount;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
@@ -219,6 +374,43 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
 		return 0.f;
+	}
+
+	if (Request.EditTool == EDRSnowVoxelEditTool::CustomTool)
+	{
+		const FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint =
+			UDRVoxelCustomTool::FindSurfaceFootprint(
+				VoxelWorld,
+				Request.WorldLocation,
+				Request.Radius,
+				SnowSurfaceFalloff,
+				Request.RequestedAmount,
+				Request.bInvertSurfaceStrength);
+
+		TArray<FModifiedVoxelValue> ModifiedValues;
+		FVoxelIntBox EditedBounds;
+		const float ModifiedValueAmount = UDRVoxelCustomTool::ApplySurfaceVolumeEdit(
+			VoxelWorld,
+			SurfaceFootprint,
+			SnowSurfaceDistanceDivisor,
+			Request.bInvertSurfaceStrength,
+			ModifiedValues,
+			EditedBounds);
+		const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+		if (RemovedAmount > 0.f)
+		{
+			// CustomTool이 직접 비운 voxel만 SnowVolume 감소 대상으로 쓴다.
+			ApplyVolumeRemovalFromSurfaceChanges(
+				GetWorld(),
+				VoxelWorld,
+				Request,
+				ModifiedValues,
+				RemovedAmount);
+
+			OnSnowRemovedFromSurface.Broadcast(Request, RemovedAmount);
+		}
+
+		return RemovedAmount;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
