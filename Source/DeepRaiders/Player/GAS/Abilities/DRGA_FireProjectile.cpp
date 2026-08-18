@@ -18,6 +18,7 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 
 UDRGA_FireProjectile::UDRGA_FireProjectile()
 {
@@ -32,41 +33,60 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	
-	UDRProjectileWeaponItemDefinition* WeaponDefinition = 
-		Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
-	
-	if (!IsValid(WeaponDefinition)
-		|| !WeaponDefinition->ProjectileClass)
+	UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
+
+	if (!IsValid(WeaponDefinition) || !WeaponDefinition->ProjectileClass)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
-		DR_LOG(TEXT("[Fire Test cooldown"));
-		
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+
 		return;
 	}
-	
-	if (ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get()))
+
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+
+	UAnimMontage* FireMontage = nullptr;
+
+	if (IsValid(WeaponDefinition->ItemAnimationSet))
 	{
-		Character->RefreshAttackFacing();
+		FireMontage = WeaponDefinition->ItemAnimationSet->FireMontage;
 	}
-	
-	// LocalPredicted GA는 클라이언트와 서버 양쪽에서 실행된다.
-	// 실제 Projectile 생성은 서버에서만 수행
+
+	if (IsValid(Character))
+	{
+		const float AimHoldDuration = WeaponDefinition->BaseFireInterval + 0.15f;
+
+		Character->RefreshCombatAim(AimHoldDuration);
+
+		// Remote owning client 예측 재생
+		if (!ActorInfo->IsNetAuthority() && Character->IsLocallyControlled() && IsValid(FireMontage))
+		{
+			Character->PlayWeaponFirePresentationLocal(FireMontage);
+		}
+	}
+
+	// 실제 게임 결과는 서버
 	if (ActorInfo->IsNetAuthority())
 	{
-		UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get();
-		
+		if (IsValid(Character) && IsValid(FireMontage))
+		{
+			Character->PlayWeaponFirePresentationFromServer(FireMontage);
+		}
+
+		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+
 		TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
-		BuildImpactEffectSpecs(AbilitySystemComponent, WeaponDefinition, ImpactEffectSpecs);
+
+		BuildImpactEffectSpecs(ASC, WeaponDefinition, ImpactEffectSpecs);
+
 		SpawnProjectile(ActorInfo, WeaponDefinition, ImpactEffectSpecs);
 	}
-	
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);	
+
+	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
 void UDRGA_FireProjectile::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,

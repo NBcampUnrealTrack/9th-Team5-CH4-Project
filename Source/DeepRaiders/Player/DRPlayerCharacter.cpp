@@ -7,6 +7,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameplayEffect.h"
+#include "AbilitySystemComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -22,9 +24,8 @@
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-
-#include "GameplayEffect.h"
-#include "AbilitySystemComponent.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
+#include "Net/UnrealNetwork.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -334,21 +335,16 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 {
-	if (!Controller)
+	if (!Controller || IsDead() || IsFrozen())
 	{
 		return;
 	}
 
 	const FRotator ControlRotation = Controller->GetControlRotation();
-
 	const FRotator YawRotation(0.f, ControlRotation.Yaw, 0.f);
-
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
 	AddMovementInput(ForwardDirection, MoveInput.Y);
-
 	AddMovementInput(RightDirection, MoveInput.X);
 }
 
@@ -434,9 +430,22 @@ bool ADRPlayerCharacter::IsFrozen() const
 	return IsValid(ASC) && ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
 }
 
-void ADRPlayerCharacter::RefreshAttackFacing()
+UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 {
-	if (!Controller || IsDead() || IsFrozen())
+	if (!IsValid(HeldItemComponent))
+	{
+		return nullptr;
+	}
+
+	const UDRItemDefinition* ItemDefinition = HeldItemComponent->GetHeldItemDefinition();
+
+	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
+}
+
+void ADRPlayerCharacter::RefreshCombatAim(const float HoldDuration)
+{
+	// Local Prediction 또는 서버에서만 상태를 바꾼다.
+	if ((!HasAuthority() && !IsLocallyControlled()) || IsDead() || IsFrozen())
 	{
 		return;
 	}
@@ -448,41 +457,89 @@ void ADRPlayerCharacter::RefreshAttackFacing()
 		return;
 	}
 
-	// 평상시 이동 방향 회전을 잠시 끈다.
-	Movement->bOrientRotationToMovement = false;
+	bCombatAiming = true;
 
-	// Controller(Camera) Yaw를 바라보도록 한다.
+	/*
+	 * 평상시:
+	 * 이동 방향으로 회전
+	 *
+	 * Combat Aim:
+	 * Controller(Camera)의 방향을 바라봄
+	 */
+	Movement->bOrientRotationToMovement = false;
 	Movement->bUseControllerDesiredRotation = true;
 
-	// 일단 공격 반응성을 보기 위해 Yaw는 즉시 맞춘다.
-	const FRotator ControlRotation = Controller->GetControlRotation();
+	if (Controller)
+	{
+		const FRotator ControlRotation = Controller->GetControlRotation();
 
-	SetActorRotation(FRotator(0.f, ControlRotation.Yaw, 0.f));
+		SetActorRotation(FRotator(0.f, ControlRotation.Yaw, 0.f));
+	}
 
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().SetTimer(AttackFacingTimerHandle, this, &ThisClass::EndAttackFacing, AttackFacingReleaseDelay, false);
+		World->GetTimerManager().SetTimer(
+			CombatAimTimerHandle, this, &ThisClass::StopCombatAim, FMath::Max(HoldDuration, 0.05f), false);
+	}
+
+	if (HasAuthority())
+	{
+		ForceNetUpdate();
 	}
 }
 
-void ADRPlayerCharacter::EndAttackFacing()
+void ADRPlayerCharacter::StopCombatAim()
 {
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-
-	if (!IsValid(Movement))
+	if (!HasAuthority() && !IsLocallyControlled())
 	{
 		return;
 	}
 
-	Movement->bUseControllerDesiredRotation = false;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CombatAimTimerHandle);
+	}
 
-	// 다시 평상시 이동 방향 회전으로 복귀
-	Movement->bOrientRotationToMovement = true;
+	bCombatAiming = false;
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->bUseControllerDesiredRotation = false;
+		Movement->bOrientRotationToMovement = true;
+	}
+
+	if (HasAuthority())
+	{
+		ForceNetUpdate();
+	}
+}
+
+void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage)
+{
+	if (IsValid(ItemActionPresentationComponent))
+	{
+		ItemActionPresentationComponent->PlayWeaponFireLocal(FireMontage);
+	}
+}
+
+void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage)
+{
+	if (IsValid(ItemActionPresentationComponent))
+	{
+		ItemActionPresentationComponent->PlayWeaponFireFromServer(FireMontage);
+	}
 }
 
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+}
+
+void ADRPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ADRPlayerCharacter, bCombatAiming);
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()

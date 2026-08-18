@@ -26,6 +26,8 @@ class UAbilitySystemComponent;
 class UGameplayEffect;
 class USpringArmComponent;
 class UDRPlayerAttributeSet;
+class UDRItemAnimationSet;
+class UAnimMontage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -147,13 +149,33 @@ public:
 	
 	bool IsFrozen() const;
 	
-	void RefreshAttackFacing();
+	UFUNCTION(BlueprintPure, Category = "Player|Animation")
+	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Combat")
+	bool IsCombatAiming() const
+	{
+		return bCombatAiming;
+	}
+
+	/**
+	 * 사격 시 조준 방향 회전을 일정 시간 유지한다.
+	 * LocalPredicted 클라이언트와 서버 양쪽에서 호출 가능.
+	 */
+	void RefreshCombatAim(float HoldDuration);
+
+	void StopCombatAim();
+
+	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
+
+	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
 	
 protected:
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void InitializeAbilitySystem();
-
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	TObjectPtr<UDRMiningComponent> MiningComponent;
 
@@ -199,14 +221,11 @@ private:
 	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
 	
 	void ApplySpawnAttributeReset();
+	
+	UPROPERTY(Replicated)
+	bool bCombatAiming = false;
 
-
-	void EndAttackFacing();
-
-	FTimerHandle AttackFacingTimerHandle;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", Units = "s"))
-	float AttackFacingReleaseDelay = 0.3f;
+	FTimerHandle CombatAimTimerHandle;
 	
 #pragma region QuickSlot
 
