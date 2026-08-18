@@ -5,6 +5,7 @@
 #include "DRHUDUIComponent.generated.h"
 
 class UDRHUDViewModel;
+class UDRUIManagerSubsystem;
 class UUserWidget;
 
 /** 로컬 플레이어의 HUD 위젯과 ViewModel 생명주기를 관리한다. */
@@ -23,13 +24,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(EditDefaultsOnly, Category = "HUD|UI")
-	TSubclassOf<UUserWidget> HUDWidgetClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "HUD|MVVM")
-	FName HUDViewModelName = TEXT("DRHUDViewModel");
-
 private:
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> HUDWidget;
 

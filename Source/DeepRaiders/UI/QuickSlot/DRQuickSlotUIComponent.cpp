@@ -2,7 +2,10 @@
 #include "DRQuickSlotUIComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DRQuickSlotWidget.h"
+#include "Engine/LocalPlayer.h"
 
 UDRQuickSlotUIComponent::UDRQuickSlotUIComponent()
 {
@@ -27,18 +30,25 @@ void UDRQuickSlotUIComponent::BeginPlay()
 		return;
 	}
 
-	if (!QuickSlotWidgetClass)
+	if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	}
+
+	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
+	if (!IsValid(UIConfig) || !UIConfig->QuickSlotWidgetClass)
 	{
 		UE_LOG(LogTemp, Error, TEXT("QuickSlotWidgetClass is not set on %s"),
 			*GetNameSafe(PlayerController));
 		return;
 	}
 	
-	QuickSlotWidget = CreateWidget<UDRQuickSlotWidget>(PlayerController, QuickSlotWidgetClass);
+	QuickSlotWidget = Cast<UDRQuickSlotWidget>(
+		UIManager->CreateManagedWidget(UIConfig->QuickSlotWidgetClass, UIConfig->QuickSlotLayer));
 	if (!IsValid(QuickSlotWidget))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to create QuickSlot widget class: %s"),
-			*GetNameSafe(QuickSlotWidgetClass));
+			*GetNameSafe(UIConfig->QuickSlotWidgetClass));
 		return;
 	}
 
@@ -47,17 +57,17 @@ void UDRQuickSlotUIComponent::BeginPlay()
 	// 위젯에 QuickSlot을 연결
 	QuickSlotWidget->InitializeQuickSlot(PlayerController->GetQuickSlotComponent());
 	
-	// UI 순서 임의로 지정, 신다인 테스트
-	QuickSlotWidget->AddToViewport(0);
 }
 
 void UDRQuickSlotUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (IsValid(QuickSlotWidget))
+	if (IsValid(UIManager))
 	{
-		QuickSlotWidget->RemoveFromParent();
-		QuickSlotWidget = nullptr;
+		UIManager->ReleaseManagedWidget(QuickSlotWidget);
 	}
+
+	QuickSlotWidget = nullptr;
+	UIManager = nullptr;
 	
 	Super::EndPlay(EndPlayReason);
 }

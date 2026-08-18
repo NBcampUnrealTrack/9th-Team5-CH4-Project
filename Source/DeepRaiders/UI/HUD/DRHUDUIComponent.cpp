@@ -3,7 +3,10 @@
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/ViewModel/DRHUDViewModel.h"
+#include "Engine/LocalPlayer.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
 
@@ -17,12 +20,23 @@ void UDRHUDUIComponent::BeginPlay()
 	Super::BeginPlay();
 
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
-	if (!IsValid(PlayerController) || !PlayerController->IsLocalController() || !HUDWidgetClass)
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
 	{
 		return;
 	}
 
-	HUDWidget = CreateWidget<UUserWidget>(PlayerController, HUDWidgetClass);
+	if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	}
+
+	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
+	if (!IsValid(UIConfig) || !UIConfig->HUDWidgetClass)
+	{
+		return;
+	}
+
+	HUDWidget = UIManager->CreateManagedWidget(UIConfig->HUDWidgetClass, UIConfig->HUDLayer);
 	if (!IsValid(HUDWidget))
 	{
 		return;
@@ -30,17 +44,17 @@ void UDRHUDUIComponent::BeginPlay()
 
 	HUDViewModel = NewObject<UDRHUDViewModel>(this);
 	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(HUDWidget);
-	if (!IsValid(View) || !View->SetViewModel(HUDViewModelName, HUDViewModel))
+	if (!IsValid(View) || !View->SetViewModel(UIConfig->HUDViewModelName, HUDViewModel))
 	{
 		UE_LOG(LogTemp, Error, TEXT("HUD ViewModel '%s' was not registered on %s"),
-			*HUDViewModelName.ToString(), *GetNameSafe(HUDWidget));
+			*UIConfig->HUDViewModelName.ToString(), *GetNameSafe(HUDWidget));
+		UIManager->ReleaseManagedWidget(HUDWidget);
 		HUDWidget = nullptr;
 		HUDViewModel = nullptr;
 		return;
 	}
 
 	RefreshPlayerCharacter();
-	HUDWidget->AddToViewport(0);
 }
 
 void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -50,13 +64,18 @@ void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		HUDViewModel->Deinitialize();
 	}
 
-	if (IsValid(HUDWidget))
+	if (IsValid(UIManager))
+	{
+		UIManager->ReleaseManagedWidget(HUDWidget);
+	}
+	else if (IsValid(HUDWidget))
 	{
 		HUDWidget->RemoveFromParent();
 	}
 
 	HUDWidget = nullptr;
 	HUDViewModel = nullptr;
+	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 

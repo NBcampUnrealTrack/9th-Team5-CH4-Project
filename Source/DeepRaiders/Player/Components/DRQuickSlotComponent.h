@@ -188,7 +188,7 @@ public:
 protected:
 	// 기본으로 제공되는 최초 슬롯 수
 	// 실제 슬롯 수는 QuickSlots.Num()
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Quick Slot", meta = (ClampMin = 1, UIMin = 1))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "QuickSlot", meta = (ClampMin = 1, UIMin = 1))
 	int32 InitialSlotCount = 5;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_QuickSlots, VisibleInstanceOnly, BlueprintReadOnly, Category = "Quick Slot")
