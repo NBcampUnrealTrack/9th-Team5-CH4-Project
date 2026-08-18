@@ -3,7 +3,10 @@
 
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Storage/DRStorage.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryWidget.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
@@ -25,6 +28,11 @@ void UDRInventoryUIComponent::BeginPlay()
 		|| !PlayerController->IsLocalController())
 	{
 		return;
+	}
+
+	if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
 	}
 	
 	PlayerController->OnCurrentStorageChangedDelegate.AddDynamic(this, &ThisClass::HandleCurrentStorageChanged);
@@ -51,9 +59,19 @@ void UDRInventoryUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		PlayerInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 		PlayerInventoryWidget->OnCloseRequestedDelegate.RemoveDynamic(this, &ThisClass::HandleCloseRequested);
 		
-		PlayerInventoryWidget->RemoveFromParent();
+		if (IsValid(UIManager))
+		{
+			UIManager->ReleaseManagedWidget(PlayerInventoryWidget);
+		}
+		else
+		{
+			PlayerInventoryWidget->RemoveFromParent();
+		}
+
 		PlayerInventoryWidget = nullptr;
 	}
+
+	UIManager = nullptr;
 	
 	Super::EndPlay(EndPlayReason);
 }
@@ -70,7 +88,6 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 	case EDRInventoryUIState::Closed:
 		UIState = EDRInventoryUIState::PlayerOnly;
 		ShowPlayerInventory();
-		ApplyInputMode(EDRInventoryInputMode::GameAndUI);
 		break;
 		
 	case EDRInventoryUIState::PlayerOnly:
@@ -95,7 +112,6 @@ void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage
 		ShowPlayerInventory();
 		ShowStorageInventory(NewStorage);
 		StartStorageDistanceCheck();
-		ApplyInputMode(EDRInventoryInputMode::GameAndUI);
 		return;
 	}
 	
@@ -110,16 +126,20 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	// 이미 존재하는 경우
 	if (IsValid(PlayerInventoryWidget))
 	{
-		PlayerInventoryWidget->SetVisibility(ESlateVisibility::Visible);
+		UIManager->SetManagedWidgetVisible(PlayerInventoryWidget, true);
 		return;
 	}
 	
-	if (!PlayerInventoryWidgetClass)
+	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
+	if (!IsValid(UIConfig) || !UIConfig->PlayerInventoryWidgetClass)
 	{
 		return;
 	}
 	
-	PlayerInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, PlayerInventoryWidgetClass);
+	PlayerInventoryWidget = Cast<UDRInventoryWidget>(
+		UIManager->CreateManagedWidget(
+			UIConfig->PlayerInventoryWidgetClass,
+			UIConfig->PlayerInventoryLayer));
 	if (!IsValid(PlayerInventoryWidget))
 	{
 		return;
@@ -131,8 +151,6 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	PlayerInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 	PlayerInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
 	
-	// UI 순서 임의로 지정, 신다인 테스트
-	PlayerInventoryWidget->AddToViewport(5);
 }
 
 void UDRInventoryUIComponent::HidePlayerInventory()
@@ -144,16 +162,18 @@ void UDRInventoryUIComponent::HidePlayerInventory()
 	
 	// Player Inventory는 지우지 않고 캐싱
 	// Visibility만 조정
-	PlayerInventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	UIManager->SetManagedWidgetVisible(PlayerInventoryWidget, false);
 }
 
 void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 {
 	HideStorageInventory();
 	
+	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
 	if (!IsValid(Storage)
 		|| !IsValid(Storage->GetInventoryComponent())
-		|| !StorageInventoryWidgetClass)
+		|| !IsValid(UIConfig)
+		|| !UIConfig->StorageInventoryWidgetClass)
 	{
 		return;
 	}
@@ -161,7 +181,10 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 	// 오픈 도중 소유권 전환 처리 (ex: 창고 확인 중 기절)
 	Storage->OnStorageOwnerChangedDelegate.AddDynamic(this, &ThisClass::HandleStorageOwnerChanged);
 	
-	StorageInventoryWidget = CreateWidget<UDRInventoryWidget>(PlayerController, StorageInventoryWidgetClass);
+	StorageInventoryWidget = Cast<UDRInventoryWidget>(
+		UIManager->CreateManagedWidget(
+			UIConfig->StorageInventoryWidgetClass,
+			UIConfig->StorageInventoryLayer));
 	if (!IsValid(StorageInventoryWidget))
 	{
 		return;
@@ -170,8 +193,6 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 	StorageInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandleStorageEntryClicked);
 	StorageInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
 	
-	// UI 순서 임의로 지정, 신다인 테스트
-	StorageInventoryWidget->AddToViewport(10);
 }
 
 void UDRInventoryUIComponent::HideStorageInventory()
@@ -190,7 +211,15 @@ void UDRInventoryUIComponent::HideStorageInventory()
 	StorageInventoryWidget->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandleStorageEntryClicked);
 	StorageInventoryWidget->OnCloseRequestedDelegate.RemoveDynamic(this, &ThisClass::HandleCloseRequested);
 	
-	StorageInventoryWidget->RemoveFromParent();
+	if (IsValid(UIManager))
+	{
+		UIManager->ReleaseManagedWidget(StorageInventoryWidget);
+	}
+	else
+	{
+		StorageInventoryWidget->RemoveFromParent();
+	}
+
 	StorageInventoryWidget = nullptr;
 }
 
@@ -262,43 +291,14 @@ void UDRInventoryUIComponent::CloseInventoryScreen()
 	HideStorageInventory();
 	
 	UIState = EDRInventoryUIState::Closed;
-	ApplyInputMode(EDRInventoryInputMode::GameOnly);	
-}
-
-void UDRInventoryUIComponent::ApplyInputMode(EDRInventoryInputMode InInputMode)
-{
-	if (!IsValid(PlayerController))
-	{
-		return;
-	}
-
-	switch (InInputMode)
-	{
-	case EDRInventoryInputMode::GameAndUI:
-		{
-			FInputModeGameAndUI InputMode;
-			InputMode.SetHideCursorDuringCapture(false);
-			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	
-			PlayerController->SetInputMode(InputMode);
-			PlayerController->bShowMouseCursor = true;
-			break;
-		}
-	case EDRInventoryInputMode::GameOnly:
-		{
-			PlayerController->SetInputMode(FInputModeGameOnly());
-			PlayerController->bShowMouseCursor = false;
-			break;
-		}
-	}
 }
 
 void UDRInventoryUIComponent::StartStorageDistanceCheck()
 {
-	if (UWorld* World = GetWorld())
+	if (UWorld* World = GetWorld(); IsValid(PlayerController) && IsValid(World))
 	{
 		World->GetTimerManager().SetTimer(StorageDistanceTimerHandle, this, &ThisClass::CheckStorageDistance
-			, StorageDistanceCheckInterval, true);
+			, PlayerController->GetStorageDistanceCheckInterval(), true);
 	}
 }
 

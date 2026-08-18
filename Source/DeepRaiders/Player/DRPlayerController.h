@@ -18,8 +18,10 @@ class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRInventoryUIComponent;
+class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRTeleportUIComponent;
+class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 
@@ -52,6 +54,7 @@ protected:
 	void SetupGASInputComponent();
 	
 	virtual void OnPossess(APawn* InPawn) override;
+	virtual void OnRep_Pawn() override;
 
 private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
@@ -238,6 +241,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Storage")
 	bool IsStorageWithinInteractionRange(const ADRStorage* Storage) const;
 
+	float GetStorageDistanceCheckInterval() const { return StorageDistanceCheckInterval; }
+
 	// 테스트 명령
 	UFUNCTION(Exec)
 	void DRDepositFirstItem();
@@ -282,6 +287,11 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentStorage, VisibleInstanceOnly, Category = "Player|Storage")
 	TObjectPtr<ADRStorage> CurrentStorage;
 
+	/** 열린 창고와의 거리를 다시 검사하는 주기다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Storage",
+		meta = (ClampMin = "0.05", Units = "s"))
+	float StorageDistanceCheckInterval = 0.2f;
+
 #pragma endregion
 
 #pragma region UI
@@ -300,6 +310,10 @@ private:
 	void HandleToggleShop(const FInputActionValue& Value);
 
 protected:
+	/** 로컬 플레이어 UI에서 사용할 위젯 클래스 설정이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TObjectPtr<UDRUIConfig> UIConfig;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
 
@@ -310,13 +324,16 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopUIComponent> AvailableShop;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
 #pragma endregion

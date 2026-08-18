@@ -23,8 +23,11 @@
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -44,6 +47,7 @@ ADRPlayerController::ADRPlayerController()
 
 	// UI Component Initialize
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 }
@@ -69,6 +73,18 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 
 void ADRPlayerController::BeginPlay()
 {
+	// UI 컴포넌트 BeginPlay 전에 로컬 플레이어 UI 설정을 준비한다.
+	if (IsLocalController())
+	{
+		if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
+		{
+			if (UDRUIManagerSubsystem* UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
+			{
+				UIManager->Configure(this, UIConfig);
+			}
+		}
+	}
+
 	Super::BeginPlay();
 
 	/*
@@ -223,6 +239,21 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->ApplySelectedItemToCharacter();
+	}
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
+	}
+}
+
+void ADRPlayerController::OnRep_Pawn()
+{
+	Super::OnRep_Pawn();
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
 	}
 }
 

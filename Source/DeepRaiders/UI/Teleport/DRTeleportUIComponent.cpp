@@ -3,7 +3,10 @@
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportSelectWidget.h"
+#include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 
 UDRTeleportUIComponent::UDRTeleportUIComponent()
@@ -21,6 +24,11 @@ void UDRTeleportUIComponent::BeginPlay()
 		return;
 	}
 
+	if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	}
+
 	RefreshTeleportComponentBinding();
 }
 
@@ -28,6 +36,7 @@ void UDRTeleportUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	BindTeleportComponent(nullptr);
 	CloseTeleportSelectWidget();
+	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -67,26 +76,51 @@ void UDRTeleportUIComponent::CloseTeleportSelectWidget()
 {
 	if (IsValid(TeleportSelectWidget))
 	{
-		TeleportSelectWidget->RemoveFromParent();
+		TeleportSelectWidget->OnCloseRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleTeleportCloseRequested);
+
+		if (IsValid(UIManager))
+		{
+			UIManager->ReleaseManagedWidget(TeleportSelectWidget);
+		}
+		else
+		{
+			TeleportSelectWidget->RemoveFromParent();
+		}
+
 		TeleportSelectWidget = nullptr;
 	}
 }
 
 void UDRTeleportUIComponent::HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint)
 {
-	if (!IsValid(PlayerController) || !PlayerController->IsLocalController() || !IsValid(CurrentTeleportPoint) || !TeleportSelectWidgetClass)
+	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController()
+		|| !IsValid(CurrentTeleportPoint) || !IsValid(UIConfig)
+		|| !UIConfig->TeleportSelectWidgetClass)
 	{
 		return;
 	}
 
 	CloseTeleportSelectWidget();
 
-	TeleportSelectWidget = CreateWidget<UDRTeleportSelectWidget>(PlayerController, TeleportSelectWidgetClass);
+	TeleportSelectWidget = Cast<UDRTeleportSelectWidget>(
+		UIManager->CreateManagedWidget(
+			UIConfig->TeleportSelectWidgetClass,
+			UIConfig->TeleportLayer));
 	if (!IsValid(TeleportSelectWidget))
 	{
 		return;
 	}
 
 	TeleportSelectWidget->InitializeRegisteredTeleportList(INDEX_NONE, CurrentTeleportPoint);
-	TeleportSelectWidget->AddToViewport(10);
+	TeleportSelectWidget->OnCloseRequested.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleTeleportCloseRequested);
+}
+
+void UDRTeleportUIComponent::HandleTeleportCloseRequested()
+{
+	CloseTeleportSelectWidget();
 }
