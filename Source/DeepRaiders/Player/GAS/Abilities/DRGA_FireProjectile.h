@@ -29,6 +29,16 @@ protected:
 		, const FGameplayAbilityActorInfo* ActorInfo
 		, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 	
+	virtual bool CheckCost(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
+
+	virtual void ApplyCost(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo) const override;
+	
 private:
 	// Definition 설정으로 적중 EffectSpec 생성
 	void BuildImpactEffectSpecs(UAbilitySystemComponent* AbilitySystemComponent

@@ -52,14 +52,17 @@ protected:
 	virtual void SetupInputComponent() override;
 	
 	void SetupGASInputComponent();
+	bool bGASInputBound = false;
 	
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_Pawn() override;
 
+	virtual void OnRep_PlayerState() override;
+
 private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
-
+	
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
 
@@ -78,7 +81,7 @@ private:
 	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
-
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -134,6 +137,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+	
 #pragma endregion
 
 #pragma region Interact
@@ -249,21 +256,6 @@ public:
 
 	UFUNCTION(Exec)
 	void DRWithDrawFirstItem();
-
-	UFUNCTION(Exec)
-	void DRTestAddSnow();
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Test")
-	TSubclassOf<UGameplayAbility> TestAddSnowAbilityClass;
-	
-	UFUNCTION(Exec)
-	void DRTestFrozen();
-
-	UPROPERTY(EditDefaultsOnly, Category = "GAS|Test")
-	TSubclassOf<UGameplayAbility> TestFrozenAbilityClass;
-
-	UFUNCTION(Exec)
-	void DRCheckFrozen();
 
 private:
 	UFUNCTION(Server, Reliable)
