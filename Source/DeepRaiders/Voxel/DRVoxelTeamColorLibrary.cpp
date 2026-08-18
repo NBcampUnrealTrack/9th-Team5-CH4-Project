@@ -12,17 +12,21 @@ namespace
 		EVoxelMaterialConfig MaterialConfig,
 		int32 TeamId)
 	{
+		const int32 MaterialIndex =
+			UDRVoxelTeamColorLibrary::GetTeamMaterialIndex(TeamId);
+
 		FVoxelPaintMaterial PaintMaterial;
+		// 팀 재질 테스트는 SingleIndex/MultiIndex에서 material index를 바꾸는 방식으로 처리한다.
 		switch (MaterialConfig)
 		{
 		case EVoxelMaterialConfig::SingleIndex:
 			PaintMaterial.Type = EVoxelPaintMaterialType::SingleIndex;
-			PaintMaterial.SingleIndex.Channel.Channel = TeamId;
+			PaintMaterial.SingleIndex.Channel.Channel = MaterialIndex;
 			break;
 
 		case EVoxelMaterialConfig::MultiIndex:
 			PaintMaterial.Type = EVoxelPaintMaterialType::MultiIndex;
-			PaintMaterial.SingleIndex.Channel.Channel = TeamId;
+			PaintMaterial.SingleIndex.Channel.Channel = MaterialIndex;
 			PaintMaterial.MultiIndex.TargetValue = 1.f;
 			break;
 
@@ -33,6 +37,13 @@ namespace
 
 		return PaintMaterial;
 	}
+}
+
+int32 UDRVoxelTeamColorLibrary::GetTeamMaterialIndex(int32 TeamId)
+{
+	return TeamId == INDEX_NONE
+		? 0
+		: FMath::Max(0, TeamId) + 1;
 }
 
 bool UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
@@ -63,6 +74,7 @@ bool UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
 		SurfaceBounds,
 		true);
 
+	// Paint만 호출하는 경우에도 값 편집과 비슷한 표면 범위를 잡기 위해 falloff stack을 적용한다.
 	FVoxelSurfaceEditsStack SurfaceStack;
 	SurfaceStack.Add(
 		UVoxelSurfaceTools::ApplyFalloff(
@@ -89,6 +101,11 @@ bool UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
 	bool bUpdateRender)
 {
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	if (ProcessedVoxels.Voxels->Num() == 0)
 	{
 		return false;
 	}
@@ -124,7 +141,7 @@ bool UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
 		*GetNameSafe(VoxelWorld),
 		static_cast<int32>(VoxelWorld->MaterialConfig),
 		TeamId,
-		TeamId,
+		GetTeamMaterialIndex(TeamId),
 		ModifiedMaterials.Num(),
 		EditedMaterialBounds.IsValid());
 

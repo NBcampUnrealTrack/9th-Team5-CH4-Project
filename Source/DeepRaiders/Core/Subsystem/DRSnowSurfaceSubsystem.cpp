@@ -1,5 +1,6 @@
 #include "DRSnowSurfaceSubsystem.h"
 
+#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "EngineUtils.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
@@ -22,6 +23,45 @@ float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 	}
 
 	return ModifiedValueAmount;
+}
+
+FVoxelSurfaceEditsProcessedVoxels MakeProcessedVoxelGroup(
+	const FVoxelSurfaceEditsProcessedVoxels& SourceVoxels,
+	TArray<FVoxelSurfaceEditsVoxel>&& GroupVoxels)
+{
+	FVoxelSurfaceEditsProcessedVoxels Result;
+	Result.Bounds = SourceVoxels.Bounds;
+	Result.Info = SourceVoxels.Info;
+	Result.Voxels = MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(MoveTemp(GroupVoxels));
+	return Result;
+}
+
+FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
+	const FVoxelSurfaceEditsProcessedVoxels& SourceVoxels,
+	const TArray<FModifiedVoxelValue>& ModifiedValues)
+{
+	TSet<FIntVector> NewlyAddedPositions;
+	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+	{
+		// FVoxelValue에서 양수는 empty, 음수/0은 filled 쪽이다.
+		// 기존에 이미 차 있던 표면은 다른 팀 재질일 수 있으니 Add paint 대상에서 제외한다.
+		if (ModifiedValue.OldValue > 0.f &&
+			ModifiedValue.NewValue < ModifiedValue.OldValue)
+		{
+			NewlyAddedPositions.Add(ModifiedValue.Position);
+		}
+	}
+
+	TArray<FVoxelSurfaceEditsVoxel> NewVoxels;
+	for (const FVoxelSurfaceEditsVoxel& Voxel : *SourceVoxels.Voxels)
+	{
+		if (NewlyAddedPositions.Contains(Voxel.Position))
+		{
+			NewVoxels.Add(Voxel);
+		}
+	}
+
+	return MakeProcessedVoxelGroup(SourceVoxels, MoveTemp(NewVoxels));
 }
 }
 
@@ -47,6 +87,7 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
 	{
+		// SphereTool은 표면을 찾지 않고 구 부피 안의 Voxel 값을 직접 추가한다.
 		TArray<FModifiedVoxelValue> ModifiedValues;
 		FVoxelIntBox EditedBounds;
 		UVoxelSphereTools::AddSphere(
@@ -60,17 +101,43 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 			true,
 			true);
 
-		UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
-			VoxelWorld,
-			Request.WorldLocation,
-			Request.Radius,
-			Request.Context.TeamId);
-
 		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
 		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
 		if (AddedAmount > 0.f)
 		{
+			const FVoxelIntBox SurfaceBounds =
+				UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
+					VoxelWorld,
+					Request.WorldLocation,
+					Request.Radius);
+			if (SurfaceBounds.IsValid())
+			{
+				FVoxelSurfaceEditsVoxels SurfaceVoxels;
+				UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+					SurfaceVoxels,
+					VoxelWorld,
+					SurfaceBounds,
+					true);
+
+				FVoxelSurfaceEditsStack SurfaceStack;
+				SurfaceStack.Add(
+					UVoxelSurfaceTools::ApplyFalloff(
+						VoxelWorld,
+						EVoxelFalloff::Smooth,
+						Request.WorldLocation,
+						Request.Radius,
+						SnowSurfaceFalloff));
+
+				const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
+					UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
+				UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+					VoxelWorld,
+					MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
+					Request.Context.TeamId,
+					true);
+			}
+
 			OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
 		}
 
@@ -110,14 +177,6 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 	const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
 		UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
 
-	// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
-	// bUpdateRender=false로 두고 아래 값 편집에서 한 번에 render update가 일어나게 한다.
-	UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
-		VoxelWorld,
-		ProcessedVoxels,
-		Request.Context.TeamId,
-		false);
-
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	FVoxelIntBox EditedBounds;
 	UVoxelSurfaceEditTools::EditVoxelValues(
@@ -135,6 +194,14 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 	const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
 	if (AddedAmount > 0.f)
 	{
+		// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
+		// 단, 기존 표면과 겹친 교집합은 유지하고 이번 Add로 새로 채워진 위치만 칠한다.
+		UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+			VoxelWorld,
+			MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
+			Request.Context.TeamId,
+			true);
+
 		OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
 	}
 
@@ -187,7 +254,6 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 	}
 
 	// SurfaceTool 객체를 직접 쓰지 않고 함수형 API만 감싼다.
-	// 이 Subsystem은 Voxel Plugin 세부 호출을 숨기는 wrapper 역할을 한다.
 	const FVoxelIntBox SurfaceBounds =
 		UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
 			VoxelWorld,
@@ -246,6 +312,89 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 	}
 
 	return RemovedAmount;
+}
+
+bool UDRSnowSurfaceSubsystem::RepaintSnowMaterialsAtArea(
+	const FDRSnowSurfaceRemoveRequest& Request)
+{
+	if (Request.Radius <= 0.f)
+	{
+		return false;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	const UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+		IsValid(World)
+			? World->GetSubsystem<UDRSnowVolumeSubsystem>()
+			: nullptr;
+	if (!SnowVolumeSubsystem)
+	{
+		return false;
+	}
+
+	const FVoxelIntBox SurfaceBounds =
+		UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius);
+	if (!SurfaceBounds.IsValid())
+	{
+		return false;
+	}
+
+	FVoxelSurfaceEditsVoxels SurfaceVoxels;
+	UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+		SurfaceVoxels,
+		VoxelWorld,
+		SurfaceBounds,
+		true);
+
+	FVoxelSurfaceEditsStack SurfaceStack;
+	SurfaceStack.Add(
+		UVoxelSurfaceTools::ApplyFalloff(
+			VoxelWorld,
+			EVoxelFalloff::Smooth,
+			Request.WorldLocation,
+			Request.Radius,
+			SnowSurfaceFalloff));
+
+	const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
+		UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
+
+	TMap<int32, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByTeam;
+	for (const FVoxelSurfaceEditsVoxel& Voxel : *ProcessedVoxels.Voxels)
+	{
+		const FVector SampleWorldLocation =
+			ProcessedVoxels.Info.bHasSurfacePositions
+				? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
+				: VoxelWorld->LocalToGlobal(Voxel.Position);
+		const int32 DominantTeamId =
+			SnowVolumeSubsystem->GetDominantTeamAtLocation(SampleWorldLocation);
+		VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);
+	}
+
+	bool bPaintedAny = false;
+	for (TPair<int32, TArray<FVoxelSurfaceEditsVoxel>>& TeamVoxels : VoxelsByTeam)
+	{
+		if (TeamVoxels.Value.Num() == 0)
+		{
+			continue;
+		}
+
+		bPaintedAny |= UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+			VoxelWorld,
+			MakeProcessedVoxelGroup(ProcessedVoxels, MoveTemp(TeamVoxels.Value)),
+			TeamVoxels.Key,
+			true);
+	}
+
+	return bPaintedAny;
 }
 
 AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const

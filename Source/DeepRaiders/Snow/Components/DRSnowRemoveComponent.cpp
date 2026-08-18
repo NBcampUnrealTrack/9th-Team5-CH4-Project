@@ -3,6 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "VoxelWorld.h"
@@ -78,6 +79,26 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 			// Voxel 편집은 컴포넌트가 직접 수행하지 않고 Subsystem 경계로 보낸다.
 			RemovedAmount = SnowSurfaceSubsystem->RemoveSnowAtArea(Request);
 		}
+
+		if (RemovedAmount > 0.f)
+		{
+			if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+				World->GetSubsystem<UDRSnowVolumeSubsystem>())
+			{
+				// 표면이 실제로 깎인 양만 원본 density에서도 제거한다.
+				// 이렇게 해야 Voxel 표현과 팀별 진행도 데이터가 같은 속도로 줄어든다.
+				FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
+				VolumeRequest.RequestedAmount = RemovedAmount;
+				SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+			}
+
+			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
+				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+			{
+				// SnowVolume 감소 후 현재 표면을 다시 찾아 남은 dominant team 색으로 복원한다.
+				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
+			}
+		}
 	}
 
 	AActor* TargetActor = GetInteractableActorFromHit(HitResult);
@@ -105,6 +126,23 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 		if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
 		{
 			RemovedAmount = SnowSurfaceSubsystem->RemoveSnowAtArea(Request);
+		}
+
+		if (RemovedAmount > 0.f)
+		{
+			if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
+				World->GetSubsystem<UDRSnowVolumeSubsystem>())
+			{
+				FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
+				VolumeRequest.RequestedAmount = RemovedAmount;
+				SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+			}
+
+			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
+				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+			{
+				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
+			}
 		}
 	}
 
