@@ -1,26 +1,21 @@
 ﻿#include "DRPlayerLifecycleComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-
-#include "DeepRaiders/Player/Components/DRHealthComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
-
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
-
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
-
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
-
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/PlayerController.h"
-
 #include "Kismet/GameplayStatics.h"
+#include "AbilitySystemComponent.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 
 UDRPlayerLifecycleComponent::UDRPlayerLifecycleComponent()
 {
@@ -33,37 +28,17 @@ UDRPlayerLifecycleComponent::UDRPlayerLifecycleComponent()
 	SetIsReplicatedByDefault(true);
 }
 
-void UDRPlayerLifecycleComponent::BeginPlay()
+void UDRPlayerLifecycleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	Super::BeginPlay();
+	UnbindAbilitySystem();
 
-	UDRHealthComponent* Health =
-		GetHealthComponent();
-
-	if (IsValid(Health))
-	{
-		Health->
-			OnHealthDepleted.AddUObject(
-				this,
-				&ThisClass::
-					HandleHealthDepleted);
-	}
+	Super::EndPlay(EndPlayReason);
 }
 
 ADRPlayerCharacter* UDRPlayerLifecycleComponent::GetOwnerCharacter() const
 {
 	return Cast<ADRPlayerCharacter>(
 		GetOwner());
-}
-
-UDRHealthComponent* UDRPlayerLifecycleComponent::GetHealthComponent() const
-{
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
-
-	return IsValid(Character)
-		? Character->GetHealthComponent()
-		: nullptr;
 }
 
 void UDRPlayerLifecycleComponent::HandleLanded(
@@ -201,13 +176,6 @@ void UDRPlayerLifecycleComponent::ApplyFallDamage(
 	const float HealthBeforeDamage =
 		Character->GetCurrentHealth();
 
-	/*
-	 * 여전히 Actor Damage Pipeline을 사용한다.
-	 *
-	 * ApplyDamage
-	 * → Character::TakeDamage
-	 * → HealthComponent::ApplyDamage
-	 */
 	const float AppliedDamage =
 		UGameplayStatics::ApplyDamage(
 			Character,
@@ -937,4 +905,50 @@ void UDRPlayerLifecycleComponent::HandleControllerReady()
 
 	Controller->
 		SetIgnoreLookInput(false);
+}
+
+void UDRPlayerLifecycleComponent::BindAbilitySystem(UAbilitySystemComponent* ASC)
+{
+	UnbindAbilitySystem();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	BoundASC = ASC;
+
+	HealthChangedDelegateHandle =
+		ASC->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetHealthAttribute())
+		.AddUObject(
+			this,
+			&ThisClass::HandleHealthChanged);
+}
+
+void UDRPlayerLifecycleComponent::UnbindAbilitySystem()
+{
+	if (BoundASC.IsValid() &&
+		HealthChangedDelegateHandle.IsValid())
+	{
+		BoundASC->
+			GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::
+					GetHealthAttribute())
+			.Remove(
+				HealthChangedDelegateHandle);
+	}
+
+	HealthChangedDelegateHandle.Reset();
+	BoundASC.Reset();
+}
+
+void UDRPlayerLifecycleComponent::HandleHealthChanged(const FOnAttributeChangeData& Data)
+{
+	if (Data.NewValue > KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	HandleHealthDepleted();
 }

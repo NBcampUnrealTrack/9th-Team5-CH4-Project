@@ -8,6 +8,7 @@
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
+class UDRItemAbilitySet;
 class UTexture2D;
 class USoundBase;
 
@@ -53,6 +54,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade", meta = (ClampMin = 0, UIMin = 0))
 	int32 Price = 0;
 
+	// ===== GAS =====
+	
+	// 아이템이 장착되었을 때 ASC에 부여할 Ability와 Effect 셋
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
+	TObjectPtr<UDRItemAbilitySet> ItemAbilitySet;
+	
 	// ===== Action =====
 
 	/** 좌클릭으로 실행할 기본 행동 */
@@ -97,6 +104,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
 
+	
+	// Sound
+	
 	/** 아이템이 활성화될 때 재생할 소리 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
 	TObjectPtr<USoundBase> ActiveSound;

@@ -9,6 +9,8 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
 {
@@ -556,7 +558,29 @@ void UDRQuickSlotComponent::RefreshHandedItem()
 	}
 	
 	HeldItemDefinition = NewHandedItem;
-	
+
+	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
+	{
+		// 기존 장비의 Ability, Effect 회수
+		if (!GrantedHandles.IsEmpty())
+		{
+			GrantedHandles.TakeFromAbilitySystem(ASC);
+			UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Take"));
+		}
+
+		// 새 장비의 Ability, Effect 부여
+		if (NewHandedItem
+			&& NewHandedItem->ItemAbilitySet)
+		{
+			NewHandedItem->ItemAbilitySet->GiveToAbilitySystem(ASC, &GrantedHandles, NewHandedItem);
+		}
+
+		if (!GrantedHandles.IsEmpty())
+		{
+			UE_LOG(LogTemp, Log, TEXT("[GAS_Item] Ability Grant"));
+		}
+	}
+
 	// 캐릭터 외형에 반영
 	ApplySelectedItemToCharacter();
 	

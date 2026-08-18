@@ -4,7 +4,6 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
-#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 
@@ -18,7 +17,6 @@
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
-#include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 
 #include "DeepRaiders/Storage/DRStorage.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
@@ -30,8 +28,10 @@
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
 #include "AbilitySystemComponent.h"
+#include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
-#include "Blueprint/UserWidget.h"
+
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -52,6 +52,18 @@ void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, CurrentStorage);
+}
+
+UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
+{
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return nullptr;
+	}
+
+	return DRPlayerState->GetAbilitySystemComponent();
 }
 
 void ADRPlayerController::BeginPlay()
@@ -100,7 +112,6 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
-
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -175,10 +186,27 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleInventory);
 	}
+	
+	SetupGASInputComponent();
+}
 
-	if (IsValid(ShopAction))
+void ADRPlayerController::SetupGASInputComponent()
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
-		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
+		if (IsValid(InputComponent))
+		{
+			UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
+			
+			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered
+				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
+			EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed
+				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
+			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered
+				, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
+			EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed
+				, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
+		}
 	}
 }
 
@@ -347,6 +375,42 @@ void ADRPlayerController::HandleSecondaryActionCompleted(const FInputActionValue
 	}
 
 	PlayerCharacter->RequestSecondaryItemAction(EDRItemActionTriggerEvent::Completed);
+}
+
+void ADRPlayerController::HandleGASInputPressed(int32 InputId)
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
+		if (Spec)
+		{
+			Spec->InputPressed = true;
+			if (Spec->IsActive())
+			{
+				ASC->AbilitySpecInputPressed(*Spec);
+			}
+			else
+			{
+				ASC->TryActivateAbility(Spec->Handle);
+			}
+		}
+	}
+}
+
+void ADRPlayerController::HandleGASInputReleased(int32 InputId)
+{
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
+		if (Spec)
+		{
+			Spec->InputPressed = false;
+			if (Spec->IsActive())
+			{
+				ASC->AbilitySpecInputReleased(*Spec);
+			}
+		}
+	}
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
@@ -823,30 +887,6 @@ void ADRPlayerController::HandleToggleInventory(const FInputActionValue&)
 	}
 }
 
-void ADRPlayerController::SetAvailableShop(UDRShopUIComponent* ShopUIComponent)
-{
-	if (IsLocalController() && IsValid(ShopUIComponent))
-	{
-		AvailableShop = ShopUIComponent;
-	}
-}
-
-void ADRPlayerController::ClearAvailableShop(UDRShopUIComponent* ShopUIComponent)
-{
-	if (AvailableShop == ShopUIComponent)
-	{
-		AvailableShop = nullptr;
-	}
-}
-
-void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
-{
-	if (IsValid(AvailableShop))
-	{
-		AvailableShop->ToggleShopWidget();
-	}
-}
-
 void ADRPlayerController::OnRep_CurrentStorage()
 {
 	OnCurrentStorageChangedDelegate.Broadcast(CurrentStorage.Get());
@@ -928,6 +968,39 @@ void ADRPlayerController::DRTestAddSnow()
 	const bool bRequested = ASC->TryActivateAbility(AbilitySpec->Handle, true);
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][TestActivate] " "TryActivateAbility=%d"), bRequested);
+}
+
+void ADRPlayerController::DRTestFrozen()
+{
+	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+
+	if (!IsValid(PlayerCharacter))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = PlayerCharacter->GetAbilitySystemComponent();
+
+	if (!IsValid(ASC) || !IsValid(TestFrozenAbilityClass))
+	{
+		return;
+	}
+
+	ASC->TryActivateAbilityByClass(TestFrozenAbilityClass, true);
+}
+
+void ADRPlayerController::DRCheckFrozen()
+{
+	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+
+	UAbilitySystemComponent* ASC = IsValid(PlayerCharacter) ? PlayerCharacter->GetAbilitySystemComponent() : nullptr;
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[GAS][Frozen][ClientCheck] Frozen=%d"), ASC->HasMatchingGameplayTag( DRGameplayTags::State_Frozen));
 }
 
 #pragma region Teleport

@@ -20,14 +20,12 @@ class UDRTeleportComponent;
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
-class UDRHealthComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
-
 class UAbilitySystemComponent;
 class UGameplayEffect;
-
 class USpringArmComponent;
+class UDRPlayerAttributeSet;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -46,6 +44,17 @@ public:
 	ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
+	float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser);
+	
+	float GetCurrentHealth() const;
+	float GetMaxHealth() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	float GetHealthRatio() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	bool IsDead() const;
 
 	virtual void Landed(const FHitResult& Hit) override;
 
@@ -84,20 +93,6 @@ public:
 
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetCurrentHealth() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetMaxHealth() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetHealthRatio() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	bool IsDead() const;
-
-	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
 	void RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
@@ -148,13 +143,8 @@ public:
 	/** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
 	void ReconcileJetpackFuelFromServer(float ServerFuel);
 
-	UDRHealthComponent* GetHealthComponent() const
-	{
-		return HealthComponent;
-	}
-
 	FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
-
+	
 protected:
 	virtual void BeginPlay() override;
 
@@ -175,9 +165,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Item Action", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRItemActionPresentationComponent> ItemActionPresentationComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Health", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRHealthComponent> HealthComponent;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
 
@@ -197,6 +184,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
+	
+private:
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Damage")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Respawn")
+	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
+	
+	void ApplySpawnAttributeReset();
+	
 #pragma region QuickSlot
 
 public:

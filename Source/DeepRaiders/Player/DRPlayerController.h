@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
+#include "AbilitySystemInterface.h"
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
@@ -33,7 +34,7 @@ enum class EDRStorageTransferDirection : uint8
 };
 
 UCLASS()
-class DEEPRAIDERS_API ADRPlayerController : public APlayerController
+class DEEPRAIDERS_API ADRPlayerController : public APlayerController, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -42,10 +43,14 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
-
+	
+	void SetupGASInputComponent();
+	
 	virtual void OnPossess(APawn* InPawn) override;
 
 private:
@@ -65,6 +70,9 @@ private:
 	void HandleSecondaryActionStarted(const FInputActionValue& Value);
 	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
 	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
+	
+	void HandleGASInputPressed(int32 InputId);
+	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
 
@@ -239,9 +247,18 @@ public:
 
 	UFUNCTION(Exec)
 	void DRTestAddSnow();
-
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Test")
 	TSubclassOf<UGameplayAbility> TestAddSnowAbilityClass;
+	
+	UFUNCTION(Exec)
+	void DRTestFrozen();
+
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Test")
+	TSubclassOf<UGameplayAbility> TestFrozenAbilityClass;
+
+	UFUNCTION(Exec)
+	void DRCheckFrozen();
 
 private:
 	UFUNCTION(Server, Reliable)

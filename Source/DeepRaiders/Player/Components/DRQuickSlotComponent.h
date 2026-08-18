@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
 #include "DRQuickSlotComponent.generated.h"
 
 class UDRInventoryComponent;
@@ -164,6 +165,7 @@ private:
 	
 	UDRItemDefinition* ResolveHandedItemDefinition(int32 SlotIndex) const;
 	
+	// 손에 든 장비에 따라 ASC의 Ability, Effect 또한 함께 새로고침
 	void RefreshHandedItem();
 	void RequestReplicationUpdate() const;
 	
@@ -209,4 +211,6 @@ private:
 	// 수량이 0인 경우 nullptr
 	UPROPERTY(Transient)
 	TObjectPtr<UDRItemDefinition> HeldItemDefinition;
+	
+	FDRItemAbilitySet_GrantedHandles GrantedHandles;
 };
