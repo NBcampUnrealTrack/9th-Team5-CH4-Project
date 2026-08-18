@@ -12,9 +12,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitFreezeGauge(0.f);
 
 	InitMaxSnowGauge(100.f);
-	InitSnowGauge(0.f);
-
-	InitMoveSpeedMultiplier(1.f);
+	InitSnowGauge(100.f);
 }
 
 void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -27,7 +25,6 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxFreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
 }
 
 void UDRPlayerAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
@@ -58,15 +55,6 @@ void UDRPlayerAttributeSet::OnRep_SnowGauge(const FGameplayAttributeData& OldSno
 void UDRPlayerAttributeSet::OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, OldMaxSnowGauge);
-}
-
-void UDRPlayerAttributeSet::OnRep_MoveSpeedMultiplier(
-	const FGameplayAttributeData& OldMoveSpeedMultiplier)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(
-		UDRPlayerAttributeSet,
-		MoveSpeedMultiplier,
-		OldMoveSpeedMultiplier);
 }
 
 void UDRPlayerAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -137,10 +125,6 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxSnowGauge());
 	}
 	else if (Attribute == GetIncomingDamageAttribute())
-	{
-		NewValue = FMath::Max(NewValue, 0.f);
-	}
-	else if (Attribute == GetMoveSpeedMultiplierAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}

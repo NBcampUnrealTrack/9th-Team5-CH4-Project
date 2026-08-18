@@ -8,6 +8,7 @@
 #include "DRProjectileWeaponDefinition.generated.h"
 
 class ADRProjectile;
+class UGameplayEffect;
 
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRProjectileWeaponItemDefinition : public UDRItemDefinition
@@ -39,4 +40,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fire", meta = (ClampMin = 0.01, UIMin=0.01, Units = "s"))
 	float BaseFireInterval = 0.25f;
 	
+	// 1회 발사 시 소비할 SnowGauge
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fire", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float SnowCostPerShot = 1.f;
+
+	// SnowGauge 소비용 GameplayEffect
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Fire")
+	TSubclassOf<UGameplayEffect> SnowCostEffectClass;
 };

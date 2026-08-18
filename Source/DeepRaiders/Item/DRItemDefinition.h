@@ -11,6 +11,7 @@ class ADRWorldItemActor;
 class UDRItemAbilitySet;
 class UTexture2D;
 class USoundBase;
+class UDRItemAnimationSet;
 
 UENUM(BlueprintType)
 enum class EItemCategory : uint8
@@ -118,5 +119,14 @@ public:
 	/** 아이템이 땅에 떨어졌을 때 재생할 소리 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
 	TObjectPtr<USoundBase> DroppedSound;
+	
+	// ===== Animation =====
+
+	/**
+	 * 이 아이템을 손에 들었을 때 사용할
+	 * 캐릭터 Animation Profile.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Animation")
+	TObjectPtr<UDRItemAnimationSet> ItemAnimationSet;
 };
 
