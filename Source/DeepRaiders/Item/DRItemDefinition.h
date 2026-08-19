@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Engine/DataTable.h"
 #include "DRItemActionTypes.h"
 #include "DRItemDefinition.generated.h"
 
@@ -14,7 +15,7 @@ class USoundBase;
 class UDRItemAnimationSet;
 
 UENUM(BlueprintType)
-enum class EItemCategory : uint8
+enum class EDRItemCategory : uint8
 {
 	Ore,
 	Equipment,
@@ -22,9 +23,33 @@ enum class EItemCategory : uint8
 	End,
 };
 
-/**
- * 
- */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString DisplayName;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Description;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRItemCategory Category;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxStackSize = 1;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 bCanBeSold:1 = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Price = 0;	
+};
+
 UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))
 class DEEPRAIDERS_API UDRItemDefinition : public UPrimaryDataAsset
 {
@@ -35,7 +60,7 @@ public:
 	FName ItemId;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
-	EItemCategory Category;
+	EDRItemCategory Category;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;

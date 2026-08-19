@@ -8,7 +8,7 @@
 class UButton;
 class UDRShopItemWidget;
 class UScrollBox;
-enum class EItemCategory : uint8;
+enum class EDRItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -42,8 +42,8 @@ protected:
 private:
 	void InitializeSellAllOresButton();
 	void InitializeUpgradeButton();
-	void SelectCategory(EItemCategory Category);
-	void RefreshItems(EItemCategory Category);
+	void SelectCategory(EDRItemCategory Category);
+	void RefreshItems(EDRItemCategory Category);
 	void RefreshUpgradeItems();
 	bool CreateItemWidget(const FDRShopItemOffer& ItemOffer);
 

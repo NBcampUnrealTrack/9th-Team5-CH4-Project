@@ -13,6 +13,11 @@
 				"UMG",
 				"GameplayAbilities"
 			]
+		},
+		{
+			  "Name": "DeepRaidersEditor",
+			  "Type": "Editor",
+			  "LoadingPhase": "PostEngineInit"
 		}
 	],
 	"Plugins": [
