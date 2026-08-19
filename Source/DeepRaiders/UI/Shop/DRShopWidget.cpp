@@ -110,8 +110,11 @@ void UDRShopWidget::RefreshPerkItems()
 	}
 
 	ItemScrollBox->ClearChildren();
+
+	// 테스트용 초기화 UI를 퍽 상품보다 먼저 표시한다.
 	CreatePerkResetTestWidget();
 
+	// 퍽 Offer마다 공용 상점 아이템 위젯을 생성한다.
 	for (const FDRShopOfferView& Offer : PerkOffers)
 	{
 		CreateItemWidget(Offer);

@@ -291,6 +291,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 {
 	UDRPerkDefinition* PerkDefinition = nullptr;
 
+	// 클라이언트 요청을 신뢰하지 않고 가격, 슬롯과 Row 데이터를 서버에서 재검증한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(PerkComponent)
@@ -310,6 +311,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		return false;
 	}
 
+	// 검증된 퍽의 AbilitySet 적용이 성공한 경우에만 구매를 확정한다.
 	if (!IsValid(PerkDefinition)
 		|| !PerkComponent->AddPerk(PerkDefinition))
 	{
@@ -323,6 +325,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		return false;
 	}
 
+	// 퍽 적용이 완료된 뒤 비용을 차감한다.
 	const int32 PreviousCoins = PlayerState->GetCoins();
 	PlayerState->SetCoins(PreviousCoins - PerkDefinition->Price);
 	UE_LOG(

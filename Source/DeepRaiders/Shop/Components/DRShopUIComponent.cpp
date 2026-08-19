@@ -356,6 +356,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 {
 	TArray<FDRShopOfferView> OfferViews;
 
+	// 퍽 상품과 플레이어 구매 상태를 모두 확인할 수 있을 때만 View를 생성한다.
 	if (!IsValid(ShopComponent)
 		|| !IsValid(PerkComponent)
 		|| !IsValid(PlayerState))
@@ -365,11 +366,13 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 
 	for (const FDRShopItemOffer& Offer : ShopComponent->GetItemOffers())
 	{
+		// 일반 상품과 장비 업그레이드는 퍽 UI에서 제외한다.
 		if (Offer.OfferType != EDRShopOfferType::Perk)
 		{
 			continue;
 		}
 
+		// 상점 ItemDefinition이 실제 퍽 Definition인지 확인한다.
 		UDRPerkDefinition* PerkDefinition =
 			Cast<UDRPerkDefinition>(Offer.ItemDefinition);
 
@@ -378,6 +381,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 			continue;
 		}
 
+		// 퍽 Definition의 표시 데이터로 상점 UI View를 구성한다.
 		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
 		OfferView.Request = Offer.MakeRequest();
 		OfferView.Request.OfferType = EDRShopOfferType::Perk;
@@ -388,6 +392,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 		OfferView.Description = PerkDefinition->Description;
 		OfferView.Icon = PerkDefinition->Icon;
 		OfferView.Price = PerkDefinition->Price;
+		// 현재 코인과 전체 퍽 슬롯 제한을 기준으로 버튼 활성 상태를 결정한다.
 		OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
 			Offer.RowName,
 			PerkComponent,

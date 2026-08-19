@@ -48,7 +48,10 @@ private:
 	void SelectCategory(EDRItemCategory Category);
 	void RefreshItems(EDRItemCategory Category);
 	void RefreshUpgradeItems();
+	/** 퍽 초기화 테스트 위젯과 판매 중인 퍽 목록을 다시 생성한다. */
 	void RefreshPerkItems();
+
+	/** 설정된 테스트 위젯 클래스로 퍽 초기화 UI를 생성한다. */
 	bool CreatePerkResetTestWidget();
 	bool CreateItemWidget(const FDRShopOfferView& Offer);
 
