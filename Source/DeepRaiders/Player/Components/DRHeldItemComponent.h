@@ -65,12 +65,6 @@ private:
 protected:
 	virtual void BeginPlay() override;
 
-	/**
-	 * 채굴 Action의 로컬 입력 쿨다운.
-	 *
-	 * Melee는 MeleeCombatComponent의
-	 * AttackDuration을 사용한다.
-	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Held Item|Action", meta = (ClampMin = "0.01"))
 	float DigActionCooldown = 0.6f;
 
