@@ -5,6 +5,7 @@
     <explicitIncludes>
       <Path>Plugins/GameplayMessageRouter</Path>
       <Path>Plugins/VoxelFree</Path>
+      <Path>Source/DeepRaiders/Audio</Path>
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
       <Path>Source/DeepRaiders/Inventory/DRInventoryTypes.h</Path>
