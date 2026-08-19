@@ -64,15 +64,6 @@ bool UDRMeleeCombatComponent::CanStartAttackFromAbility(const UDRMeleeWeaponItem
 		return false;
 	}
 
-	/*
-	 * 현재 실제로 근접 공격 가능한 아이템을
-	 * 들고 있는지 서버에서 다시 검증.
-	 */
-	if (!Character->HasHeldItemAction(EDRItemActionType::MeleeAttack))
-	{
-		return false;
-	}
-
 	return !bIsAttacking;
 }
 

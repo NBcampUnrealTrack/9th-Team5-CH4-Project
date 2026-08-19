@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/DataTable.h"
-#include "DRItemActionTypes.h"
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
@@ -87,37 +86,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
 	TObjectPtr<UDRItemAbilitySet> ItemAbilitySet;
 	
-	// ===== Action =====
-
-	/** 좌클릭으로 실행할 기본 행동 */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionType PrimaryAction =
-		EDRItemActionType::None;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionTriggerEvent PrimaryActionTriggerEvent =
-		EDRItemActionTriggerEvent::Started;
-
-	/** 우클릭으로 실행할 보조 행동 */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionType SecondaryAction =
-		EDRItemActionType::None;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionTriggerEvent SecondaryActionTriggerEvent =
-		EDRItemActionTriggerEvent::Started;
+	// Mesh
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")
 	TObjectPtr<UStaticMesh> WorldMesh;
@@ -130,7 +99,6 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
-
 	
 	// Sound
 	
