@@ -69,12 +69,6 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-	void HandlePrimaryActionStarted(const FInputActionValue& Value);
-	void HandlePrimaryActionTriggered(const FInputActionValue& Value);
-	void HandlePrimaryActionCompleted(const FInputActionValue& Value);
-	void HandleSecondaryActionStarted(const FInputActionValue& Value);
-	void HandleSecondaryActionTriggered(const FInputActionValue& Value);
-	void HandleSecondaryActionCompleted(const FInputActionValue& Value);
 	
 	void HandleGASInputPressed(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);

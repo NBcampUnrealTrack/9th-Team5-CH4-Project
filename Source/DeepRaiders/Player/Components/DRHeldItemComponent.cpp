@@ -134,8 +134,11 @@ bool UDRHeldItemComponent::HasAction(EDRItemActionType ActionType) const
 	{
 		return false;
 	}
-
-	return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
+	
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	return false;
+	//return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
 }
 
 void UDRHeldItemComponent::RequestPrimaryAction(EDRItemActionTriggerEvent TriggerEvent)
@@ -147,12 +150,14 @@ void UDRHeldItemComponent::RequestPrimaryAction(EDRItemActionTriggerEvent Trigge
 		return;
 	}
 
-	if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	//if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
 
-	ExecuteAction(HeldItemDefinition->PrimaryAction);
+	//ExecuteAction(HeldItemDefinition->PrimaryAction);
 }
 
 void UDRHeldItemComponent::RequestSecondaryAction(EDRItemActionTriggerEvent TriggerEvent)
@@ -164,12 +169,14 @@ void UDRHeldItemComponent::RequestSecondaryAction(EDRItemActionTriggerEvent Trig
 		return;
 	}
 
-	if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	//if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
 
-	ExecuteAction(HeldItemDefinition->SecondaryAction);
+	//ExecuteAction(HeldItemDefinition->SecondaryAction);
 }
 
 bool UDRHeldItemComponent::CanStartLocalAction() const
