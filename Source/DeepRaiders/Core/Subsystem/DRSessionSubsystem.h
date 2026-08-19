@@ -2,9 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "Subsystems/GameInstanceSubsystem.h"
 #include "DRSessionSubsystem.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSessionComplete, bool, bWasSuccessful);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRSessionOperationComplete,
+	bool,
+	bWasSuccessful);
 
 UCLASS()
 class DEEPRAIDERS_API UDRSessionSubsystem : public UGameInstanceSubsystem
@@ -12,26 +16,23 @@ class DEEPRAIDERS_API UDRSessionSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	UDRSessionSubsystem();
+	UPROPERTY(BlueprintAssignable)
+	FDRSessionOperationComplete OnCreateSessionComplete;
 
-	/// 세션 생성 성공 여부
-	FOnSessionComplete OnCreateSessionComplete;
-	/// 세션 조인 성공 여부
-	FOnSessionComplete OnJoinSessionComplete;
+	UPROPERTY(BlueprintAssignable)
+	FDRSessionOperationComplete OnJoinSessionComplete;
 
-	/// 세션 생성
-	/// @param NumPublicConnections 세션에 공개적으로 연결할 수 있는 클라이언트 수
-	/// @param MatchType 매치 타입
-	/// @param InLoadLevelName 로드할 레벨 이름 없을 경우 로드 하지 않음
-	void CreateSession(const int32 NumPublicConnections, const FName MatchType,
-	                   const FName InLoadLevelName = NAME_None);
+	// Dedicated Server에서만 로컬 서버 세션을 생성
+	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
+	void CreateServerSession();
 
-	/// 랜 환경에서 세션 찾기 후 조인
-	void FindAndJoinSession();
+	// IP:Port 또는 Domain:Port 주소로 서버에 직접 접속합니다.
+	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
+	void JoinServer(const FString& Address);
 
-	/// IP 주소로 세션 조인
-	/// @param IPAddress 도메인 또는 IP 주소
-	void JoinSession(const FString& IPAddress);
+	// 서버에서 지정한 맵으로 이동합니다. 접속 중인 클라이언트는 서버를 따라 이동합니다.
+	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
+	bool ServerTravel(const FString& MapPath);
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
@@ -39,16 +40,17 @@ public:
 private:
 	// ReSharper disable once CppBoundToDelegateMethodIsNotMarkedAsUFunction
 	IOnlineSessionPtr SessionInterface;
-	TSharedPtr<FOnlineSessionSearch> SessionSearch;
-	FName LoadLevelName;
+
+	FDelegateHandle CreateSessionCompleteDelegateHandle;
+	bool bDedicatedSessionCreationRequested = false;
+
+	void CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName,
+	                           const FString& MatchType);
 
 	void HandleCreateSessionComplete(FName SessionName, bool bWasSuccessful);
-	void HandleFindSessionsComplete(bool bWasSuccessful);
-	void HandleJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+	void ClearSessionDelegateHandles();
 
-	/// 입력 받은 주소를 IP 주소로 변환
-	/// @param IPAddress 도메인 또는 IP 주소
-	/// @param OutFinalConnectURL 변환된 IP 주소
-	///	@return 변환 성공 여부
-	static bool TryConvertDomainToIP(const FString& IPAddress, FString& OutFinalConnectURL);
+	bool RefreshOnlineSubsystem();
+
+	static bool TryResolveConnectAddress(const FString& Address, FString& OutResolvedAddress);
 };
