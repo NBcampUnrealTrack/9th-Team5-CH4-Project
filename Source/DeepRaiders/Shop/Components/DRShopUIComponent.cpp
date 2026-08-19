@@ -328,7 +328,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		OfferView.Request.OfferType = OfferType;
 		OfferView.Section = OfferType == EDRShopOfferType::Upgrade
 			? EDRShopOfferSection::Upgrade
-			: Offer.ItemDefinition->Category == EItemCategory::Consumable
+			: Offer.ItemDefinition->Category == EDRItemCategory::Consumable
 				? EDRShopOfferSection::Consumable
 				: EDRShopOfferSection::Equipment;
 		OfferView.DisplayName = Offer.ItemDefinition->DisplayName;

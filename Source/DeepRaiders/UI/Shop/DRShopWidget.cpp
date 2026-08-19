@@ -9,20 +9,31 @@
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeShop(
-	const TArray<FDRShopItemOffer>& NewItemOffers)
+	const TArray<FDRShopOfferView>& NewItemOffers)
 {
 	ItemOffers = NewItemOffers;
 	SelectCategory(EDRItemCategory::Equipment);
 }
 
 void UDRShopWidget::SetUpgradeOffers(
-	const TArray<FDRShopItemOffer>& NewUpgradeOffers)
+	const TArray<FDRShopOfferView>& NewUpgradeOffers)
 {
 	UpgradeOffers = NewUpgradeOffers;
 
 	if (IsUpgradeSelected)
 	{
 		RefreshUpgradeItems();
+	}
+}
+
+void UDRShopWidget::SetPerkOffers(
+	const TArray<FDRShopOfferView>& NewPerkOffers)
+{
+	PerkOffers = NewPerkOffers;
+
+	if (IsPerkSelected)
+	{
+		RefreshPerkItems();
 	}
 }
 
@@ -34,12 +45,18 @@ void UDRShopWidget::SelectCategory(EDRItemCategory Category)
 	}
 
 	IsUpgradeSelected = false;
+	IsPerkSelected = false;
 	EquipmentButton->SetIsEnabled(Category != EDRItemCategory::Equipment);
 	ConsumableButton->SetIsEnabled(Category != EDRItemCategory::Consumable);
 
 	if (IsValid(UpgradeButton))
 	{
 		UpgradeButton->SetIsEnabled(true);
+	}
+
+	if (IsValid(PerkButton))
+	{
+		PerkButton->SetIsEnabled(true);
 	}
 
 	RefreshItems(Category);
@@ -54,16 +71,18 @@ void UDRShopWidget::RefreshItems(EDRItemCategory Category)
 
 	ItemScrollBox->ClearChildren();
 
-	for (const FDRShopItemOffer& ItemOffer : ItemOffers)
+	const EDRShopOfferSection Section = Category == EDRItemCategory::Equipment
+		? EDRShopOfferSection::Equipment
+		: EDRShopOfferSection::Consumable;
+
+	for (const FDRShopOfferView& Offer : ItemOffers)
 	{
-		if (ItemOffer.IsUpgrade()
-			|| !IsValid(ItemOffer.ItemDefinition)
-			|| ItemOffer.ItemDefinition->Category != Category)
+		if (Offer.Section != Section)
 		{
 			continue;
 		}
 
-		CreateItemWidget(ItemOffer);
+		CreateItemWidget(Offer);
 	}
 }
 
@@ -76,19 +95,29 @@ void UDRShopWidget::RefreshUpgradeItems()
 
 	ItemScrollBox->ClearChildren();
 
-	for (const FDRShopItemOffer& ItemOffer : UpgradeOffers)
+	for (const FDRShopOfferView& Offer : UpgradeOffers)
 	{
-		CreateItemWidget(ItemOffer);
+		CreateItemWidget(Offer);
 	}
 }
 
-bool UDRShopWidget::CreateItemWidget(const FDRShopItemOffer& ItemOffer)
+void UDRShopWidget::RefreshPerkItems()
 {
-	if (!IsValid(ItemOffer.ItemDefinition))
+	if (!IsValid(ItemScrollBox) || !ItemWidgetClass)
 	{
-		return false;
+		return;
 	}
 
+	ItemScrollBox->ClearChildren();
+
+	for (const FDRShopOfferView& Offer : PerkOffers)
+	{
+		CreateItemWidget(Offer);
+	}
+}
+
+bool UDRShopWidget::CreateItemWidget(const FDRShopOfferView& Offer)
+{
 	UDRShopItemWidget* ItemWidget = CreateWidget<UDRShopItemWidget>(
 		GetOwningPlayer(),
 		ItemWidgetClass);
@@ -98,7 +127,7 @@ bool UDRShopWidget::CreateItemWidget(const FDRShopItemOffer& ItemOffer)
 		return false;
 	}
 
-	ItemWidget->SetItemOffer(ItemOffer);
+	ItemWidget->SetOffer(Offer);
 	ItemWidget->OnOfferRequested.AddDynamic(
 		this,
 		&ThisClass::HandleOfferRequested);
@@ -111,6 +140,7 @@ void UDRShopWidget::NativeOnInitialized()
 	Super::NativeOnInitialized();
 	InitializeSellAllOresButton();
 	InitializeUpgradeButton();
+	InitializePerkButton();
 
 	if (IsValid(CloseButton))
 	{
@@ -138,6 +168,13 @@ void UDRShopWidget::NativeOnInitialized()
 		UpgradeButton->OnClicked.AddDynamic(
 			this,
 			&ThisClass::HandleUpgradeButtonClicked);
+	}
+
+	if (IsValid(PerkButton))
+	{
+		PerkButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandlePerkButtonClicked);
 	}
 
 	if (IsValid(SellAllOresButton))
@@ -214,6 +251,39 @@ void UDRShopWidget::InitializeUpgradeButton()
 	ButtonContainer->AddChild(UpgradeButton);
 }
 
+void UDRShopWidget::InitializePerkButton()
+{
+	if (IsValid(PerkButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(WidgetTree))
+	{
+		return;
+	}
+
+	UPanelWidget* ButtonContainer =
+		Cast<UPanelWidget>(ConsumableButton->GetParent());
+
+	if (!IsValid(ButtonContainer))
+	{
+		return;
+	}
+
+	PerkButton = WidgetTree->ConstructWidget<UButton>(
+		UButton::StaticClass(),
+		TEXT("PerkButton"));
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>();
+
+	if (!IsValid(PerkButton) || !IsValid(ButtonText))
+	{
+		PerkButton = nullptr;
+		return;
+	}
+
+	ButtonText->SetText(FText::FromString(TEXT("\uD37D")));
+	PerkButton->SetContent(ButtonText);
+	ButtonContainer->AddChild(PerkButton);
+}
+
 void UDRShopWidget::NativeDestruct()
 {
 	if (IsValid(CloseButton))
@@ -242,6 +312,13 @@ void UDRShopWidget::NativeDestruct()
 		UpgradeButton->OnClicked.RemoveDynamic(
 			this,
 			&ThisClass::HandleUpgradeButtonClicked);
+	}
+
+	if (IsValid(PerkButton))
+	{
+		PerkButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandlePerkButtonClicked);
 	}
 
 	if (IsValid(SellAllOresButton))
@@ -279,10 +356,40 @@ void UDRShopWidget::HandleUpgradeButtonClicked()
 	}
 
 	IsUpgradeSelected = true;
+	IsPerkSelected = false;
 	EquipmentButton->SetIsEnabled(true);
 	ConsumableButton->SetIsEnabled(true);
 	UpgradeButton->SetIsEnabled(false);
+
+	if (IsValid(PerkButton))
+	{
+		PerkButton->SetIsEnabled(true);
+	}
+
 	RefreshUpgradeItems();
+}
+
+void UDRShopWidget::HandlePerkButtonClicked()
+{
+	if (!IsValid(EquipmentButton)
+		|| !IsValid(ConsumableButton)
+		|| !IsValid(PerkButton))
+	{
+		return;
+	}
+
+	IsUpgradeSelected = false;
+	IsPerkSelected = true;
+	EquipmentButton->SetIsEnabled(true);
+	ConsumableButton->SetIsEnabled(true);
+	PerkButton->SetIsEnabled(false);
+
+	if (IsValid(UpgradeButton))
+	{
+		UpgradeButton->SetIsEnabled(true);
+	}
+
+	RefreshPerkItems();
 }
 
 void UDRShopWidget::HandleSellAllOresButtonClicked()
