@@ -16,10 +16,14 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(
 	const FDRSnowSurfaceRemoveRequest&,
 	const FDRSnowRemoveResult&);
 
+class UDRJoinSnapshotSubsystem;
+
 UCLASS()
 class DEEPRAIDERS_API UDRSnowVolumeSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
+
+	friend class UDRJoinSnapshotSubsystem;
 
 public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
@@ -64,6 +68,12 @@ public:
 
 	FDRSnowAddedToVolumeDelegate OnSnowAddedToVolume;
 	FDRSnowRemovedFromVolumeDelegate OnSnowRemovedFromVolume;
+
+	// Join snapshot 적용 전용. Voxel 표현과 같은 checkpoint에서 복원되어야 한다.
+	void ReplaceSnapshotData(
+		float InCellSize,
+		int32 InChunkSize,
+		TMap<FIntVector, FDRSnowVolumeChunk>&& InChunks);
 
 protected:
 	FIntVector WorldToCell(const FVector& WorldLocation) const;

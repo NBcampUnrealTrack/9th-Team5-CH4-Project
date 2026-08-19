@@ -123,6 +123,30 @@ bool UDRVoxelTeamOwnershipSubsystem::GetNearestTeamAtVoxel(
 	return false;
 }
 
+void UDRVoxelTeamOwnershipSubsystem::CopySnapshotData(
+	AVoxelWorld* VoxelWorld,
+	TMap<FIntVector, int32>& OutTeamByVoxel) const
+{
+	OutTeamByVoxel.Reset();
+	if (const FDRVoxelTeamOwnershipWorldData* WorldData =
+		FindWorldData(VoxelWorld))
+	{
+		OutTeamByVoxel = WorldData->TeamByVoxel;
+	}
+}
+
+void UDRVoxelTeamOwnershipSubsystem::ReplaceSnapshotData(
+	AVoxelWorld* VoxelWorld,
+	TMap<FIntVector, int32>&& InTeamByVoxel)
+{
+	if (!IsValid(VoxelWorld))
+	{
+		return;
+	}
+
+	FindOrCreateWorldData(VoxelWorld).TeamByVoxel = MoveTemp(InTeamByVoxel);
+}
+
 FDRVoxelTeamOwnershipWorldData& UDRVoxelTeamOwnershipSubsystem::FindOrCreateWorldData(
 	AVoxelWorld* VoxelWorld)
 {

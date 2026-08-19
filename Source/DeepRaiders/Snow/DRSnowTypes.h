@@ -153,6 +153,11 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	float RequestedAmount = 0.f;
 
+	// 서버 표면 편집에서 실제로 빠진 양이다. 클라이언트는 SnowVolume 감소에
+	// 이 값을 사용해야 각자의 표면 탐색 결과 차이로 원본 density가 벌어지지 않는다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	float AppliedAmount = 0.f;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	bool bInvertSurfaceStrength = false;
 
@@ -164,6 +169,26 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FName VoxelWorldName = NAME_None;
+};
+
+// checkpoint 이후 재생할 눈 변경 이벤트다. Sequence는 중도난입 동기화 중
+// multicast와 history가 겹쳐도 같은 변경을 한 번만 적용하기 위한 기준이다.
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSnowOperationRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	int32 Sequence = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bIsAddOperation = true;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FDRSnowAddOperation AddOperation;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FDRSnowRemoveOperation RemoveOperation;
 };
 
 // 눈 투사체나 눈 충돌체가 캐릭터/대상에게 피해를 줄 때 사용하는 요청 데이터다.

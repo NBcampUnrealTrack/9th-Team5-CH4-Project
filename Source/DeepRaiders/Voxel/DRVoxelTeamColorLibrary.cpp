@@ -134,16 +134,16 @@ bool UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
 		false,
 		bUpdateRender);
 
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[Voxel][TeamColor] Painted VoxelWorld=%s Config=%d TeamId=%d MaterialIndex=%d Materials=%d BoundsValid=%d"),
-		*GetNameSafe(VoxelWorld),
-		static_cast<int32>(VoxelWorld->MaterialConfig),
-		TeamId,
-		GetTeamMaterialIndex(TeamId),
-		ModifiedMaterials.Num(),
-		EditedMaterialBounds.IsValid());
+	// UE_LOG(
+	// 	LogTemp,
+	// 	Log,
+	// 	TEXT("[Voxel][TeamColor] Painted VoxelWorld=%s Config=%d TeamId=%d MaterialIndex=%d Materials=%d BoundsValid=%d"),
+	// 	*GetNameSafe(VoxelWorld),
+	// 	static_cast<int32>(VoxelWorld->MaterialConfig),
+	// 	TeamId,
+	// 	GetTeamMaterialIndex(TeamId),
+	// 	ModifiedMaterials.Num(),
+	// 	EditedMaterialBounds.IsValid());
 
 	return EditedMaterialBounds.IsValid();
 }

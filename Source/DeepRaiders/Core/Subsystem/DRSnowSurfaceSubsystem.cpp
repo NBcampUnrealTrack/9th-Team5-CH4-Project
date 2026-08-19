@@ -66,6 +66,7 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 	return MakeProcessedVoxelGroup(SourceVoxels, MoveTemp(NewVoxels));
 }
 
+
 float ApplyVolumeRemovalFromSurfaceChanges(
 	UWorld* World,
 	AVoxelWorld* VoxelWorld,

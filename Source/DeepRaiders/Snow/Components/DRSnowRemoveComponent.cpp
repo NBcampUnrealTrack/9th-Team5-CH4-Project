@@ -94,6 +94,7 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
 				Operation.Radius = Request.Radius;
 				Operation.RequestedAmount = Request.RequestedAmount;
+				Operation.AppliedAmount = RemovedAmount;
 				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
 				Operation.EditTool = Request.EditTool;
 				Operation.TeamId = Request.Context.TeamId;
@@ -175,6 +176,7 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
 				Operation.Radius = Request.Radius;
 				Operation.RequestedAmount = Request.RequestedAmount;
+				Operation.AppliedAmount = RemovedAmount;
 				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
 				Operation.EditTool = Request.EditTool;
 				Operation.TeamId = Request.Context.TeamId;

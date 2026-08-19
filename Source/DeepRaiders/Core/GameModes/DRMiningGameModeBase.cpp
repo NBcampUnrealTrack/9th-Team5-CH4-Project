@@ -1,6 +1,7 @@
 #include "DRMiningGameModeBase.h"
 
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
+#include "DeepRaiders/Core/Subsystem/DRJoinSnapshotSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 
@@ -27,15 +28,38 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	UDRVoxelTerrainSubsystem* TerrainSubsystem =
-		World->GetSubsystem<UDRVoxelTerrainSubsystem>();
+	ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>();
+	UDRJoinSnapshotSubsystem* JoinSnapshotSubsystem = World->GetSubsystem<UDRJoinSnapshotSubsystem>();
+	if (IsValid(MiningGameState) && IsValid(JoinSnapshotSubsystem))
+	{
+		FDRSnowJoinCheckpoint Checkpoint;
+		if (!JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint) &&
+			JoinSnapshotSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
+		{
+			JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint);
+			MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
+		}
+
+		if (JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint))
+		{
+			PlayerController->Client_BeginSnowJoinSnapshot(
+				Checkpoint.SnapshotId,
+				Checkpoint.OperationSequence,
+				Checkpoint.VoxelWorldName,
+				Checkpoint.VoxelSaveData.Num(),
+				Checkpoint.SnowVolumeData.Num(),
+				Checkpoint.OwnershipData.Num());
+			return;
+		}
+	}
+
+	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
 	if (!IsValid(TerrainSubsystem))
 	{
 		return;
 	}
 
-	const TArray<FDRTerrainDigOperation>& DigHistory =
-		TerrainSubsystem->GetDigHistory();
+	const TArray<FDRTerrainDigOperation>& DigHistory = TerrainSubsystem->GetDigHistory();
 	if (DigHistory.Num() == 0)
 	{
 		return;

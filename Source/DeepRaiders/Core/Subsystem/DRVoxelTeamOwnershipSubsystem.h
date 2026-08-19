@@ -44,6 +44,14 @@ public:
 		int32 SearchRadius,
 		int32& OutTeamId) const;
 
+	// 중도난입 checkpoint용 원본 소유권 데이터 입출력이다.
+	void CopySnapshotData(
+		AVoxelWorld* VoxelWorld,
+		TMap<FIntVector, int32>& OutTeamByVoxel) const;
+	void ReplaceSnapshotData(
+		AVoxelWorld* VoxelWorld,
+		TMap<FIntVector, int32>&& InTeamByVoxel);
+
 private:
 	FDRVoxelTeamOwnershipWorldData& FindOrCreateWorldData(AVoxelWorld* VoxelWorld);
 	const FDRVoxelTeamOwnershipWorldData* FindWorldData(AVoxelWorld* VoxelWorld) const;

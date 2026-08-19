@@ -41,6 +41,16 @@ bool UDRSnowVolumeSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return IsValid(World) && World->IsGameWorld();
 }
 
+void UDRSnowVolumeSubsystem::ReplaceSnapshotData(
+	float InCellSize,
+	int32 InChunkSize,
+	TMap<FIntVector, FDRSnowVolumeChunk>&& InChunks)
+{
+	CellSize = FMath::Max(1.f, InCellSize);
+	ChunkSize = FMath::Max(1, InChunkSize);
+	Chunks = MoveTemp(InChunks);
+}
+
 FDRSnowAddResult UDRSnowVolumeSubsystem::AddSnow(
 	const FDRSnowSurfaceAddRequest& Request)
 {
