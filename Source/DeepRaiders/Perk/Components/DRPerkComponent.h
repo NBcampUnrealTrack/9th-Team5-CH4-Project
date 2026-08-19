@@ -9,14 +9,17 @@ class UDRPerkDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPerksChangedSignature);
 
+/** 플레이어가 보유한 퍽 하나의 정의와 서버 GAS 적용 상태다. */
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRPerkEntry
 {
 	GENERATED_BODY()
 
+	/** 소유 클라이언트에 복제할 퍽 정의다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
 
+	/** 초기화 시 Ability와 Effect를 회수하기 위한 서버 전용 핸들이다. */
 	FDRItemAbilitySet_GrantedHandles GrantedHandles;
 };
 
@@ -52,6 +55,7 @@ public:
 	FDRPerksChangedSignature OnPerksChanged;
 
 private:
+	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)
 	void ServerResetPerks();
 

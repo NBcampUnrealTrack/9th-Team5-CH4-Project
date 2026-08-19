@@ -54,6 +54,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		? PlayerState->GetAbilitySystemComponent()
 		: nullptr;
 
+	// 퍽과 GAS 상태는 서버에서만 변경한다.
 	if (!IsValid(PlayerState)
 		|| !PlayerState->HasAuthority()
 		|| !IsValid(AbilitySystemComponent)
@@ -84,6 +85,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 
 	FDRItemAbilitySet_GrantedHandles GrantedHandles;
 
+	// Definition에 설정된 AbilitySet을 적용하고 회수용 핸들을 받는다.
 	PerkDefinition->ItemAbilitySet->GiveToAbilitySystem(
 		AbilitySystemComponent,
 		&GrantedHandles,
@@ -107,6 +109,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		*GetNameSafe(PlayerState),
 		*GetNameSafe(PerkDefinition));
 
+	// 퍽 정의와 적용 핸들을 하나의 Entry로 보관한다.
 	FDRPerkEntry& PerkEntry = PerkEntries.AddDefaulted_GetRef();
 	PerkEntry.PerkDefinition = PerkDefinition;
 	PerkEntry.GrantedHandles = MoveTemp(GrantedHandles);
@@ -142,6 +145,7 @@ bool UDRPerkComponent::ResetPerks()
 		return false;
 	}
 
+	// 각 퍽이 부여한 Ability와 Effect만 ASC에서 회수한다.
 	for (FDRPerkEntry& PerkEntry : PerkEntries)
 	{
 		PerkEntry.GrantedHandles.TakeFromAbilitySystem(
@@ -157,6 +161,7 @@ bool UDRPerkComponent::ResetPerks()
 
 void UDRPerkComponent::RequestResetPerks()
 {
+	// PlayerState 소유 클라이언트에서 서버 RPC를 호출한다.
 	ServerResetPerks();
 }
 
@@ -167,6 +172,7 @@ void UDRPerkComponent::ServerResetPerks_Implementation()
 
 void UDRPerkComponent::OnRep_PerkEntries()
 {
+	// 복제 완료 후 소유 클라이언트의 퍽 UI를 갱신한다.
 	UE_LOG(
 		LogTemp,
 		Log,
