@@ -2,12 +2,15 @@
 
 
 #include "DRWorldItemActor.h"
+#include "AbilitySystemGlobals.h"
 #include "DRItemInstance.h"
 #include "DRItemDefinition.h"
-#include "Net/UnrealNetwork.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "GameplayCueManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -22,6 +25,7 @@ ADRWorldItemActor::ADRWorldItemActor()
 	
 	StaticMeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	StaticMeshComponent->SetSimulatePhysics(true);
+	StaticMeshComponent->SetNotifyRigidBodyCollision(true);
 	StaticMeshComponent->BodyInstance.bStartAwake = false;
 	StaticMeshComponent->OnComponentHit.AddDynamic(this, &ThisClass::HandleStaticMeshHit);
 }
@@ -141,17 +145,30 @@ void ADRWorldItemActor::MulticastPlayActiveSound_Implementation()
 void ADRWorldItemActor::ArmGroundHitEvent()
 {
 	bGroundHitEventArmed = true;
+	GroundHitArmHeight = GetActorLocation().Z;
 }
 
 void ADRWorldItemActor::BroadcastDropped()
 {
-	if (!HasAuthority() || !bGroundHitEventArmed)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	// 드랍 동작마다 최초 착지에서 한 번만 재생한다.
+	if (!bGroundHitEventArmed)
+	{
+		return;
+	}
+
+	const float FallHeight = GroundHitArmHeight - GetActorLocation().Z;
+
+	// 첫 바닥 판정 후 다음 분리 또는 투척까지 잠근다.
 	bGroundHitEventArmed = false;
+	if (FallHeight < MinimumDropSoundHeight)
+	{
+		return;
+	}
+
 	MulticastPlayDroppedSound();
 }
 
@@ -177,21 +194,50 @@ void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, A
 	}
 }
 
-void ADRWorldItemActor::MulticastPlayPickupSound_Implementation()
+void ADRWorldItemActor::MulticastPlayPickupSound_Implementation(APawn* Interactor)
 {
-	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
-	if (IsValid(Definition) && IsValid(Definition->PickupSound))
+	if (!IsValid(Interactor))
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Definition->PickupSound, GetActorLocation());
+		return;
+	}
+
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	FGameplayCueParameters CueParameters;
+	CueParameters.Location = GetActorLocation();
+	CueParameters.Instigator = Interactor;
+	CueParameters.EffectCauser = this;
+	CueParameters.SourceObject = Definition;
+
+	if (UGameplayCueManager* CueManager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
+	{
+		CueManager->HandleGameplayCue(Interactor,
+			DRGameplayTags::GameplayCue_Sound_Item_PickedUp,
+			EGameplayCueEvent::Executed, CueParameters);
 	}
 }
 
 void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	if (IsValid(Definition) && Definition->Category == EDRItemCategory::Ore)
+	{
+		FGameplayCueParameters CueParameters;
+		CueParameters.OriginalTag = DRGameplayTags::GameplayCue_Sound_Ore_Dropped;
+		CueParameters.Location = GetActorLocation();
+		CueParameters.EffectCauser = this;
+		CueParameters.SourceObject = Definition;
+
+		if (UGameplayCueManager* CueManager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
+		{
+			CueManager->HandleGameplayCue(this, DRGameplayTags::GameplayCue_Sound_Ore_Dropped,
+				EGameplayCueEvent::Executed, CueParameters);
+		}
+
+		return;
+	}
+
 	if (IsValid(Definition) && IsValid(Definition->DroppedSound))
 	{
-		// 광물마다 별도의 Concurrency Owner를 사용한다.
 		UGameplayStatics::PlaySoundAtLocation(this, Definition->DroppedSound, GetActorLocation(),
 			FRotator::ZeroRotator, 1.f, 1.f, 0.f, nullptr, nullptr, this);
 	}
@@ -316,7 +362,7 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 	// 	return false;
 	// }
 
-	MulticastPlayPickupSound();
+	MulticastPlayPickupSound(Interactor);
 	
 	if (!FinalizePickup())
 	{

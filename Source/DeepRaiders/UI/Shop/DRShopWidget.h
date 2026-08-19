@@ -8,7 +8,7 @@
 class UButton;
 class UDRShopItemWidget;
 class UScrollBox;
-enum class EItemCategory : uint8;
+enum class EDRItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -23,9 +23,8 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeShop(const TArray<FDRShopOfferView>& NewItemOffers);
-	void SetUpgradeOffers(const TArray<FDRShopOfferView>& NewUpgradeOffers);
-	void SetPerkOffers(const TArray<FDRShopOfferView>& NewPerkOffers);
+	void InitializeShop(const TArray<FDRShopItemOffer>& NewItemOffers);
+	void SetUpgradeOffers(const TArray<FDRShopItemOffer>& NewUpgradeOffers);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -43,12 +42,10 @@ protected:
 private:
 	void InitializeSellAllOresButton();
 	void InitializeUpgradeButton();
-	void InitializePerkButton();
-	void SelectCategory(EItemCategory Category);
-	void RefreshItems(EItemCategory Category);
+	void SelectCategory(EDRItemCategory Category);
+	void RefreshItems(EDRItemCategory Category);
 	void RefreshUpgradeItems();
-	void RefreshPerkItems();
-	bool CreateItemWidget(const FDRShopOfferView& Offer);
+	bool CreateItemWidget(const FDRShopItemOffer& ItemOffer);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -61,9 +58,6 @@ private:
 
 	UFUNCTION()
 	void HandleUpgradeButtonClicked();
-
-	UFUNCTION()
-	void HandlePerkButtonClicked();
 
 	UFUNCTION()
 	void HandleSellAllOresButtonClicked();
@@ -86,9 +80,6 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> UpgradeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> PerkButton;
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
 
@@ -96,14 +87,10 @@ private:
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
 	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> ItemOffers;
+	TArray<FDRShopItemOffer> ItemOffers;
 
 	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> UpgradeOffers;
-
-	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> PerkOffers;
+	TArray<FDRShopItemOffer> UpgradeOffers;
 
 	bool IsUpgradeSelected = false;
-	bool IsPerkSelected = false;
 };

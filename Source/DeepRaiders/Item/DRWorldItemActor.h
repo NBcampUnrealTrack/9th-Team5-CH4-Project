@@ -68,9 +68,9 @@ protected:
 	void MulticastPlayActiveSound();
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayPickupSound();
+	void MulticastPlayPickupSound(APawn* Interactor);
 
-	UFUNCTION(NetMulticast, Reliable)
+	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayDroppedSound();
 	
 protected:
@@ -85,6 +85,10 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_WorldItemState)
 	TObjectPtr<APawn> ThrowingPawn;
+
+	// 아이템 착지음을 재생할 최소 낙하 높이(cm)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound", meta = (ClampMin = "0.0"))
+	float MinimumDropSoundHeight = 25.f;
 	
 private:
 	// ItemInstance 갱신 시마다 호출
@@ -92,6 +96,7 @@ private:
 	void RefreshItemPresentation();
 	void ApplyWorldItemCollision();
 	bool bGroundHitEventArmed = false;
+	float GroundHitArmHeight = 0.f;
 	TWeakObjectPtr<APawn> IgnoredThrower;
 	
 #pragma region Interactable

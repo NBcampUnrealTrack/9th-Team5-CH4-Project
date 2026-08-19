@@ -19,4 +19,13 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Freeze_Amount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
+
+	// Gameplay Cue - Sound
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Miss);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Kill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_PickedUp);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Dropped);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Discovered);
 }

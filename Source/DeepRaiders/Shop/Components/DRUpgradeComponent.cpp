@@ -79,7 +79,7 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 
 	// 1단계는 신규 지급, 이후 단계는 직전 Definition을 가진 Entry 교체로 처리한다.
 	if (!IsValid(TargetDefinition)
-		|| TargetDefinition->Category != EItemCategory::Equipment)
+		|| TargetDefinition->Category != EDRItemCategory::Equipment)
 	{
 		return false;
 	}
@@ -93,7 +93,7 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 	}
 	else if (!IsValid(SourceDefinition)
 		|| SourceDefinition == TargetDefinition
-		|| SourceDefinition->Category != EItemCategory::Equipment
+		|| SourceDefinition->Category != EDRItemCategory::Equipment
 		|| !FindUpgradeSourceEntryId(
 			Inventory,
 			SourceDefinition,

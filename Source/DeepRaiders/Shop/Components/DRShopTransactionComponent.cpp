@@ -363,7 +363,7 @@ int64 UDRShopTransactionComponent::CollectSellableOreEntries(
 
 		if (!Entry.IsValid()
 			|| !IsValid(Definition)
-			|| Definition->Category != EItemCategory::Ore
+			|| Definition->Category != EDRItemCategory::Ore
 			|| !Definition->bCanBeSold
 			|| Definition->Price <= 0)
 		{
