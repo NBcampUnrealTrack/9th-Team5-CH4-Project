@@ -7,6 +7,7 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
@@ -318,7 +319,8 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 
 	for (const FDRShopItemOffer& Offer : Offers)
 	{
-		if (!IsValid(Offer.ItemDefinition))
+		if (Offer.OfferType != OfferType
+			|| !IsValid(Offer.ItemDefinition))
 		{
 			continue;
 		}
@@ -361,53 +363,33 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 		return OfferViews;
 	}
 
-	for (const FName RowName : ShopComponent->GetPerkRowNames())
+	for (const FDRShopItemOffer& Offer : ShopComponent->GetItemOffers())
 	{
-		FDRPerkTableRow PerkRow;
-
-		if (!ShopComponent->GetPerkRow(RowName, PerkRow))
+		if (Offer.OfferType != EDRShopOfferType::Perk)
 		{
 			continue;
 		}
 
-		const int32 CurrentRank = PerkComponent->GetPerkRank(RowName);
-		const int32 TargetRank = CurrentRank + 1;
-		const FDRPerkRankData* RankData = PerkRow.GetRankData(TargetRank);
+		UDRPerkDefinition* PerkDefinition =
+			Cast<UDRPerkDefinition>(Offer.ItemDefinition);
 
-		if (PerkRow.Ranks.IsEmpty())
-		{
-			FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
-			OfferView.Request.RowName = RowName;
-			OfferView.Request.OfferType = EDRShopOfferType::Perk;
-			OfferView.Section = EDRShopOfferSection::Perk;
-			OfferView.DisplayName = PerkRow.DisplayName;
-			OfferView.Icon = PerkRow.Icon;
-			OfferView.IsPurchasable = false;
-			continue;
-		}
-
-		if (!RankData)
+		if (!IsValid(PerkDefinition))
 		{
 			continue;
 		}
 
 		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
-		OfferView.Request.RowName = RowName;
+		OfferView.Request = Offer.MakeRequest();
 		OfferView.Request.OfferType = EDRShopOfferType::Perk;
 		OfferView.Section = EDRShopOfferSection::Perk;
 		OfferView.DisplayName = FText::Format(
 			FText::FromString(TEXT("{0} 퍽")),
-			PerkRow.DisplayName);
-		// OfferView.DisplayName = FText::Format(
-		// 	FText::FromString(TEXT("{0} Lv.{1} → Lv.{2}")),
-		// 	PerkRow.DisplayName,
-		// 	FText::AsNumber(CurrentRank),
-		// 	FText::AsNumber(TargetRank));
-		OfferView.Description = RankData->Description;
-		OfferView.Icon = PerkRow.Icon;
-		OfferView.Price = RankData->Price;
+			PerkDefinition->DisplayName);
+		OfferView.Description = PerkDefinition->Description;
+		OfferView.Icon = PerkDefinition->Icon;
+		OfferView.Price = PerkDefinition->Price;
 		OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
-			RowName,
+			Offer.RowName,
 			PerkComponent,
 			PlayerState->GetCoins());
 	}

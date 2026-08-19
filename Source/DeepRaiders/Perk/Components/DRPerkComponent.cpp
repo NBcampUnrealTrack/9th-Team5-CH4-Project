@@ -1,8 +1,9 @@
 #include "DRPerkComponent.h"
 
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
-#include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
 UDRPerkComponent::UDRPerkComponent()
@@ -18,140 +19,179 @@ void UDRPerkComponent::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME_CONDITION(
 		UDRPerkComponent,
-		PerkStates,
+		TestPerkSlots,
 		COND_OwnerOnly);
 }
 
-int32 UDRPerkComponent::GetPerkRank(FName RowName) const
+int32 UDRPerkComponent::GetTestPerkCount(
+	const UDRPerkDefinition* PerkDefinition) const
 {
-	const FDRPerkState* PerkState = PerkStates.FindByPredicate(
-		[RowName](const FDRPerkState& State)
+	int32 TestPerkCount = 0;
+
+	for (const UDRPerkDefinition* TestPerk : TestPerkSlots)
+	{
+		if (TestPerk == PerkDefinition)
 		{
-			return State.RowName == RowName;
-		});
+			++TestPerkCount;
+		}
+	}
 
-	return PerkState ? PerkState->Rank : 0;
+	return TestPerkCount;
 }
 
-bool UDRPerkComponent::CanApplyNextRank(
-	FName RowName,
-	const FDRPerkTableRow& PerkRow) const
+bool UDRPerkComponent::CanAddTestPerk(
+	const UDRPerkDefinition* PerkDefinition) const
 {
-	const int32 TargetRank = GetPerkRank(RowName) + 1;
-	const UGameplayEffect* Effect = PerkRow.EffectClass.GetDefaultObject();
-
-	return !RowName.IsNone()
-		&& PerkRow.IsValidRank(TargetRank)
-		&& IsValid(Effect)
-		&& Effect->DurationPolicy == EGameplayEffectDurationType::Infinite;
+	return IsValid(PerkDefinition)
+		&& IsValid(PerkDefinition->ItemAbilitySet)
+		&& TestPerkSlots.Num() < TestMaxPerkSlotCount;
 }
 
-bool UDRPerkComponent::ApplyNextRank(
-	FName RowName,
-	const FDRPerkTableRow& PerkRow)
+bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
 	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
 		? PlayerState->GetAbilitySystemComponent()
 		: nullptr;
-	const int32 TargetRank = GetPerkRank(RowName) + 1;
 
 	if (!IsValid(PlayerState)
 		|| !PlayerState->HasAuthority()
 		|| !IsValid(AbilitySystemComponent)
-		|| !CanApplyNextRank(RowName, PerkRow))
+		|| !IsValid(PerkDefinition)
+		|| !IsValid(PerkDefinition->ItemAbilitySet))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Reason=InvalidStateOrDefinition"),
+			TEXT("[Perk][Test][AddFailed] Player=%s Perk=%s Reason=InvalidStateOrDefinition"),
 			*GetNameSafe(PlayerState),
-			*RowName.ToString(),
-			TargetRank);
+			*GetNameSafe(PerkDefinition));
 		return false;
 	}
 
-	FGameplayEffectContextHandle EffectContext =
-		AbilitySystemComponent->MakeEffectContext();
-	EffectContext.AddSourceObject(this);
-
-	FGameplayEffectSpecHandle EffectSpec =
-		AbilitySystemComponent->MakeOutgoingSpec(
-			PerkRow.EffectClass,
-			static_cast<float>(TargetRank),
-			EffectContext);
-
-	if (!EffectSpec.IsValid())
+	if (!CanAddTestPerk(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Effect=%s Reason=InvalidSpec"),
+			TEXT("[Perk][Test][AddFailed] Player=%s Perk=%s Reason=SlotsFull Total=%d/%d"),
 			*GetNameSafe(PlayerState),
-			*RowName.ToString(),
-			TargetRank,
-			*GetNameSafe(PerkRow.EffectClass));
+			*GetNameSafe(PerkDefinition),
+			TestPerkSlots.Num(),
+			TestMaxPerkSlotCount);
 		return false;
 	}
 
-	const FActiveGameplayEffectHandle NewHandle =
-		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
-			*EffectSpec.Data.Get());
+	FDRItemAbilitySet_GrantedHandles GrantedHandles;
 
-	if (!NewHandle.IsValid())
+	PerkDefinition->ItemAbilitySet->GiveToAbilitySystem(
+		AbilitySystemComponent,
+		&GrantedHandles,
+		PerkDefinition);
+
+	if (GrantedHandles.IsEmpty())
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Effect=%s Reason=InvalidActiveEffectHandle"),
+			TEXT("[Perk][Test][AbilitySetFailed] Player=%s Perk=%s Reason=NoGrantedHandles"),
 			*GetNameSafe(PlayerState),
-			*RowName.ToString(),
-			TargetRank,
-			*GetNameSafe(PerkRow.EffectClass));
+			*GetNameSafe(PerkDefinition));
 		return false;
 	}
 
-	if (const FActiveGameplayEffectHandle* PreviousHandle =
-		EffectHandles.Find(RowName))
-	{
-		AbilitySystemComponent->RemoveActiveGameplayEffect(*PreviousHandle);
-	}
-
-	EffectHandles.Add(RowName, NewHandle);
-
-	FDRPerkState* PerkState = FindPerkState(RowName);
-
-	if (!PerkState)
-	{
-		PerkState = &PerkStates.AddDefaulted_GetRef();
-		PerkState->RowName = RowName;
-	}
-
-	PerkState->Rank = TargetRank;
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][EffectApplied] Player=%s Row=%s Name=%s Rank=%d Effect=%s HandleValid=%d"),
+		TEXT("[Perk][Test][AbilitySetApplied] Player=%s Perk=%s"),
 		*GetNameSafe(PlayerState),
-		*RowName.ToString(),
-		*PerkRow.DisplayName.ToString(),
-		TargetRank,
-		*GetNameSafe(PerkRow.EffectClass),
-		NewHandle.IsValid());
+		*GetNameSafe(PerkDefinition));
+
+	const int32 SlotIndex = TestPerkSlots.Add(PerkDefinition);
+	const bool IsSlotValid = TestPerkSlots.IsValidIndex(SlotIndex)
+		&& TestPerkSlots[SlotIndex] == PerkDefinition;
+
+	if (!IsSlotValid)
+	{
+		GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
+
+		if (TestPerkSlots.IsValidIndex(SlotIndex))
+		{
+			TestPerkSlots.RemoveAt(SlotIndex);
+		}
+
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[Perk][Test][SlotAddFailed] Player=%s Slot=%d Perk=%s"),
+			*GetNameSafe(PlayerState),
+			SlotIndex,
+			*GetNameSafe(PerkDefinition));
+		return false;
+	}
+
+	const int32 HandleIndex = TestGrantedHandles.Add(MoveTemp(GrantedHandles));
+
+	if (HandleIndex != SlotIndex)
+	{
+		if (TestGrantedHandles.IsValidIndex(HandleIndex))
+		{
+			TestGrantedHandles[HandleIndex].TakeFromAbilitySystem(
+				AbilitySystemComponent);
+			TestGrantedHandles.RemoveAt(HandleIndex);
+		}
+
+		TestPerkSlots.RemoveAt(SlotIndex);
+
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("[Perk][Test][HandleStoreFailed] Player=%s Slot=%d Perk=%s"),
+			*GetNameSafe(PlayerState),
+			SlotIndex,
+			*GetNameSafe(PerkDefinition));
+		return false;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Perk][Test][SlotAdded] Player=%s Slot=%d Perk=%s IsValid=%d DuplicateCount=%d Total=%d/%d"),
+		*GetNameSafe(PlayerState),
+		SlotIndex,
+		*GetNameSafe(PerkDefinition),
+		IsSlotValid,
+		GetTestPerkCount(PerkDefinition),
+		TestPerkSlots.Num(),
+		TestMaxPerkSlotCount);
+
+	PlayerState->ForceNetUpdate();
 	OnPerksChanged.Broadcast();
 	return true;
 }
 
-void UDRPerkComponent::OnRep_PerkStates()
+void UDRPerkComponent::OnRep_TestPerkSlots()
 {
-	OnPerksChanged.Broadcast();
-}
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Perk][Test][SlotsReplicated] Player=%s Total=%d/%d"),
+		*GetNameSafe(GetOwner()),
+		TestPerkSlots.Num(),
+		TestMaxPerkSlotCount);
 
-FDRPerkState* UDRPerkComponent::FindPerkState(FName RowName)
-{
-	return PerkStates.FindByPredicate(
-		[RowName](const FDRPerkState& State)
-		{
-			return State.RowName == RowName;
-		});
+	for (int32 SlotIndex = 0;
+		SlotIndex < TestPerkSlots.Num();
+		++SlotIndex)
+	{
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("[Perk][Test][Slot] Player=%s Slot=%d Perk=%s"),
+			*GetNameSafe(GetOwner()),
+			SlotIndex,
+			*GetNameSafe(TestPerkSlots[SlotIndex]));
+	}
+
+	OnPerksChanged.Broadcast();
 }

@@ -8,6 +8,7 @@
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Shop/DRShop.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -288,7 +289,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	UDRPerkComponent* PerkComponent,
 	FName RowName) const
 {
-	FDRPerkTableRow PerkRow;
+	UDRPerkDefinition* PerkDefinition = nullptr;
 
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
@@ -297,7 +298,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 			RowName,
 			PerkComponent,
 			PlayerState->GetCoins())
-		|| !ShopComponent->GetPerkRow(RowName, PerkRow))
+		|| !ShopComponent->GetPerkDefinition(RowName, PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
@@ -309,37 +310,32 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		return false;
 	}
 
-	const int32 TargetRank = PerkComponent->GetPerkRank(RowName) + 1;
-	const FDRPerkRankData* RankData = PerkRow.GetRankData(TargetRank);
-
-	if (!RankData
-		|| !PerkComponent->ApplyNextRank(RowName, PerkRow))
+	if (!IsValid(PerkDefinition)
+		|| !PerkComponent->AddTestPerk(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][PurchaseFailed] Player=%s Row=%s Name=%s TargetRank=%d Reason=EffectApplyFailed"),
+			TEXT("[Perk][Test][PurchaseFailed] Player=%s Row=%s Perk=%s Reason=AddFailed"),
 			*GetNameSafe(PlayerState),
 			*RowName.ToString(),
-			*PerkRow.DisplayName.ToString(),
-			TargetRank);
+			*GetNameSafe(PerkDefinition));
 		return false;
 	}
 
 	const int32 PreviousCoins = PlayerState->GetCoins();
-	PlayerState->SetCoins(PreviousCoins - RankData->Price);
+	PlayerState->SetCoins(PreviousCoins - PerkDefinition->Price);
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Name=%s Rank=%d Price=%d Coins=%d->%d Effect=%s"),
+		TEXT("[Perk][Test][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
 		*GetNameSafe(PlayerState),
 		*RowName.ToString(),
-		*PerkRow.DisplayName.ToString(),
-		TargetRank,
-		RankData->Price,
+		*GetNameSafe(PerkDefinition),
+		PerkComponent->GetTestPerkCount(PerkDefinition),
+		PerkDefinition->Price,
 		PreviousCoins,
-		PlayerState->GetCoins(),
-		*GetNameSafe(PerkRow.EffectClass));
+		PlayerState->GetCoins());
 	return true;
 }
 

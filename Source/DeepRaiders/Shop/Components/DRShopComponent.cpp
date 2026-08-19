@@ -3,6 +3,7 @@
 #include "DRShopAreaComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 
@@ -20,14 +21,6 @@ void UDRShopComponent::SetItemTable(UDataTable* NewItemTable)
 
 	ItemTable = NewItemTable;
 	LoadItemOffers();
-}
-
-void UDRShopComponent::SetPerkTable(UDataTable* NewPerkTable)
-{
-	if (IsValid(NewPerkTable))
-	{
-		PerkTable = NewPerkTable;
-	}
 }
 
 bool UDRShopComponent::HasItemTable() const
@@ -61,32 +54,20 @@ bool UDRShopComponent::GetItemRow(
 	return true;
 }
 
-bool UDRShopComponent::GetPerkRow(
+bool UDRShopComponent::GetPerkDefinition(
 	FName RowName,
-	FDRPerkTableRow& OutPerkRow) const
+	UDRPerkDefinition*& OutPerkDefinition) const
 {
-	if (!IsValid(PerkTable) || RowName.IsNone())
+	FDRShopItemTableRow ItemRow;
+	OutPerkDefinition = nullptr;
+
+	if (!GetItemRow(RowName, ItemRow))
 	{
 		return false;
 	}
 
-	const FDRPerkTableRow* PerkRow =
-		PerkTable->FindRow<FDRPerkTableRow>(RowName, TEXT("GetPerkRow"));
-
-	if (!PerkRow || !PerkRow->EffectClass)
-	{
-		return false;
-	}
-
-	OutPerkRow = *PerkRow;
-	return true;
-}
-
-TArray<FName> UDRShopComponent::GetPerkRowNames() const
-{
-	return IsValid(PerkTable)
-		? PerkTable->GetRowNames()
-		: TArray<FName>();
+	OutPerkDefinition = Cast<UDRPerkDefinition>(ItemRow.ItemDefinition);
+	return IsValid(OutPerkDefinition);
 }
 
 bool UDRShopComponent::CanPurchasePerk(
@@ -94,21 +75,17 @@ bool UDRShopComponent::CanPurchasePerk(
 	const UDRPerkComponent* PerkComponent,
 	int32 AvailableCoins) const
 {
-	FDRPerkTableRow PerkRow;
+	UDRPerkDefinition* PerkDefinition = nullptr;
 
 	if (!IsValid(PerkComponent)
-		|| !GetPerkRow(RowName, PerkRow)
-		|| !PerkComponent->CanApplyNextRank(RowName, PerkRow))
+		|| !GetPerkDefinition(RowName, PerkDefinition)
+		|| !PerkComponent->CanAddTestPerk(PerkDefinition))
 	{
 		return false;
 	}
 
-	const FDRPerkRankData* RankData =
-		PerkRow.GetRankData(PerkComponent->GetPerkRank(RowName) + 1);
-
-	return RankData
-		&& RankData->Price >= 0
-		&& AvailableCoins >= RankData->Price;
+	return PerkDefinition->Price >= 0
+		&& AvailableCoins >= PerkDefinition->Price;
 }
 
 bool UDRShopComponent::IsItemAvailable(
@@ -118,7 +95,7 @@ bool UDRShopComponent::IsItemAvailable(
 		&& ItemOffers.ContainsByPredicate(
 			[ItemDefinition](const FDRShopItemOffer& ItemOffer)
 			{
-				return !ItemOffer.IsUpgrade()
+				return ItemOffer.OfferType == EDRShopOfferType::Purchase
 					&& ItemOffer.ItemDefinition == ItemDefinition;
 			});
 }
@@ -174,6 +151,15 @@ void UDRShopComponent::AddItemOffers(
 	FName RowName,
 	const FDRShopItemTableRow& ItemRow)
 {
+	if (IsValid(Cast<UDRPerkDefinition>(ItemRow.ItemDefinition)))
+	{
+		FDRShopItemOffer& PerkOffer = ItemOffers.AddDefaulted_GetRef();
+		PerkOffer.RowName = RowName;
+		PerkOffer.OfferType = EDRShopOfferType::Perk;
+		PerkOffer.ItemDefinition = ItemRow.ItemDefinition;
+		return;
+	}
+
 	if (!ItemRow.IsUpgradeRow())
 	{
 		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();

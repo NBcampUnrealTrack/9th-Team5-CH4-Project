@@ -5,7 +5,6 @@
 #include "DeepRaiders/Shop/Components/DRShopComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
 #include "DeepRaiders/Shop/Components/DRUpgradeComponent.h"
-#include "Engine/DataTable.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -24,9 +23,6 @@ ADRShop::ADRShop()
 
 	ShopComponent = CreateDefaultSubobject<UDRShopComponent>(
 		TEXT("ShopComponent"));
-	static ConstructorHelpers::FObjectFinder<UDataTable> PerkTableAsset(
-		TEXT("/Game/DeepRaiders/Data/DataAssets/Perk/DT_DRPerkTable.DT_DRPerkTable"));
-	ShopComponent->SetPerkTable(PerkTableAsset.Object);
 
 	UpgradeComponent = CreateDefaultSubobject<UDRUpgradeComponent>(
 		TEXT("UpgradeComponent"));
