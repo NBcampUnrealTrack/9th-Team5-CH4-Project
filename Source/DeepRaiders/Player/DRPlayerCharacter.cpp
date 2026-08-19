@@ -248,7 +248,9 @@ void ADRPlayerCharacter::RequestThrowHeldItem()
 
 	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
 	{
-		PlayerController->RequestThrowHeldItem();
+		// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
+		ensure(true);
+		//PlayerController->RequestThrowHeldItem();
 	}
 }
 

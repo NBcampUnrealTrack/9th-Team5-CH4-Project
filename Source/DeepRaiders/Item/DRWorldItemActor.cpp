@@ -291,8 +291,10 @@ bool ADRWorldItemActor::CanInteract_Implementation(APawn* Interactor) const
 {
 	const ADRPlayerController* Controller = IsValid(Interactor) ? Cast<ADRPlayerController>(Interactor->GetController()) : nullptr;
 	
-	return HasAuthority() && !bInteractionInProgress &&  ItemInstance.IsValid()
-		&& IsValid(Controller) && IsPickupAvailable() && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
+	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
+	return false;
+	// return HasAuthority() && !bInteractionInProgress &&  ItemInstance.IsValid()
+	// 	&& IsValid(Controller) && IsPickupAvailable() && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
 }
 
 bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
@@ -305,11 +307,14 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 	ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
 	
 	bInteractionInProgress = true;
-	if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
-	{
-		bInteractionInProgress = false;
-		return false;
-	}
+	
+	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
+	check(true);
+	// if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
+	// {
+	// 	bInteractionInProgress = false;
+	// 	return false;
+	// }
 
 	MulticastPlayPickupSound();
 	
