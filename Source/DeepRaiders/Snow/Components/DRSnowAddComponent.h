@@ -46,7 +46,18 @@ public:
 		AVoxelWorld* TargetVoxelWorld);
 
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
+	bool TryAddSnowImpactAtLocationForTeam(
+		FVector WorldLocation,
+		FVector SurfaceNormal,
+		FVector ImpactDirection,
+		int32 TeamId,
+		AVoxelWorld* TargetVoxelWorld);
+
+	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
 	void SetAddSettings(float InAddRadius, float InAddAmount);
+
+	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
+	void SetAddEditTool(EDRSnowVoxelEditTool InEditTool);
 
 	// 카메라 방향으로 trace한 뒤 명시한 팀으로 눈 추가를 시도한다.
 	// 실제 팀 material paint는 DRSnowSurfaceSubsystem -> DRVoxelTeamColorLibrary 경로에서 처리한다.
@@ -56,12 +67,19 @@ public:
 		int32 TeamId,
 		AVoxelWorld* TargetVoxelWorld);
 
+	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
+	bool DebugTryAddSnowFromViewWithTool(
+		float TraceDistance,
+		int32 TeamId,
+		AVoxelWorld* TargetVoxelWorld,
+		EDRSnowVoxelEditTool DebugEditTool);
+
 protected:
 	// 위치/노멀/반경/양/기본 interaction context만 채운다.
 	// TeamId나 TargetVoxelWorld를 강제로 지정해야 하면 호출자가 Request 생성 후 덮어쓴다.
 	FDRSnowSurfaceAddRequest MakeAddRequest(
 		FVector WorldLocation,
-		FVector SurfaceNormal) const;
+		FVector SurfaceNormal);
 
 	// 디버그용 시선 trace만 담당한다. 눈 추가/재질 처리는 여기서 하지 않는다.
 	bool MakeDebugViewHit(
@@ -72,7 +90,8 @@ protected:
 	bool DebugAddSnowFromHit(
 		const FHitResult& HitResult,
 		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
+		AVoxelWorld* TargetVoxelWorld,
+		EDRSnowVoxelEditTool DebugEditTool);
 
 	// SnowVolume 원본 데이터 갱신 후, 성공한 경우에만 Voxel 표면 표현을 갱신한다.
 	bool ExecuteAddSnow(const FDRSnowSurfaceAddRequest& Request);
@@ -92,7 +111,6 @@ protected:
 	float AddAmount = 1.f;
 
 	// Voxel 표면을 어떤 방식으로 올릴지 선택한다.
-	// CustomTool은 DRVoxelCustomTool 경로로 표면 기준 부피를 직접 추가한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Add")
 	EDRSnowVoxelEditTool AddEditTool = EDRSnowVoxelEditTool::SurfaceTool;
 };

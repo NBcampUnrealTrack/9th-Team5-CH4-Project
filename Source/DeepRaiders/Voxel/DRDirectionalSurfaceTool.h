@@ -5,19 +5,19 @@
 #include "VoxelTools/Gen/VoxelToolsBase.h"
 #include "VoxelTools/Tools/VoxelToolBase.h"
 #include "VoxelTools/VoxelSurfaceEdits.h"
-#include "DRVoxelCustomTool.generated.h"
+#include "DRDirectionalSurfaceTool.generated.h"
 
 class AVoxelWorld;
 
 // SurfaceTool의 브러시 모양은 재사용하되, 최종 write는 add/remove 방향으로만 합성하는 Voxel Tool이다.
 // 겹쳐 쏜 눈이 기존 팀 영역을 밀어 섞지 않도록 Snow 시스템에서 사용한다.
 UCLASS()
-class DEEPRAIDERS_API UDRVoxelCustomTool : public UVoxelToolBase
+class DEEPRAIDERS_API UDRDirectionalSurfaceTool : public UVoxelToolBase
 {
 	GENERATED_BODY()
 
 public:
-	UDRVoxelCustomTool();
+	UDRDirectionalSurfaceTool();
 
 	//~ Begin UVoxelToolBase Interface
 	virtual void GetToolConfig(FVoxelToolBaseConfig& OutConfig) const override;
@@ -26,19 +26,19 @@ public:
 
 public:
 	// true면 눈/땅을 채우고, false면 비운다.
-	UPROPERTY(Category = "Custom Tool", EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(Category = "Directional Surface Tool", EditAnywhere, BlueprintReadWrite)
 	bool bAdd = true;
 
 	// SurfaceTool의 push/pull 세기와 같은 의미다.
-	UPROPERTY(Category = "Custom Tool", EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
+	UPROPERTY(Category = "Directional Surface Tool", EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0"))
 	float Strength = 1.f;
 
 	// 브러시 가장자리 감쇠 비율이다.
-	UPROPERTY(Category = "Custom Tool", EditAnywhere, BlueprintReadWrite, meta = (UIMin = "0", UIMax = "1"))
+	UPROPERTY(Category = "Directional Surface Tool", EditAnywhere, BlueprintReadWrite, meta = (UIMin = "0", UIMax = "1"))
 	float Falloff = 0.35f;
 
 	// SurfaceTool target 값을 voxel density 값으로 줄이는 비율이다.
-	UPROPERTY(Category = "Custom Tool", EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.01"))
+	UPROPERTY(Category = "Directional Surface Tool", EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.01"))
 	float DistanceDivisor = 4.f;
 
 public:

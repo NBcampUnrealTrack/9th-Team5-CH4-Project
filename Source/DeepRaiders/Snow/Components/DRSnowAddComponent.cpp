@@ -18,8 +18,7 @@ bool UDRSnowAddComponent::TryAddSnowFromHit(
 		return false;
 	}
 
-	FDRSnowSurfaceAddRequest Request =
-		MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
+	FDRSnowSurfaceAddRequest Request = MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
 
 	// VoxelWorld를 맞춘 경우에는 중앙 snow pipeline으로 먼저 보낸다.
@@ -66,12 +65,36 @@ bool UDRSnowAddComponent::TryAddSnowAtLocationForTeam(
 	return bHandled;
 }
 
+bool UDRSnowAddComponent::TryAddSnowImpactAtLocationForTeam(
+	FVector WorldLocation,
+	FVector SurfaceNormal,
+	FVector ImpactDirection,
+	int32 TeamId,
+	AVoxelWorld* TargetVoxelWorld)
+{
+	FDRSnowSurfaceAddRequest Request = MakeAddRequest(WorldLocation, SurfaceNormal);
+	Request.ImpactDirection = ImpactDirection.IsNearlyZero()
+		? -Request.SurfaceNormal
+		: ImpactDirection.GetSafeNormal();
+	Request.Context.TeamId = TeamId;
+	Request.TargetVoxelWorld = TargetVoxelWorld;
+
+	const bool bHandled = ExecuteAddSnow(Request);
+	OnSnowAdded.Broadcast(Request, bHandled);
+	return bHandled;
+}
+
 void UDRSnowAddComponent::SetAddSettings(
 	float InAddRadius,
 	float InAddAmount)
 {
 	AddRadius = FMath::Max(0.f, InAddRadius);
 	AddAmount = FMath::Max(0.f, InAddAmount);
+}
+
+void UDRSnowAddComponent::SetAddEditTool(EDRSnowVoxelEditTool InEditTool)
+{
+	AddEditTool = InEditTool;
 }
 
 bool UDRSnowAddComponent::DebugTryAddSnowFromView(
@@ -84,7 +107,23 @@ bool UDRSnowAddComponent::DebugTryAddSnowFromView(
 		DebugAddSnowFromHit(
 			HitResult,
 			TeamId,
-			TargetVoxelWorld);
+			TargetVoxelWorld,
+			AddEditTool);
+}
+
+bool UDRSnowAddComponent::DebugTryAddSnowFromViewWithTool(
+	float TraceDistance,
+	int32 TeamId,
+	AVoxelWorld* TargetVoxelWorld,
+	EDRSnowVoxelEditTool DebugEditTool)
+{
+	FHitResult HitResult;
+	return MakeDebugViewHit(TraceDistance, HitResult) &&
+		DebugAddSnowFromHit(
+			HitResult,
+			TeamId,
+			TargetVoxelWorld,
+			DebugEditTool);
 }
 
 bool UDRSnowAddComponent::MakeDebugViewHit(
@@ -152,14 +191,19 @@ bool UDRSnowAddComponent::MakeDebugViewHit(
 bool UDRSnowAddComponent::DebugAddSnowFromHit(
 	const FHitResult& HitResult,
 	int32 TeamId,
-	AVoxelWorld* TargetVoxelWorld)
+	AVoxelWorld* TargetVoxelWorld,
+	EDRSnowVoxelEditTool DebugEditTool)
 {
-	FDRSnowSurfaceAddRequest Request =
-		MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
+	FDRSnowSurfaceAddRequest Request = MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
+	if (!HitResult.TraceStart.Equals(HitResult.TraceEnd))
+	{
+		Request.ImpactDirection = (HitResult.TraceEnd - HitResult.TraceStart).GetSafeNormal();
+	}
 	Request.Context.TeamId = TeamId;
 	Request.TargetVoxelWorld = IsValid(TargetVoxelWorld)
 		? TargetVoxelWorld
 		: GetVoxelWorldFromHit(HitResult);
+	Request.EditTool = DebugEditTool;
 
 	const bool bHandled = ExecuteAddSnow(Request);
 	OnSnowAdded.Broadcast(Request, bHandled);
@@ -168,9 +212,10 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 	const FColor DebugColor = FColor::Green;
 
 	const FString DebugMessage = FString::Printf(
-		TEXT("[Snow][DebugAdd] Handled=%d TeamId=%d Location=%s Radius=%.1f Amount=%.2f Color=%s HitActor=%s"),
+		TEXT("[Snow][DebugAdd] Handled=%d TeamId=%d EditTool=%s Location=%s Radius=%.1f Amount=%.2f Color=%s HitActor=%s"),
 		bHandled,
 		TeamId,
+		*StaticEnum<EDRSnowVoxelEditTool>()->GetNameStringByValue(static_cast<int64>(Request.EditTool)),
 		*HitResult.ImpactPoint.ToCompactString(),
 		AddRadius,
 		AddAmount,
@@ -196,31 +241,27 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 	bool bHandled = false;
 	if (UWorld* World = GetWorld())
 	{
-		if (Request.EditTool == EDRSnowVoxelEditTool::CustomTool)
+		if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 		{
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
-				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
 			{
-				// CustomTool은 실제 생성 voxel 기준으로 SnowVolume을 기록하므로 SurfaceSubsystem이 먼저 처리한다.
+				// Custom 계열 툴은 실제 생성 voxel 기준으로 SnowVolume을 기록하므로 SurfaceSubsystem이 먼저 처리한다.
 				bHandled = SnowSurfaceSubsystem->AddSnowAtArea(Request) > 0.f;
 			}
 
 			return bHandled;
 		}
 
-		if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-			World->GetSubsystem<UDRSnowVolumeSubsystem>())
+		if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem = World->GetSubsystem<UDRSnowVolumeSubsystem>())
 		{
 			// SnowVolume은 팀별 누적량의 원본 데이터다. Voxel은 이 결과를 보여주는 표현 계층이다.
-			const FDRSnowAddResult AddResult =
-				SnowVolumeSubsystem->AddSnow(Request);
+			const FDRSnowAddResult AddResult = SnowVolumeSubsystem->AddSnow(Request);
 			bHandled = AddResult.AddedAmount > 0.f;
 		}
 
 		if (bHandled)
 		{
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
-				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
 			{
 				// 표면 SDF와 팀 material index를 함께 갱신한다.
 				SnowSurfaceSubsystem->AddSnowAtArea(Request);
@@ -233,7 +274,7 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 
 FDRSnowSurfaceAddRequest UDRSnowAddComponent::MakeAddRequest(
 	FVector WorldLocation,
-	FVector SurfaceNormal) const
+	FVector SurfaceNormal)
 {
 	FDRSnowSurfaceAddRequest Request;
 	Request.WorldLocation = WorldLocation;
@@ -241,6 +282,7 @@ FDRSnowSurfaceAddRequest UDRSnowAddComponent::MakeAddRequest(
 		SurfaceNormal.IsNearlyZero()
 			? FVector::UpVector
 			: SurfaceNormal.GetSafeNormal();
+	Request.ImpactDirection = -Request.SurfaceNormal;
 	Request.Radius = AddRadius;
 	Request.Amount = AddAmount;
 	Request.EditTool = AddEditTool;

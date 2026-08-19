@@ -1,4 +1,4 @@
-#include "DRVoxelCustomTool.h"
+#include "DRDirectionalSurfaceTool.h"
 
 #include "VoxelData/VoxelDataImpl.inl"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
@@ -27,18 +27,18 @@ float GetSurfaceToolTargetValue(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, flo
 }
 }
 
-UDRVoxelCustomTool::UDRVoxelCustomTool()
+UDRDirectionalSurfaceTool::UDRDirectionalSurfaceTool()
 {
-	ToolName = TEXT("DR Voxel Custom Tool");
+	ToolName = TEXT("DR Voxel Directional Surface Tool");
 }
 
-void UDRVoxelCustomTool::GetToolConfig(FVoxelToolBaseConfig& OutConfig) const
+void UDRDirectionalSurfaceTool::GetToolConfig(FVoxelToolBaseConfig& OutConfig) const
 {
 	OutConfig.bHasAlignment = true;
 	OutConfig.Alignment = EVoxelToolAlignment::Surface;
 }
 
-FVoxelIntBoxWithValidity UDRVoxelCustomTool::DoEdit()
+FVoxelIntBoxWithValidity UDRDirectionalSurfaceTool::DoEdit()
 {
 	AVoxelWorld* World = GetVoxelWorld();
 	if (!IsValid(World) || !World->IsCreated() || !SharedConfig)
@@ -70,7 +70,7 @@ FVoxelIntBoxWithValidity UDRVoxelCustomTool::DoEdit()
 	return EditedBounds.IsValid() ? FVoxelIntBoxWithValidity(EditedBounds) : FVoxelIntBoxWithValidity();
 }
 
-FVoxelSurfaceEditsProcessedVoxels UDRVoxelCustomTool::FindSurfaceFootprint(
+FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::FindSurfaceFootprint(
 	AVoxelWorld* VoxelWorld,
 	const FVector& WorldLocation,
 	float Radius,
@@ -118,7 +118,7 @@ FVoxelSurfaceEditsProcessedVoxels UDRVoxelCustomTool::FindSurfaceFootprint(
 	return UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
 }
 
-float UDRVoxelCustomTool::ApplySurfaceVolumeEdit(
+float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
 	float DistanceDivisor,
@@ -197,7 +197,7 @@ float UDRVoxelCustomTool::ApplySurfaceVolumeEdit(
 	return GetModifiedValueAmount(ModifiedValues);
 }
 
-FVoxelSurfaceEditsProcessedVoxels UDRVoxelCustomTool::MakeModifiedValueVoxelGroup(
+FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
 	const FVoxelIntBox& Bounds,
 	const TArray<FModifiedVoxelValue>& ModifiedValues,
 	bool bAdd)

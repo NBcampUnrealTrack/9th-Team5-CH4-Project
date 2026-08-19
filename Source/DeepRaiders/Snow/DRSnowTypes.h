@@ -16,8 +16,8 @@ enum class EDRSnowVoxelEditTool : uint8
 	// 지정 반경의 구 부피를 직접 더하거나 뺀다. SurfaceTool과 제거 느낌을 비교할 때 사용한다.
 	SphereTool UMETA(DisplayName = "Sphere Tool"),
 
-	// surface footprint만 표면에서 찾고, 실제 값 변경은 DRVoxelCustomTool이 부피 voxel을 직접 추가/제거한다.
-	CustomTool UMETA(DisplayName = "Custom Tool")
+	// surface footprint만 표면에서 찾고, 실제 값 변경은 요청 방향으로만 적용한다.
+	DirectionalSurfaceTool UMETA(DisplayName = "Directional Surface Tool")
 };
 
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.
@@ -49,6 +49,9 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FVector SurfaceNormal = FVector::UpVector;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	FVector ImpactDirection = FVector::ForwardVector;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	TObjectPtr<AVoxelWorld> TargetVoxelWorld = nullptr;

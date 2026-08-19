@@ -82,13 +82,13 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 
 		if (RemovedAmount > 0.f)
 		{
-			if (Request.EditTool != EDRSnowVoxelEditTool::CustomTool)
+			if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 			{
 				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
 					World->GetSubsystem<UDRSnowVolumeSubsystem>())
 				{
 					// 표면이 실제로 깎인 양만 원본 density에서도 제거한다.
-					// CustomTool은 SurfaceSubsystem에서 실제 변화 voxel 기준으로 이미 처리한다.
+					// Custom 계열 툴은 SurfaceSubsystem에서 실제 변화 voxel 기준으로 이미 처리한다.
 					FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
 					VolumeRequest.RequestedAmount = RemovedAmount;
 					SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
@@ -133,7 +133,7 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 
 		if (RemovedAmount > 0.f)
 		{
-			if (Request.EditTool != EDRSnowVoxelEditTool::CustomTool)
+			if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 			{
 				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
 					World->GetSubsystem<UDRSnowVolumeSubsystem>())
@@ -158,7 +158,7 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 
 FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	FVector WorldLocation,
-	FVector SurfaceNormal) const
+	FVector SurfaceNormal)
 {
 	FDRSnowSurfaceRemoveRequest Request;
 	Request.WorldLocation = WorldLocation;

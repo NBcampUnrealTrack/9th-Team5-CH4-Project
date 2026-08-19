@@ -49,7 +49,6 @@ struct DEEPRAIDERS_API FDRSnowRemovalSettings
 	bool bInvertSurfaceStrength = false;
 
 	// Voxel 표면을 어떤 방식으로 낮출지 선택한다.
-	// CustomTool은 DRVoxelCustomTool 경로로 표면 기준 부피를 직접 제거한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
 };
@@ -105,7 +104,7 @@ protected:
 	// Hit 위치와 현재 업그레이드 수치를 조합해 중앙 표면 제거 요청으로 변환한다.
 	FDRSnowSurfaceRemoveRequest MakeRemoveRequest(
 		FVector WorldLocation,
-		FVector SurfaceNormal) const;
+		FVector SurfaceNormal);
 
 	// 지속 흡수 중 카메라/시선 기준으로 흡수 후보 표면을 찾는다.
 	bool PerformRemovalTrace(FHitResult& OutHitResult) const;

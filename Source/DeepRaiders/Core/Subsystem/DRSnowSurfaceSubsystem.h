@@ -29,8 +29,8 @@ public:
 
 	float RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 
-	// 현재 Voxel 표면을 다시 찾고, SnowVolume의 dominant team 기준으로 material index를 복원한다.
-	// RemoveSnow로 원본 density를 줄인 뒤 호출해야 새로 드러난 표면 색이 맞는다.
+	// 현재 Voxel 표면을 다시 찾고, DirectionalSurfaceTool ownership을 우선 사용해 material index를 복원한다.
+	// ownership이 없는 위치만 SnowVolume dominant team을 fallback으로 사용한다.
 	bool RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 
 	FDRSnowAddedToSurfaceDelegate OnSnowAddedToSurface;
