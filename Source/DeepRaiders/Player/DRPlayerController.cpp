@@ -162,24 +162,6 @@ void ADRPlayerController::SetupInputComponent()
 		EnhancedInput->BindAction(SelectQuickSlotAction.Get(), ETriggerEvent::Started, this, &ThisClass::HandleSelectQuickSlot);
 	}
 
-	if (IsValid(PrimaryAction.Get()))
-	{
-		EnhancedInput->BindAction(PrimaryAction.Get(), ETriggerEvent::Started, this, &ThisClass::HandlePrimaryActionStarted);
-
-		EnhancedInput->BindAction(PrimaryAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandlePrimaryActionTriggered);
-
-		EnhancedInput->BindAction(PrimaryAction.Get(), ETriggerEvent::Completed, this, &ThisClass::HandlePrimaryActionCompleted);
-	}
-
-	if (IsValid(SecondaryAction.Get()))
-	{
-		EnhancedInput->BindAction(SecondaryAction.Get(), ETriggerEvent::Started, this, &ThisClass::HandleSecondaryActionStarted);
-
-		EnhancedInput->BindAction(SecondaryAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandleSecondaryActionTriggered);
-
-		EnhancedInput->BindAction(SecondaryAction.Get(), ETriggerEvent::Completed, this, &ThisClass::HandleSecondaryActionCompleted);
-	}
-
 	if (IsValid(ShopAction.Get()))
 	{
 		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
@@ -381,78 +363,6 @@ void ADRPlayerController::ApplyViewPitchLimits()
 
 	PlayerCameraManager->ViewPitchMin = PlayerCharacter->GetAimPitchMinDegrees();
 	PlayerCameraManager->ViewPitchMax = PlayerCharacter->GetAimPitchMaxDegrees();
-}
-
-void ADRPlayerController::HandlePrimaryActionStarted(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestPrimaryItemAction(EDRItemActionTriggerEvent::Started);
-}
-
-void ADRPlayerController::HandlePrimaryActionTriggered(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestPrimaryItemAction(EDRItemActionTriggerEvent::Triggered);
-}
-
-void ADRPlayerController::HandlePrimaryActionCompleted(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestPrimaryItemAction(EDRItemActionTriggerEvent::Completed);
-}
-
-void ADRPlayerController::HandleSecondaryActionStarted(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestSecondaryItemAction(EDRItemActionTriggerEvent::Started);
-}
-
-void ADRPlayerController::HandleSecondaryActionTriggered(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestSecondaryItemAction(EDRItemActionTriggerEvent::Triggered);
-}
-
-void ADRPlayerController::HandleSecondaryActionCompleted(const FInputActionValue&)
-{
-	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
-
-	if (!IsValid(PlayerCharacter))
-	{
-		return;
-	}
-
-	PlayerCharacter->RequestSecondaryItemAction(EDRItemActionTriggerEvent::Completed);
 }
 
 void ADRPlayerController::HandleGASInputPressed(int32 InputId)

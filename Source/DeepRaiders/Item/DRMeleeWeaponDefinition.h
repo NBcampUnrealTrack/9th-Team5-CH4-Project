@@ -18,6 +18,8 @@ class DEEPRAIDERS_API UDRMeleeWeaponItemDefinition : public UDRItemDefinition
 	GENERATED_BODY()
 
 public:
+	UDRMeleeWeaponItemDefinition();
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Melee|Damage", meta = (ClampMin = "0.0"))
 	float BaseDamage = 40.f;
 
