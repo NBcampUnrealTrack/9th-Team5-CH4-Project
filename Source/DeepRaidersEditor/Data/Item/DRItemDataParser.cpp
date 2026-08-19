@@ -52,7 +52,7 @@ bool UDRItemDataParser::OnParseComplete(FString& OutError)
         return FinalizeParseReport(ParserName, Report, OutError);
     }
 
-    FScopedDataTableEditNotification TableEdit(TargetTable, false);
+    FScopedDataTableEditNotification TableEdit(TargetTable);
 
     for (int32 Index = 0; Index < GetRowCount(); ++Index)
     {
