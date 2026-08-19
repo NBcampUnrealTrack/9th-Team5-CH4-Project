@@ -36,11 +36,13 @@ struct FDRPerkTableRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Perk")
 	TArray<FDRPerkRankData> Ranks;
 
+	/** 설정된 랭크 데이터 개수를 최대 랭크로 반환한다. */
 	int32 GetMaxRank() const
 	{
 		return Ranks.Num();
 	}
 
+	/** 요청한 랭크에 대응하는 데이터와 GameplayEffect가 유효한지 확인한다. */
 	bool IsValidRank(int32 Rank) const
 	{
 		return Rank > 0
@@ -48,6 +50,7 @@ struct FDRPerkTableRow : public FTableRowBase
 			&& EffectClass;
 	}
 
+	/** 요청한 랭크 데이터를 반환하며 유효하지 않으면 nullptr을 반환한다. */
 	const FDRPerkRankData* GetRankData(int32 Rank) const
 	{
 		return IsValidRank(Rank) ? &Ranks[Rank - 1] : nullptr;

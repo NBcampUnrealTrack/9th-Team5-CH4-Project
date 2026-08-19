@@ -61,6 +61,13 @@ bool UDRPerkComponent::ApplyNextRank(
 		|| !IsValid(AbilitySystemComponent)
 		|| !CanApplyNextRank(RowName, PerkRow))
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Reason=InvalidStateOrDefinition"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			TargetRank);
 		return false;
 	}
 
@@ -76,6 +83,14 @@ bool UDRPerkComponent::ApplyNextRank(
 
 	if (!EffectSpec.IsValid())
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Effect=%s Reason=InvalidSpec"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			TargetRank,
+			*GetNameSafe(PerkRow.EffectClass));
 		return false;
 	}
 
@@ -85,6 +100,14 @@ bool UDRPerkComponent::ApplyNextRank(
 
 	if (!NewHandle.IsValid())
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][ApplyFailed] Player=%s Row=%s TargetRank=%d Effect=%s Reason=InvalidActiveEffectHandle"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			TargetRank,
+			*GetNameSafe(PerkRow.EffectClass));
 		return false;
 	}
 
@@ -105,6 +128,16 @@ bool UDRPerkComponent::ApplyNextRank(
 	}
 
 	PerkState->Rank = TargetRank;
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Perk][EffectApplied] Player=%s Row=%s Name=%s Rank=%d Effect=%s HandleValid=%d"),
+		*GetNameSafe(PlayerState),
+		*RowName.ToString(),
+		*PerkRow.DisplayName.ToString(),
+		TargetRank,
+		*GetNameSafe(PerkRow.EffectClass),
+		NewHandle.IsValid());
 	OnPerksChanged.Broadcast();
 	return true;
 }

@@ -18,10 +18,13 @@ class DEEPRAIDERS_API UDRShopComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/** 상점 데이터와 거래 범위 참조를 관리하는 컴포넌트를 초기화한다. */
 	UDRShopComponent();
 
 	/** 상점에서 사용할 DataTable을 설정하고 Offer 목록을 다시 생성한다. */
 	void SetItemTable(UDataTable* NewItemTable);
+
+	/** 상점에서 판매할 퍽 DataTable을 설정한다. */
 	void SetPerkTable(UDataTable* NewPerkTable);
 
 	/** 유효한 상점 DataTable이 설정되어 있는지 확인한다. */
@@ -32,8 +35,14 @@ public:
 
 	/** RowName에 해당하는 원본 상점 데이터를 반환한다. */
 	bool GetItemRow(FName RowName, FDRShopItemTableRow& OutItemRow) const;
+
+	/** RowName에 해당하는 퍽 정의를 상점의 퍽 테이블에서 반환한다. */
 	bool GetPerkRow(FName RowName, FDRPerkTableRow& OutPerkRow) const;
+
+	/** 상점의 퍽 테이블에 등록된 모든 RowName을 반환한다. */
 	TArray<FName> GetPerkRowNames() const;
+
+	/** 퍽 정의, 현재 랭크, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
 		FName RowName,
 		const UDRPerkComponent* PerkComponent,
@@ -51,6 +60,7 @@ public:
 	bool IsTransactionAllowed(const APawn* Pawn) const;
 
 protected:
+	/** 상점 범위 컴포넌트를 찾고 아이템 Offer를 구성한다. */
 	virtual void BeginPlay() override;
 
 private:

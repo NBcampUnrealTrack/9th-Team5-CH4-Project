@@ -21,13 +21,17 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/** 로컬 상점 UI 흐름을 관리하는 컴포넌트를 초기화한다. */
 	UDRShopUIComponent();
 
 	/** 상점 범위 안에서 UI를 열거나 닫는다. */
 	void ToggleShopWidget();
 
 protected:
+	/** 상점에 필요한 컴포넌트와 범위 이벤트를 연결한다. */
 	virtual void BeginPlay() override;
+
+	/** 상점 UI와 연결된 이벤트 및 입력 상태를 정리한다. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
@@ -62,6 +66,7 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
+	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
 	UFUNCTION()
 	void HandleCoinsChanged(int32 NewCoins);
 
@@ -71,9 +76,11 @@ private:
 	/** 현재 퍽 등급에 맞는 다음 등급 Offer로 UI를 갱신한다. */
 	void RefreshPerkOffers();
 
+	/** 아이템 Offer를 UI 표시용 View 데이터로 변환한다. */
 	TArray<FDRShopOfferView> MakeOfferViews(
 		const TArray<FDRShopItemOffer>& Offers,
 		EDRShopOfferType OfferType) const;
+	/** 퍽 정의와 플레이어 상태를 조합해 퍽 UI View를 구성한다. */
 	TArray<FDRShopOfferView> BuildPerkOfferViews() const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")

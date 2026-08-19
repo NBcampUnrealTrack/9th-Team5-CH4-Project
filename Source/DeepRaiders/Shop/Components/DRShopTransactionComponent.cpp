@@ -299,6 +299,13 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 			PlayerState->GetCoins())
 		|| !ShopComponent->GetPerkRow(RowName, PerkRow))
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s Coins=%d Reason=PurchaseValidationFailed"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			IsValid(PlayerState) ? PlayerState->GetCoins() : 0);
 		return false;
 	}
 
@@ -308,10 +315,31 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	if (!RankData
 		|| !PerkComponent->ApplyNextRank(RowName, PerkRow))
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][PurchaseFailed] Player=%s Row=%s Name=%s TargetRank=%d Reason=EffectApplyFailed"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			*PerkRow.DisplayName.ToString(),
+			TargetRank);
 		return false;
 	}
 
-	PlayerState->SetCoins(PlayerState->GetCoins() - RankData->Price);
+	const int32 PreviousCoins = PlayerState->GetCoins();
+	PlayerState->SetCoins(PreviousCoins - RankData->Price);
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Name=%s Rank=%d Price=%d Coins=%d->%d Effect=%s"),
+		*GetNameSafe(PlayerState),
+		*RowName.ToString(),
+		*PerkRow.DisplayName.ToString(),
+		TargetRank,
+		RankData->Price,
+		PreviousCoins,
+		PlayerState->GetCoins(),
+		*GetNameSafe(PerkRow.EffectClass));
 	return true;
 }
 
