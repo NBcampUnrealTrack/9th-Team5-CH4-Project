@@ -19,6 +19,7 @@ enum class EDRItemCategory : uint8
 	Ore,
 	Equipment,
 	Consumable,
+	Perk,
 	End,
 };
 

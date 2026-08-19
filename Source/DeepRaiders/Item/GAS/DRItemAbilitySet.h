@@ -60,8 +60,9 @@ public:
 	
 	// 이 ItemAbilitySet이 부여한 Ability와 Effect만 제거
 	void TakeFromAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
-	
+
 	bool IsEmpty() const;
+
 private:
 	TArray<FGameplayAbilitySpecHandle> AbilitySpecHandles;
 	TArray<FActiveGameplayEffectHandle> GameplayEffectHandles;

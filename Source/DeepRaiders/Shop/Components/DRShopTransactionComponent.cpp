@@ -7,6 +7,8 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Shop/DRShop.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -55,8 +57,7 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
 		|| Request.RowName.IsNone()
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn())
-		|| !ShopComponent->GetItemRow(Request.RowName, ItemRow))
+		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
 	{
 		return;
 	}
@@ -64,19 +65,32 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	switch (Request.OfferType)
 	{
 	case EDRShopOfferType::Purchase:
-		if (TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
+		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
+			&& TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
 		break;
 
 	case EDRShopOfferType::Upgrade:
-		if (TryUpgrade(
+		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
+			&& TryUpgrade(
 			PlayerState,
 			ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
 			Inventory,
 			ItemRow,
 			Request.TargetLevel))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
+		break;
+
+	case EDRShopOfferType::Perk:
+		if (TryPurchasePerk(
+				PlayerState,
+				ShopComponent,
+				PlayerState->GetPerkComponent(),
+				Request.RowName))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
@@ -266,6 +280,65 @@ bool UDRShopTransactionComponent::TryUpgrade(
 
 	PlayerState->SetCoins(
 		PlayerState->GetCoins() - Operation.TargetDefinition->Price);
+	return true;
+}
+
+bool UDRShopTransactionComponent::TryPurchasePerk(
+	ADRPlayerState* PlayerState,
+	const UDRShopComponent* ShopComponent,
+	UDRPerkComponent* PerkComponent,
+	FName RowName) const
+{
+	UDRPerkDefinition* PerkDefinition = nullptr;
+
+	// 클라이언트 요청을 신뢰하지 않고 가격, 슬롯과 Row 데이터를 서버에서 재검증한다.
+	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(PerkComponent)
+		|| !ShopComponent->CanPurchasePerk(
+			RowName,
+			PerkComponent,
+			PlayerState->GetCoins())
+		|| !ShopComponent->GetPerkDefinition(RowName, PerkDefinition))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s Coins=%d Reason=PurchaseValidationFailed"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			IsValid(PlayerState) ? PlayerState->GetCoins() : 0);
+		return false;
+	}
+
+	// 검증된 퍽의 AbilitySet 적용이 성공한 경우에만 구매를 확정한다.
+	if (!IsValid(PerkDefinition)
+		|| !PerkComponent->AddPerk(PerkDefinition))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][PurchaseFailed] Player=%s Row=%s Perk=%s Reason=AddFailed"),
+			*GetNameSafe(PlayerState),
+			*RowName.ToString(),
+			*GetNameSafe(PerkDefinition));
+		return false;
+	}
+
+	// 퍽 적용이 완료된 뒤 비용을 차감한다.
+	const int32 PreviousCoins = PlayerState->GetCoins();
+	PlayerState->SetCoins(PreviousCoins - PerkDefinition->Price);
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
+		*GetNameSafe(PlayerState),
+		*RowName.ToString(),
+		*GetNameSafe(PerkDefinition),
+		PerkComponent->GetPerkCount(PerkDefinition),
+		PerkDefinition->Price,
+		PreviousCoins,
+		PlayerState->GetCoins());
 	return true;
 }
 

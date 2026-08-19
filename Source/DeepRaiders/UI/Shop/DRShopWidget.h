@@ -6,6 +6,7 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
+class UDRPerkResetTestWidget;
 class UDRShopItemWidget;
 class UScrollBox;
 enum class EDRItemCategory : uint8;
@@ -23,8 +24,9 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeShop(const TArray<FDRShopItemOffer>& NewItemOffers);
-	void SetUpgradeOffers(const TArray<FDRShopItemOffer>& NewUpgradeOffers);
+	void InitializeShop(const TArray<FDRShopOfferView>& NewItemOffers);
+	void SetUpgradeOffers(const TArray<FDRShopOfferView>& NewUpgradeOffers);
+	void SetPerkOffers(const TArray<FDRShopOfferView>& NewPerkOffers);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -42,10 +44,16 @@ protected:
 private:
 	void InitializeSellAllOresButton();
 	void InitializeUpgradeButton();
+	void InitializePerkButton();
 	void SelectCategory(EDRItemCategory Category);
 	void RefreshItems(EDRItemCategory Category);
 	void RefreshUpgradeItems();
-	bool CreateItemWidget(const FDRShopItemOffer& ItemOffer);
+	/** 퍽 초기화 테스트 위젯과 판매 중인 퍽 목록을 다시 생성한다. */
+	void RefreshPerkItems();
+
+	/** 설정된 테스트 위젯 클래스로 퍽 초기화 UI를 생성한다. */
+	bool CreatePerkResetTestWidget();
+	bool CreateItemWidget(const FDRShopOfferView& Offer);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -58,6 +66,9 @@ private:
 
 	UFUNCTION()
 	void HandleUpgradeButtonClicked();
+
+	UFUNCTION()
+	void HandlePerkButtonClicked();
 
 	UFUNCTION()
 	void HandleSellAllOresButtonClicked();
@@ -80,17 +91,27 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> UpgradeButton;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> PerkButton;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
-	UPROPERTY(Transient)
-	TArray<FDRShopItemOffer> ItemOffers;
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI|Test")
+	TSubclassOf<UDRPerkResetTestWidget> PerkResetTestWidgetClass;
 
 	UPROPERTY(Transient)
-	TArray<FDRShopItemOffer> UpgradeOffers;
+	TArray<FDRShopOfferView> ItemOffers;
+
+	UPROPERTY(Transient)
+	TArray<FDRShopOfferView> UpgradeOffers;
+
+	UPROPERTY(Transient)
+	TArray<FDRShopOfferView> PerkOffers;
 
 	bool IsUpgradeSelected = false;
+	bool IsPerkSelected = false;
 };
