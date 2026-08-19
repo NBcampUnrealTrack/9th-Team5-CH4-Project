@@ -15,7 +15,7 @@ class USoundBase;
 class UDRItemAnimationSet;
 
 UENUM(BlueprintType)
-enum class EItemCategory : uint8
+enum class EDRItemCategory : uint8
 {
 	Ore,
 	Equipment,
@@ -36,6 +36,18 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Description;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRItemCategory Category;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxStackSize = 1;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 bCanBeSold:1 = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Price = 0;	
 };
 
 UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))
@@ -48,7 +60,7 @@ public:
 	FName ItemId;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
-	EItemCategory Category;
+	EDRItemCategory Category;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;

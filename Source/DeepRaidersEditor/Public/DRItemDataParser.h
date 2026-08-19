@@ -6,6 +6,9 @@
 
 class UDataTable;
 
+const FString DRITEM_ASSET_PATH = TEXT("/Game/DeepRaiders/Data/DataAssets/Item");
+const FString DRITEM_NAME_FORMAT = TEXT("DA_DR{0}");
+
 UCLASS(EditInlineNew)
 class DEEPRAIDERSEDITOR_API UDRItemDataParser : public UGoogleSheetParserBase
 {

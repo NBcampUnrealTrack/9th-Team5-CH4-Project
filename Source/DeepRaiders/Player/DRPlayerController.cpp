@@ -702,7 +702,7 @@ ADRWorldItemActor* ADRPlayerController::SpawnDroppedItem(UDRItemDefinition* Defi
 		return nullptr;
 	}
 
-	if (Definition->Category == EItemCategory::Ore)
+	if (Definition->Category == EDRItemCategory::Ore)
 	{
 		UClass* ActorClass = Definition->ActorClass.Get();
 

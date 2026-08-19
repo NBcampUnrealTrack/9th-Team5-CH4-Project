@@ -12,7 +12,7 @@ void UDRShopWidget::InitializeShop(
 	const TArray<FDRShopItemOffer>& NewItemOffers)
 {
 	ItemOffers = NewItemOffers;
-	SelectCategory(EItemCategory::Equipment);
+	SelectCategory(EDRItemCategory::Equipment);
 }
 
 void UDRShopWidget::SetUpgradeOffers(
@@ -26,7 +26,7 @@ void UDRShopWidget::SetUpgradeOffers(
 	}
 }
 
-void UDRShopWidget::SelectCategory(EItemCategory Category)
+void UDRShopWidget::SelectCategory(EDRItemCategory Category)
 {
 	if (!IsValid(EquipmentButton) || !IsValid(ConsumableButton))
 	{
@@ -34,8 +34,8 @@ void UDRShopWidget::SelectCategory(EItemCategory Category)
 	}
 
 	IsUpgradeSelected = false;
-	EquipmentButton->SetIsEnabled(Category != EItemCategory::Equipment);
-	ConsumableButton->SetIsEnabled(Category != EItemCategory::Consumable);
+	EquipmentButton->SetIsEnabled(Category != EDRItemCategory::Equipment);
+	ConsumableButton->SetIsEnabled(Category != EDRItemCategory::Consumable);
 
 	if (IsValid(UpgradeButton))
 	{
@@ -45,7 +45,7 @@ void UDRShopWidget::SelectCategory(EItemCategory Category)
 	RefreshItems(Category);
 }
 
-void UDRShopWidget::RefreshItems(EItemCategory Category)
+void UDRShopWidget::RefreshItems(EDRItemCategory Category)
 {
 	if (!IsValid(ItemScrollBox) || !ItemWidgetClass)
 	{
@@ -261,12 +261,12 @@ void UDRShopWidget::HandleCloseButtonClicked()
 
 void UDRShopWidget::HandleEquipmentButtonClicked()
 {
-	SelectCategory(EItemCategory::Equipment);
+	SelectCategory(EDRItemCategory::Equipment);
 }
 
 void UDRShopWidget::HandleConsumableButtonClicked()
 {
-	SelectCategory(EItemCategory::Consumable);
+	SelectCategory(EDRItemCategory::Consumable);
 }
 
 void UDRShopWidget::HandleUpgradeButtonClicked()
