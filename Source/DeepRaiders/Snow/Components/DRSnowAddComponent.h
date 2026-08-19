@@ -96,6 +96,38 @@ protected:
 	// SnowVolume 원본 데이터 갱신 후, 성공한 경우에만 Voxel 표면 표현을 갱신한다.
 	bool ExecuteAddSnow(const FDRSnowSurfaceAddRequest& Request);
 
+	UFUNCTION(Server, Reliable)
+	void ServerTryAddSnowFromHit(const FHitResult& HitResult);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryAddSnowAtLocation(
+		FVector_NetQuantize WorldLocation,
+		FVector_NetQuantizeNormal SurfaceNormal);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryAddSnowAtLocationForTeam(
+		FVector_NetQuantize WorldLocation,
+		FVector_NetQuantizeNormal SurfaceNormal,
+		int32 TeamId,
+		AVoxelWorld* TargetVoxelWorld);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryAddSnowImpactAtLocationForTeam(
+		FVector_NetQuantize WorldLocation,
+		FVector_NetQuantizeNormal SurfaceNormal,
+		FVector_NetQuantizeNormal ImpactDirection,
+		int32 TeamId,
+		AVoxelWorld* TargetVoxelWorld);
+
+	UFUNCTION(Server, Reliable)
+	void ServerDebugAddSnowAtLocationForTeam(
+		FVector_NetQuantize WorldLocation,
+		FVector_NetQuantizeNormal SurfaceNormal,
+		FVector_NetQuantizeNormal ImpactDirection,
+		int32 TeamId,
+		AVoxelWorld* TargetVoxelWorld,
+		EDRSnowVoxelEditTool DebugEditTool);
+
 	// VoxelWorld actor를 직접 맞거나, VoxelWorld 하위 collision component를 맞은 경우를 모두 처리한다.
 	AVoxelWorld* GetVoxelWorldFromHit(const FHitResult& HitResult) const;
 

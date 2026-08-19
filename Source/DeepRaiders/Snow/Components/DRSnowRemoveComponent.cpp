@@ -1,52 +1,23 @@
 #include "DRSnowRemoveComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
-#include "GameFramework/Controller.h"
-#include "GameFramework/Pawn.h"
 #include "VoxelWorld.h"
 
 UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
-}
-
-void UDRSnowRemoveComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (!bRemovingSnow || !CanRemoveNow())
-	{
-		return;
-	}
-
-	// 아무 표면을 맞추지 못해도 시도 간격은 소비한다.
-	// 실패 시 매 프레임 trace하는 상황을 막기 위한 처리다.
-	LastRemoveTime = GetWorld()->GetTimeSeconds();
-
-	FHitResult HitResult;
-	if (PerformRemovalTrace(HitResult))
-	{
-		TryRemoveSnowFromHit(HitResult);
-	}
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UDRSnowRemoveComponent::StartSnowRemoval()
 {
-	bRemovingSnow = true;
-	SetComponentTickEnabled(true);
 }
 
 void UDRSnowRemoveComponent::StopSnowRemoval()
 {
-	bRemovingSnow = false;
-	SetComponentTickEnabled(false);
 }
 
 void UDRSnowRemoveComponent::ApplyRemovalSettings(
@@ -63,10 +34,23 @@ void UDRSnowRemoveComponent::ApplyRemovalSettings(
 float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 	const FHitResult& HitResult)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryRemoveSnowFromHit(HitResult);
+		return 0.f;
+	}
+
 	if (!HitResult.bBlockingHit)
 	{
 		return 0.f;
 	}
+
+	if (!CanRemoveNow())
+	{
+		return 0.f;
+	}
+	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
 	FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
@@ -101,6 +85,24 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 				// SnowVolume 감소 후 현재 표면을 다시 찾아 남은 dominant team 색으로 복원한다.
 				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
 			}
+
+			if (ADRMiningGameStateBase* MiningGameState =
+				World->GetGameState<ADRMiningGameStateBase>())
+			{
+				FDRSnowRemoveOperation Operation;
+				Operation.WorldLocation = Request.WorldLocation;
+				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+				Operation.Radius = Request.Radius;
+				Operation.RequestedAmount = Request.RequestedAmount;
+				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
+				Operation.EditTool = Request.EditTool;
+				Operation.TeamId = Request.Context.TeamId;
+				Operation.VoxelWorldName =
+					IsValid(Request.TargetVoxelWorld.Get())
+						? Request.TargetVoxelWorld->GetFName()
+						: NAME_None;
+				MiningGameState->RegisterSnowRemove(Operation);
+			}
 		}
 	}
 
@@ -121,6 +123,21 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 	FVector WorldLocation,
 	FVector SurfaceNormal)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryRemoveSnowAtLocation(
+			WorldLocation,
+			SurfaceNormal.GetSafeNormal());
+		return 0.f;
+	}
+
+	if (!CanRemoveNow())
+	{
+		return 0.f;
+	}
+	LastRemoveTime = GetWorld()->GetTimeSeconds();
+
 	const FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(WorldLocation, SurfaceNormal);
 
 	float RemovedAmount = 0.f;
@@ -149,6 +166,24 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 			{
 				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
 			}
+
+			if (ADRMiningGameStateBase* MiningGameState =
+				World->GetGameState<ADRMiningGameStateBase>())
+			{
+				FDRSnowRemoveOperation Operation;
+				Operation.WorldLocation = Request.WorldLocation;
+				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+				Operation.Radius = Request.Radius;
+				Operation.RequestedAmount = Request.RequestedAmount;
+				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
+				Operation.EditTool = Request.EditTool;
+				Operation.TeamId = Request.Context.TeamId;
+				Operation.VoxelWorldName =
+					IsValid(Request.TargetVoxelWorld.Get())
+						? Request.TargetVoxelWorld->GetFName()
+						: NAME_None;
+				MiningGameState->RegisterSnowRemove(Operation);
+			}
 		}
 	}
 
@@ -174,72 +209,6 @@ FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	return Request;
 }
 
-bool UDRSnowRemoveComponent::PerformRemovalTrace(FHitResult& OutHitResult) const
-{
-	UWorld* World = GetWorld();
-	const AActor* Owner = GetOwner();
-	if (!IsValid(World) || !IsValid(Owner))
-	{
-		return false;
-	}
-
-	FVector TraceStart = Owner->GetActorLocation();
-	FRotator TraceRotation = Owner->GetActorRotation();
-
-	const APawn* OwnerPawn = Cast<APawn>(Owner);
-	if (!IsValid(OwnerPawn))
-	{
-		OwnerPawn = Owner->GetInstigator();
-	}
-
-	if (IsValid(OwnerPawn))
-	{
-		if (AController* Controller = OwnerPawn->GetController())
-		{
-			// 플레이어 장비에 붙은 경우 캐릭터 forward보다 실제 조준 시점을 우선한다.
-			Controller->GetPlayerViewPoint(TraceStart, TraceRotation);
-		}
-		else
-		{
-			OwnerPawn->GetActorEyesViewPoint(TraceStart, TraceRotation);
-		}
-	}
-
-	const FVector TraceEnd = TraceStart + (TraceRotation.Vector() * RemovalSettings.AbsorbRange);
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SnowRemovalTrace), false);
-	QueryParams.bTraceComplex = bTraceComplex;
-	QueryParams.AddIgnoredActor(Owner);
-	if (IsValid(OwnerPawn))
-	{
-		QueryParams.AddIgnoredActor(OwnerPawn);
-	}
-
-	switch (RemovalSettings.TraceMode)
-	{
-	case EDRSnowRemovalTraceMode::LineTrace:
-		return World->LineTraceSingleByChannel(
-			OutHitResult,
-			TraceStart,
-			TraceEnd,
-			TraceChannel,
-			QueryParams);
-
-	case EDRSnowRemovalTraceMode::SphereSweep:
-		return World->SweepSingleByChannel(
-			OutHitResult,
-			TraceStart,
-			TraceEnd,
-			FQuat::Identity,
-			TraceChannel,
-			FCollisionShape::MakeSphere(RemovalSettings.TraceSweepRadius),
-			QueryParams);
-
-	default:
-		return false;
-	}
-}
-
 bool UDRSnowRemoveComponent::CanRemoveNow() const
 {
 	const UWorld* World = GetWorld();
@@ -249,6 +218,29 @@ bool UDRSnowRemoveComponent::CanRemoveNow() const
 	}
 
 	return World->GetTimeSeconds() - LastRemoveTime >= RemovalSettings.AbsorbInterval;
+}
+
+void UDRSnowRemoveComponent::ServerStartSnowRemoval_Implementation()
+{
+	StartSnowRemoval();
+}
+
+void UDRSnowRemoveComponent::ServerStopSnowRemoval_Implementation()
+{
+	StopSnowRemoval();
+}
+
+void UDRSnowRemoveComponent::ServerTryRemoveSnowFromHit_Implementation(
+	const FHitResult& HitResult)
+{
+	TryRemoveSnowFromHit(HitResult);
+}
+
+void UDRSnowRemoveComponent::ServerTryRemoveSnowAtLocation_Implementation(
+	FVector_NetQuantize WorldLocation,
+	FVector_NetQuantizeNormal SurfaceNormal)
+{
+	TryRemoveSnowAtLocation(WorldLocation, SurfaceNormal);
 }
 
 AVoxelWorld* UDRSnowRemoveComponent::GetVoxelWorldFromHit(

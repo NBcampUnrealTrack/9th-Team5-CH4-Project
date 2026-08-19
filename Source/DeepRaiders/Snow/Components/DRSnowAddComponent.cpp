@@ -1,6 +1,7 @@
 #include "DRSnowAddComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
@@ -13,6 +14,13 @@
 bool UDRSnowAddComponent::TryAddSnowFromHit(
 	const FHitResult& HitResult)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryAddSnowFromHit(HitResult);
+		return true;
+	}
+
 	if (!HitResult.bBlockingHit)
 	{
 		return false;
@@ -42,6 +50,13 @@ bool UDRSnowAddComponent::TryAddSnowAtLocation(
 	FVector WorldLocation,
 	FVector SurfaceNormal)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryAddSnowAtLocation(WorldLocation, SurfaceNormal.GetSafeNormal());
+		return true;
+	}
+
 	const FDRSnowSurfaceAddRequest Request = MakeAddRequest(WorldLocation, SurfaceNormal);
 
 	const bool bHandled = ExecuteAddSnow(Request);
@@ -55,6 +70,17 @@ bool UDRSnowAddComponent::TryAddSnowAtLocationForTeam(
 	int32 TeamId,
 	AVoxelWorld* TargetVoxelWorld)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryAddSnowAtLocationForTeam(
+			WorldLocation,
+			SurfaceNormal.GetSafeNormal(),
+			TeamId,
+			TargetVoxelWorld);
+		return true;
+	}
+
 	FDRSnowSurfaceAddRequest Request = MakeAddRequest(WorldLocation, SurfaceNormal);
 	// 디버그/투사체처럼 Owner로 팀을 해석하기 어려운 호출자는 여기서 명시값을 덮어쓴다.
 	Request.Context.TeamId = TeamId;
@@ -72,6 +98,18 @@ bool UDRSnowAddComponent::TryAddSnowImpactAtLocationForTeam(
 	int32 TeamId,
 	AVoxelWorld* TargetVoxelWorld)
 {
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerTryAddSnowImpactAtLocationForTeam(
+			WorldLocation,
+			SurfaceNormal.GetSafeNormal(),
+			ImpactDirection.GetSafeNormal(),
+			TeamId,
+			TargetVoxelWorld);
+		return true;
+	}
+
 	FDRSnowSurfaceAddRequest Request = MakeAddRequest(WorldLocation, SurfaceNormal);
 	Request.ImpactDirection = ImpactDirection.IsNearlyZero()
 		? -Request.SurfaceNormal
@@ -174,14 +212,14 @@ bool UDRSnowAddComponent::MakeDebugViewHit(
 			*TraceEnd.ToCompactString());
 
 		UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugMessage);
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				-1,
-				2.f,
-				FColor::Red,
-				DebugMessage);
-		}
+		// if (GEngine)
+		// {
+		// 	GEngine->AddOnScreenDebugMessage(
+		// 		-1,
+		// 		2.f,
+		// 		FColor::Red,
+		// 		DebugMessage);
+		// }
 		return false;
 	}
 
@@ -205,6 +243,19 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 		: GetVoxelWorldFromHit(HitResult);
 	Request.EditTool = DebugEditTool;
 
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		ServerDebugAddSnowAtLocationForTeam(
+			Request.WorldLocation,
+			Request.SurfaceNormal.GetSafeNormal(),
+			Request.ImpactDirection.GetSafeNormal(),
+			TeamId,
+			Request.TargetVoxelWorld.Get(),
+			DebugEditTool);
+		return true;
+	}
+
 	const bool bHandled = ExecuteAddSnow(Request);
 	OnSnowAdded.Broadcast(Request, bHandled);
 
@@ -222,15 +273,15 @@ bool UDRSnowAddComponent::DebugAddSnowFromHit(
 		*DebugColor.ToString(),
 		*GetNameSafe(HitResult.GetActor()));
 
-	UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugMessage);
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			2.f,
-			bHandled ? DebugColor : FColor::Red,
-			DebugMessage);
-	}
+	// UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugMessage);
+	// if (GEngine)
+	// {
+	// 	GEngine->AddOnScreenDebugMessage(
+	// 		-1,
+	// 		2.f,
+	// 		bHandled ? DebugColor : FColor::Red,
+	// 		DebugMessage);
+	// }
 
 	return bHandled;
 }
@@ -247,6 +298,27 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 			{
 				// Custom 계열 툴은 실제 생성 voxel 기준으로 SnowVolume을 기록하므로 SurfaceSubsystem이 먼저 처리한다.
 				bHandled = SnowSurfaceSubsystem->AddSnowAtArea(Request) > 0.f;
+			}
+
+			if (bHandled)
+			{
+				if (ADRMiningGameStateBase* MiningGameState =
+					World->GetGameState<ADRMiningGameStateBase>())
+				{
+					FDRSnowAddOperation Operation;
+					Operation.WorldLocation = Request.WorldLocation;
+					Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+					Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
+					Operation.Radius = Request.Radius;
+					Operation.Amount = Request.Amount;
+					Operation.EditTool = Request.EditTool;
+					Operation.TeamId = Request.Context.TeamId;
+					Operation.VoxelWorldName =
+						IsValid(Request.TargetVoxelWorld.Get())
+							? Request.TargetVoxelWorld->GetFName()
+							: NAME_None;
+					MiningGameState->RegisterSnowAdd(Operation);
+				}
 			}
 
 			return bHandled;
@@ -266,10 +338,89 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 				// 표면 SDF와 팀 material index를 함께 갱신한다.
 				SnowSurfaceSubsystem->AddSnowAtArea(Request);
 			}
+
+			if (ADRMiningGameStateBase* MiningGameState =
+				World->GetGameState<ADRMiningGameStateBase>())
+			{
+				FDRSnowAddOperation Operation;
+				Operation.WorldLocation = Request.WorldLocation;
+				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+				Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
+				Operation.Radius = Request.Radius;
+				Operation.Amount = Request.Amount;
+				Operation.EditTool = Request.EditTool;
+				Operation.TeamId = Request.Context.TeamId;
+				Operation.VoxelWorldName =
+					IsValid(Request.TargetVoxelWorld.Get())
+						? Request.TargetVoxelWorld->GetFName()
+						: NAME_None;
+				MiningGameState->RegisterSnowAdd(Operation);
+			}
 		}
 	}
 
 	return bHandled;
+}
+
+void UDRSnowAddComponent::ServerTryAddSnowFromHit_Implementation(
+	const FHitResult& HitResult)
+{
+	TryAddSnowFromHit(HitResult);
+}
+
+void UDRSnowAddComponent::ServerTryAddSnowAtLocation_Implementation(
+	FVector_NetQuantize WorldLocation,
+	FVector_NetQuantizeNormal SurfaceNormal)
+{
+	TryAddSnowAtLocation(WorldLocation, SurfaceNormal);
+}
+
+void UDRSnowAddComponent::ServerTryAddSnowAtLocationForTeam_Implementation(
+	FVector_NetQuantize WorldLocation,
+	FVector_NetQuantizeNormal SurfaceNormal,
+	int32 TeamId,
+	AVoxelWorld* TargetVoxelWorld)
+{
+	TryAddSnowAtLocationForTeam(
+		WorldLocation,
+		SurfaceNormal,
+		TeamId,
+		TargetVoxelWorld);
+}
+
+void UDRSnowAddComponent::ServerTryAddSnowImpactAtLocationForTeam_Implementation(
+	FVector_NetQuantize WorldLocation,
+	FVector_NetQuantizeNormal SurfaceNormal,
+	FVector_NetQuantizeNormal ImpactDirection,
+	int32 TeamId,
+	AVoxelWorld* TargetVoxelWorld)
+{
+	TryAddSnowImpactAtLocationForTeam(
+		WorldLocation,
+		SurfaceNormal,
+		ImpactDirection,
+		TeamId,
+		TargetVoxelWorld);
+}
+
+void UDRSnowAddComponent::ServerDebugAddSnowAtLocationForTeam_Implementation(
+	FVector_NetQuantize WorldLocation,
+	FVector_NetQuantizeNormal SurfaceNormal,
+	FVector_NetQuantizeNormal ImpactDirection,
+	int32 TeamId,
+	AVoxelWorld* TargetVoxelWorld,
+	EDRSnowVoxelEditTool DebugEditTool)
+{
+	FDRSnowSurfaceAddRequest Request = MakeAddRequest(WorldLocation, SurfaceNormal);
+	Request.ImpactDirection = FVector(ImpactDirection).IsNearlyZero()
+		? -Request.SurfaceNormal
+		: FVector(ImpactDirection).GetSafeNormal();
+	Request.Context.TeamId = TeamId;
+	Request.TargetVoxelWorld = TargetVoxelWorld;
+	Request.EditTool = DebugEditTool;
+
+	const bool bHandled = ExecuteAddSnow(Request);
+	OnSnowAdded.Broadcast(Request, bHandled);
 }
 
 FDRSnowSurfaceAddRequest UDRSnowAddComponent::MakeAddRequest(

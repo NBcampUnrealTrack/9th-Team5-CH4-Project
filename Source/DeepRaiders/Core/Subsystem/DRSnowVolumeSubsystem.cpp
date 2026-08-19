@@ -8,6 +8,31 @@ namespace
 			? Value / Divisor
 			: -((-Value + Divisor - 1) / Divisor);
 	}
+
+	bool IsWorldLocationInsideHexPrism(
+		const FVector& WorldLocation,
+		const FTransform& HexTransform,
+		const FVector& HexExtent)
+	{
+		const FVector LocalLocation =
+			HexTransform.InverseTransformPosition(WorldLocation);
+
+		if (FMath::Abs(LocalLocation.Z) > HexExtent.Z)
+		{
+			return false;
+		}
+
+		const float HexRadius = FMath::Max(
+			1.f,
+			FMath::Min(HexExtent.X, HexExtent.Y));
+		const float AbsX = FMath::Abs(LocalLocation.X);
+		const float AbsY = FMath::Abs(LocalLocation.Y);
+		const float HalfSqrt3 = 0.86602540378f;
+
+		return AbsX <= HexRadius &&
+			AbsY <= HalfSqrt3 * HexRadius &&
+			HalfSqrt3 * AbsX + 0.5f * AbsY <= HalfSqrt3 * HexRadius;
+	}
 }
 
 bool UDRSnowVolumeSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -250,6 +275,89 @@ FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInBounds(
 			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
 			{
 				const FIntVector GlobalCell(X, Y, Z);
+				const FDRSnowVolumeChunk* Chunk =
+					FindChunk(CellToChunkOrigin(GlobalCell));
+				if (!Chunk)
+				{
+					continue;
+				}
+
+				int32 LocalIndex = INDEX_NONE;
+				if (!Chunk->GetLocalIndex(GlobalCell - Chunk->Origin, LocalIndex))
+				{
+					continue;
+				}
+
+				const FDRSnowCell& Cell = Chunk->Cells[LocalIndex];
+				Ratio.NeutralAmount += Cell.NeutralAmount;
+				if (Cell.AmountA > 0.f)
+				{
+					AddQueriedAmount(Ratio, Chunk->TeamIdA, Cell.AmountA);
+				}
+				if (Cell.AmountB > 0.f)
+				{
+					AddQueriedAmount(Ratio, Chunk->TeamIdB, Cell.AmountB);
+				}
+
+				++Ratio.SampledCellCount;
+			}
+		}
+	}
+
+	Ratio.TotalAmount =
+		Ratio.NeutralAmount +
+		Ratio.AmountA +
+		Ratio.AmountB;
+	if (Ratio.TotalAmount > 0.f)
+	{
+		Ratio.RatioA = Ratio.AmountA / Ratio.TotalAmount;
+		Ratio.RatioB = Ratio.AmountB / Ratio.TotalAmount;
+	}
+
+	return Ratio;
+}
+
+FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInHexPrism(
+	const FBox& WorldBounds,
+	const FTransform& HexTransform,
+	const FVector& HexExtent,
+	int32 TeamIdA,
+	int32 TeamIdB) const
+{
+	FDRSnowControlRatio Ratio;
+	Ratio.TeamIdA = TeamIdA;
+	Ratio.TeamIdB = TeamIdB;
+
+	if (!WorldBounds.IsValid)
+	{
+		return Ratio;
+	}
+
+	const FIntVector MinCell = WorldToCell(WorldBounds.Min);
+	const FIntVector MaxCell = WorldToCell(WorldBounds.Max);
+
+	for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
+	{
+		for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+		{
+			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+			{
+				const FIntVector GlobalCell(X, Y, Z);
+				const FVector CellCenter =
+					(FVector(
+						static_cast<double>(GlobalCell.X),
+						static_cast<double>(GlobalCell.Y),
+						static_cast<double>(GlobalCell.Z)) +
+						FVector(0.5, 0.5, 0.5)) *
+					CellSize;
+				if (!IsWorldLocationInsideHexPrism(
+					CellCenter,
+					HexTransform,
+					HexExtent))
+				{
+					continue;
+				}
+
 				const FDRSnowVolumeChunk* Chunk =
 					FindChunk(CellToChunkOrigin(GlobalCell));
 				if (!Chunk)

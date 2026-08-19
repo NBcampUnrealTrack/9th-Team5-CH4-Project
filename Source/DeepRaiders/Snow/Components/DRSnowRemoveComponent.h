@@ -73,15 +73,20 @@ class DEEPRAIDERS_API UDRSnowRemoveComponent : public UDRSnowInteractionComponen
 public:
 	UDRSnowRemoveComponent();
 
-	virtual void TickComponent(
-		float DeltaTime,
-		ELevelTick TickType,
-		FActorComponentTickFunction* ThisTickFunction) override;
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Remove")
+	UFUNCTION(
+		BlueprintCallable,
+		Category = "Snow|Remove",
+		meta = (
+			DeprecatedFunction,
+			DeprecationMessage = "Call TryRemoveSnowFromHit or TryRemoveSnowAtLocation repeatedly while input is held."))
 	void StartSnowRemoval();
 
-	UFUNCTION(BlueprintCallable, Category = "Snow|Remove")
+	UFUNCTION(
+		BlueprintCallable,
+		Category = "Snow|Remove",
+		meta = (
+			DeprecatedFunction,
+			DeprecationMessage = "StopSnowRemoval is no longer needed because removal is handled as repeated one-shot requests."))
 	void StopSnowRemoval();
 
 	// 장비와 업그레이드가 계산한 최종 흡수 수치를 컴포넌트에 적용한다.
@@ -106,11 +111,22 @@ protected:
 		FVector WorldLocation,
 		FVector SurfaceNormal);
 
-	// 지속 흡수 중 카메라/시선 기준으로 흡수 후보 표면을 찾는다.
-	bool PerformRemovalTrace(FHitResult& OutHitResult) const;
-
-	// Tick마다 Voxel 편집을 호출하지 않도록 흡수 간격을 제한한다.
+	// 입력 유지 중 호출자가 반복 요청할 때 서버가 너무 자주 Voxel 편집하지 않도록 제한한다.
 	bool CanRemoveNow() const;
+
+	UFUNCTION(Server, Reliable)
+	void ServerStartSnowRemoval();
+
+	UFUNCTION(Server, Reliable)
+	void ServerStopSnowRemoval();
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryRemoveSnowFromHit(const FHitResult& HitResult);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTryRemoveSnowAtLocation(
+		FVector_NetQuantize WorldLocation,
+		FVector_NetQuantizeNormal SurfaceNormal);
 
 	// Voxel collision component를 맞춘 경우 Owner인 AVoxelWorld까지 거슬러 올라간다.
 	AVoxelWorld* GetVoxelWorldFromHit(const FHitResult& HitResult) const;
@@ -128,9 +144,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
 	FDRSnowRemovalSettings RemovalSettings;
-
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "Snow|Remove")
-	bool bRemovingSnow = false;
 
 	float LastRemoveTime = -BIG_NUMBER;
 };

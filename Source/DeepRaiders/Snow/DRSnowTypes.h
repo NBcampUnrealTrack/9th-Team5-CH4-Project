@@ -106,6 +106,66 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	FDRSnowInteractionContext Context;
 };
 
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSnowAddOperation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantize WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantizeNormal SurfaceNormal = FVector::UpVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantizeNormal ImpactDirection = FVector::ForwardVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	float Radius = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	float Amount = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	int32 TeamId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FName VoxelWorldName = NAME_None;
+};
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSnowRemoveOperation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantize WorldLocation = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantizeNormal SurfaceNormal = FVector::UpVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	float Radius = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	float RequestedAmount = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bInvertSurfaceStrength = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	int32 TeamId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FName VoxelWorldName = NAME_None;
+};
+
 // 눈 투사체나 눈 충돌체가 캐릭터/대상에게 피해를 줄 때 사용하는 요청 데이터다.
 // 실제 체력 감소는 이후 GAS GameplayEffect 적용 계층에서 처리한다.
 USTRUCT(BlueprintType)
