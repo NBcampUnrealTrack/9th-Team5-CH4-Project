@@ -219,7 +219,7 @@ void ADRWorldItemActor::MulticastPlayPickupSound_Implementation(APawn* Interacto
 void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
-	if (IsValid(Definition) && Definition->Category == EItemCategory::Ore)
+	if (IsValid(Definition) && Definition->Category == EDRItemCategory::Ore)
 	{
 		FGameplayCueParameters CueParameters;
 		CueParameters.OriginalTag = DRGameplayTags::GameplayCue_Sound_Ore_Dropped;

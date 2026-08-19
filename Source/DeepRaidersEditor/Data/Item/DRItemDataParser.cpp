@@ -52,19 +52,25 @@ bool UDRItemDataParser::OnParseComplete(FString& OutError)
         return FinalizeParseReport(ParserName, Report, OutError);
     }
 
-    FScopedDataTableEditNotification TableEdit(TargetTable);
+    FScopedDataTableEditNotification TableEdit(TargetTable, false);
 
     for (int32 Index = 0; Index < GetRowCount(); ++Index)
     {
         TMap<FString, FString> RowData;
         if (!GetRowAt(Index, RowData))
         {
+            ensureMsgf(false, TEXT("DRItemDataParser : RowData %d is invalid."), Index);
             continue;
         }
         
         FSheetRowReader Row(RowData, Index, Report);
+        if (!Row.IsValid())
+        {
+            ensureMsgf(false, TEXT("DRItemDataParser : SheetRowReader is invalid."));
+            continue;
+        }
+        
         FDRItemDataTableRow NewRow;
-
         NewRow.RowName = Row.GetRequiredName(ItemColumns::RowName);
         NewRow.DisplayName = Row.Get(ItemColumns::DisplayName);
         NewRow.Description = Row.Get(ItemColumns::Description);
@@ -74,11 +80,6 @@ bool UDRItemDataParser::OnParseComplete(FString& OutError)
         NewRow.bCanBeSold = ParseBoolValue(Row.GetRequiredString(ItemColumns::bCanBeSold), false);
         NewRow.Price = Row.GetRequiredInt(ItemColumns::Price);
         
-        if (!Row.IsValid())
-        {
-            continue;
-        }
-
         TargetTable->AddRow(NewRow.RowName, NewRow);
         Report.AddSuccess();
         
