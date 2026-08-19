@@ -8,7 +8,6 @@
 #include "DeepRaiders/teleport/DRTeleportPoint.h"
 #include "DRTeleportListItemWidget.h"
 #include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
 
 void UDRTeleportSelectWidget::InitializeTeleportList(ADRTeleportPoint* NewCurrentTeleportPoint, const TArray<ADRTeleportPoint*>& NewDestinationTeleportPoints)
 {
@@ -57,12 +56,6 @@ void UDRTeleportSelectWidget::NativeOnInitialized()
 	}
 }
 
-void UDRTeleportSelectWidget::NativeConstruct()
-{
-	Super::NativeConstruct();
-	ApplyUIInputMode();
-}
-
 void UDRTeleportSelectWidget::NativeDestruct()
 {
 	if (IsValid(Button_Close))
@@ -75,37 +68,7 @@ void UDRTeleportSelectWidget::NativeDestruct()
 		Button_Confirm->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmButtonClicked);
 	}
 
-	RestoreGameInputMode();
 	Super::NativeDestruct();
-}
-
-void UDRTeleportSelectWidget::ApplyUIInputMode()
-{
-	APlayerController* PlayerController = GetOwningPlayer();
-	if (!IsValid(PlayerController))
-	{
-		return;
-	}
-
-	bPreviousShowMouseCursor = PlayerController->bShowMouseCursor;
-	PlayerController->bShowMouseCursor = true;
-
-	FInputModeUIOnly InputMode;
-	InputMode.SetWidgetToFocus(TakeWidget());
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-	PlayerController->SetInputMode(InputMode);
-}
-
-void UDRTeleportSelectWidget::RestoreGameInputMode()
-{
-	APlayerController* PlayerController = GetOwningPlayer();
-	if (!IsValid(PlayerController))
-	{
-		return;
-	}
-
-	PlayerController->bShowMouseCursor = bPreviousShowMouseCursor;
-	PlayerController->SetInputMode(FInputModeGameOnly());
 }
 
 void UDRTeleportSelectWidget::RefreshCurrentTeleport()
@@ -205,7 +168,7 @@ void UDRTeleportSelectWidget::HandleDestinationItemSelected(ADRTeleportPoint* De
 
 void UDRTeleportSelectWidget::HandleCloseButtonClicked()
 {
-	RemoveFromParent();
+	OnCloseRequested.Broadcast();
 }
 
 void UDRTeleportSelectWidget::HandleConfirmButtonClicked()
@@ -218,5 +181,5 @@ void UDRTeleportSelectWidget::HandleConfirmButtonClicked()
 		}
 	}
 
-	RemoveFromParent();
+	OnCloseRequested.Broadcast();
 }

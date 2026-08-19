@@ -85,11 +85,7 @@ void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySyst
 			, AbilityToGrant.AbilityLevel);
 		AbilitySpec.SourceObject = SourceObject;
 		
-		if (AbilityToGrant.InputTag.IsValid())
-		{
-			AbilitySpec.GetDynamicSpecSourceTags().AddTag(
-				AbilityToGrant.InputTag);
-		}
+		AbilitySpec.InputID = static_cast<int32>(AbilityToGrant.InputID);
 		
 		const FGameplayAbilitySpecHandle AbilityHandle = AbilitySystemComponent->GiveAbility(AbilitySpec);
 		

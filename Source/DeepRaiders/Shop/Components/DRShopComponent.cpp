@@ -1,7 +1,9 @@
 #include "DRShopComponent.h"
 
-#include "DRInteractionComponent.h"
+#include "DRShopAreaComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 
@@ -52,6 +54,44 @@ bool UDRShopComponent::GetItemRow(
 	return true;
 }
 
+bool UDRShopComponent::GetPerkDefinition(
+	FName RowName,
+	UDRPerkDefinition*& OutPerkDefinition) const
+{
+	FDRShopItemTableRow ItemRow;
+	OutPerkDefinition = nullptr;
+
+	// 서버가 RowName으로 원본 상점 데이터를 다시 조회한다.
+	if (!GetItemRow(RowName, ItemRow))
+	{
+		return false;
+	}
+
+	// 일반 아이템 Row가 퍽 구매 경로로 들어오는 것을 차단한다.
+	OutPerkDefinition = Cast<UDRPerkDefinition>(ItemRow.ItemDefinition);
+	return IsValid(OutPerkDefinition);
+}
+
+bool UDRShopComponent::CanPurchasePerk(
+	FName RowName,
+	const UDRPerkComponent* PerkComponent,
+	int32 AvailableCoins) const
+{
+	UDRPerkDefinition* PerkDefinition = nullptr;
+
+	// 퍽 데이터 유효성과 플레이어의 남은 퍽 슬롯을 확인한다.
+	if (!IsValid(PerkComponent)
+		|| !GetPerkDefinition(RowName, PerkDefinition)
+		|| !PerkComponent->CanAddPerk(PerkDefinition))
+	{
+		return false;
+	}
+
+	// 가격 데이터와 현재 보유 코인을 마지막으로 검증한다.
+	return PerkDefinition->Price >= 0
+		&& AvailableCoins >= PerkDefinition->Price;
+}
+
 bool UDRShopComponent::IsItemAvailable(
 	const UDRItemDefinition* ItemDefinition) const
 {
@@ -59,32 +99,32 @@ bool UDRShopComponent::IsItemAvailable(
 		&& ItemOffers.ContainsByPredicate(
 			[ItemDefinition](const FDRShopItemOffer& ItemOffer)
 			{
-				return !ItemOffer.IsUpgrade()
+				return ItemOffer.OfferType == EDRShopOfferType::Purchase
 					&& ItemOffer.ItemDefinition == ItemDefinition;
 			});
 }
 
 bool UDRShopComponent::CanPurchase(
-	const APawn* Interactor,
+	const APawn* Pawn,
 	const UDRItemDefinition* ItemDefinition) const
 {
 	return IsItemAvailable(ItemDefinition)
-		&& IsTransactionAllowed(Interactor);
+		&& IsTransactionAllowed(Pawn);
 }
 
-bool UDRShopComponent::IsTransactionAllowed(const APawn* Interactor) const
+bool UDRShopComponent::IsTransactionAllowed(const APawn* Pawn) const
 {
-	return IsValid(InteractionComponent)
-		&& IsValid(Interactor)
-		&& InteractionComponent->IsOverlappingActor(Interactor);
+	return IsValid(ShopAreaComponent)
+		&& IsValid(Pawn)
+		&& ShopAreaComponent->IsOverlappingActor(Pawn);
 }
 
 void UDRShopComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	InteractionComponent =
-		GetOwner()->FindComponentByClass<UDRInteractionComponent>();
+	ShopAreaComponent =
+		GetOwner()->FindComponentByClass<UDRShopAreaComponent>();
 	LoadItemOffers();
 }
 
@@ -115,6 +155,16 @@ void UDRShopComponent::AddItemOffers(
 	FName RowName,
 	const FDRShopItemTableRow& ItemRow)
 {
+	// PerkDefinition은 일반 구매나 장비 업그레이드가 아닌 퍽 Offer로 등록한다.
+	if (IsValid(Cast<UDRPerkDefinition>(ItemRow.ItemDefinition)))
+	{
+		FDRShopItemOffer& PerkOffer = ItemOffers.AddDefaulted_GetRef();
+		PerkOffer.RowName = RowName;
+		PerkOffer.OfferType = EDRShopOfferType::Perk;
+		PerkOffer.ItemDefinition = ItemRow.ItemDefinition;
+		return;
+	}
+
 	if (!ItemRow.IsUpgradeRow())
 	{
 		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();

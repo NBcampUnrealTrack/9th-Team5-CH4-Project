@@ -10,8 +10,14 @@
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
 				"Engine",
-				"UMG"
+				"UMG",
+				"GameplayAbilities"
 			]
+		},
+		{
+			  "Name": "DeepRaidersEditor",
+			  "Type": "Editor",
+			  "LoadingPhase": "PostEngineInit"
 		}
 	],
 	"Plugins": [
@@ -24,7 +30,8 @@
 		},
 		{
 			"Name": "VoxelFree",
-			"Enabled": true
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/b08e5581837e4bbca486b61cdf2751bb"
 		},
 		{
 			"Name": "WaveformEditor",
@@ -32,6 +39,10 @@
 		},
 		{
 			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
 			"Enabled": true
 		},
 		{

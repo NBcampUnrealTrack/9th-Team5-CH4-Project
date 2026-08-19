@@ -3,119 +3,87 @@
 
 #include "DRQuickSlotWidget.h"
 
-#include "Components/UniformGridPanel.h"
+#include "Components/HorizontalBox.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
-#include "DRQuickSlotSlotWidget.h"
+#include "DeepRaiders/UI/QuickSlot/DRQuickSlotSlotWidget.h"
+#include "DeepRaiders/UI/ViewModel/DRQuickSlotViewModel.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
 
 void UDRQuickSlotWidget::NativeDestruct()
-{	
-	UnbindQuickSlot();
-	
+{
+	if (IsValid(QuickSlotViewModel))
+	{
+		QuickSlotViewModel->Deinitialize();
+	}
+
 	Super::NativeDestruct();
 }
 
 void UDRQuickSlotWidget::InitializeQuickSlot(UDRQuickSlotComponent* NewQuickSlotComponent)
 {
-	UnbindQuickSlot();
-	QuickSlotComponent = NewQuickSlotComponent;
-	
-	BindQuickSlot();
-	RebuildSlots();
-	RefreshSlots();
-}
-
-void UDRQuickSlotWidget::BindQuickSlot()
-{
-	if (UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get())
+	if (!IsValid(NewQuickSlotComponent))
 	{
-		QuickSlot->OnQuickSlotsChangedDelegate.AddDynamic(this, &ThisClass::HandleQuickSlotsChanged);
-		QuickSlot->OnQuickSlotCountChangedDelegate.AddDynamic(this, &ThisClass::HandleQuickSlotCountChanged);
-		QuickSlot->OnSelectedQuickSlotIndexChangedDelegate.AddDynamic(this, &ThisClass::HandleSelectedSlotChanged);
-	}
-}
-
-void UDRQuickSlotWidget::UnbindQuickSlot()
-{
-	if (UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get())
-	{
-		QuickSlot->OnQuickSlotsChangedDelegate.RemoveDynamic(this, &ThisClass::HandleQuickSlotsChanged);
-		QuickSlot->OnQuickSlotCountChangedDelegate.RemoveDynamic(this, &ThisClass::HandleQuickSlotCountChanged);
-		QuickSlot->OnSelectedQuickSlotIndexChangedDelegate.RemoveDynamic(this, &ThisClass::HandleSelectedSlotChanged);
-	}
-}
-
-void UDRQuickSlotWidget::RebuildSlots()
-{
-	UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get();
-	
-	if (!IsValid(QuickSlot)
-		|| !IsValid(SlotPanel)
-		|| !QuickSlotSlotWidgetClass)
-	{
+		UE_LOG(LogTemp, Error, TEXT("QuickSlotComponent is invalid on %s"), *GetName());
 		return;
 	}
-	
+
+	if (!IsValid(QuickSlotViewModel))
+	{
+		QuickSlotViewModel = NewObject<UDRQuickSlotViewModel>(this);
+	}
+
+	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+
+	if (!IsValid(View)
+		|| !View->SetViewModel(QuickSlotViewModelName, QuickSlotViewModel))
+	{
+		UE_LOG(LogTemp, Error, TEXT("QuickSlotViewModel '%s' was not registered on %s"),
+			*QuickSlotViewModelName.ToString(), *GetName());
+		return;
+	}
+
+	QuickSlotViewModel->Initialize(NewQuickSlotComponent);
+}
+
+void UDRQuickSlotWidget::SetSlotEntries(
+	const TArray<UDRQuickSlotEntryViewModel*>& NewSlotEntries)
+{
+	if (!IsValid(SlotPanel) || !SlotWidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("QuickSlot UI setup is invalid. SlotPanel=%s, SlotWidgetClass=%s"),
+			*GetNameSafe(SlotPanel), *GetNameSafe(SlotWidgetClass));
+		return;
+	}
+
 	SlotPanel->ClearChildren();
-	SlotWidgets.Reset();
-	
-	for (int32 SlotIndex = 0; SlotIndex < QuickSlot->GetSlotCount(); ++SlotIndex)
+
+	for (UDRQuickSlotEntryViewModel* EntryViewModel : NewSlotEntries)
 	{
-		UDRQuickSlotSlotWidget* SlotWidget = CreateWidget<UDRQuickSlotSlotWidget>(GetOwningPlayer(), QuickSlotSlotWidgetClass);
-		
-		if (!ensureMsgf(IsValid(SlotWidget), TEXT("Failed to create QuickSlotWidget at index %d"), SlotIndex))
+		if (!IsValid(EntryViewModel))
 		{
-			SlotPanel->ClearChildren();
-			SlotWidgets.Reset();
-			return;
+			continue;
 		}
-		
-		SlotWidget->OnQuickSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);
-		
-		SlotPanel->AddChildToUniformGrid(SlotWidget, 0, SlotIndex);
-		
-		SlotWidgets.Add(SlotWidget);
-	}
-}
 
-void UDRQuickSlotWidget::RefreshSlots()
-{
-	UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get();
-	
-	if (!IsValid(QuickSlot))
-	{
-		return;
-	}
-	
-	for (int32 SlotIndex = 0; SlotIndex < SlotWidgets.Num(); ++SlotIndex)
-	{
-		FDRQuickSlotEntry Entry;
-		QuickSlot->GetQuickSlot(SlotIndex, Entry);
-		
-		SlotWidgets[SlotIndex]->SetSlotData(SlotIndex, Entry.Definition, QuickSlot->GetSlotItemCount(SlotIndex)
-			, QuickSlot->GetSelectedSlotIndex() == SlotIndex, QuickSlot->IsSlotItemAvailable(SlotIndex));
-	}
-}
+		UDRQuickSlotSlotWidget* SlotWidget = CreateWidget<UDRQuickSlotSlotWidget>(
+			GetOwningPlayer(),
+			SlotWidgetClass);
 
-void UDRQuickSlotWidget::HandleQuickSlotsChanged()
-{
-	RefreshSlots();
-}
+		if (!IsValid(SlotWidget))
+		{
+			continue;
+		}
 
-void UDRQuickSlotWidget::HandleQuickSlotCountChanged(int32 NewSlotCount)
-{
-	RebuildSlots();
-	RefreshSlots();
-}
+		UMVVMView* EntryView = UMVVMSubsystem::GetViewFromUserWidget(SlotWidget);
 
-void UDRQuickSlotWidget::HandleSelectedSlotChanged(int32 PreviousSlotIndex, int32 NewSlotIndex)
-{
-	RefreshSlots();
-}
+		if (!IsValid(EntryView)
+			|| !EntryView->SetViewModel(EntryViewModelName, EntryViewModel))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Entry ViewModel '%s' was not registered on %s"),
+				*EntryViewModelName.ToString(), *GetNameSafe(SlotWidget));
+			continue;
+		}
 
-void UDRQuickSlotWidget::HandleSlotClicked(int32 SlotIndex)
-{
-	if (UDRQuickSlotComponent* QuickSlot = QuickSlotComponent.Get())
-	{
-		QuickSlot->RequestSelectSlot(SlotIndex);
+		SlotPanel->AddChildToHorizontalBox(SlotWidget);
 	}
 }

@@ -4,7 +4,6 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
-#include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 
 #include "Kismet/GameplayStatics.h"
@@ -19,40 +18,28 @@ UDRHeldItemComponent::UDRHeldItemComponent()
 }
 
 
-void UDRHeldItemComponent::GetLifetimeReplicatedProps(
-	TArray<FLifetimeProperty>&
-		OutLifetimeProps) const
+void UDRHeldItemComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	Super::GetLifetimeReplicatedProps(
-		OutLifetimeProps);
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(
-		UDRHeldItemComponent,
-		HeldItemDefinition);
+	DOREPLIFETIME(UDRHeldItemComponent, HeldItemDefinition);
 }
 
 ADRPlayerCharacter* UDRHeldItemComponent::GetOwnerCharacter() const
 {
-	return Cast<ADRPlayerCharacter>(
-		GetOwner());
+	return Cast<ADRPlayerCharacter>(GetOwner());
 }
 
-void UDRHeldItemComponent::SetHeldItemDefinition(
-	UDRItemDefinition* NewItemDefinition)
+void UDRHeldItemComponent::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->HasAuthority() ||
-		HeldItemDefinition ==
-			NewItemDefinition)
+	if (!IsValid(Character) || !Character->HasAuthority() || HeldItemDefinition == NewItemDefinition)
 	{
 		return;
 	}
 
-	HeldItemDefinition =
-		NewItemDefinition;
+	HeldItemDefinition = NewItemDefinition;
 
 	/*
 	 * Listen Server에서는 RepNotify가
@@ -73,73 +60,37 @@ void UDRHeldItemComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
 	if (!IsValid(Character))
 	{
 		return;
 	}
 
-	MiningComponent =
-		Character->FindComponentByClass<
-			UDRMiningComponent>();
-
-	MeleeCombatComponent =
-		Character->FindComponentByClass<
-			UDRMeleeCombatComponent>();
-
-	PresentationComponent =
-		Character->FindComponentByClass<
-			UDRItemActionPresentationComponent>();
-
+	MiningComponent = Character->FindComponentByClass<UDRMiningComponent>();
+	PresentationComponent = Character->FindComponentByClass<UDRItemActionPresentationComponent>();
+	
 	if (!MiningComponent.IsValid())
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[HeldItem] MiningComponent missing. "
-				"Character=%s"),
-			*GetNameSafe(Character));
-	}
-
-	if (!MeleeCombatComponent.IsValid())
-	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[HeldItem] MeleeCombatComponent missing. "
-				"Character=%s"),
-			*GetNameSafe(Character));
+		UE_LOG(LogTemp, Error, TEXT( "[HeldItem] MiningComponent missing. " "Character=%s"), *GetNameSafe(Character));
 	}
 
 	if (!PresentationComponent.IsValid())
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[HeldItem] PresentationComponent missing. "
-				"Character=%s"),
-			*GetNameSafe(Character));
+		UE_LOG(LogTemp, Error, TEXT( "[HeldItem] PresentationComponent missing. " "Character=%s"), *GetNameSafe(Character));
 	}
 }
 
 void UDRHeldItemComponent::RefreshHeldItemState()
 {
 	RefreshVisual();
-
 	RefreshMiningSettings();
-
 	PlayEquipSound();
 }
 
 void UDRHeldItemComponent::RefreshVisual()
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
 	if (!IsValid(Character))
 	{
@@ -148,27 +99,18 @@ void UDRHeldItemComponent::RefreshVisual()
 
 	if (!IsValid(HeldItemDefinition))
 	{
-		Character->
-			ClearHandEquipmentVisual();
-
+		Character->ClearHandEquipmentVisual();
 		return;
 	}
 
-	UStaticMesh* VisualMesh =
-		HeldItemDefinition->WorldMesh;
-
-	const FTransform WorldVisualTransform =
-		HeldItemDefinition->SpawnOffsetTransform;
-
-	Character->ApplyHandEquipmentVisual(
-		VisualMesh,
-		WorldVisualTransform);
+	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
+	const FTransform WorldVisualTransform = HeldItemDefinition->SpawnOffsetTransform;
+	Character->ApplyHandEquipmentVisual(VisualMesh, WorldVisualTransform);
 }
 
 void UDRHeldItemComponent::RefreshMiningSettings()
 {
-	if (UDRMiningComponent* Mining =
-			MiningComponent.Get())
+	if (UDRMiningComponent* Mining = MiningComponent.Get())
 	{
 		Mining->ApplyItemDefinition(HeldItemDefinition);
 	}
@@ -176,193 +118,134 @@ void UDRHeldItemComponent::RefreshMiningSettings()
 
 void UDRHeldItemComponent::PlayEquipSound()
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled() ||
-		!IsValid(HeldItemDefinition) ||
-		!IsValid(EquipSound))
+	if (!IsValid(Character) || !Character->IsLocallyControlled() || !IsValid(HeldItemDefinition) || !IsValid(EquipSound))
 	{
 		return;
 	}
 
-	UGameplayStatics::PlaySound2D(
-		Character,
-		EquipSound);
+	UGameplayStatics::PlaySound2D(Character, EquipSound);
 }
 
-bool UDRHeldItemComponent::HasAction(
-	EDRItemActionType ActionType) const
+bool UDRHeldItemComponent::HasAction(EDRItemActionType ActionType) const
 {
-	if (!IsValid(HeldItemDefinition) ||
-		ActionType ==
-			EDRItemActionType::None)
+	if (!IsValid(HeldItemDefinition) || ActionType == EDRItemActionType::None)
 	{
 		return false;
 	}
-
-	return
-		HeldItemDefinition->
-			PrimaryAction == ActionType ||
-		HeldItemDefinition->
-			SecondaryAction == ActionType;
+	
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	return false;
+	//return HeldItemDefinition->PrimaryAction == ActionType || HeldItemDefinition->SecondaryAction == ActionType;
 }
 
-void UDRHeldItemComponent::RequestPrimaryAction(
-	EDRItemActionTriggerEvent TriggerEvent)
+void UDRHeldItemComponent::RequestPrimaryAction(EDRItemActionTriggerEvent TriggerEvent)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled() ||
-		Character->IsDead() ||
-		!IsValid(HeldItemDefinition))
+	if (!IsValid(Character) || !Character->IsLocallyControlled() || Character->IsDead() || !IsValid(HeldItemDefinition))
 	{
 		return;
 	}
 
-	if (HeldItemDefinition->
-			PrimaryActionTriggerEvent !=
-		TriggerEvent)
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	//if (HeldItemDefinition->PrimaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
 
-	ExecuteAction(
-		HeldItemDefinition->
-			PrimaryAction);
+	//ExecuteAction(HeldItemDefinition->PrimaryAction);
 }
 
-void UDRHeldItemComponent::RequestSecondaryAction(
-	EDRItemActionTriggerEvent TriggerEvent)
+void UDRHeldItemComponent::RequestSecondaryAction(EDRItemActionTriggerEvent TriggerEvent)
 {
-	ADRPlayerCharacter* Character =
-		GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) ||
-		!Character->IsLocallyControlled() ||
-		Character->IsDead() ||
-		!IsValid(HeldItemDefinition))
+	if (!IsValid(Character) || !Character->IsLocallyControlled() || Character->IsDead() || !IsValid(HeldItemDefinition))
 	{
 		return;
 	}
 
-	if (HeldItemDefinition->
-			SecondaryActionTriggerEvent !=
-		TriggerEvent)
+	ensureMsgf(false ,TEXT("UDRHeldItemComponent : GAS 기반 프로젝트로 수정되며 Item의 Action은 GA가 담당하도록 수정되었습니다."));
+	
+	//if (HeldItemDefinition->SecondaryActionTriggerEvent != TriggerEvent)
 	{
 		return;
 	}
 
-	ExecuteAction(
-		HeldItemDefinition->
-			SecondaryAction);
+	//ExecuteAction(HeldItemDefinition->SecondaryAction);
 }
 
 bool UDRHeldItemComponent::CanStartLocalAction() const
 {
-	const UWorld* World =
-		GetWorld();
-
-	return IsValid(World) &&
-		World->GetTimeSeconds() >=
-			NextLocalActionTime;
+	const UWorld* World = GetWorld();
+	return IsValid(World) && World->GetTimeSeconds() >= NextLocalActionTime;
 }
 
-float UDRHeldItemComponent::GetActionCooldown(
-	EDRItemActionType ActionType) const
+float UDRHeldItemComponent::GetActionCooldown(EDRItemActionType ActionType) const
 {
 	switch (ActionType)
 	{
 	case EDRItemActionType::Dig:
 		return DigActionCooldown;
 
-	case EDRItemActionType::MeleeAttack:
-		{
-			const UDRMeleeCombatComponent* Melee =
-				MeleeCombatComponent.Get();
-
-			return IsValid(Melee)
-				? Melee->GetAttackDuration()
-				: 0.f;
-		}
-
 	default:
 		return 0.f;
 	}
 }
 
-void UDRHeldItemComponent::ExecuteAction(
-    EDRItemActionType ActionType)
+void UDRHeldItemComponent::ExecuteAction(EDRItemActionType ActionType)
 {
-    ADRPlayerCharacter* Character =
-        GetOwnerCharacter();
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-    UWorld* World =
-        GetWorld();
+	UWorld* World = GetWorld();
 
-    if (!IsValid(Character) ||
-        !IsValid(World) ||
-        !CanStartLocalAction())
-    {
-        return;
-    }
+	if (!IsValid(Character) || !IsValid(World) || !CanStartLocalAction())
+	{
+		return;
+	}
 
-    switch (ActionType)
-    {
-    case EDRItemActionType::Dig:
-        {
-            UDRMiningComponent* Mining =
-                MiningComponent.Get();
+	switch (ActionType)
+	{
+	case EDRItemActionType::Dig:
+		{
+			UDRMiningComponent* Mining = MiningComponent.Get();
 
-            if (!IsValid(Mining) ||
-                !Mining->TryMine())
-            {
-                return;
-            }
+			if (!IsValid(Mining) || !Mining->TryMine())
+			{
+				return;
+			}
 
-            NextLocalActionTime =
-                World->GetTimeSeconds() +
-                GetActionCooldown(
-                    EDRItemActionType::Dig);
+			NextLocalActionTime = World->GetTimeSeconds() + GetActionCooldown(EDRItemActionType::Dig);
 
-            break;
-        }
+			break;
+		}
 
-    case EDRItemActionType::MeleeAttack:
-        {
-            UDRMeleeCombatComponent* Melee =
-                MeleeCombatComponent.Get();
+	case EDRItemActionType::MeleeAttack:
+		{
+			/*
+			 * 근접 공격은 선택된 ItemAbilitySet이
+			 * 지급한 GameplayAbility에서 처리한다.
+			 *
+			 * 동일 Primary Input이 GAS로도 전달되므로
+			 * 여기서는 실행하지 않는다.
+			 */
+			break;
+		}
 
-            if (!IsValid(Melee))
-            {
-                return;
-            }
+	case EDRItemActionType::Throw:
+		/*
+		 * Throw는 아직 실제 구현이
+		 * PlayerController에 있으므로
+		 * Character Facade 유지.
+		 */
+		Character->RequestThrowHeldItem();
+		break;
 
-            NextLocalActionTime =
-                World->GetTimeSeconds() +
-                GetActionCooldown(
-                    EDRItemActionType::
-                        MeleeAttack);
-    		
-            Melee->RequestAttack();
-
-            break;
-        }
-
-    case EDRItemActionType::Throw:
-        /*
-         * Throw는 아직 실제 구현이
-         * PlayerController에 있으므로
-         * Character Facade 유지.
-         */
-        Character->RequestThrowHeldItem();
-        break;
-
-    case EDRItemActionType::None:
-    default:
-        break;
-    }
+	case EDRItemActionType::None: default:
+		break;
+	}
 }

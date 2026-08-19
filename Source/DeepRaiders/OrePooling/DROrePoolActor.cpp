@@ -1,8 +1,11 @@
 #include "DROrePoolActor.h"
 
+#include "AbilitySystemGlobals.h"
 #include "DROreFieldActor.h"
 #include "DROrePoolSubsystem.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "GameplayCueManager.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "VoxelWorld.h"
@@ -206,8 +209,12 @@ void ADROrePoolActor::CheckGroundBelow()
     const FCollisionShape Sphere = FCollisionShape::MakeSphere(SphereRadius);
     if (!GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, Sphere, Params)) return;
 
-    AActor* HitOwner = Hit.GetComponent() ? Hit.GetComponent()->GetOwner() : Hit.GetActor();
-    if (Cast<AVoxelWorld>(Hit.GetActor()) || Cast<AVoxelWorld>(HitOwner))
+    UPrimitiveComponent* HitComponent = Hit.GetComponent();
+    AActor* HitOwner = HitComponent ? HitComponent->GetOwner() : Hit.GetActor();
+    const bool bHitVoxelTerrain = Cast<AVoxelWorld>(Hit.GetActor()) || Cast<AVoxelWorld>(HitOwner);
+    const bool bHitWorldStatic = HitComponent &&
+        HitComponent->GetCollisionObjectType() == ECC_WorldStatic;
+    if (bHitVoxelTerrain || bHitWorldStatic)
     {
         const float BottomOffset = GetActorLocation().Z - (MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z);
         FVector SafeLocation = GetActorLocation();
@@ -262,10 +269,31 @@ void ADROrePoolActor::ApplyPoolState()
         }
 
         OnActivatedFromPool();
+
+        if (WorldState == EDROreWorldState::Detached && !bDiscoveryCuePlayedForActivation)
+        {
+            bDiscoveryCuePlayedForActivation = true;
+            PlayDiscoveredGameplayCue();
+        }
     }
     else
     {
+        bDiscoveryCuePlayedForActivation = false;
         OnDeactivatedToPool();
+    }
+}
+
+void ADROrePoolActor::PlayDiscoveredGameplayCue()
+{
+    FGameplayCueParameters CueParameters;
+    CueParameters.Location = GetActorLocation();
+    CueParameters.EffectCauser = this;
+    CueParameters.SourceObject = GetItemInstance().GetDefinition();
+
+    if (UGameplayCueManager* CueManager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
+    {
+        CueManager->HandleGameplayCue(this, DRGameplayTags::GameplayCue_Sound_Ore_Discovered,
+            EGameplayCueEvent::Executed, CueParameters);
     }
 }
 

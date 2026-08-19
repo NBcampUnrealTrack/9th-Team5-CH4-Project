@@ -6,8 +6,10 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
-class UDRInteractionComponent;
+class ADRPlayerState;
 class UDRInventoryComponent;
+class UDRPerkComponent;
+class UDRShopAreaComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
 class UDRShopWidget;
@@ -19,20 +21,30 @@ class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/** 로컬 상점 UI 흐름을 관리하는 컴포넌트를 초기화한다. */
 	UDRShopUIComponent();
 
+	/** 상점 범위 안에서 UI를 열거나 닫는다. */
+	void ToggleShopWidget();
+
 protected:
+	/** 상점에 필요한 컴포넌트와 범위 이벤트를 연결한다. */
 	virtual void BeginPlay() override;
+
+	/** 상점 UI와 연결된 이벤트 및 입력 상태를 정리한다. */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** 로컬 플레이어가 상점에 진입하면 UI와 관련 컴포넌트를 연결한다. */
+	/** 로컬 플레이어가 사용할 수 있는 상점으로 등록한다. */
 	UFUNCTION()
-	void HandleInteractionEntered(APawn* Interactor);
+	void HandlePawnEntered(APawn* Pawn);
 
-	/** 상점 상호작용 범위를 벗어나면 열려 있는 UI를 닫는다. */
+	/** 상점 범위를 벗어나면 열려 있는 UI를 닫는다. */
 	UFUNCTION()
-	void HandleInteractionExited(APawn* Interactor);
+	void HandlePawnExited(APawn* Pawn);
+
+	/** 상점 UI와 관련 컴포넌트를 연결한다. */
+	void ShowShopWidget();
 
 	/** 상점 UI와 입력 상태를 정리한다. */
 	UFUNCTION()
@@ -50,8 +62,26 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
+	/** 보유 퍽 목록이 변경되면 구매 가능한 퍽을 다시 표시한다. */
+	UFUNCTION()
+	void HandlePerksChanged();
+
+	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
+	UFUNCTION()
+	void HandleCoinsChanged(int32 NewCoins);
+
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
+
+	/** 퍽 구매 횟수에 맞춰 Offer UI를 갱신한다. */
+	void RefreshPerkOffers();
+
+	/** 아이템 Offer를 UI 표시용 View 데이터로 변환한다. */
+	TArray<FDRShopOfferView> MakeOfferViews(
+		const TArray<FDRShopItemOffer>& Offers,
+		EDRShopOfferType OfferType) const;
+	/** 퍽 정의와 플레이어 상태를 조합해 퍽 UI View를 구성한다. */
+	TArray<FDRShopOfferView> BuildPerkOfferViews() const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
@@ -60,7 +90,7 @@ private:
 	TObjectPtr<UDRShopWidget> ShopWidget;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInventoryComponent> InventoryComponent;
@@ -73,4 +103,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRPlayerState> PlayerState;
+
+	bool IsMoveInputBlocked = false;
 };

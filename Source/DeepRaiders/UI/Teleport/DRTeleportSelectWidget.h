@@ -13,6 +13,7 @@ class UScrollBox;
 class UTextBlock;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRTeleportDestinationSelectedSignature, ADRTeleportPoint*, DestinationTeleportPoint);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRTeleportCloseRequestedSignature);
 
 UCLASS()
 class DEEPRAIDERS_API UDRTeleportSelectWidget : public UUserWidget
@@ -29,14 +30,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Teleport|UI")
 	FDRTeleportDestinationSelectedSignature OnDestinationSelected;
 
+	UPROPERTY(BlueprintAssignable, Category = "Teleport|UI")
+	FDRTeleportCloseRequestedSignature OnCloseRequested;
+
 protected:
 	virtual void NativeOnInitialized() override;
-	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:
-	void ApplyUIInputMode();
-	void RestoreGameInputMode();
 	void RefreshCurrentTeleport();
 	void RefreshDestinationList();
 	void ClearSelectedDestination();
@@ -78,5 +79,4 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADRTeleportPoint> SelectedDestinationTeleportPoint;
 
-	bool bPreviousShowMouseCursor = false;
 };
