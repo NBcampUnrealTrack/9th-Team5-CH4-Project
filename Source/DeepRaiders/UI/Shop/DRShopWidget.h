@@ -6,6 +6,7 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
+class UDRPerkResetTestWidget;
 class UDRShopItemWidget;
 class UScrollBox;
 enum class EDRItemCategory : uint8;
@@ -48,6 +49,7 @@ private:
 	void RefreshItems(EDRItemCategory Category);
 	void RefreshUpgradeItems();
 	void RefreshPerkItems();
+	bool CreatePerkResetTestWidget();
 	bool CreateItemWidget(const FDRShopOfferView& Offer);
 
 	UFUNCTION()
@@ -94,6 +96,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI|Test")
+	TSubclassOf<UDRPerkResetTestWidget> PerkResetTestWidgetClass;
 
 	UPROPERTY(Transient)
 	TArray<FDRShopOfferView> ItemOffers;

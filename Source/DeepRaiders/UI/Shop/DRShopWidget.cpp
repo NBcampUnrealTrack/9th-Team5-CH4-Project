@@ -6,6 +6,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DRPerkResetTestWidget.h"
 #include "DRShopItemWidget.h"
 
 void UDRShopWidget::InitializeShop(
@@ -109,11 +110,33 @@ void UDRShopWidget::RefreshPerkItems()
 	}
 
 	ItemScrollBox->ClearChildren();
+	CreatePerkResetTestWidget();
 
 	for (const FDRShopOfferView& Offer : PerkOffers)
 	{
 		CreateItemWidget(Offer);
 	}
+}
+
+bool UDRShopWidget::CreatePerkResetTestWidget()
+{
+	if (!PerkResetTestWidgetClass)
+	{
+		return false;
+	}
+
+	UDRPerkResetTestWidget* ResetWidget =
+		CreateWidget<UDRPerkResetTestWidget>(
+			GetOwningPlayer(),
+			PerkResetTestWidgetClass);
+
+	if (!IsValid(ResetWidget))
+	{
+		return false;
+	}
+
+	ItemScrollBox->AddChild(ResetWidget);
+	return true;
 }
 
 bool UDRShopWidget::CreateItemWidget(const FDRShopOfferView& Offer)

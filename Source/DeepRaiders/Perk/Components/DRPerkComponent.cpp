@@ -170,6 +170,44 @@ bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
 	return true;
 }
 
+bool UDRPerkComponent::ResetPerks()
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent))
+	{
+		return false;
+	}
+
+	for (FDRItemAbilitySet_GrantedHandles& GrantedHandles
+		: TestGrantedHandles)
+	{
+		GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
+	}
+
+	TestGrantedHandles.Reset();
+	TestPerkSlots.Reset();
+
+	PlayerState->ForceNetUpdate();
+	OnPerksChanged.Broadcast();
+	return true;
+}
+
+void UDRPerkComponent::RequestResetPerks()
+{
+	ServerResetPerks();
+}
+
+void UDRPerkComponent::ServerResetPerks_Implementation()
+{
+	ResetPerks();
+}
+
 void UDRPerkComponent::OnRep_TestPerkSlots()
 {
 	UE_LOG(

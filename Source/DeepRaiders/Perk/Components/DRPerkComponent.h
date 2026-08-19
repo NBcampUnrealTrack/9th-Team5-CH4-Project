@@ -31,10 +31,19 @@ public:
 	/** 서버에서 테스트 배열에 퍽을 추가하고 AbilitySet을 즉시 적용한다. */
 	bool AddTestPerk(UDRPerkDefinition* PerkDefinition);
 
+	/** 서버에서 모든 퍽 슬롯과 적용된 AbilitySet을 초기화한다. */
+	bool ResetPerks();
+
+	/** 소유 클라이언트에서 서버에 퍽 초기화를 요청한다. */
+	void RequestResetPerks();
+
 	UPROPERTY(BlueprintAssignable, Category = "Perk")
 	FDRPerksChangedSignature OnPerksChanged;
 
 private:
+	UFUNCTION(Server, Reliable)
+	void ServerResetPerks();
+
 	/** 복제된 테스트용 퍽 배열의 변경을 소유 클라이언트에 알린다. */
 	UFUNCTION()
 	void OnRep_TestPerkSlots();
