@@ -106,12 +106,14 @@ private:
     FVector LastDigLocation = FVector::ZeroVector;
     FVector LastGroundLocation = FVector::ZeroVector;
     bool bHasLastGroundLocation = false;
+    bool bDiscoveryCuePlayedForActivation = false;
 
     void SetWorldState(EDROreWorldState NewState);
     void MarkAsDetached();
     void HandleDetachedTimeout();
     void CheckGroundBelow();
     void ApplyPoolState();
+    void PlayDiscoveredGameplayCue();
 
 protected:
     virtual bool IsPickupAvailable() const override;
