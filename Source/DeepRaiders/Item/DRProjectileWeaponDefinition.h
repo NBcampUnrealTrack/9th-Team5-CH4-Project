@@ -14,7 +14,7 @@ UENUM(BlueprintType)
 enum class EDRProjectileWeaponResourceType : uint8
 {
 	SnowGauge UMETA(DisplayName = "Snow Gauge"),
-	InstanceAmmon UMETA(DisplayName = "Instance Ammon")
+	InstanceAmmo UMETA(DisplayName = "Instance Ammo")
 };
 
 UCLASS(BlueprintType)
@@ -65,7 +65,7 @@ public:
 	TSubclassOf<UGameplayEffect> SnowCostEffectClass;
 	
 	// ResourceType::Ammo
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Ammon", meta = (
-	EditCondition = "ResourceType == EDRProjectileWeaponResourceType::InstanceAmmon", ClampMin = "1", UIMin = "1"))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Ammo", meta = (
+	EditCondition = "ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo", ClampMin = "1", UIMin = "1"))
 	int32 InitialAmmo = 1;
 };
