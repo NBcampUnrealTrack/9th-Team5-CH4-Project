@@ -4,26 +4,52 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "DRItemActionTypes.h"
+#include "Engine/DataTable.h"
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
 class UDRItemAbilitySet;
 class UTexture2D;
 class USoundBase;
+class UDRItemAnimationSet;
 
 UENUM(BlueprintType)
-enum class EItemCategory : uint8
+enum class EDRItemCategory : uint8
 {
 	Ore,
 	Equipment,
 	Consumable,
+	Perk,
 	End,
 };
 
-/**
- * 
- */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString DisplayName;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Description;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRItemCategory Category;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 MaxStackSize = 1;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 bCanBeSold:1 = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Price = 0;	
+};
+
 UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))
 class DEEPRAIDERS_API UDRItemDefinition : public UPrimaryDataAsset
 {
@@ -34,7 +60,7 @@ public:
 	FName ItemId;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
-	EItemCategory Category;
+	EDRItemCategory Category;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;
@@ -60,37 +86,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
 	TObjectPtr<UDRItemAbilitySet> ItemAbilitySet;
 	
-	// ===== Action =====
-
-	/** 좌클릭으로 실행할 기본 행동 */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionType PrimaryAction =
-		EDRItemActionType::None;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionTriggerEvent PrimaryActionTriggerEvent =
-		EDRItemActionTriggerEvent::Started;
-
-	/** 우클릭으로 실행할 보조 행동 */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionType SecondaryAction =
-		EDRItemActionType::None;
-
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Item|Action")
-	EDRItemActionTriggerEvent SecondaryActionTriggerEvent =
-		EDRItemActionTriggerEvent::Started;
+	// Mesh
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")
 	TObjectPtr<UStaticMesh> WorldMesh;
@@ -103,7 +99,6 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
-
 	
 	// Sound
 	
@@ -118,5 +113,14 @@ public:
 	/** 아이템이 땅에 떨어졌을 때 재생할 소리 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Sound")
 	TObjectPtr<USoundBase> DroppedSound;
+	
+	// ===== Animation =====
+
+	/**
+	 * 이 아이템을 손에 들었을 때 사용할
+	 * 캐릭터 Animation Profile.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Animation")
+	TObjectPtr<UDRItemAnimationSet> ItemAnimationSet;
 };
 

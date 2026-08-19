@@ -11,12 +11,6 @@
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 
-namespace
-{
-	const FName FirstPersonSwingTrackName(
-		TEXT("FirstPersonSwing"));
-}
-
 UDRItemActionPresentationComponent::UDRItemActionPresentationComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -93,6 +87,30 @@ void UDRItemActionPresentationComponent::PlayDamagedFeedbackLocal()
 		1.f);
 }
 
+void UDRItemActionPresentationComponent::PlayWeaponFireLocal(UAnimMontage* FireMontage)
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character) || !Character->IsLocallyControlled() || !IsValid(FireMontage))
+	{
+		return;
+	}
+
+	Character->PlayAnimMontage(FireMontage);
+}
+
+void UDRItemActionPresentationComponent::PlayWeaponFireFromServer(UAnimMontage* FireMontage)
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character) || !Character->HasAuthority() || !IsValid(FireMontage))
+	{
+		return;
+	}
+
+	MulticastPlayWeaponFire(FireMontage);
+}
+
 void UDRItemActionPresentationComponent::PlayWorldAction(
 	EDRItemActionType ActionType)
 {
@@ -135,10 +153,6 @@ UAnimMontage* UDRItemActionPresentationComponent::ResolveWorldActionMontage(
 	{
 	case EDRItemActionType::Dig:
 		return WorldDigMontage;
-
-	case EDRItemActionType::MeleeAttack:
-		return WorldMeleeAttackMontage;
-
 	case EDRItemActionType::Throw:
 	case EDRItemActionType::None:
 	default:
@@ -198,6 +212,34 @@ void UDRItemActionPresentationComponent::PlayLocalCameraShake(
 			FRotator::ZeroRotator);
 }
 
+void UDRItemActionPresentationComponent::MulticastPlayWeaponFire_Implementation(UAnimMontage* FireMontage)
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character) || !IsValid(FireMontage))
+	{
+		return;
+	}
+
+	/*
+	 * Remote Owner는 LocalPredicted GA에서
+	 * 이미 즉시 재생했으므로 중복 재생하지 않는다.
+	 *
+	 * Listen Host는 서버 인스턴스에서 재생한다.
+	 */
+	if (Character->IsLocallyControlled() && !Character->HasAuthority())
+	{
+		return;
+	}
+
+	if (Character->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	Character->PlayAnimMontage(FireMontage);
+}
+
 void UDRItemActionPresentationComponent::MulticastPlayMeleeImpactSound_Implementation(
 	bool bKilled,
 	FVector_NetQuantize ImpactLocation)
@@ -221,8 +263,8 @@ void UDRItemActionPresentationComponent::MulticastPlayMeleeImpactSound_Implement
 	}
 
 	/*
-	 * 공격한 본인은 1인칭 피드백이므로
-	 * 2D Sound.
+	 * 공격한 로컬 플레이어에게는
+	 * 위치 감쇠 없이 즉시 피드백한다.
 	 */
 	if (Character->IsLocallyControlled())
 	{

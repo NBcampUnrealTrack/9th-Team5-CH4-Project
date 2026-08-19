@@ -3,12 +3,36 @@
   <component name="UserContentModel">
     <attachedFolders />
     <explicitIncludes>
+      <Path>Plugins/GameplayMessageRouter</Path>
+      <Path>Plugins/VoxelFree</Path>
+      <Path>Source/DeepRaiders/Audio</Path>
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
       <Path>Source/DeepRaiders/Inventory/DRInventoryTypes.h</Path>
+      <Path>Source/DeepRaiders/Item/GAS</Path>
+      <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.cpp</Path>
+      <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRHeldItemComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRHeldItemComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRItemActionPresentationComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRItemActionPresentationComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRJetpackComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRJetpackComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRMeleeCombatComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRMeleeCombatComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRPlayerLifecycleComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRTeleportComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRTeleportComponent.h</Path>
       <Path>Source/DeepRaiders/Storage</Path>
       <Path>Source/DeepRaiders/Storage/DRStorage.cpp</Path>
       <Path>Source/DeepRaiders/Storage/DRStorage.h</Path>
+      <Path>Source/DeepRaiders/Teleport</Path>
+      <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.cpp</Path>
+      <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.h</Path>
+      <Path>Source/DeepRaiders/UI/Teleport</Path>
     </explicitIncludes>
     <explicitExcludes />
   </component>

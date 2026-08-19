@@ -51,4 +51,39 @@ namespace DRGameplayTags
 		Data_Damage,
 		"Data.Damage",
 		"Damage amount passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Attack_Miss,
+		"GameplayCue.Sound.Attack.Miss",
+		"Attack missed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Attack_Hit,
+		"GameplayCue.Sound.Attack.Hit",
+		"Attack hit.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Attack_Kill,
+		"GameplayCue.Sound.Attack.Kill",
+		"Attack killed the target.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Dig,
+		"GameplayCue.Sound.Dig",
+		"Digging sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Item_PickedUp,
+		"GameplayCue.Sound.Item.PickedUp",
+		"Item picked up.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Ore_Dropped,
+		"GameplayCue.Sound.Ore.Dropped",
+		"Ore dropped.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Ore_Discovered,
+		"GameplayCue.Sound.Ore.Discovered",
+		"Ore discovered.");
 }
