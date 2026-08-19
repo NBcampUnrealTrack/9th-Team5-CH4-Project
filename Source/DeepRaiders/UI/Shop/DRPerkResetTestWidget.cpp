@@ -4,9 +4,9 @@
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 
-void UDRPerkResetTestWidget::NativeOnInitialized()
+void UDRPerkResetTestWidget::NativeConstruct()
 {
-	Super::NativeOnInitialized();
+	Super::NativeConstruct();
 
 	if (IsValid(ResetButton))
 	{

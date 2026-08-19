@@ -38,7 +38,7 @@ public:
 		FName RowName,
 		UDRPerkDefinition*& OutPerkDefinition) const;
 
-	/** 테스트용 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
+	/** 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
 		FName RowName,
 		const UDRPerkComponent* PerkComponent,

@@ -19,35 +19,35 @@ void UDRPerkComponent::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME_CONDITION(
 		UDRPerkComponent,
-		TestPerkSlots,
+		PerkEntries,
 		COND_OwnerOnly);
 }
 
-int32 UDRPerkComponent::GetTestPerkCount(
+int32 UDRPerkComponent::GetPerkCount(
 	const UDRPerkDefinition* PerkDefinition) const
 {
-	int32 TestPerkCount = 0;
+	int32 PerkCount = 0;
 
-	for (const UDRPerkDefinition* TestPerk : TestPerkSlots)
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
 	{
-		if (TestPerk == PerkDefinition)
+		if (PerkEntry.PerkDefinition == PerkDefinition)
 		{
-			++TestPerkCount;
+			++PerkCount;
 		}
 	}
 
-	return TestPerkCount;
+	return PerkCount;
 }
 
-bool UDRPerkComponent::CanAddTestPerk(
+bool UDRPerkComponent::CanAddPerk(
 	const UDRPerkDefinition* PerkDefinition) const
 {
 	return IsValid(PerkDefinition)
 		&& IsValid(PerkDefinition->ItemAbilitySet)
-		&& TestPerkSlots.Num() < TestMaxPerkSlotCount;
+		&& PerkEntries.Num() < MaxPerkSlotCount;
 }
 
-bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
+bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
 	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
@@ -63,22 +63,22 @@ bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][Test][AddFailed] Player=%s Perk=%s Reason=InvalidStateOrDefinition"),
+			TEXT("[Perk][AddFailed] Player=%s Perk=%s Reason=InvalidStateOrDefinition"),
 			*GetNameSafe(PlayerState),
 			*GetNameSafe(PerkDefinition));
 		return false;
 	}
 
-	if (!CanAddTestPerk(PerkDefinition))
+	if (!CanAddPerk(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][Test][AddFailed] Player=%s Perk=%s Reason=SlotsFull Total=%d/%d"),
+			TEXT("[Perk][AddFailed] Player=%s Perk=%s Reason=SlotsFull Total=%d/%d"),
 			*GetNameSafe(PlayerState),
 			*GetNameSafe(PerkDefinition),
-			TestPerkSlots.Num(),
-			TestMaxPerkSlotCount);
+			PerkEntries.Num(),
+			MaxPerkSlotCount);
 		return false;
 	}
 
@@ -94,7 +94,7 @@ bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][Test][AbilitySetFailed] Player=%s Perk=%s Reason=NoGrantedHandles"),
+			TEXT("[Perk][AbilitySetFailed] Player=%s Perk=%s Reason=NoGrantedHandles"),
 			*GetNameSafe(PlayerState),
 			*GetNameSafe(PerkDefinition));
 		return false;
@@ -103,67 +103,25 @@ bool UDRPerkComponent::AddTestPerk(UDRPerkDefinition* PerkDefinition)
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][Test][AbilitySetApplied] Player=%s Perk=%s"),
+		TEXT("[Perk][AbilitySetApplied] Player=%s Perk=%s"),
 		*GetNameSafe(PlayerState),
 		*GetNameSafe(PerkDefinition));
 
-	const int32 SlotIndex = TestPerkSlots.Add(PerkDefinition);
-	const bool IsSlotValid = TestPerkSlots.IsValidIndex(SlotIndex)
-		&& TestPerkSlots[SlotIndex] == PerkDefinition;
-
-	if (!IsSlotValid)
-	{
-		GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
-
-		if (TestPerkSlots.IsValidIndex(SlotIndex))
-		{
-			TestPerkSlots.RemoveAt(SlotIndex);
-		}
-
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("[Perk][Test][SlotAddFailed] Player=%s Slot=%d Perk=%s"),
-			*GetNameSafe(PlayerState),
-			SlotIndex,
-			*GetNameSafe(PerkDefinition));
-		return false;
-	}
-
-	const int32 HandleIndex = TestGrantedHandles.Add(MoveTemp(GrantedHandles));
-
-	if (HandleIndex != SlotIndex)
-	{
-		if (TestGrantedHandles.IsValidIndex(HandleIndex))
-		{
-			TestGrantedHandles[HandleIndex].TakeFromAbilitySystem(
-				AbilitySystemComponent);
-			TestGrantedHandles.RemoveAt(HandleIndex);
-		}
-
-		TestPerkSlots.RemoveAt(SlotIndex);
-
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("[Perk][Test][HandleStoreFailed] Player=%s Slot=%d Perk=%s"),
-			*GetNameSafe(PlayerState),
-			SlotIndex,
-			*GetNameSafe(PerkDefinition));
-		return false;
-	}
+	FDRPerkEntry& PerkEntry = PerkEntries.AddDefaulted_GetRef();
+	PerkEntry.PerkDefinition = PerkDefinition;
+	PerkEntry.GrantedHandles = MoveTemp(GrantedHandles);
+	const int32 SlotIndex = PerkEntries.Num() - 1;
 
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][Test][SlotAdded] Player=%s Slot=%d Perk=%s IsValid=%d DuplicateCount=%d Total=%d/%d"),
+		TEXT("[Perk][SlotAdded] Player=%s Slot=%d Perk=%s DuplicateCount=%d Total=%d/%d"),
 		*GetNameSafe(PlayerState),
 		SlotIndex,
 		*GetNameSafe(PerkDefinition),
-		IsSlotValid,
-		GetTestPerkCount(PerkDefinition),
-		TestPerkSlots.Num(),
-		TestMaxPerkSlotCount);
+		GetPerkCount(PerkDefinition),
+		PerkEntries.Num(),
+		MaxPerkSlotCount);
 
 	PlayerState->ForceNetUpdate();
 	OnPerksChanged.Broadcast();
@@ -184,14 +142,13 @@ bool UDRPerkComponent::ResetPerks()
 		return false;
 	}
 
-	for (FDRItemAbilitySet_GrantedHandles& GrantedHandles
-		: TestGrantedHandles)
+	for (FDRPerkEntry& PerkEntry : PerkEntries)
 	{
-		GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
+		PerkEntry.GrantedHandles.TakeFromAbilitySystem(
+			AbilitySystemComponent);
 	}
 
-	TestGrantedHandles.Reset();
-	TestPerkSlots.Reset();
+	PerkEntries.Reset();
 
 	PlayerState->ForceNetUpdate();
 	OnPerksChanged.Broadcast();
@@ -208,27 +165,27 @@ void UDRPerkComponent::ServerResetPerks_Implementation()
 	ResetPerks();
 }
 
-void UDRPerkComponent::OnRep_TestPerkSlots()
+void UDRPerkComponent::OnRep_PerkEntries()
 {
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][Test][SlotsReplicated] Player=%s Total=%d/%d"),
+		TEXT("[Perk][SlotsReplicated] Player=%s Total=%d/%d"),
 		*GetNameSafe(GetOwner()),
-		TestPerkSlots.Num(),
-		TestMaxPerkSlotCount);
+		PerkEntries.Num(),
+		MaxPerkSlotCount);
 
 	for (int32 SlotIndex = 0;
-		SlotIndex < TestPerkSlots.Num();
+		SlotIndex < PerkEntries.Num();
 		++SlotIndex)
 	{
 		UE_LOG(
 			LogTemp,
 			Log,
-			TEXT("[Perk][Test][Slot] Player=%s Slot=%d Perk=%s"),
+			TEXT("[Perk][Slot] Player=%s Slot=%d Perk=%s"),
 			*GetNameSafe(GetOwner()),
 			SlotIndex,
-			*GetNameSafe(TestPerkSlots[SlotIndex]));
+			*GetNameSafe(PerkEntries[SlotIndex].PerkDefinition));
 	}
 
 	OnPerksChanged.Broadcast();

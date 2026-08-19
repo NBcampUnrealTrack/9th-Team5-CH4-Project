@@ -311,12 +311,12 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	}
 
 	if (!IsValid(PerkDefinition)
-		|| !PerkComponent->AddTestPerk(PerkDefinition))
+		|| !PerkComponent->AddPerk(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][Test][PurchaseFailed] Player=%s Row=%s Perk=%s Reason=AddFailed"),
+			TEXT("[Perk][PurchaseFailed] Player=%s Row=%s Perk=%s Reason=AddFailed"),
 			*GetNameSafe(PlayerState),
 			*RowName.ToString(),
 			*GetNameSafe(PerkDefinition));
@@ -328,11 +328,11 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][Test][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
+		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
 		*GetNameSafe(PlayerState),
 		*RowName.ToString(),
 		*GetNameSafe(PerkDefinition),
-		PerkComponent->GetTestPerkCount(PerkDefinition),
+		PerkComponent->GetPerkCount(PerkDefinition),
 		PerkDefinition->Price,
 		PreviousCoins,
 		PlayerState->GetCoins());

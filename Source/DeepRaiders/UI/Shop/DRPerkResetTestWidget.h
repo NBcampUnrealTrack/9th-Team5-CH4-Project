@@ -12,7 +12,7 @@ class DEEPRAIDERS_API UDRPerkResetTestWidget : public UUserWidget
 	GENERATED_BODY()
 
 protected:
-	virtual void NativeOnInitialized() override;
+	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:

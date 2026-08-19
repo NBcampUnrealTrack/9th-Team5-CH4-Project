@@ -79,7 +79,7 @@ bool UDRShopComponent::CanPurchasePerk(
 
 	if (!IsValid(PerkComponent)
 		|| !GetPerkDefinition(RowName, PerkDefinition)
-		|| !PerkComponent->CanAddTestPerk(PerkDefinition))
+		|| !PerkComponent->CanAddPerk(PerkDefinition))
 	{
 		return false;
 	}

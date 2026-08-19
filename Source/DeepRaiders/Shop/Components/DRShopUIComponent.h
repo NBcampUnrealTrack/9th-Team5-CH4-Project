@@ -62,7 +62,7 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
-	/** 테스트용 퍽 배열이 변경되면 구매 가능한 퍽을 다시 표시한다. */
+	/** 보유 퍽 목록이 변경되면 구매 가능한 퍽을 다시 표시한다. */
 	UFUNCTION()
 	void HandlePerksChanged();
 
@@ -73,7 +73,7 @@ private:
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
 
-	/** 테스트용 퍽 구매 횟수에 맞춰 Offer UI를 갱신한다. */
+	/** 퍽 구매 횟수에 맞춰 Offer UI를 갱신한다. */
 	void RefreshPerkOffers();
 
 	/** 아이템 Offer를 UI 표시용 View 데이터로 변환한다. */
