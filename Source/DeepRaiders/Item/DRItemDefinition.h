@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/DataTable.h"
+#include "DRItemTypes.h"
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
@@ -12,16 +13,6 @@ class UDRItemAbilitySet;
 class UTexture2D;
 class USoundBase;
 class UDRItemAnimationSet;
-
-UENUM(BlueprintType)
-enum class EDRItemCategory : uint8
-{
-	Ore,
-	Equipment,
-	Consumable,
-	Perk,
-	End,
-};
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
