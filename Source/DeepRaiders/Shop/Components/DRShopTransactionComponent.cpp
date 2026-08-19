@@ -50,7 +50,6 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		: nullptr;
 	UDRInventoryComponent* Inventory = GetInventoryComponent();
 	FDRShopItemTableRow ItemRow;
-	FDRPerkTableRow PerkRow;
 
 	// 클라이언트 요청을 신뢰하지 않고 상점 접근 상태와 Row를 서버에서 다시 확인한다.
 	if (!IsValid(PlayerState)
@@ -86,12 +85,11 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		break;
 
 	case EDRShopOfferType::Perk:
-		if (ShopComponent->GetPerkRow(Request.RowName, PerkRow)
-			&& TryPurchasePerk(
+		if (TryPurchasePerk(
 				PlayerState,
+				ShopComponent,
 				PlayerState->GetPerkComponent(),
-				Request.RowName,
-				PerkRow))
+				Request.RowName))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
@@ -286,13 +284,20 @@ bool UDRShopTransactionComponent::TryUpgrade(
 
 bool UDRShopTransactionComponent::TryPurchasePerk(
 	ADRPlayerState* PlayerState,
+	const UDRShopComponent* ShopComponent,
 	UDRPerkComponent* PerkComponent,
-	FName RowName,
-	const FDRPerkTableRow& PerkRow) const
+	FName RowName) const
 {
+	FDRPerkTableRow PerkRow;
+
 	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
 		|| !IsValid(PerkComponent)
-		|| !PerkComponent->CanApplyNextRank(RowName, PerkRow))
+		|| !ShopComponent->CanPurchasePerk(
+			RowName,
+			PerkComponent,
+			PlayerState->GetCoins())
+		|| !ShopComponent->GetPerkRow(RowName, PerkRow))
 	{
 		return false;
 	}
@@ -301,8 +306,6 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	const FDRPerkRankData* RankData = PerkRow.GetRankData(TargetRank);
 
 	if (!RankData
-		|| RankData->Price < 0
-		|| PlayerState->GetCoins() < RankData->Price
 		|| !PerkComponent->ApplyNextRank(RowName, PerkRow))
 	{
 		return false;

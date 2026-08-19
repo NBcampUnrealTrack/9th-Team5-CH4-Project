@@ -10,6 +10,7 @@ class APawn;
 class UDataTable;
 class UDRShopAreaComponent;
 class UDRItemDefinition;
+class UDRPerkComponent;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopComponent : public UActorComponent
@@ -33,6 +34,10 @@ public:
 	bool GetItemRow(FName RowName, FDRShopItemTableRow& OutItemRow) const;
 	bool GetPerkRow(FName RowName, FDRPerkTableRow& OutPerkRow) const;
 	TArray<FName> GetPerkRowNames() const;
+	bool CanPurchasePerk(
+		FName RowName,
+		const UDRPerkComponent* PerkComponent,
+		int32 AvailableCoins) const;
 
 	/** 일반 구매 Offer에 포함된 아이템인지 확인한다. */
 	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;

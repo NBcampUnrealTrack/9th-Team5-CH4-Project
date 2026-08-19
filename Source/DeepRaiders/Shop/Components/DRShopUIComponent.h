@@ -6,6 +6,7 @@
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
+class ADRPlayerState;
 class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopAreaComponent;
@@ -61,6 +62,9 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
+	UFUNCTION()
+	void HandleCoinsChanged(int32 NewCoins);
+
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
 
@@ -95,6 +99,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRPlayerState> PlayerState;
 
 	bool IsMoveInputBlocked = false;
 };

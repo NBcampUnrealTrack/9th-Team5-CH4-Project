@@ -1,6 +1,7 @@
 #include "DRShopItemWidget.h"
 
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 
 void UDRShopItemWidget::SetOffer(
@@ -21,7 +22,8 @@ void UDRShopItemWidget::NativeConstruct()
 	if (!IsValid(Buy)
 		|| !IsValid(DisplayNameText)
 		|| !IsValid(PriceText)
-		|| !IsValid(DescriptionText))
+		|| !IsValid(DescriptionText)
+		|| !IsValid(ItemIcon))
 	{
 		return;
 	}
@@ -49,13 +51,19 @@ void UDRShopItemWidget::ApplyOffer()
 	if (!IsValid(Buy)
 		|| !IsValid(DisplayNameText)
 		|| !IsValid(PriceText)
-		|| !IsValid(DescriptionText))
+		|| !IsValid(DescriptionText)
+		|| !IsValid(ItemIcon))
 	{
 		return;
 	}
 
 	DisplayNameText->SetText(Offer.DisplayName);
 	DescriptionText->SetText(Offer.Description);
+	ItemIcon->SetBrushFromTexture(Offer.Icon);
+	ItemIcon->SetVisibility(
+		IsValid(Offer.Icon)
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Hidden);
 	PriceText->SetText(FText::AsNumber(Offer.Price));
 	Buy->SetIsEnabled(Offer.IsPurchasable);
 

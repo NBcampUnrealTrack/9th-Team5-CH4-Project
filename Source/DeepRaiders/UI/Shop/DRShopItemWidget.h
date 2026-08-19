@@ -7,6 +7,7 @@
 
 class UButton;
 class UTextBlock;
+class UImage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopItemOfferRequestedSignature,
@@ -45,6 +46,9 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> DescriptionText;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> ItemIcon;
 
 	UPROPERTY(Transient)
 	FDRShopOfferView Offer;

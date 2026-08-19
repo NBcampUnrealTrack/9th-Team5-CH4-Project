@@ -112,7 +112,7 @@ void UDRShopUIComponent::ShowShopWidget()
 	ShopTransactionComponent =
 		PlayerController->GetShopTransactionComponent();
 	InventoryComponent = PlayerController->GetInventoryComponent();
-	ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>();
+	PlayerState = PlayerController->GetPlayerState<ADRPlayerState>();
 	PerkComponent = IsValid(PlayerState)
 		? PlayerState->GetPerkComponent()
 		: nullptr;
@@ -154,6 +154,9 @@ void UDRShopUIComponent::ShowShopWidget()
 	PerkComponent->OnPerksChanged.AddDynamic(
 		this,
 		&ThisClass::HandlePerksChanged);
+	PlayerState->OnCoinsChanged.AddDynamic(
+		this,
+		&ThisClass::HandleCoinsChanged);
 	ShopWidget->AddToViewport();
 
 	// 상점 UI를 조작할 수 있도록 마우스와 입력 모드를 전환한다.
@@ -202,6 +205,13 @@ void UDRShopUIComponent::HideShopWidget()
 			&ThisClass::HandlePerksChanged);
 	}
 
+	if (IsValid(PlayerState))
+	{
+		PlayerState->OnCoinsChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleCoinsChanged);
+	}
+
 	APlayerController* PlayerController = IsValid(ShopWidget)
 		? ShopWidget->GetOwningPlayer()
 		: nullptr;
@@ -224,6 +234,7 @@ void UDRShopUIComponent::HideShopWidget()
 	InventoryComponent = nullptr;
 	ShopTransactionComponent = nullptr;
 	PerkComponent = nullptr;
+	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
 	{
@@ -265,6 +276,11 @@ void UDRShopUIComponent::HandleInventoryChanged()
 }
 
 void UDRShopUIComponent::HandlePerksChanged()
+{
+	RefreshPerkOffers();
+}
+
+void UDRShopUIComponent::HandleCoinsChanged(int32)
 {
 	RefreshPerkOffers();
 }
@@ -327,6 +343,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		}
 
 		OfferView.Description = Offer.ItemDefinition->Description;
+		OfferView.Icon = Offer.ItemDefinition->Icon;
 		OfferView.Price = Offer.ItemDefinition->Price;
 	}
 
@@ -337,7 +354,9 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 {
 	TArray<FDRShopOfferView> OfferViews;
 
-	if (!IsValid(ShopComponent) || !IsValid(PerkComponent))
+	if (!IsValid(ShopComponent)
+		|| !IsValid(PerkComponent)
+		|| !IsValid(PlayerState))
 	{
 		return OfferViews;
 	}
@@ -362,6 +381,7 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 			OfferView.Request.OfferType = EDRShopOfferType::Perk;
 			OfferView.Section = EDRShopOfferSection::Perk;
 			OfferView.DisplayName = PerkRow.DisplayName;
+			OfferView.Icon = PerkRow.Icon;
 			OfferView.IsPurchasable = false;
 			continue;
 		}
@@ -384,7 +404,12 @@ TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
 		// 	FText::AsNumber(CurrentRank),
 		// 	FText::AsNumber(TargetRank));
 		OfferView.Description = RankData->Description;
+		OfferView.Icon = PerkRow.Icon;
 		OfferView.Price = RankData->Price;
+		OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
+			RowName,
+			PerkComponent,
+			PlayerState->GetCoins());
 	}
 
 	return OfferViews;

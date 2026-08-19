@@ -11,7 +11,6 @@ class UDRPerkComponent;
 class UDRShopComponent;
 class UDRUpgradeComponent;
 class USoundBase;
-struct FDRPerkTableRow;
 
 UCLASS(ClassGroup = (DeepRaiders))
 class DEEPRAIDERS_API UDRShopTransactionComponent : public UActorComponent
@@ -72,9 +71,9 @@ private:
 
 	bool TryPurchasePerk(
 		ADRPlayerState* PlayerState,
+		const UDRShopComponent* ShopComponent,
 		UDRPerkComponent* PerkComponent,
-		FName RowName,
-		const FDRPerkTableRow& PerkRow) const;
+		FName RowName) const;
 
 	/** 판매 가능한 광물 Entry와 총 판매 금액을 안전하게 계산한다. */
 	int64 CollectSellableOreEntries(

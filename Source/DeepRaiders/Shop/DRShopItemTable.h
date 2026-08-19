@@ -5,6 +5,7 @@
 #include "DRShopItemTable.generated.h"
 
 class UDRItemDefinition;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class EDRShopOfferType : uint8
@@ -115,6 +116,9 @@ struct FDRShopOfferView
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	FText Description;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	TObjectPtr<UTexture2D> Icon;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	int32 Price = 0;

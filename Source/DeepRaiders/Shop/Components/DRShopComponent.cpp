@@ -2,6 +2,7 @@
 
 #include "DRShopAreaComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 
@@ -86,6 +87,28 @@ TArray<FName> UDRShopComponent::GetPerkRowNames() const
 	return IsValid(PerkTable)
 		? PerkTable->GetRowNames()
 		: TArray<FName>();
+}
+
+bool UDRShopComponent::CanPurchasePerk(
+	FName RowName,
+	const UDRPerkComponent* PerkComponent,
+	int32 AvailableCoins) const
+{
+	FDRPerkTableRow PerkRow;
+
+	if (!IsValid(PerkComponent)
+		|| !GetPerkRow(RowName, PerkRow)
+		|| !PerkComponent->CanApplyNextRank(RowName, PerkRow))
+	{
+		return false;
+	}
+
+	const FDRPerkRankData* RankData =
+		PerkRow.GetRankData(PerkComponent->GetPerkRank(RowName) + 1);
+
+	return RankData
+		&& RankData->Price >= 0
+		&& AvailableCoins >= RankData->Price;
 }
 
 bool UDRShopComponent::IsItemAvailable(
