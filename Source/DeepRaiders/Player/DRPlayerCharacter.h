@@ -179,6 +179,19 @@ public:
 		return bAbilitySystemReady;
 	}
 	
+	UFUNCTION(BlueprintPure, Category = "Player|Aim")
+	float GetNormalizedAimPitch() const;
+
+	float GetAimPitchMinDegrees() const
+	{
+		return AimPitchMinDegrees;
+	}
+
+	float GetAimPitchMaxDegrees() const
+	{
+		return AimPitchMaxDegrees;
+	}
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -239,6 +252,12 @@ private:
 	bool bAbilitySystemReady = false;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMinDegrees = -55.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMaxDegrees = 45.f;
 	
 #pragma region QuickSlot
 
