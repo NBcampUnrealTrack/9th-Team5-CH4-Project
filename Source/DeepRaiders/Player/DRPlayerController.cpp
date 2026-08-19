@@ -12,7 +12,7 @@
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
-#include "DeepRaiders/Core/Subsystem/DRJoinSnapshotSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
@@ -399,8 +399,7 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	int32 SnowVolumeByteCount,
 	int32 OwnershipByteCount)
 {
-	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0 ||
-		OwnershipByteCount <= 0)
+	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0 || OwnershipByteCount <= 0)
 	{
 		return;
 	}
@@ -421,21 +420,18 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	ServerRequestSnowJoinSnapshotData(SnapshotId);
 }
 
-void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(
-	int32 SnapshotId)
+void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32 SnapshotId)
 {
 	UWorld* World = GetWorld();
-	UDRJoinSnapshotSubsystem* SnapshotSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRJoinSnapshotSubsystem>() : nullptr;
-	ADRMiningGameStateBase* MiningGameState =
-		IsValid(World) ? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
-	if (!IsValid(SnapshotSubsystem) || !IsValid(MiningGameState))
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	ADRMiningGameStateBase* MiningGameState = IsValid(World) ? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (!IsValid(SnowSubsystem) || !IsValid(MiningGameState))
 	{
 		return;
 	}
 
 	FDRSnowJoinCheckpoint Checkpoint;
-	if (!SnapshotSubsystem->GetCheckpoint(SnapshotId, Checkpoint))
+	if (!SnowSubsystem->GetCheckpoint(SnapshotId, Checkpoint))
 	{
 		return;
 	}
@@ -461,12 +457,8 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(
 	SendData(2, Checkpoint.OwnershipData);
 
 	TArray<FDRSnowOperationRecord> RecentHistory;
-	MiningGameState->GetSnowOperationsAfter(
-		Checkpoint.OperationSequence,
-		RecentHistory);
-	Client_FinishSnowJoinSnapshot(
-		SnapshotId,
-		RecentHistory);
+	MiningGameState->GetSnowOperationsAfter(Checkpoint.OperationSequence, RecentHistory);
+	Client_FinishSnowJoinSnapshot(SnapshotId, RecentHistory);
 }
 
 void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
@@ -527,11 +519,9 @@ void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(
 	TryApplyPendingSnowJoinSnapshot();
 }
 
-bool ADRPlayerController::QueueSnowJoinOperation(
-	const FDRSnowOperationRecord& Record)
+bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& Record)
 {
-	if (PendingSnowSnapshotId == INDEX_NONE ||
-		Record.Sequence <= PendingSnowCheckpointSequence)
+	if (PendingSnowSnapshotId == INDEX_NONE || Record.Sequence <= PendingSnowCheckpointSequence)
 	{
 		return false;
 	}
@@ -551,9 +541,8 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	}
 
 	UWorld* World = GetWorld();
-	UDRJoinSnapshotSubsystem* SnapshotSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRJoinSnapshotSubsystem>() : nullptr;
-	if (!IsValid(SnapshotSubsystem) || !SnapshotSubsystem->ApplyCheckpoint(
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
 		PendingSnowVoxelWorldName,
 		PendingSnowVoxelSaveData,
 		PendingSnowVolumeData,
@@ -606,6 +595,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	PendingSnowHistory.Reset();
 	BufferedSnowOperations.Reset();
 	ApplySnowJoinOperations(Operations);
+	
 	UE_LOG(
 		LogTemp,
 		Log,
@@ -615,6 +605,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		AppliedSnowVolumeByteCount,
 		AppliedOwnershipByteCount,
 		Operations.Num());
+	
 	return true;
 }
 
@@ -623,11 +614,9 @@ void ADRPlayerController::RetryPendingSnowJoinSnapshot()
 	TryApplyPendingSnowJoinSnapshot();
 }
 
-void ADRPlayerController::ApplySnowJoinOperations(
-	const TArray<FDRSnowOperationRecord>& Operations)
+void ADRPlayerController::ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations)
 {
-	ADRMiningGameStateBase* MiningGameState =
-		GetWorld() ? GetWorld()->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	ADRMiningGameStateBase* MiningGameState = GetWorld() ? GetWorld()->GetGameState<ADRMiningGameStateBase>() : nullptr;
 	if (!IsValid(MiningGameState))
 	{
 		return;
@@ -1165,14 +1154,13 @@ void ADRPlayerController::DRMeasureJoinSnapshotSize()
 		return;
 	}
 
-	UDRJoinSnapshotSubsystem* SnapshotSubsystem =
-		World->GetSubsystem<UDRJoinSnapshotSubsystem>();
-	if (!IsValid(SnapshotSubsystem))
+	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (!IsValid(SnowSubsystem))
 	{
 		return;
 	}
 
-	SnapshotSubsystem->MeasureCompressedSnapshotSize(nullptr, true);
+	SnowSubsystem->MeasureCompressedSnapshotSize(nullptr, true);
 }
 
 void ADRPlayerController::ServerMeasureJoinSnapshotSize_Implementation()

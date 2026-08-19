@@ -1,11 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/WorldSubsystem.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
-#include "DRSnowSurfaceSubsystem.generated.h"
 
 class AVoxelWorld;
+class FDRSnowOwnershipStore;
+class FDRSnowVolumeStore;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(
 	FDRSnowRemovedFromSurfaceDelegate,
@@ -17,20 +17,22 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(
 	const FDRSnowSurfaceAddRequest&,
 	float);
 
-UCLASS()
-class DEEPRAIDERS_API UDRSnowSurfaceSubsystem : public UWorldSubsystem
+// Voxel value/material 표현 편집만 담당한다. 원본 amount와 ownership은 store가 관리한다.
+class DEEPRAIDERS_API FDRSnowSurfaceEditor
 {
-	GENERATED_BODY()
-
 public:
-	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
+	void Configure(
+		UWorld* InWorld,
+		FDRSnowVolumeStore& InVolumeStore,
+		FDRSnowOwnershipStore& InOwnershipStore)
+	{
+		World = InWorld;
+		VolumeStore = &InVolumeStore;
+		OwnershipStore = &InOwnershipStore;
+	}
 
 	float AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
-
 	float RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
-
-	// 현재 Voxel 표면을 다시 찾고, DirectionalSurfaceTool ownership을 우선 사용해 material index를 복원한다.
-	// ownership이 없는 위치만 SnowVolume dominant team을 fallback으로 사용한다.
 	bool RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 
 	FDRSnowAddedToSurfaceDelegate OnSnowAddedToSurface;
@@ -38,6 +40,9 @@ public:
 
 private:
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const;
-	
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const;
+
+	UWorld* World = nullptr;
+	FDRSnowVolumeStore* VolumeStore = nullptr;
+	FDRSnowOwnershipStore* OwnershipStore = nullptr;
 };

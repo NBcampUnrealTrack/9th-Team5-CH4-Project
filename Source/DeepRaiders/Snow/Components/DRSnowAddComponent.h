@@ -60,7 +60,7 @@ public:
 	void SetAddEditTool(EDRSnowVoxelEditTool InEditTool);
 
 	// 카메라 방향으로 trace한 뒤 명시한 팀으로 눈 추가를 시도한다.
-	// 실제 팀 material paint는 DRSnowSurfaceSubsystem -> DRVoxelTeamColorLibrary 경로에서 처리한다.
+	// 실제 팀 material paint는 DRSnowSubsystem의 SurfaceEditor에서 처리한다.
 	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
 	bool DebugTryAddSnowFromView(
 		float TraceDistance,

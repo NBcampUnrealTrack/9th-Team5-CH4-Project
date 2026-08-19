@@ -13,7 +13,7 @@ class DEEPRAIDERS_API UDRVoxelTeamColorLibrary : public UBlueprintFunctionLibrar
 	GENERATED_BODY()
 
 public:
-	// DirectionalSurfaceTool의 정확한 팀 소유권은 DRVoxelTeamOwnershipSubsystem이 관리한다.
+	// DirectionalSurfaceTool의 정확한 팀 소유권은 DRSnowSubsystem의 OwnershipStore가 관리한다.
 	// 이 라이브러리는 VoxelWorld material index를 칠해 화면에 팀 색을 보여주는 표현 계층만 담당한다.
 
 	// TeamId를 Voxel material index로 변환한다.

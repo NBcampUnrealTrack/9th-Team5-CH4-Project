@@ -1,8 +1,6 @@
 #include "DRMiningGameStateBase.h"
 
-#include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRJoinSnapshotSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 #include "EngineUtils.h"
@@ -124,8 +122,8 @@ void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
 	}
 
 	UWorld* World = GetWorld();
-	UDRJoinSnapshotSubsystem* SnapshotSubsystem = IsValid(World) ? World->GetSubsystem<UDRJoinSnapshotSubsystem>() : nullptr;
-	if (!IsValid(SnapshotSubsystem))
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(SnowSubsystem))
 	{
 		return;
 	}
@@ -133,9 +131,9 @@ void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
 	FDRSnowJoinCheckpoint Checkpoint;
 	constexpr int32 CheckpointInterval = 250;
 	const bool bNeedsCheckpoint =
-		!SnapshotSubsystem->GetLatestCheckpoint(Checkpoint) ||
+		!SnowSubsystem->GetLatestCheckpoint(Checkpoint) ||
 		NextSnowOperationSequence - Checkpoint.OperationSequence >= CheckpointInterval;
-	if (bNeedsCheckpoint && SnapshotSubsystem->CreateCheckpoint(NextSnowOperationSequence))
+	if (bNeedsCheckpoint && SnowSubsystem->CreateCheckpoint(NextSnowOperationSequence))
 	{
 		DiscardSnowOperationsThrough(NextSnowOperationSequence);
 	}
@@ -161,9 +159,7 @@ void ADRMiningGameStateBase::Multicast_ApplySnowOperation_Implementation(const F
 
 bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationRecord& Record)
 {
-	return Record.bIsAddOperation
-		? ApplySnowAddOnce(Record.AddOperation)
-		: ApplySnowRemoveOnce(Record.RemoveOperation);
+	return Record.bIsAddOperation ? ApplySnowAddOnce(Record.AddOperation) : ApplySnowRemoveOnce(Record.RemoveOperation);
 }
 
 bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operation)
@@ -199,32 +195,12 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operati
 	Request.EditTool = Operation.EditTool;
 	Request.Context.TeamId = Operation.TeamId;
 
-	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 	{
-		if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-		{
-			return SnowSurfaceSubsystem->AddSnowAtArea(Request) > 0.f;
-		}
-
-		return false;
+		return SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
 	}
 
-	bool bHandled = false;
-	if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem = World->GetSubsystem<UDRSnowVolumeSubsystem>())
-	{
-		const FDRSnowAddResult AddResult = SnowVolumeSubsystem->AddSnow(Request);
-		bHandled = AddResult.AddedAmount > 0.f;
-	}
-
-	if (bHandled)
-	{
-		if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-		{
-			SnowSurfaceSubsystem->AddSnowAtArea(Request);
-		}
-	}
-
-	return bHandled;
+	return false;
 }
 
 bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation)
@@ -258,35 +234,15 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 	Request.EditTool = Operation.EditTool;
 	Request.Context.TeamId = Operation.TeamId;
 
-	float RemovedAmount = 0.f;
-	if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-	{
-		RemovedAmount = SnowSurfaceSubsystem->RemoveSnowAtArea(Request);
-	}
-
-	if (RemovedAmount <= 0.f)
+	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (!IsValid(SnowSubsystem))
 	{
 		return false;
 	}
 
-	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
-	{
-		if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem = World->GetSubsystem<UDRSnowVolumeSubsystem>())
-		{
-			FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-			// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
-			// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-			VolumeRequest.RequestedAmount = Operation.AppliedAmount;
-			SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
-		}
-	}
-
-	if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-	{
-		SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
-	}
-
-	return true;
+	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
+	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
+	return SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
 }
 
 AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const

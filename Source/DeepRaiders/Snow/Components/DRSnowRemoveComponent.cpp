@@ -3,8 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "VoxelWorld.h"
 
 UDRSnowRemoveComponent::UDRSnowRemoveComponent()
@@ -58,51 +57,30 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(
 	float RemovedAmount = 0.f;
 	if (UWorld* World = GetWorld())
 	{
-		if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			// Voxel 편집은 컴포넌트가 직접 수행하지 않고 Subsystem 경계로 보낸다.
-			RemovedAmount = SnowSurfaceSubsystem->RemoveSnowAtArea(Request);
-		}
+			RemovedAmount = SnowSubsystem->RemoveSnow(Request).RemovedAmount;
 
-		if (RemovedAmount > 0.f)
-		{
-			if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+			if (RemovedAmount > 0.f)
 			{
-				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-					World->GetSubsystem<UDRSnowVolumeSubsystem>())
+				if (ADRMiningGameStateBase* MiningGameState =
+					World->GetGameState<ADRMiningGameStateBase>())
 				{
-					// 표면이 실제로 깎인 양만 원본 density에서도 제거한다.
-					// Custom 계열 툴은 SurfaceSubsystem에서 실제 변화 voxel 기준으로 이미 처리한다.
-					FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-					VolumeRequest.RequestedAmount = RemovedAmount;
-					SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+					FDRSnowRemoveOperation Operation;
+					Operation.WorldLocation = Request.WorldLocation;
+					Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+					Operation.Radius = Request.Radius;
+					Operation.RequestedAmount = Request.RequestedAmount;
+					Operation.AppliedAmount = RemovedAmount;
+					Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
+					Operation.EditTool = Request.EditTool;
+					Operation.TeamId = Request.Context.TeamId;
+					Operation.VoxelWorldName =
+						IsValid(Request.TargetVoxelWorld.Get())
+							? Request.TargetVoxelWorld->GetFName()
+							: NAME_None;
+					MiningGameState->RegisterSnowRemove(Operation);
 				}
-			}
-
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
-				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-			{
-				// SnowVolume 감소 후 현재 표면을 다시 찾아 남은 dominant team 색으로 복원한다.
-				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
-			}
-
-			if (ADRMiningGameStateBase* MiningGameState =
-				World->GetGameState<ADRMiningGameStateBase>())
-			{
-				FDRSnowRemoveOperation Operation;
-				Operation.WorldLocation = Request.WorldLocation;
-				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
-				Operation.Radius = Request.Radius;
-				Operation.RequestedAmount = Request.RequestedAmount;
-				Operation.AppliedAmount = RemovedAmount;
-				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
-				Operation.EditTool = Request.EditTool;
-				Operation.TeamId = Request.Context.TeamId;
-				Operation.VoxelWorldName =
-					IsValid(Request.TargetVoxelWorld.Get())
-						? Request.TargetVoxelWorld->GetFName()
-						: NAME_None;
-				MiningGameState->RegisterSnowRemove(Operation);
 			}
 		}
 	}
@@ -144,47 +122,30 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 	float RemovedAmount = 0.f;
 	if (UWorld* World = GetWorld())
 	{
-		if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
+		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			RemovedAmount = SnowSurfaceSubsystem->RemoveSnowAtArea(Request);
-		}
+			RemovedAmount = SnowSubsystem->RemoveSnow(Request).RemovedAmount;
 
-		if (RemovedAmount > 0.f)
-		{
-			if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+			if (RemovedAmount > 0.f)
 			{
-				if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-					World->GetSubsystem<UDRSnowVolumeSubsystem>())
+				if (ADRMiningGameStateBase* MiningGameState =
+					World->GetGameState<ADRMiningGameStateBase>())
 				{
-					FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-					VolumeRequest.RequestedAmount = RemovedAmount;
-					SnowVolumeSubsystem->RemoveSnow(VolumeRequest);
+					FDRSnowRemoveOperation Operation;
+					Operation.WorldLocation = Request.WorldLocation;
+					Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+					Operation.Radius = Request.Radius;
+					Operation.RequestedAmount = Request.RequestedAmount;
+					Operation.AppliedAmount = RemovedAmount;
+					Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
+					Operation.EditTool = Request.EditTool;
+					Operation.TeamId = Request.Context.TeamId;
+					Operation.VoxelWorldName =
+						IsValid(Request.TargetVoxelWorld.Get())
+							? Request.TargetVoxelWorld->GetFName()
+							: NAME_None;
+					MiningGameState->RegisterSnowRemove(Operation);
 				}
-			}
-
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem =
-				World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-			{
-				SnowSurfaceSubsystem->RepaintSnowMaterialsAtArea(Request);
-			}
-
-			if (ADRMiningGameStateBase* MiningGameState =
-				World->GetGameState<ADRMiningGameStateBase>())
-			{
-				FDRSnowRemoveOperation Operation;
-				Operation.WorldLocation = Request.WorldLocation;
-				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
-				Operation.Radius = Request.Radius;
-				Operation.RequestedAmount = Request.RequestedAmount;
-				Operation.AppliedAmount = RemovedAmount;
-				Operation.bInvertSurfaceStrength = Request.bInvertSurfaceStrength;
-				Operation.EditTool = Request.EditTool;
-				Operation.TeamId = Request.Context.TeamId;
-				Operation.VoxelWorldName =
-					IsValid(Request.TargetVoxelWorld.Get())
-						? Request.TargetVoxelWorld->GetFName()
-						: NAME_None;
-				MiningGameState->RegisterSnowRemove(Operation);
 			}
 		}
 	}

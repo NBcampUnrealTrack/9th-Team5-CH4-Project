@@ -1,7 +1,7 @@
 #include "DRMiningGameModeBase.h"
 
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
-#include "DeepRaiders/Core/Subsystem/DRJoinSnapshotSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 
@@ -15,8 +15,7 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(NewPlayer);
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(NewPlayer);
 	if (!IsValid(PlayerController))
 	{
 		return;
@@ -29,18 +28,18 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	}
 
 	ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>();
-	UDRJoinSnapshotSubsystem* JoinSnapshotSubsystem = World->GetSubsystem<UDRJoinSnapshotSubsystem>();
-	if (IsValid(MiningGameState) && IsValid(JoinSnapshotSubsystem))
+	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (IsValid(MiningGameState) && IsValid(SnowSubsystem))
 	{
 		FDRSnowJoinCheckpoint Checkpoint;
-		if (!JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint) &&
-			JoinSnapshotSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
+		if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
+			SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
 		{
-			JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint);
+			SnowSubsystem->GetLatestCheckpoint(Checkpoint);
 			MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
 		}
 
-		if (JoinSnapshotSubsystem->GetLatestCheckpoint(Checkpoint))
+		if (SnowSubsystem->GetLatestCheckpoint(Checkpoint))
 		{
 			PlayerController->Client_BeginSnowJoinSnapshot(
 				Checkpoint.SnapshotId,

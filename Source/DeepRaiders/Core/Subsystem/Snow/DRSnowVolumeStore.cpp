@@ -1,4 +1,4 @@
-#include "DRSnowVolumeSubsystem.h"
+#include "DRSnowVolumeStore.h"
 
 namespace
 {
@@ -35,13 +35,7 @@ namespace
 	}
 }
 
-bool UDRSnowVolumeSubsystem::ShouldCreateSubsystem(UObject* Outer) const
-{
-	const UWorld* World = Cast<UWorld>(Outer);
-	return IsValid(World) && World->IsGameWorld();
-}
-
-void UDRSnowVolumeSubsystem::ReplaceSnapshotData(
+void FDRSnowVolumeStore::ReplaceSnapshotData(
 	float InCellSize,
 	int32 InChunkSize,
 	TMap<FIntVector, FDRSnowVolumeChunk>&& InChunks)
@@ -51,7 +45,7 @@ void UDRSnowVolumeSubsystem::ReplaceSnapshotData(
 	Chunks = MoveTemp(InChunks);
 }
 
-FDRSnowAddResult UDRSnowVolumeSubsystem::AddSnow(
+FDRSnowAddResult FDRSnowVolumeStore::AddSnow(
 	const FDRSnowSurfaceAddRequest& Request)
 {
 	FDRSnowAddResult Result;
@@ -128,7 +122,7 @@ FDRSnowAddResult UDRSnowVolumeSubsystem::AddSnow(
 	return Result;
 }
 
-FDRSnowRemoveResult UDRSnowVolumeSubsystem::RemoveSnow(
+FDRSnowRemoveResult FDRSnowVolumeStore::RemoveSnow(
 	const FDRSnowSurfaceRemoveRequest& Request)
 {
 	FDRSnowRemoveResult Result;
@@ -216,7 +210,7 @@ FDRSnowRemoveResult UDRSnowVolumeSubsystem::RemoveSnow(
 	return Result;
 }
 
-bool UDRSnowVolumeSubsystem::GetSnowCellAtLocation(
+bool FDRSnowVolumeStore::GetSnowCellAtLocation(
 	FVector WorldLocation,
 	FDRSnowCell& OutCell,
 	int32& OutTeamIdA,
@@ -248,7 +242,7 @@ bool UDRSnowVolumeSubsystem::GetSnowCellAtLocation(
 	return OutCell.GetTotalAmount() > 0.f;
 }
 
-int32 UDRSnowVolumeSubsystem::GetDominantTeamAtLocation(
+int32 FDRSnowVolumeStore::GetDominantTeamAtLocation(
 	FVector WorldLocation) const
 {
 	FDRSnowCell Cell;
@@ -259,7 +253,7 @@ int32 UDRSnowVolumeSubsystem::GetDominantTeamAtLocation(
 		: INDEX_NONE;
 }
 
-FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInBounds(
+FDRSnowControlRatio FDRSnowVolumeStore::QuerySnowInBounds(
 	const FBox& WorldBounds,
 	int32 TeamIdA,
 	int32 TeamIdB) const
@@ -327,7 +321,7 @@ FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInBounds(
 	return Ratio;
 }
 
-FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInHexPrism(
+FDRSnowControlRatio FDRSnowVolumeStore::QuerySnowInHexPrism(
 	const FBox& WorldBounds,
 	const FTransform& HexTransform,
 	const FVector& HexExtent,
@@ -410,7 +404,7 @@ FDRSnowControlRatio UDRSnowVolumeSubsystem::QuerySnowInHexPrism(
 	return Ratio;
 }
 
-FIntVector UDRSnowVolumeSubsystem::WorldToCell(
+FIntVector FDRSnowVolumeStore::WorldToCell(
 	const FVector& WorldLocation) const
 {
 	const float SafeCellSize = FMath::Max(1.f, CellSize);
@@ -420,7 +414,7 @@ FIntVector UDRSnowVolumeSubsystem::WorldToCell(
 		FMath::FloorToInt(WorldLocation.Z / SafeCellSize));
 }
 
-FIntVector UDRSnowVolumeSubsystem::CellToChunkOrigin(
+FIntVector FDRSnowVolumeStore::CellToChunkOrigin(
 	const FIntVector& Cell) const
 {
 	const int32 SafeChunkSize = FMath::Max(1, ChunkSize);
@@ -430,13 +424,13 @@ FIntVector UDRSnowVolumeSubsystem::CellToChunkOrigin(
 		FloorDivide(Cell.Z, SafeChunkSize) * SafeChunkSize);
 }
 
-const FDRSnowVolumeChunk* UDRSnowVolumeSubsystem::FindChunk(
+const FDRSnowVolumeChunk* FDRSnowVolumeStore::FindChunk(
 	const FIntVector& ChunkOrigin) const
 {
 	return Chunks.Find(ChunkOrigin);
 }
 
-FDRSnowVolumeChunk& UDRSnowVolumeSubsystem::FindOrCreateChunk(
+FDRSnowVolumeChunk& FDRSnowVolumeStore::FindOrCreateChunk(
 	const FIntVector& ChunkOrigin)
 {
 	if (FDRSnowVolumeChunk* ExistingChunk = Chunks.Find(ChunkOrigin))
@@ -453,7 +447,7 @@ FDRSnowVolumeChunk& UDRSnowVolumeSubsystem::FindOrCreateChunk(
 	return Chunks.Add(ChunkOrigin, MoveTemp(NewChunk));
 }
 
-bool UDRSnowVolumeSubsystem::AddSnowToCell(
+bool FDRSnowVolumeStore::AddSnowToCell(
 	FDRSnowVolumeChunk& Chunk,
 	const FIntVector& GlobalCell,
 	int32 TeamId,
@@ -497,7 +491,7 @@ bool UDRSnowVolumeSubsystem::AddSnowToCell(
 	return true;
 }
 
-float UDRSnowVolumeSubsystem::RemoveSnowFromCell(
+float FDRSnowVolumeStore::RemoveSnowFromCell(
 	FDRSnowVolumeChunk& Chunk,
 	const FIntVector& GlobalCell,
 	float Amount)
@@ -536,7 +530,7 @@ float UDRSnowVolumeSubsystem::RemoveSnowFromCell(
 	return RemovedAmount;
 }
 
-void UDRSnowVolumeSubsystem::AddQueriedAmount(
+void FDRSnowVolumeStore::AddQueriedAmount(
 	FDRSnowControlRatio& InOutRatio,
 	int32 TeamId,
 	float Amount) const

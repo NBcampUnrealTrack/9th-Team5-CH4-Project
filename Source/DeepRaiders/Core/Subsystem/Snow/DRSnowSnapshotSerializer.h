@@ -1,10 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/WorldSubsystem.h"
-#include "DRJoinSnapshotSubsystem.generated.h"
+
+#include "DRSnowSnapshotSerializer.generated.h"
 
 class AVoxelWorld;
+class FDRSnowOwnershipStore;
+class FDRSnowVolumeStore;
 
 struct FDRSnowJoinCheckpoint
 {
@@ -99,15 +101,9 @@ struct DEEPRAIDERS_API FDRJoinSnapshotSizeReport
 	float TotalCompressedMB = 0.f;
 };
 
-UCLASS()
-class DEEPRAIDERS_API UDRJoinSnapshotSubsystem : public UWorldSubsystem
+class DEEPRAIDERS_API FDRSnowSnapshotSerializer
 {
-	GENERATED_BODY()
-
 public:
-	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
-
-	UFUNCTION(BlueprintCallable, Category = "Join Snapshot")
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(
 		AVoxelWorld* TargetVoxelWorld = nullptr,
 		bool bLogResult = true) const;
@@ -124,20 +120,29 @@ public:
 		const TArray<uint8>& SnowVolumeData,
 		const TArray<uint8>& OwnershipData);
 
+	void Configure(
+		UWorld* InWorld,
+		FDRSnowVolumeStore& InVolumeStore,
+		FDRSnowOwnershipStore& InOwnershipStore)
+	{
+		World = InWorld;
+		VolumeStore = &InVolumeStore;
+		OwnershipStore = &InOwnershipStore;
+	}
+
 private:
 	AVoxelWorld* ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotVoxelSaveSizeReport MeasureVoxelSave(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotSnowVolumeSizeReport MeasureSnowVolume() const;
 	bool SerializeSnowVolume(TArray<uint8>& OutCompressedData) const;
 	bool DeserializeSnowVolume(const TArray<uint8>& CompressedData);
-	bool SerializeOwnership(
-		AVoxelWorld* VoxelWorld,
-		TArray<uint8>& OutCompressedData) const;
-	bool DeserializeOwnership(
-		AVoxelWorld* VoxelWorld,
-		const TArray<uint8>& CompressedData);
+	bool SerializeOwnership(AVoxelWorld* VoxelWorld, TArray<uint8>& OutCompressedData) const;
+	bool DeserializeOwnership(AVoxelWorld* VoxelWorld, const TArray<uint8>& CompressedData);
 
 	int32 NextSnapshotId = 1;
 	FDRSnowJoinCheckpoint LatestCheckpoint;
 	TMap<int32, FDRSnowJoinCheckpoint> CheckpointsById;
+	UWorld* World = nullptr;
+	FDRSnowVolumeStore* VolumeStore = nullptr;
+	FDRSnowOwnershipStore* OwnershipStore = nullptr;
 };

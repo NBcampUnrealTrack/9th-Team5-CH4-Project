@@ -1,7 +1,7 @@
-#include "DRJoinSnapshotSubsystem.h"
+#include "DRSnowSnapshotSerializer.h"
 
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRVoxelTeamOwnershipSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "EngineUtils.h"
 #include "Serialization/BufferArchive.h"
 #include "Serialization/MemoryReader.h"
@@ -49,13 +49,7 @@ namespace
 	}
 }
 
-bool UDRJoinSnapshotSubsystem::ShouldCreateSubsystem(UObject* Outer) const
-{
-	const UWorld* World = Cast<UWorld>(Outer);
-	return IsValid(World) && World->IsGameWorld();
-}
-
-FDRJoinSnapshotSizeReport UDRJoinSnapshotSubsystem::MeasureCompressedSnapshotSize(
+FDRJoinSnapshotSizeReport FDRSnowSnapshotSerializer::MeasureCompressedSnapshotSize(
 	AVoxelWorld* TargetVoxelWorld,
 	bool bLogResult) const
 {
@@ -121,12 +115,10 @@ FDRJoinSnapshotSizeReport UDRJoinSnapshotSubsystem::MeasureCompressedSnapshotSiz
 	return Report;
 }
 
-bool UDRJoinSnapshotSubsystem::CreateCheckpoint(
-	int32 OperationSequence,
-	AVoxelWorld* TargetVoxelWorld)
+bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld)
 {
-	UWorld* World = GetWorld();
-	if (!IsValid(World) || World->GetNetMode() == NM_Client)
+	UWorld* LocalWorld = World;
+	if (!IsValid(LocalWorld) || LocalWorld->GetNetMode() == NM_Client)
 	{
 		return false;
 	}
@@ -187,8 +179,7 @@ bool UDRJoinSnapshotSubsystem::CreateCheckpoint(
 	return true;
 }
 
-bool UDRJoinSnapshotSubsystem::GetLatestCheckpoint(
-	FDRSnowJoinCheckpoint& OutCheckpoint) const
+bool FDRSnowSnapshotSerializer::GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint) const
 {
 	if (!LatestCheckpoint.IsValid())
 	{
@@ -199,9 +190,7 @@ bool UDRJoinSnapshotSubsystem::GetLatestCheckpoint(
 	return true;
 }
 
-bool UDRJoinSnapshotSubsystem::GetCheckpoint(
-	int32 SnapshotId,
-	FDRSnowJoinCheckpoint& OutCheckpoint) const
+bool FDRSnowSnapshotSerializer::GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint) const
 {
 	const FDRSnowJoinCheckpoint* Checkpoint = CheckpointsById.Find(SnapshotId);
 	if (!Checkpoint || !Checkpoint->IsValid())
@@ -213,7 +202,7 @@ bool UDRJoinSnapshotSubsystem::GetCheckpoint(
 	return true;
 }
 
-bool UDRJoinSnapshotSubsystem::ApplyCheckpoint(
+bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 	FName VoxelWorldName,
 	const TArray<uint8>& VoxelSaveData,
 	const TArray<uint8>& SnowVolumeData,
@@ -226,10 +215,10 @@ bool UDRJoinSnapshotSubsystem::ApplyCheckpoint(
 	}
 	if (!VoxelWorldName.IsNone())
 	{
-		UWorld* World = GetWorld();
-		if (IsValid(World))
+		UWorld* LocalWorld = World;
+		if (IsValid(LocalWorld))
 		{
-			for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+			for (TActorIterator<AVoxelWorld> It(LocalWorld); It; ++It)
 			{
 				if (IsValid(*It) && (*It)->GetFName() == VoxelWorldName)
 				{
@@ -253,25 +242,23 @@ bool UDRJoinSnapshotSubsystem::ApplyCheckpoint(
 		return false;
 	}
 
-	return DeserializeSnowVolume(SnowVolumeData) &&
-		DeserializeOwnership(VoxelWorld, OwnershipData);
+	return DeserializeSnowVolume(SnowVolumeData) && DeserializeOwnership(VoxelWorld, OwnershipData);
 }
 
-AVoxelWorld* UDRJoinSnapshotSubsystem::ResolveVoxelWorld(
-	AVoxelWorld* TargetVoxelWorld) const
+AVoxelWorld* FDRSnowSnapshotSerializer::ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const
 {
 	if (IsValid(TargetVoxelWorld))
 	{
 		return TargetVoxelWorld;
 	}
 
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	UWorld* LocalWorld = World;
+	if (!IsValid(LocalWorld))
 	{
 		return nullptr;
 	}
 
-	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	for (TActorIterator<AVoxelWorld> It(LocalWorld); It; ++It)
 	{
 		if (IsValid(*It))
 		{
@@ -282,8 +269,7 @@ AVoxelWorld* UDRJoinSnapshotSubsystem::ResolveVoxelWorld(
 	return nullptr;
 }
 
-FDRSnapshotVoxelSaveSizeReport UDRJoinSnapshotSubsystem::MeasureVoxelSave(
-	AVoxelWorld* TargetVoxelWorld) const
+FDRSnapshotVoxelSaveSizeReport FDRSnowSnapshotSerializer::MeasureVoxelSave(AVoxelWorld* TargetVoxelWorld) const
 {
 	FDRSnapshotVoxelSaveSizeReport Report;
 	if (!IsValid(TargetVoxelWorld) || !TargetVoxelWorld->IsCreated())
@@ -305,34 +291,27 @@ FDRSnapshotVoxelSaveSizeReport UDRJoinSnapshotSubsystem::MeasureVoxelSave(
 	return Report;
 }
 
-FDRSnapshotSnowVolumeSizeReport UDRJoinSnapshotSubsystem::MeasureSnowVolume() const
+FDRSnapshotSnowVolumeSizeReport FDRSnowSnapshotSerializer::MeasureSnowVolume() const
 {
 	FDRSnapshotSnowVolumeSizeReport Report;
 
-	const UWorld* World = GetWorld();
-	if (!IsValid(World))
-	{
-		return Report;
-	}
-
-	const UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		World->GetSubsystem<UDRSnowVolumeSubsystem>();
-	if (!IsValid(SnowVolumeSubsystem))
+	if (!VolumeStore)
 	{
 		return Report;
 	}
 
 	FBufferArchive SparseArchive;
 	int32 Version = SnowVolumeSnapshotVersion;
-	float CellSize = SnowVolumeSubsystem->CellSize;
-	int32 ChunkSize = SnowVolumeSubsystem->ChunkSize;
-	int32 ChunkCount = SnowVolumeSubsystem->Chunks.Num();
+	const FDRSnowVolumeStore& SnowVolumeStore = *VolumeStore;
+	float CellSize = SnowVolumeStore.CellSize;
+	int32 ChunkSize = SnowVolumeStore.ChunkSize;
+	int32 ChunkCount = SnowVolumeStore.Chunks.Num();
 	SparseArchive << Version;
 	SparseArchive << CellSize;
 	SparseArchive << ChunkSize;
 	SparseArchive << ChunkCount;
 
-	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeSubsystem->Chunks)
+	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeStore.Chunks)
 	{
 		const FDRSnowVolumeChunk& Chunk = Pair.Value;
 		int32 NonEmptyCellCount = 0;
@@ -384,29 +363,26 @@ FDRSnapshotSnowVolumeSizeReport UDRJoinSnapshotSubsystem::MeasureSnowVolume() co
 	return Report;
 }
 
-bool UDRJoinSnapshotSubsystem::SerializeSnowVolume(
-	TArray<uint8>& OutCompressedData) const
+bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressedData) const
 {
 	OutCompressedData.Reset();
-	const UWorld* World = GetWorld();
-	const UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRSnowVolumeSubsystem>() : nullptr;
-	if (!IsValid(SnowVolumeSubsystem))
+	if (!VolumeStore)
 	{
 		return false;
 	}
 
 	FBufferArchive Archive;
 	int32 Version = SnowVolumeSnapshotVersion;
-	float CellSize = SnowVolumeSubsystem->CellSize;
-	int32 ChunkSize = SnowVolumeSubsystem->ChunkSize;
-	int32 ChunkCount = SnowVolumeSubsystem->Chunks.Num();
+	const FDRSnowVolumeStore& SnowVolumeStore = *VolumeStore;
+	float CellSize = SnowVolumeStore.CellSize;
+	int32 ChunkSize = SnowVolumeStore.ChunkSize;
+	int32 ChunkCount = SnowVolumeStore.Chunks.Num();
 	Archive << Version;
 	Archive << CellSize;
 	Archive << ChunkSize;
 	Archive << ChunkCount;
 
-	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeSubsystem->Chunks)
+	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeStore.Chunks)
 	{
 		const FDRSnowVolumeChunk& Chunk = Pair.Value;
 		int32 NonEmptyCellCount = 0;
@@ -442,13 +418,9 @@ bool UDRJoinSnapshotSubsystem::SerializeSnowVolume(
 	return !OutCompressedData.IsEmpty();
 }
 
-bool UDRJoinSnapshotSubsystem::DeserializeSnowVolume(
-	const TArray<uint8>& CompressedData)
+bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& CompressedData)
 {
-	UWorld* World = GetWorld();
-	UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRSnowVolumeSubsystem>() : nullptr;
-	if (!IsValid(SnowVolumeSubsystem) || CompressedData.IsEmpty())
+	if (!VolumeStore || CompressedData.IsEmpty())
 	{
 		return false;
 	}
@@ -520,25 +492,22 @@ bool UDRJoinSnapshotSubsystem::DeserializeSnowVolume(
 		RestoredChunks.Add(Origin, MoveTemp(Chunk));
 	}
 
-	SnowVolumeSubsystem->ReplaceSnapshotData(CellSize, ChunkSize, MoveTemp(RestoredChunks));
+	VolumeStore->ReplaceSnapshotData(CellSize, ChunkSize, MoveTemp(RestoredChunks));
 	return true;
 }
 
-bool UDRJoinSnapshotSubsystem::SerializeOwnership(
+bool FDRSnowSnapshotSerializer::SerializeOwnership(
 	AVoxelWorld* VoxelWorld,
 	TArray<uint8>& OutCompressedData) const
 {
 	OutCompressedData.Reset();
-	const UWorld* World = GetWorld();
-	const UDRVoxelTeamOwnershipSubsystem* OwnershipSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRVoxelTeamOwnershipSubsystem>() : nullptr;
-	if (!IsValid(OwnershipSubsystem) || !IsValid(VoxelWorld))
+	if (!OwnershipStore || !IsValid(VoxelWorld))
 	{
 		return false;
 	}
 
 	TMap<FIntVector, int32> TeamByVoxel;
-	OwnershipSubsystem->CopySnapshotData(VoxelWorld, TeamByVoxel);
+	OwnershipStore->CopySnapshotData(VoxelWorld, TeamByVoxel);
 	FBufferArchive Archive;
 	int32 Version = OwnershipSnapshotVersion;
 	int32 Count = TeamByVoxel.Num();
@@ -556,14 +525,11 @@ bool UDRJoinSnapshotSubsystem::SerializeOwnership(
 	return !OutCompressedData.IsEmpty();
 }
 
-bool UDRJoinSnapshotSubsystem::DeserializeOwnership(
+bool FDRSnowSnapshotSerializer::DeserializeOwnership(
 	AVoxelWorld* VoxelWorld,
 	const TArray<uint8>& CompressedData)
 {
-	UWorld* World = GetWorld();
-	UDRVoxelTeamOwnershipSubsystem* OwnershipSubsystem =
-		IsValid(World) ? World->GetSubsystem<UDRVoxelTeamOwnershipSubsystem>() : nullptr;
-	if (!IsValid(OwnershipSubsystem) || !IsValid(VoxelWorld) || CompressedData.IsEmpty())
+	if (!OwnershipStore || !IsValid(VoxelWorld) || CompressedData.IsEmpty())
 	{
 		return false;
 	}
@@ -601,6 +567,6 @@ bool UDRJoinSnapshotSubsystem::DeserializeOwnership(
 		TeamByVoxel.Add(VoxelPosition, TeamId);
 	}
 
-	OwnershipSubsystem->ReplaceSnapshotData(VoxelWorld, MoveTemp(TeamByVoxel));
+	OwnershipStore->ReplaceSnapshotData(VoxelWorld, MoveTemp(TeamByVoxel));
 	return true;
 }

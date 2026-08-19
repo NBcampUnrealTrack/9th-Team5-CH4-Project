@@ -4,7 +4,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
@@ -248,16 +248,15 @@ FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
 		return EmptyRatio;
 	}
 
-	const UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		World->GetSubsystem<UDRSnowVolumeSubsystem>();
-	if (!IsValid(SnowVolumeSubsystem))
+	const UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (!IsValid(SnowSubsystem))
 	{
 		return EmptyRatio;
 	}
 
 	if (bUseHexPrismShape && IsValid(ZoneBounds))
 	{
-		return SnowVolumeSubsystem->QuerySnowInHexPrism(
+		return SnowSubsystem->QuerySnowInHexPrism(
 			GetZoneWorldBounds(),
 			ZoneBounds->GetComponentTransform(),
 			ZoneBounds->GetUnscaledBoxExtent(),
@@ -265,7 +264,7 @@ FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
 			TeamIdB);
 	}
 
-	return SnowVolumeSubsystem->QuerySnowInBounds(
+	return SnowSubsystem->QuerySnowInBounds(
 		GetZoneWorldBounds(),
 		TeamIdA,
 		TeamIdB);

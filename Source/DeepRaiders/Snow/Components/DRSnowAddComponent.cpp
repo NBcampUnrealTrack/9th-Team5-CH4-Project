@@ -3,8 +3,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowSurfaceSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Controller.h"
@@ -290,72 +289,33 @@ bool UDRSnowAddComponent::ExecuteAddSnow(
 	const FDRSnowSurfaceAddRequest& Request)
 {
 	bool bHandled = false;
-	if (UWorld* World = GetWorld())
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
 	{
-		if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+		return false;
+	}
+
+	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
+	{
+		bHandled = SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
+	}
+
+	if (bHandled)
+	{
+		if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
 		{
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-			{
-				// Custom 계열 툴은 실제 생성 voxel 기준으로 SnowVolume을 기록하므로 SurfaceSubsystem이 먼저 처리한다.
-				bHandled = SnowSurfaceSubsystem->AddSnowAtArea(Request) > 0.f;
-			}
-
-			if (bHandled)
-			{
-				if (ADRMiningGameStateBase* MiningGameState =
-					World->GetGameState<ADRMiningGameStateBase>())
-				{
-					FDRSnowAddOperation Operation;
-					Operation.WorldLocation = Request.WorldLocation;
-					Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
-					Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
-					Operation.Radius = Request.Radius;
-					Operation.Amount = Request.Amount;
-					Operation.EditTool = Request.EditTool;
-					Operation.TeamId = Request.Context.TeamId;
-					Operation.VoxelWorldName =
-						IsValid(Request.TargetVoxelWorld.Get())
-							? Request.TargetVoxelWorld->GetFName()
-							: NAME_None;
-					MiningGameState->RegisterSnowAdd(Operation);
-				}
-			}
-
-			return bHandled;
-		}
-
-		if (UDRSnowVolumeSubsystem* SnowVolumeSubsystem = World->GetSubsystem<UDRSnowVolumeSubsystem>())
-		{
-			// SnowVolume은 팀별 누적량의 원본 데이터다. Voxel은 이 결과를 보여주는 표현 계층이다.
-			const FDRSnowAddResult AddResult = SnowVolumeSubsystem->AddSnow(Request);
-			bHandled = AddResult.AddedAmount > 0.f;
-		}
-
-		if (bHandled)
-		{
-			if (UDRSnowSurfaceSubsystem* SnowSurfaceSubsystem = World->GetSubsystem<UDRSnowSurfaceSubsystem>())
-			{
-				// 표면 SDF와 팀 material index를 함께 갱신한다.
-				SnowSurfaceSubsystem->AddSnowAtArea(Request);
-			}
-
-			if (ADRMiningGameStateBase* MiningGameState =
-				World->GetGameState<ADRMiningGameStateBase>())
-			{
-				FDRSnowAddOperation Operation;
-				Operation.WorldLocation = Request.WorldLocation;
-				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
-				Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
-				Operation.Radius = Request.Radius;
-				Operation.Amount = Request.Amount;
-				Operation.EditTool = Request.EditTool;
-				Operation.TeamId = Request.Context.TeamId;
-				Operation.VoxelWorldName =
-					IsValid(Request.TargetVoxelWorld.Get())
-						? Request.TargetVoxelWorld->GetFName()
-						: NAME_None;
-				MiningGameState->RegisterSnowAdd(Operation);
-			}
+			FDRSnowAddOperation Operation;
+			Operation.WorldLocation = Request.WorldLocation;
+			Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+			Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
+			Operation.Radius = Request.Radius;
+			Operation.Amount = Request.Amount;
+			Operation.EditTool = Request.EditTool;
+			Operation.TeamId = Request.Context.TeamId;
+			Operation.VoxelWorldName = IsValid(Request.TargetVoxelWorld.Get())
+				? Request.TargetVoxelWorld->GetFName()
+				: NAME_None;
+			MiningGameState->RegisterSnowAdd(Operation);
 		}
 	}
 

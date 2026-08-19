@@ -1,9 +1,9 @@
-#include "DRSnowSurfaceSubsystem.h"
+#include "DRSnowSurfaceEditor.h"
 
-#include "DeepRaiders/Core/Subsystem/DRSnowVolumeSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "DeepRaiders/Voxel/DRDirectionalSurfaceTool.h"
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
-#include "DRVoxelTeamOwnershipSubsystem.h"
 #include "EngineUtils.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelTools/Gen/VoxelSurfaceEditTools.h"
@@ -68,22 +68,15 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 
 
 float ApplyVolumeRemovalFromSurfaceChanges(
-	UWorld* World,
+	FDRSnowVolumeStore* VolumeStore,
 	AVoxelWorld* VoxelWorld,
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const TArray<FModifiedVoxelValue>& ModifiedValues,
 	float MaxRemovedAmount)
 {
-	if (!IsValid(World) ||
+	if (!VolumeStore ||
 		!IsValid(VoxelWorld) ||
 		MaxRemovedAmount <= 0.f)
-	{
-		return 0.f;
-	}
-
-	UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		World->GetSubsystem<UDRSnowVolumeSubsystem>();
-	if (!SnowVolumeSubsystem)
 	{
 		return 0.f;
 	}
@@ -111,8 +104,7 @@ float ApplyVolumeRemovalFromSurfaceChanges(
 			RemainingAmount,
 			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
 
-		const FDRSnowRemoveResult Result =
-			SnowVolumeSubsystem->RemoveSnow(CellRequest);
+		const FDRSnowRemoveResult Result = VolumeStore->RemoveSnow(CellRequest);
 		RemovedAmount += Result.RemovedAmount;
 	}
 
@@ -120,22 +112,15 @@ float ApplyVolumeRemovalFromSurfaceChanges(
 }
 
 float ApplyVolumeAddFromSurfaceChanges(
-	UWorld* World,
+	FDRSnowVolumeStore* VolumeStore,
 	AVoxelWorld* VoxelWorld,
 	const FDRSnowSurfaceAddRequest& Request,
 	const TArray<FModifiedVoxelValue>& ModifiedValues,
 	float MaxAddedAmount)
 {
-	if (!IsValid(World) ||
+	if (!VolumeStore ||
 		!IsValid(VoxelWorld) ||
 		MaxAddedAmount <= 0.f)
-	{
-		return 0.f;
-	}
-
-	UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		World->GetSubsystem<UDRSnowVolumeSubsystem>();
-	if (!SnowVolumeSubsystem)
 	{
 		return 0.f;
 	}
@@ -163,8 +148,7 @@ float ApplyVolumeAddFromSurfaceChanges(
 			RemainingAmount,
 			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
 
-		const FDRSnowAddResult Result =
-			SnowVolumeSubsystem->AddSnow(CellRequest);
+		const FDRSnowAddResult Result = VolumeStore->AddSnow(CellRequest);
 		AddedAmount += Result.AddedAmount;
 	}
 
@@ -173,13 +157,7 @@ float ApplyVolumeAddFromSurfaceChanges(
 
 }
 
-bool UDRSnowSurfaceSubsystem::ShouldCreateSubsystem(UObject* Outer) const
-{
-	const UWorld* World = Cast<UWorld>(Outer);
-	return IsValid(World) && World->IsGameWorld();
-}
-
-float UDRSnowSurfaceSubsystem::AddSnowAtArea(
+float FDRSnowSurfaceEditor::AddSnowAtArea(
 	const FDRSnowSurfaceAddRequest& Request)
 {
 	if (Request.Radius <= 0.f || Request.Amount <= 0.f)
@@ -216,10 +194,9 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
 		if (AddedAmount > 0.f)
 		{
-			if (UDRVoxelTeamOwnershipSubsystem* OwnershipSubsystem =
-				GetWorld()->GetSubsystem<UDRVoxelTeamOwnershipSubsystem>())
+			if (OwnershipStore)
 			{
-				OwnershipSubsystem->RecordAddedVoxels(
+				OwnershipStore->RecordAddedVoxels(
 					VoxelWorld,
 					ModifiedValues,
 					Request.Context.TeamId);
@@ -227,7 +204,7 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 
 			// CustomTool은 surface footprint에서 실제 변경된 voxel만 원본 density로 기록한다.
 			ApplyVolumeAddFromSurfaceChanges(
-				GetWorld(),
+				VolumeStore,
 				VoxelWorld,
 				Request,
 				ModifiedValues,
@@ -374,7 +351,7 @@ float UDRSnowSurfaceSubsystem::AddSnowAtArea(
 	return AddedAmount;
 }
 
-float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request)
+float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request)
 {
 	if (Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
 	{
@@ -410,15 +387,14 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 		const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
 		if (RemovedAmount > 0.f)
 		{
-			if (UDRVoxelTeamOwnershipSubsystem* OwnershipSubsystem =
-				GetWorld()->GetSubsystem<UDRVoxelTeamOwnershipSubsystem>())
+			if (OwnershipStore)
 			{
-				OwnershipSubsystem->RemoveClearedVoxels(VoxelWorld, ModifiedValues);
+				OwnershipStore->RemoveClearedVoxels(VoxelWorld, ModifiedValues);
 			}
 
 			// CustomTool이 직접 비운 voxel만 SnowVolume 감소 대상으로 쓴다.
 			ApplyVolumeRemovalFromSurfaceChanges(
-				GetWorld(),
+				VolumeStore,
 				VoxelWorld,
 				Request,
 				ModifiedValues,
@@ -523,7 +499,7 @@ float UDRSnowSurfaceSubsystem::RemoveSnowAtArea(const FDRSnowSurfaceRemoveReques
 	return RemovedAmount;
 }
 
-bool UDRSnowSurfaceSubsystem::RepaintSnowMaterialsAtArea(
+bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 	const FDRSnowSurfaceRemoveRequest& Request)
 {
 	if (Request.Radius <= 0.f)
@@ -537,16 +513,7 @@ bool UDRSnowSurfaceSubsystem::RepaintSnowMaterialsAtArea(
 		return false;
 	}
 
-	UWorld* World = GetWorld();
-	const UDRSnowVolumeSubsystem* SnowVolumeSubsystem =
-		IsValid(World)
-			? World->GetSubsystem<UDRSnowVolumeSubsystem>()
-			: nullptr;
-	const UDRVoxelTeamOwnershipSubsystem* OwnershipSubsystem =
-		IsValid(World)
-			? World->GetSubsystem<UDRVoxelTeamOwnershipSubsystem>()
-			: nullptr;
-	if (!SnowVolumeSubsystem && !OwnershipSubsystem)
+	if (!VolumeStore || !OwnershipStore)
 	{
 		return false;
 	}
@@ -584,20 +551,19 @@ bool UDRSnowSurfaceSubsystem::RepaintSnowMaterialsAtArea(
 	for (const FVoxelSurfaceEditsVoxel& Voxel : *ProcessedVoxels.Voxels)
 	{
 		int32 DominantTeamId = INDEX_NONE;
-		const bool bFoundOwnership = OwnershipSubsystem &&
-			OwnershipSubsystem->GetNearestTeamAtVoxel(
+		const bool bFoundOwnership = OwnershipStore->GetNearestTeamAtVoxel(
 				VoxelWorld,
 				Voxel.Position,
 				2,
 				DominantTeamId);
 
-		if (!bFoundOwnership && SnowVolumeSubsystem)
+		if (!bFoundOwnership)
 		{
 			const FVector SampleWorldLocation =
 				ProcessedVoxels.Info.bHasSurfacePositions
 					? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
 					: VoxelWorld->LocalToGlobal(Voxel.Position);
-			DominantTeamId = SnowVolumeSubsystem->GetDominantTeamAtLocation(SampleWorldLocation);
+			DominantTeamId = VolumeStore->GetDominantTeamAtLocation(SampleWorldLocation);
 		}
 
 		VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);
@@ -621,20 +587,20 @@ bool UDRSnowSurfaceSubsystem::RepaintSnowMaterialsAtArea(
 	return bPaintedAny;
 }
 
-AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const
+AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const
 {
 	if (IsValid(Request.TargetVoxelWorld.Get()))
 	{
 		return Request.TargetVoxelWorld.Get();
 	}
 
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	UWorld* LocalWorld = this->World;
+	if (!IsValid(LocalWorld))
 	{
 		return nullptr;
 	}
 
-	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	for (TActorIterator<AVoxelWorld> It(LocalWorld); It; ++It)
 	{
 		if (IsValid(*It))
 		{
@@ -645,20 +611,20 @@ AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceAddR
 	return nullptr;
 }
 
-AVoxelWorld* UDRSnowSurfaceSubsystem::ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const
+AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const
 {
 	if (IsValid(Request.TargetVoxelWorld.Get()))
 	{
 		return Request.TargetVoxelWorld.Get();
 	}
 
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	UWorld* LocalWorld = this->World;
+	if (!IsValid(LocalWorld))
 	{
 		return nullptr;
 	}
 
-	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	for (TActorIterator<AVoxelWorld> It(LocalWorld); It; ++It)
 	{
 		if (IsValid(*It))
 		{
