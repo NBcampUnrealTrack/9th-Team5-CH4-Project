@@ -136,6 +136,18 @@ public:
 	}
 
 private:
+	static constexpr int32 SnowVolumeSnapshotVersion = 2;
+	static constexpr int32 OwnershipSnapshotVersion = 1;
+	static float BytesToMB(int64 Bytes);
+	static void SerializeSnowCell(
+		FArchive& Archive,
+		const FIntVector& LocalCell,
+		const FDRSnowVolumeChunk& Chunk,
+		int32 LocalIndex);
+	static bool DeserializeSnowCell(
+		FArchive& Archive,
+		FIntVector& OutLocalCell,
+		FDRSnowVolumeChunk& OutChunk);
 	AVoxelWorld* ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotVoxelSaveSizeReport MeasureVoxelSave(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotSnowVolumeSizeReport MeasureSnowVolume() const;

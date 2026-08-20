@@ -6,9 +6,18 @@
 #include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelWorld.h"
 
-namespace
+UDRDirectionalSurfaceTool::UDRDirectionalSurfaceTool()
 {
-float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
+	ToolName = TEXT("DR Voxel Directional Surface Tool");
+}
+
+void UDRDirectionalSurfaceTool::GetToolConfig(FVoxelToolBaseConfig& OutConfig) const
+{
+	OutConfig.bHasAlignment = true;
+	OutConfig.Alignment = EVoxelToolAlignment::Surface;
+}
+
+float UDRDirectionalSurfaceTool::GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 {
 	float ModifiedValueAmount = 0.f;
 	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
@@ -19,35 +28,22 @@ float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 	return ModifiedValueAmount;
 }
 
-float GetSurfaceToolTargetValue(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, float DistanceDivisor)
+float UDRDirectionalSurfaceTool::GetSurfaceToolTargetValue(
+	const FVoxelSurfaceEditsVoxel& SurfaceVoxel,
+	const float DistanceDivisor)
 {
-	// FVoxelSurfaceEditToolsImpl::EditVoxelValues와 같은 target 값이다.
-	// 차이는 아래 write 단계에서 반대 방향 변화는 버린다는 점이다.
 	return (SurfaceVoxel.Value + SurfaceVoxel.Strength) / DistanceDivisor;
 }
 
-bool IsInsideSweptSurfaceVolume(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, bool bAdd)
+bool UDRDirectionalSurfaceTool::IsInsideSweptSurfaceVolume(
+	const FVoxelSurfaceEditsVoxel& SurfaceVoxel,
+	const bool bAdd)
 {
 	const float OldDistance = SurfaceVoxel.Value;
 	const float TargetDistance = SurfaceVoxel.Value + SurfaceVoxel.Strength;
-
-	// FindSurfaceVoxelsFromDistanceField의 Value는 현재 표면에서의 signed distance다.
-	// SurfaceTool이 만들려던 이동 중 0면을 가로지르는 구간만 이번 stamp 부피로 취급한다.
 	return bAdd
 		? OldDistance > 0.f && TargetDistance <= 0.f
 		: OldDistance <= 0.f && TargetDistance > 0.f;
-}
-}
-
-UDRDirectionalSurfaceTool::UDRDirectionalSurfaceTool()
-{
-	ToolName = TEXT("DR Voxel Directional Surface Tool");
-}
-
-void UDRDirectionalSurfaceTool::GetToolConfig(FVoxelToolBaseConfig& OutConfig) const
-{
-	OutConfig.bHasAlignment = true;
-	OutConfig.Alignment = EVoxelToolAlignment::Surface;
 }
 
 FVoxelIntBoxWithValidity UDRDirectionalSurfaceTool::DoEdit()

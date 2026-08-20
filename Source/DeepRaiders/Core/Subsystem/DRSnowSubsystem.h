@@ -30,10 +30,8 @@ public:
 	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
 	bool RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 
-	// ControlZone과 디버그 UI가 원본 snow density를 읽는 조회 API다.
-	bool GetSnowCellAtLocation(FVector WorldLocation, FDRSnowCell& OutCell, int32& OutTeamIdA, int32& OutTeamIdB) const;
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
-	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds, int32 TeamIdA = INDEX_NONE, int32 TeamIdB = INDEX_NONE) const;
+	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
 
 	// 중도 난입 checkpoint 생성/전송에 사용하는 snapshot API다.
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(AVoxelWorld* TargetVoxelWorld = nullptr, bool bLogResult = true);

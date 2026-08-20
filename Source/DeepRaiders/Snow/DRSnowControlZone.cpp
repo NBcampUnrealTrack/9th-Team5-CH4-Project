@@ -5,7 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
-#include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
 #include "VoxelData/VoxelDataIncludes.h"
@@ -16,112 +15,110 @@
 #include "VoxelValue.h"
 #include "VoxelWorld.h"
 
-namespace
+#pragma region Debug
+
+int32 ADRSnowControlZone::GetDominantMaterialIndex(
+	const FVoxelMaterial& Material,
+	const EVoxelMaterialConfig MaterialConfig)
 {
-	int32 GetDominantMaterialIndex(
-		const FVoxelMaterial& Material,
-		EVoxelMaterialConfig MaterialConfig)
+	if (MaterialConfig == EVoxelMaterialConfig::SingleIndex)
 	{
-		if (MaterialConfig == EVoxelMaterialConfig::SingleIndex)
-		{
-			return Material.GetSingleIndex();
+		return Material.GetSingleIndex();
 		}
 
-		if (MaterialConfig == EVoxelMaterialConfig::MultiIndex)
+	if (MaterialConfig == EVoxelMaterialConfig::MultiIndex)
+	{
+		const float Blend0 = Material.GetMultiIndex_Blend0_AsFloat();
+		const float Blend1 = Material.GetMultiIndex_Blend1_AsFloat();
+		const float Blend2 = Material.GetMultiIndex_Blend2_AsFloat();
+		const TVoxelStaticArray<float, 4> Strengths =
+			FVoxelUtilities::XWayBlend_AlphasToStrengths_Static<4>({ Blend0, Blend1, Blend2 });
+
+		int32 BestChannel = 0;
+		float BestStrength = Strengths[0];
+		// MultiIndex는 가장 강한 blend channel의 material index를 팀 색으로 해석한다.
+		for (int32 Channel = 1; Channel < 4; ++Channel)
 		{
-			const float Blend0 = Material.GetMultiIndex_Blend0_AsFloat();
-			const float Blend1 = Material.GetMultiIndex_Blend1_AsFloat();
-			const float Blend2 = Material.GetMultiIndex_Blend2_AsFloat();
-			const TVoxelStaticArray<float, 4> Strengths =
-				FVoxelUtilities::XWayBlend_AlphasToStrengths_Static<4>(
-					{ Blend0, Blend1, Blend2 });
-
-			int32 BestChannel = 0;
-			float BestStrength = Strengths[0];
-			for (int32 Channel = 1; Channel < 4; ++Channel)
+			if (Strengths[Channel] > BestStrength)
 			{
-				if (Strengths[Channel] > BestStrength)
-				{
-					BestChannel = Channel;
-					BestStrength = Strengths[Channel];
-				}
-			}
-
-			switch (BestChannel)
-			{
-			case 0:
-				return Material.GetMultiIndex_Index0();
-			case 1:
-				return Material.GetMultiIndex_Index1();
-			case 2:
-				return Material.GetMultiIndex_Index2();
-			case 3:
-				return Material.GetMultiIndex_Index3();
-			default:
-				return 0;
+				BestChannel = Channel;
+				BestStrength = Strengths[Channel];
 			}
 		}
 
-		return INDEX_NONE;
-	}
-
-	int32 MaterialIndexToTeamId(int32 MaterialIndex)
-	{
-		return MaterialIndex <= 0
-			? INDEX_NONE
-			: MaterialIndex - 1;
-	}
-
-	void ExpandVoxelBoundsForWorldPoint(
-		const AVoxelWorld* VoxelWorld,
-		const FVector& WorldPoint,
-		FIntVector& InOutMin,
-		FIntVector& InOutMax)
-	{
-		const FIntVector VoxelPoint =
-			VoxelWorld->GlobalToLocal(
-				WorldPoint,
-				EVoxelWorldCoordinatesRounding::RoundDown);
-		InOutMin.X = FMath::Min(InOutMin.X, VoxelPoint.X);
-		InOutMin.Y = FMath::Min(InOutMin.Y, VoxelPoint.Y);
-		InOutMin.Z = FMath::Min(InOutMin.Z, VoxelPoint.Z);
-		InOutMax.X = FMath::Max(InOutMax.X, VoxelPoint.X + 1);
-		InOutMax.Y = FMath::Max(InOutMax.Y, VoxelPoint.Y + 1);
-		InOutMax.Z = FMath::Max(InOutMax.Z, VoxelPoint.Z + 1);
-	}
-
-	FVoxelIntBox MakeVoxelBoundsFromWorldBounds(
-		const AVoxelWorld* VoxelWorld,
-		const FBox& WorldBounds)
-	{
-		if (!IsValid(VoxelWorld) || !WorldBounds.IsValid)
+		switch (BestChannel)
 		{
-			return FVoxelIntBox();
+		case 0:
+			return Material.GetMultiIndex_Index0();
+		case 1:
+			return Material.GetMultiIndex_Index1();
+		case 2:
+			return Material.GetMultiIndex_Index2();
+		case 3:
+			return Material.GetMultiIndex_Index3();
+		default:
+			return 0;
 		}
-
-		FIntVector Min(MAX_int32);
-		FIntVector Max(MIN_int32);
-		for (int32 X = 0; X < 2; ++X)
-		{
-			for (int32 Y = 0; Y < 2; ++Y)
-			{
-				for (int32 Z = 0; Z < 2; ++Z)
-				{
-					ExpandVoxelBoundsForWorldPoint(
-						VoxelWorld,
-						FVector(
-							X == 0 ? WorldBounds.Min.X : WorldBounds.Max.X,
-							Y == 0 ? WorldBounds.Min.Y : WorldBounds.Max.Y,
-							Z == 0 ? WorldBounds.Min.Z : WorldBounds.Max.Z),
-						Min,
-						Max);
-				}
-			}
-		}
-
-		return FVoxelIntBox(Min, Max);
 	}
+
+	return INDEX_NONE;
 }
+
+int32 ADRSnowControlZone::MaterialIndexToTeamId(const int32 MaterialIndex)
+{
+	return MaterialIndex <= 0 ? INDEX_NONE : MaterialIndex - 1;
+}
+
+void ADRSnowControlZone::ExpandVoxelBoundsForWorldPoint(
+	const AVoxelWorld* VoxelWorld,
+	const FVector& WorldPoint,
+	FIntVector& InOutMin,
+	FIntVector& InOutMax)
+{
+	const FIntVector VoxelPoint =
+		VoxelWorld->GlobalToLocal(WorldPoint, EVoxelWorldCoordinatesRounding::RoundDown);
+	InOutMin.X = FMath::Min(InOutMin.X, VoxelPoint.X);
+	InOutMin.Y = FMath::Min(InOutMin.Y, VoxelPoint.Y);
+	InOutMin.Z = FMath::Min(InOutMin.Z, VoxelPoint.Z);
+	InOutMax.X = FMath::Max(InOutMax.X, VoxelPoint.X + 1);
+	InOutMax.Y = FMath::Max(InOutMax.Y, VoxelPoint.Y + 1);
+	InOutMax.Z = FMath::Max(InOutMax.Z, VoxelPoint.Z + 1);
+}
+
+FVoxelIntBox ADRSnowControlZone::MakeVoxelBoundsFromWorldBounds(
+	const AVoxelWorld* VoxelWorld,
+	const FBox& WorldBounds)
+{
+	if (!IsValid(VoxelWorld) || !WorldBounds.IsValid)
+	{
+		return FVoxelIntBox();
+	}
+
+	FIntVector Min(MAX_int32);
+	FIntVector Max(MIN_int32);
+	// 회전된 BoxComponent도 정확히 포함하도록 월드 bounds의 8개 꼭짓점을 voxel 좌표로 변환한다.
+	for (int32 X = 0; X < 2; ++X)
+	{
+		for (int32 Y = 0; Y < 2; ++Y)
+		{
+			for (int32 Z = 0; Z < 2; ++Z)
+			{
+				ExpandVoxelBoundsForWorldPoint(
+					VoxelWorld,
+					FVector(
+						X == 0 ? WorldBounds.Min.X : WorldBounds.Max.X,
+						Y == 0 ? WorldBounds.Min.Y : WorldBounds.Max.Y,
+						Z == 0 ? WorldBounds.Min.Z : WorldBounds.Max.Z),
+					Min,
+					Max);
+			}
+		}
+	}
+
+	return FVoxelIntBox(Min, Max);
+}
+
+#pragma endregion
 
 ADRSnowControlZone::ADRSnowControlZone()
 {
@@ -140,7 +137,42 @@ ADRSnowControlZone::ADRSnowControlZone()
 void ADRSnowControlZone::BeginPlay()
 {
 	Super::BeginPlay();
+	InitializeDebug();
+}
 
+void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	DeinitializeDebug();
+	Super::EndPlay(EndPlayReason);
+}
+FBox ADRSnowControlZone::GetZoneWorldBounds() const
+{
+	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
+}
+
+FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
+{
+	FDRSnowControlRatio EmptyRatio;
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return EmptyRatio;
+	}
+
+	const UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (!IsValid(SnowSubsystem))
+	{
+		return EmptyRatio;
+	}
+
+	return SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
+}
+
+#pragma region Debug
+
+void ADRSnowControlZone::InitializeDebug()
+{
 	if (bCreateDebugWidget && DebugWidgetClass)
 	{
 		APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
@@ -167,48 +199,20 @@ void ADRSnowControlZone::BeginPlay()
 	}
 }
 
-void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void ADRSnowControlZone::DeinitializeDebug()
 {
 	GetWorldTimerManager().ClearTimer(DebugUpdateTimerHandle);
-
 	if (IsValid(DebugWidget))
 	{
 		DebugWidget->RemoveFromParent();
-		DebugWidget = nullptr;
-		DebugTextBlock = nullptr;
 	}
-
-	Super::EndPlay(EndPlayReason);
-}
-FBox ADRSnowControlZone::GetZoneWorldBounds() const
-{
-	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
-}
-
-FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
-{
-	FDRSnowControlRatio EmptyRatio;
-
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
-	{
-		return EmptyRatio;
-	}
-
-	const UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
-	if (!IsValid(SnowSubsystem))
-	{
-		return EmptyRatio;
-	}
-
-	return SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds(), TeamIdA, TeamIdB);
+	DebugWidget = nullptr;
+	DebugTextBlock = nullptr;
 }
 
 FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 {
 	FDRSnowVoxelMaterialScanResult Result;
-	Result.TeamIdA = TeamIdA;
-	Result.TeamIdB = TeamIdB;
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
 	if (!IsValid(VoxelWorld) ||
@@ -223,9 +227,6 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 	{
 		return Result;
 	}
-
-	const int32 TeamMaterialIndexA = TeamIdA == INDEX_NONE ? INDEX_NONE : FMath::Max(0, TeamIdA) + 1;
-	const int32 TeamMaterialIndexB = TeamIdB == INDEX_NONE ? INDEX_NONE : FMath::Max(0, TeamIdB) + 1;
 
 	FVoxelData& Data = VoxelWorld->GetData();
 	{
@@ -274,42 +275,18 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 					}
 
 					++Result.MaterialVoxelCount;
-					if (TeamMaterialIndexA != INDEX_NONE &&
-						MaterialIndex == TeamMaterialIndexA)
+					const int32 TeamId = MaterialIndexToTeamId(MaterialIndex);
+					FDRSnowVoxelMaterialTeamCount* Team = Result.Teams.FindByPredicate(
+						[TeamId](const FDRSnowVoxelMaterialTeamCount& Entry)
+						{
+							return Entry.TeamId == TeamId;
+						});
+					if (!Team)
 					{
-						++Result.CountA;
+						Team = &Result.Teams.AddDefaulted_GetRef();
+						Team->TeamId = TeamId;
 					}
-					else if (TeamMaterialIndexB != INDEX_NONE &&
-						MaterialIndex == TeamMaterialIndexB)
-					{
-						++Result.CountB;
-					}
-					else
-					{
-						const int32 TeamId = MaterialIndexToTeamId(MaterialIndex);
-						if (Result.TeamIdA == INDEX_NONE)
-						{
-							Result.TeamIdA = TeamId;
-							++Result.CountA;
-						}
-						else if (Result.TeamIdA == TeamId)
-						{
-							++Result.CountA;
-						}
-						else if (Result.TeamIdB == INDEX_NONE)
-						{
-							Result.TeamIdB = TeamId;
-							++Result.CountB;
-						}
-						else if (Result.TeamIdB == TeamId)
-						{
-							++Result.CountB;
-						}
-						else
-						{
-							++Result.UnknownCount;
-						}
-					}
+					++Team->VoxelCount;
 				}
 
 				if (Result.bTruncated)
@@ -325,11 +302,12 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 		}
 	}
 
-	const int32 KnownTeamCount = Result.CountA + Result.CountB;
-	if (KnownTeamCount > 0)
+	if (Result.MaterialVoxelCount > 0)
 	{
-		Result.RatioA = static_cast<float>(Result.CountA) / static_cast<float>(KnownTeamCount);
-		Result.RatioB = static_cast<float>(Result.CountB) / static_cast<float>(KnownTeamCount);
+		for (FDRSnowVoxelMaterialTeamCount& Team : Result.Teams)
+		{
+			Team.Ratio = static_cast<float>(Team.VoxelCount) / static_cast<float>(Result.MaterialVoxelCount);
+		}
 	}
 
 	if (Result.FilledVoxelCount > 0)
@@ -343,17 +321,21 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 FString ADRSnowControlZone::BuildSnowCountDebugText() const
 {
 	const FDRSnowVoxelMaterialScanResult MaterialScan = ScanVoxelMaterials();
+	FString TeamText;
+	for (const FDRSnowVoxelMaterialTeamCount& Team : MaterialScan.Teams)
+	{
+		TeamText += FString::Printf(TEXT("Team %d: %d (%.1f%%)\n"), Team.TeamId, Team.VoxelCount, Team.Ratio * 100.f);
+	}
 	return FString::Printf(
 		TEXT("[Snow Zone Debug]%s\n\n")
 		TEXT("Voxel Material Scan\n")
-		TEXT("A: %d  B: %d  Neutral: %d  Unknown: %d\n")
+		TEXT("%sNeutral: %d  Unknown: %d\n")
 		TEXT("Filled Voxels: %d\n")
 		TEXT("Material Voxels: %d\n")
 		TEXT("Coverage: %.1f%%\n")
 		TEXT("Scanned: %d\n\n"),
 		MaterialScan.bTruncated ? TEXT(" [Truncated]") : TEXT(""),
-		MaterialScan.CountA,
-		MaterialScan.CountB,
+		*TeamText,
 		MaterialScan.NeutralCount,
 		MaterialScan.UnknownCount,
 		MaterialScan.FilledVoxelCount,
@@ -419,3 +401,5 @@ void ADRSnowControlZone::UpdateDebugWidget()
 
 	DebugTextBlock->SetText(FText::FromString(BuildSnowCountDebugText()));
 }
+
+#pragma endregion

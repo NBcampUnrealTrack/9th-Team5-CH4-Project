@@ -8,24 +8,25 @@ struct DEEPRAIDERS_API FDRSnowCell
 {
 	GENERATED_BODY()
 
-	// 팀이 지정되지 않은 기본/중립 눈 밀도다.
-	// 기본 지형에 박혀 있는 눈이나 월드가 먼저 가진 눈처럼 특정 팀 소유가 아닌 양을 보관한다.
+	// 특정 팀 소유가 아닌 기본 지형 눈 밀도다. 팀별 양은 Chunk의 palette 저장소가 관리한다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	float NeutralAmount = 0.f;
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
-	float AmountA = 0.f;
+};
 
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
-	float AmountB = 0.f;
-	float GetTotalAmount() const;
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSnowTeamAmount
+{
+	GENERATED_BODY()
 
-	// 외부 TeamId를 이 cell 내부 슬롯(Neutral/A/B)에 맞춰 조회한다.
-	// INDEX_NONE은 중립 눈을 의미한다.
-	float GetAmountForTeam(int32 TeamId, int32 TeamIdA, int32 TeamIdB) const;
+	// Control query가 팀별로 반환하는 누적량이다. Ratio의 분모에는 NeutralAmount도 포함된다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Team")
+	int32 TeamId = INDEX_NONE;
 
-	// 이 cell에서 가장 많은 양을 가진 팀을 반환한다.
-	// 중립이 가장 많거나 아무 양도 없으면 INDEX_NONE을 돌려준다.
-	int32 GetDominantTeamId(int32 TeamIdA, int32 TeamIdB) const;
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Team")
+	float Amount = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Team")
+	float Ratio = 0.f;
 };
 
 USTRUCT(BlueprintType)
@@ -33,7 +34,6 @@ struct DEEPRAIDERS_API FDRSnowVolumeChunk
 {
 	GENERATED_BODY()
 
-	// 전체 snow grid 기준 cell origin이다. 월드 좌표가 아니라 cell 좌표다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	FIntVector Origin = FIntVector::ZeroValue;
 
@@ -43,23 +43,27 @@ struct DEEPRAIDERS_API FDRSnowVolumeChunk
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	float CellSize = 20.f;
 
-	// 첫 번째로 기록된 팀을 A, 두 번째 팀을 B로 매핑한다.
-	// 실제 팀 식별자는 PlayerState의 int32 TeamId를 그대로 보관한다.
+	// Chunk에 눈을 남긴 팀의 palette다. TeamAmounts는 [TeamSlot * CellCount + LocalCellIndex] 형식이다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
-	int32 TeamIdA = INDEX_NONE;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
-	int32 TeamIdB = INDEX_NONE;
+	TArray<int32> TeamIds;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	TArray<FDRSnowCell> Cells;
 
-	// Cells는 snapshot/직렬화를 위해 밀집 배열로 유지하고, 조회용으로 실제 눈이 있는 cell만 별도 추적한다.
+	// TeamIds palette의 각 팀이 모든 dense cell에 가진 양이다. 새 팀이 추가될 때만 한 구간이 확장된다.
+	TArray<float> TeamAmounts;
+
+	// 값이 있는 cell만 따로 추적해 Control query와 snapshot 순회 비용을 줄인다.
 	TSet<int32> ActiveCellIndices;
 
 	void Initialize(const FIntVector& InOrigin, int32 InSize, float InCellSize);
 	bool GetLocalIndex(const FIntVector& LocalCell, int32& OutIndex) const;
-	bool ResolveTeamSlot(int32 TeamId, bool& bOutTeamA);
+	int32 FindOrAddTeamSlot(int32 TeamId);
+	float GetTeamAmount(int32 LocalIndex, int32 TeamSlot) const;
+	void SetTeamAmount(int32 LocalIndex, int32 TeamSlot, float Amount);
+	void AddTeamAmount(int32 LocalIndex, int32 TeamSlot, float Amount);
+	float GetCellTotalAmount(int32 LocalIndex) const;
+	int32 GetDominantTeamId(int32 LocalIndex) const;
 };
 
 USTRUCT(BlueprintType)
@@ -85,7 +89,6 @@ struct DEEPRAIDERS_API FDRSnowRemoveResult
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	float RemovedAmount = 0.f;
 
-	// 흡수를 시도한 팀이다. 실제 감소 대상은 중립/A/B 전체에서 비율로 빠진다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	int32 TeamId = INDEX_NONE;
 
@@ -98,30 +101,15 @@ struct DEEPRAIDERS_API FDRSnowControlRatio
 {
 	GENERATED_BODY()
 
+	// Bounds 안에서 발견한 모든 팀을 반환한다. 팀 수를 호출자가 미리 지정하지 않는다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	int32 TeamIdA = INDEX_NONE;
+	TArray<FDRSnowTeamAmount> Teams;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	int32 TeamIdB = INDEX_NONE;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	float AmountA = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	float AmountB = 0.f;
-
-	// 점령률 분모에는 포함하지만, 어느 팀의 점령량으로도 더하지 않는 중립 눈 양이다.
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
 	float NeutralAmount = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
 	float TotalAmount = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	float RatioA = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
-	float RatioB = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Control")
 	int32 SampledCellCount = 0;

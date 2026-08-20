@@ -68,4 +68,9 @@ public:
 		const FVoxelIntBox& Bounds,
 		const TArray<FModifiedVoxelValue>& ModifiedValues,
 		bool bAdd);
+
+private:
+	static float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues);
+	static float GetSurfaceToolTargetValue(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, float DistanceDivisor);
+	static bool IsInsideSweptSurfaceVolume(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, bool bAdd);
 };

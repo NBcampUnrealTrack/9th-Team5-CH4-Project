@@ -93,19 +93,14 @@ bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequ
 		VolumeStore);
 }
 
-bool UDRSnowSubsystem::GetSnowCellAtLocation(FVector Location, FDRSnowCell& Cell, int32& A, int32& B) const
-{
-	return VolumeStore.GetSnowCellAtLocation(Location, Cell, A, B);
-}
-
 int32 UDRSnowSubsystem::GetDominantTeamAtLocation(FVector Location) const
 {
 	return VolumeStore.GetDominantTeamAtLocation(Location);
 }
 
-FDRSnowControlRatio UDRSnowSubsystem::QuerySnowInBounds(const FBox& Bounds, int32 A, int32 B) const
+FDRSnowControlRatio UDRSnowSubsystem::QuerySnowInBounds(const FBox& Bounds) const
 {
-	return VolumeStore.QuerySnowInBounds(Bounds, A, B);
+	return VolumeStore.QuerySnowInBounds(Bounds);
 }
 
 FDRJoinSnapshotSizeReport UDRSnowSubsystem::MeasureCompressedSnapshotSize(AVoxelWorld* Target, bool bLog)

@@ -9,44 +9,51 @@
 #include "VoxelUtilities/VoxelSerializationUtilities.h"
 #include "VoxelWorld.h"
 
-namespace
+float FDRSnowSnapshotSerializer::BytesToMB(const int64 Bytes)
 {
-	constexpr int32 SnowVolumeSnapshotVersion = 1;
-	constexpr int32 OwnershipSnapshotVersion = 1;
+	return static_cast<float>(static_cast<double>(Bytes) / static_cast<double>(1 << 20));
+}
 
-	float BytesToMB(int64 Bytes)
+void FDRSnowSnapshotSerializer::SerializeSnowCell(
+	FArchive& Archive,
+	const FIntVector& LocalCell,
+	const FDRSnowVolumeChunk& Chunk,
+	const int32 LocalIndex)
+{
+	// Chunk palette를 먼저 저장한 뒤, 그 순서대로 cell의 team amount를 기록한다.
+	FIntVector MutableLocalCell = LocalCell;
+	float NeutralAmount = Chunk.Cells[LocalIndex].NeutralAmount;
+	Archive << MutableLocalCell;
+	Archive << NeutralAmount;
+	for (int32 TeamSlot = 0; TeamSlot < Chunk.TeamIds.Num(); ++TeamSlot)
 	{
-		return static_cast<float>(
-			static_cast<double>(Bytes) / static_cast<double>(1 << 20));
+		float TeamAmount = Chunk.GetTeamAmount(LocalIndex, TeamSlot);
+		Archive << TeamAmount;
+	}
+}
+
+bool FDRSnowSnapshotSerializer::DeserializeSnowCell(
+	FArchive& Archive,
+	FIntVector& OutLocalCell,
+	FDRSnowVolumeChunk& OutChunk)
+{
+	// 읽는 쪽도 Chunk.TeamIds 순서를 그대로 사용해야 team amount가 올바른 팀에 복원된다.
+	Archive << OutLocalCell;
+	int32 LocalIndex = INDEX_NONE;
+	if (!OutChunk.GetLocalIndex(OutLocalCell, LocalIndex))
+	{
+		return false;
 	}
 
-	void SerializeSnowCell(
-		FArchive& Archive,
-		const FIntVector& LocalCell,
-		const FDRSnowCell& Cell)
+	Archive << OutChunk.Cells[LocalIndex].NeutralAmount;
+	for (int32 TeamSlot = 0; TeamSlot < OutChunk.TeamIds.Num(); ++TeamSlot)
 	{
-		FIntVector MutableLocalCell = LocalCell;
-		float NeutralAmount = Cell.NeutralAmount;
-		float AmountA = Cell.AmountA;
-		float AmountB = Cell.AmountB;
-
-		Archive << MutableLocalCell;
-		Archive << NeutralAmount;
-		Archive << AmountA;
-		Archive << AmountB;
+		float TeamAmount = 0.f;
+		Archive << TeamAmount;
+		OutChunk.SetTeamAmount(LocalIndex, TeamSlot, TeamAmount);
 	}
 
-	bool DeserializeSnowCell(
-		FArchive& Archive,
-		FIntVector& OutLocalCell,
-		FDRSnowCell& OutCell)
-	{
-		Archive << OutLocalCell;
-		Archive << OutCell.NeutralAmount;
-		Archive << OutCell.AmountA;
-		Archive << OutCell.AmountB;
-		return !Archive.IsError();
-	}
+	return !Archive.IsError();
 }
 
 FDRJoinSnapshotSizeReport FDRSnowSnapshotSerializer::MeasureCompressedSnapshotSize(
@@ -328,6 +335,7 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 	float CellSize = VolumeSnapshot.CellSize;
 	int32 ChunkSize = VolumeSnapshot.ChunkSize;
 	int32 ChunkCount = VolumeSnapshot.Chunks.Num();
+	// v2부터 청크별 TeamIds palette를 포함한다. 이전 v1 Snapshot은 호환하지 않는다.
 	Archive << Version;
 	Archive << CellSize;
 	Archive << ChunkSize;
@@ -342,23 +350,20 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 	{
 		const FDRSnowVolumeChunk& Chunk = Pair.Value;
 		int32 NonEmptyCellCount = 0;
-		for (const FDRSnowCell& Cell : Chunk.Cells)
+		for (int32 LocalIndex = 0; LocalIndex < Chunk.Cells.Num(); ++LocalIndex)
 		{
-			NonEmptyCellCount += Cell.GetTotalAmount() > 0.f ? 1 : 0;
+			NonEmptyCellCount += Chunk.GetCellTotalAmount(LocalIndex) > 0.f ? 1 : 0;
 		}
 
 		FIntVector Origin = Chunk.Origin;
-		int32 TeamIdA = Chunk.TeamIdA;
-		int32 TeamIdB = Chunk.TeamIdB;
+		TArray<int32> TeamIds = Chunk.TeamIds;
 		Archive << Origin;
-		Archive << TeamIdA;
-		Archive << TeamIdB;
+		Archive << TeamIds;
 		Archive << NonEmptyCellCount;
 
 		for (int32 LocalIndex = 0; LocalIndex < Chunk.Cells.Num(); ++LocalIndex)
 		{
-			const FDRSnowCell& Cell = Chunk.Cells[LocalIndex];
-			if (Cell.GetTotalAmount() <= 0.f)
+			if (Chunk.GetCellTotalAmount(LocalIndex) <= 0.f)
 			{
 				continue;
 			}
@@ -366,7 +371,7 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 			SerializeSnowCell(Archive, FIntVector(
 				LocalIndex % Chunk.Size,
 				(LocalIndex / Chunk.Size) % Chunk.Size,
-				LocalIndex / (Chunk.Size * Chunk.Size)), Cell);
+				LocalIndex / (Chunk.Size * Chunk.Size)), Chunk, LocalIndex);
 
 			if (OutSizeReport)
 			{
@@ -424,37 +429,27 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& Compr
 	for (int32 ChunkIndex = 0; ChunkIndex < ChunkCount; ++ChunkIndex)
 	{
 		FIntVector Origin;
-		int32 TeamIdA = INDEX_NONE;
-		int32 TeamIdB = INDEX_NONE;
+		TArray<int32> TeamIds;
 		int32 NonEmptyCellCount = 0;
 		Reader << Origin;
-		Reader << TeamIdA;
-		Reader << TeamIdB;
+		Reader << TeamIds;
 		Reader << NonEmptyCellCount;
-		if (Reader.IsError() || NonEmptyCellCount < 0 || NonEmptyCellCount > ChunkSize * ChunkSize * ChunkSize)
+		if (Reader.IsError() || TeamIds.Contains(INDEX_NONE) || NonEmptyCellCount < 0 || NonEmptyCellCount > ChunkSize * ChunkSize * ChunkSize)
 		{
 			return false;
 		}
 
 		FDRSnowVolumeChunk Chunk;
 		Chunk.Initialize(Origin, ChunkSize, CellSize);
-		Chunk.TeamIdA = TeamIdA;
-		Chunk.TeamIdB = TeamIdB;
+		Chunk.TeamIds = MoveTemp(TeamIds);
+		Chunk.TeamAmounts.SetNumZeroed(Chunk.TeamIds.Num() * Chunk.Cells.Num());
 		for (int32 CellIndex = 0; CellIndex < NonEmptyCellCount; ++CellIndex)
 		{
 			FIntVector LocalCell;
-			FDRSnowCell Cell;
-			if (!DeserializeSnowCell(Reader, LocalCell, Cell))
+			if (!DeserializeSnowCell(Reader, LocalCell, Chunk))
 			{
 				return false;
 			}
-
-			int32 LocalIndex = INDEX_NONE;
-			if (!Chunk.GetLocalIndex(LocalCell, LocalIndex))
-			{
-				return false;
-			}
-			Chunk.Cells[LocalIndex] = Cell;
 		}
 
 		RestoredChunks.Add(Origin, MoveTemp(Chunk));

@@ -1,66 +1,16 @@
 #include "DRSnowVolumeTypes.h"
 
-float FDRSnowCell::GetTotalAmount() const
-{
-	return NeutralAmount + AmountA + AmountB;
-}
-
-float FDRSnowCell::GetAmountForTeam(
-	int32 TeamId,
-	int32 TeamIdA,
-	int32 TeamIdB) const
-{
-	// INDEX_NONE은 "팀 없음"이 아니라 중립 눈 슬롯을 조회하겠다는 의미로 사용한다.
-	if (TeamId == INDEX_NONE)
-	{
-		return NeutralAmount;
-	}
-
-	if (TeamId == TeamIdA)
-	{
-		return AmountA;
-	}
-
-	if (TeamId == TeamIdB)
-	{
-		return AmountB;
-	}
-
-	return 0.f;
-}
-
-int32 FDRSnowCell::GetDominantTeamId(
-	int32 TeamIdA,
-	int32 TeamIdB) const
-{
-	// 중립이 가장 많으면 팀 소유 표면으로 칠하지 않는다.
-	float BestAmount = NeutralAmount;
-	int32 BestTeamId = INDEX_NONE;
-
-	if (AmountA > BestAmount)
-	{
-		BestAmount = AmountA;
-		BestTeamId = TeamIdA;
-	}
-
-	if (AmountB > BestAmount)
-	{
-		BestAmount = AmountB;
-		BestTeamId = TeamIdB;
-	}
-
-	return BestAmount > 0.f ? BestTeamId : INDEX_NONE;
-}
-
 void FDRSnowVolumeChunk::Initialize(
 	const FIntVector& InOrigin,
-	int32 InSize,
-	float InCellSize)
+	const int32 InSize,
+	const float InCellSize)
 {
 	Origin = InOrigin;
 	Size = FMath::Max(1, InSize);
 	CellSize = FMath::Max(1.f, InCellSize);
+	TeamIds.Reset();
 	Cells.SetNum(Size * Size * Size);
+	TeamAmounts.Reset();
 	ActiveCellIndices.Reset();
 }
 
@@ -74,46 +24,97 @@ bool FDRSnowVolumeChunk::GetLocalIndex(
 		return false;
 	}
 
-	OutIndex = LocalCell.X +
-		LocalCell.Y * Size +
-		LocalCell.Z * Size * Size;
+	OutIndex = LocalCell.X + LocalCell.Y * Size + LocalCell.Z * Size * Size;
 	return Cells.IsValidIndex(OutIndex);
 }
 
-bool FDRSnowVolumeChunk::ResolveTeamSlot(int32 TeamId, bool& bOutTeamA)
+int32 FDRSnowVolumeChunk::FindOrAddTeamSlot(const int32 TeamId)
 {
 	if (TeamId == INDEX_NONE)
 	{
-		return false;
+		return INDEX_NONE;
 	}
 
-	// Chunk 안의 cell은 TeamId를 직접 저장하지 않고 A/B 슬롯만 저장한다.
-	// 그래서 chunk 단위로 실제 TeamId <-> 슬롯 매핑을 관리한다.
-	if (TeamIdA == TeamId)
+	const int32 ExistingSlot = TeamIds.IndexOfByKey(TeamId);
+	if (ExistingSlot != INDEX_NONE)
 	{
-		bOutTeamA = true;
-		return true;
+		return ExistingSlot;
 	}
 
-	if (TeamIdB == TeamId)
+	TeamIds.Add(TeamId);
+	TeamAmounts.SetNumZeroed(TeamIds.Num() * Cells.Num());
+	return TeamIds.Num() - 1;
+}
+
+float FDRSnowVolumeChunk::GetTeamAmount(
+	const int32 LocalIndex,
+	const int32 TeamSlot) const
+{
+	const int32 AmountIndex = TeamSlot * Cells.Num() + LocalIndex;
+	if (!Cells.IsValidIndex(LocalIndex) || !TeamIds.IsValidIndex(TeamSlot) || !TeamAmounts.IsValidIndex(AmountIndex))
 	{
-		bOutTeamA = false;
-		return true;
+		return 0.f;
 	}
 
-	if (TeamIdA == INDEX_NONE)
+	return TeamAmounts[AmountIndex];
+}
+
+void FDRSnowVolumeChunk::SetTeamAmount(
+	const int32 LocalIndex,
+	const int32 TeamSlot,
+	const float Amount)
+{
+	const int32 AmountIndex = TeamSlot * Cells.Num() + LocalIndex;
+	if (!Cells.IsValidIndex(LocalIndex) || !TeamIds.IsValidIndex(TeamSlot) || !TeamAmounts.IsValidIndex(AmountIndex))
 	{
-		TeamIdA = TeamId;
-		bOutTeamA = true;
-		return true;
+		return;
 	}
 
-	if (TeamIdB == INDEX_NONE)
+	TeamAmounts[AmountIndex] = FMath::Max(0.f, Amount);
+}
+
+void FDRSnowVolumeChunk::AddTeamAmount(
+	const int32 LocalIndex,
+	const int32 TeamSlot,
+	const float Amount)
+{
+	SetTeamAmount(LocalIndex, TeamSlot, GetTeamAmount(LocalIndex, TeamSlot) + Amount);
+}
+
+float FDRSnowVolumeChunk::GetCellTotalAmount(const int32 LocalIndex) const
+{
+	if (!Cells.IsValidIndex(LocalIndex))
 	{
-		TeamIdB = TeamId;
-		bOutTeamA = false;
-		return true;
+		return 0.f;
 	}
 
-	return false;
+	float TotalAmount = Cells[LocalIndex].NeutralAmount;
+	for (int32 TeamSlot = 0; TeamSlot < TeamIds.Num(); ++TeamSlot)
+	{
+		TotalAmount += GetTeamAmount(LocalIndex, TeamSlot);
+	}
+
+	return TotalAmount;
+}
+
+int32 FDRSnowVolumeChunk::GetDominantTeamId(const int32 LocalIndex) const
+{
+	if (!Cells.IsValidIndex(LocalIndex))
+	{
+		return INDEX_NONE;
+	}
+
+	float BestAmount = Cells[LocalIndex].NeutralAmount;
+	int32 BestTeamId = INDEX_NONE;
+	for (int32 TeamSlot = 0; TeamSlot < TeamIds.Num(); ++TeamSlot)
+	{
+		const float Amount = GetTeamAmount(LocalIndex, TeamSlot);
+		if (Amount > BestAmount)
+		{
+			BestAmount = Amount;
+			BestTeamId = TeamIds[TeamSlot];
+		}
+	}
+
+	return BestAmount > 0.f ? BestTeamId : INDEX_NONE;
 }

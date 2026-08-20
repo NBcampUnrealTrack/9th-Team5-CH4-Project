@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
+#include "VoxelIntBox.h"
+#include "VoxelMaterial.h"
 #include "DRSnowControlZone.generated.h"
 
 class AVoxelWorld;
@@ -11,22 +13,30 @@ class USceneComponent;
 class UTextBlock;
 class UUserWidget;
 
+#pragma region Debug
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSnowVoxelMaterialTeamCount
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
+	int32 TeamId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
+	int32 VoxelCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
+	float Ratio = 0.f;
+};
+
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRSnowVoxelMaterialScanResult
 {
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	int32 TeamIdA = INDEX_NONE;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	int32 TeamIdB = INDEX_NONE;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	int32 CountA = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	int32 CountB = 0;
+	TArray<FDRSnowVoxelMaterialTeamCount> Teams;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
 	int32 NeutralCount = 0;
@@ -47,14 +57,10 @@ struct DEEPRAIDERS_API FDRSnowVoxelMaterialScanResult
 	bool bTruncated = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	float RatioA = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
-	float RatioB = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Snow|Debug")
 	float Coverage = 0.f;
 };
+
+#pragma endregion
 
 UCLASS()
 class DEEPRAIDERS_API ADRSnowControlZone : public AActor
@@ -73,12 +79,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Control")
 	FDRSnowControlRatio GetControlRatio() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	FDRSnowVoxelMaterialScanResult ScanVoxelMaterials() const;
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	FString BuildSnowCountDebugText() const;
-
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<USceneComponent> Root;
@@ -87,14 +87,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<UBoxComponent> ZoneBounds;
 
-	// 지정하면 해당 두 팀만 점령률로 계산한다.
-	// 비워두면 Bounds 안에서 처음 발견되는 두 팀을 A/B로 사용한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control")
-	int32 TeamIdA = INDEX_NONE;
+#pragma region Debug
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control")
-	int32 TeamIdB = INDEX_NONE;
+public:
+	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
+	FDRSnowVoxelMaterialScanResult ScanVoxelMaterials() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
+	FString BuildSnowCountDebugText() const;
+
+protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug")
 	TObjectPtr<AVoxelWorld> TargetVoxelWorld = nullptr;
 
@@ -114,6 +116,18 @@ protected:
 	int32 MaxVoxelScanCount = 250000;
 
 private:
+	static int32 GetDominantMaterialIndex(const FVoxelMaterial& Material, EVoxelMaterialConfig MaterialConfig);
+	static int32 MaterialIndexToTeamId(int32 MaterialIndex);
+	static void ExpandVoxelBoundsForWorldPoint(
+		const AVoxelWorld* VoxelWorld,
+		const FVector& WorldPoint,
+		FIntVector& InOutMin,
+		FIntVector& InOutMax);
+	static FVoxelIntBox MakeVoxelBoundsFromWorldBounds(
+		const AVoxelWorld* VoxelWorld,
+		const FBox& WorldBounds);
+	void InitializeDebug();
+	void DeinitializeDebug();
 	AVoxelWorld* ResolveVoxelWorld() const;
 	bool IsWorldLocationInsideZoneBounds(const FVector& WorldLocation) const;
 	void UpdateDebugWidget();
@@ -125,4 +139,6 @@ private:
 	TObjectPtr<UTextBlock> DebugTextBlock = nullptr;
 
 	FTimerHandle DebugUpdateTimerHandle;
+
+#pragma endregion
 };
