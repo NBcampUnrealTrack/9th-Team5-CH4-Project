@@ -115,18 +115,18 @@ void UDRShopTransactionComponent::ServerSellAllOres_Implementation(
 		return;
 	}
 
-	TArray<FGuid> EntryIds;
+	TArray<FGuid> InstanceIds;
 	int32 TotalQuantity = 0;
 	const int64 TotalPrice = CollectSellableOreEntries(
 		Inventory,
-		EntryIds,
+		InstanceIds,
 		TotalQuantity);
 
 	// 인벤토리 제거가 완료된 경우에만 판매 금액을 지급한다.
-	if (EntryIds.IsEmpty()
+	if (InstanceIds.IsEmpty()
 		|| TotalPrice <= 0
 		|| TotalPrice > static_cast<int64>(MAX_int32) - PlayerState->GetCoins()
-		|| !Inventory->TryRemoveEntries(EntryIds))
+		|| !Inventory->TryRemoveItemInstances(InstanceIds))
 	{
 		return;
 	}
@@ -245,39 +245,6 @@ bool UDRShopTransactionComponent::TryUpgrade(
 		return false;
 	}
 
-	if (Operation.TargetLevel == 1)
-	{
-		ADRPlayerController* PlayerController =
-			Cast<ADRPlayerController>(GetOwner());
-		UDRQuickSlotComponent* QuickSlotComponent =
-			IsValid(PlayerController)
-				? PlayerController->GetQuickSlotComponent()
-				: nullptr;
-		bool IsBindingRestored = false;
-
-		if (IsValid(QuickSlotComponent))
-		{
-			for (int32 Level = 2;
-				Level <= ItemRow.GetMaxUpgradeLevel();
-				++Level)
-			{
-				if (QuickSlotComponent->ReplaceBoundDefinition(
-					ItemRow.GetDefinitionForLevel(Level),
-					Operation.TargetDefinition))
-				{
-					IsBindingRestored = true;
-					break;
-				}
-			}
-
-			if (!IsBindingRestored)
-			{
-				QuickSlotComponent->TryBindFirstEmptySlot(
-					Operation.TargetDefinition);
-			}
-		}
-	}
-
 	PlayerState->SetCoins(
 		PlayerState->GetCoins() - Operation.TargetDefinition->Price);
 	return true;
@@ -344,10 +311,10 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 
 int64 UDRShopTransactionComponent::CollectSellableOreEntries(
 	const UDRInventoryComponent* Inventory,
-	TArray<FGuid>& OutEntryIds,
+	TArray<FGuid>& OutInstanceIds,
 	int32& OutTotalQuantity) const
 {
-	OutEntryIds.Reset();
+	OutInstanceIds.Reset();
 	OutTotalQuantity = 0;
 	int64 TotalPrice = 0;
 
@@ -356,11 +323,11 @@ int64 UDRShopTransactionComponent::CollectSellableOreEntries(
 		return TotalPrice;
 	}
 
-	for (const FDRInventoryEntry& Entry : Inventory->GetEntries())
+	for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
 	{
-		const UDRItemDefinition* Definition = Entry.Definition;
+		const UDRItemDefinition* Definition = ItemInstance.Definition;
 
-		if (!Entry.IsValid()
+		if (!ItemInstance.IsValid()
 			|| !IsValid(Definition)
 			|| Definition->Category != EDRItemCategory::Ore
 			|| !Definition->bCanBeSold
@@ -369,20 +336,20 @@ int64 UDRShopTransactionComponent::CollectSellableOreEntries(
 			continue;
 		}
 
-		const int64 EntryPrice =
-			static_cast<int64>(Definition->Price) * Entry.Quantity;
+		const int64 InstancePrice =
+			static_cast<int64>(Definition->Price) * ItemInstance.Quantity;
 
-		if (Entry.Quantity > MAX_int32 - OutTotalQuantity
-			|| EntryPrice > MAX_int64 - TotalPrice)
+		if (ItemInstance.Quantity > MAX_int32 - OutTotalQuantity
+			|| InstancePrice > MAX_int64 - TotalPrice)
 		{
-			OutEntryIds.Reset();
+			OutInstanceIds.Reset();
 			OutTotalQuantity = 0;
 			return -1;
 		}
 
-		OutEntryIds.Add(Entry.EntryId);
-		OutTotalQuantity += Entry.Quantity;
-		TotalPrice += EntryPrice;
+		OutInstanceIds.Add(ItemInstance.InstanceId);
+		OutTotalQuantity += ItemInstance.Quantity;
+		TotalPrice += InstancePrice;
 	}
 
 	return TotalPrice;

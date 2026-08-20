@@ -43,7 +43,10 @@ private:
 	void HandleInventoryChanged();
 	
 	UFUNCTION()
-	void HandleSlotClicked(FGuid EntryId);
+	void HandleSlotClicked(FGuid InstanceId);
+	
+	UFUNCTION()
+	void HandleMoveRequested(int32 SourceSlotIndex, int32 TargetSlotIndex);
 	
 	UFUNCTION()
 	void HandleCloseClicked();

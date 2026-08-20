@@ -84,6 +84,6 @@ private:
 	/** 판매 가능한 광물 Entry와 총 판매 금액을 안전하게 계산한다. */
 	int64 CollectSellableOreEntries(
 		const UDRInventoryComponent* Inventory,
-		TArray<FGuid>& OutEntryIds,
+		TArray<FGuid>& OutInstanceIds,
 		int32& OutTotalQuantity) const;
 };
