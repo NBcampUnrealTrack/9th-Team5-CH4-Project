@@ -263,35 +263,8 @@ void ADRPlayerState::GrantDefaultAbilities()
 	{
 		return;
 	}
-
-	for (const TSubclassOf<UGameplayAbility>& AbilityClass
-		 : DefaultAbilities)
-	{
-		if (!IsValid(AbilityClass))
-		{
-			continue;
-		}
-
-		FGameplayAbilitySpec AbilitySpec(
-			AbilityClass,
-			1);
-
-		const FGameplayAbilitySpecHandle Handle =
-			AbilitySystemComponent->GiveAbility(
-				AbilitySpec);
-
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[GAS][GiveAbility] "
-				"PlayerState=%s "
-				"Ability=%s "
-				"HandleValid=%d"),
-			*GetNameSafe(this),
-			*GetNameSafe(AbilityClass),
-			Handle.IsValid());
-	}
+	
+	DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
 }
 
 void ADRPlayerState::BindStatusPolicy()
