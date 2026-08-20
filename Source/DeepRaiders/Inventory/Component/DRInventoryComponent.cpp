@@ -6,6 +6,7 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
+#include "GameFramework/PlayerController.h"
 
 UDRInventoryComponent::UDRInventoryComponent()
 {
@@ -14,18 +15,32 @@ UDRInventoryComponent::UDRInventoryComponent()
 	SetIsReplicatedByDefault(true);
 }
 
+void UDRInventoryComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	MaxSlots = FMath::Max(1, MaxSlots);
+	LockedSlotCount = FMath::Clamp(LockedSlotCount, 0, MaxSlots);
+	
+	Slots.SetNum(MaxSlots);
+}
+
 void UDRInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(ThisClass, MaxSlots);
-	DOREPLIFETIME(ThisClass, Entries);
+	DOREPLIFETIME(ThisClass, Slots);
+}
+
+void UDRInventoryComponent::SetLockedSlotCount(int32 NewLockedSlotCount)
+{
+	ensureMsgf(!HasBegunPlay(), TEXT("LockedSlotCount must be set before BeginPlay."));
+	
+	LockedSlotCount = FMath::Clamp(NewLockedSlotCount, 0, FMath::Max(1, MaxSlots));
 }
 
 bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quantity)
 {
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryAddItem start, Quantity : %d"), *GetName(), GetItemCount(Definition));
-	
 	if (!HasInventoryAuthority()
 		|| !CanAddItem(Definition, Quantity))
 	{
@@ -35,17 +50,64 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 	AddItemInternal(Definition, Quantity);
 	HandleInventoryChangedOnServer();
 	
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryAddItem End, Quantity : %d"), *GetName(), GetItemCount(Definition));
 	return true;
 }
 
-bool UDRInventoryComponent::TryReplaceEntryDefinition(
-	FGuid EntryId,
+bool UDRInventoryComponent::TryAddItemInstance(const FDRItemInstance& ItemInstance)
+{
+	if (!HasInventoryAuthority()
+		|| !ItemInstance.IsValid()
+		|| ItemInstance.Quantity > GetMaxStackSize(ItemInstance.Definition)
+		|| GetAddableQuantity(ItemInstance.Definition) < ItemInstance.Quantity)
+	{
+		return false;
+	}
+	
+	// 
+	if (ItemInstance.RuntimeState.IsValid()
+		&& GetMaxStackSize(ItemInstance.Definition) > 1)
+	{
+		return false;
+	}
+	
+	AddItemInstanceInternal(ItemInstance);
+	HandleInventoryChangedOnServer();
+	
+	return true;
+}
+
+bool UDRInventoryComponent::TryAddItemToSlot(int32 SlotIndex, UDRItemDefinition* Definition, int32 Quantity)
+{
+	if (!HasInventoryAuthority()
+		|| !IsValidSlotIndex(SlotIndex)
+		|| Slots[SlotIndex].IsValid()
+		|| !IsValid(Definition)
+		|| Quantity <= 0
+		|| Quantity > GetMaxStackSize(Definition))
+	{
+		return false;
+	}
+	
+	FDRItemInstance NewItemInstance = DRItemInstanceFactory::Create(Definition, Quantity);
+	
+	if (!NewItemInstance.IsValid())
+	{
+		return false;
+	}
+	
+	Slots[SlotIndex] = MoveTemp(NewItemInstance);
+	HandleInventoryChangedOnServer();
+	
+	return false;
+}
+
+bool UDRInventoryComponent::TryReplaceItemDefinition(
+	FGuid InstanceId,
 	UDRItemDefinition* ExpectedSourceDefinition,
 	UDRItemDefinition* TargetDefinition)
 {
 	if (!HasInventoryAuthority()
-		|| !EntryId.IsValid()
+		|| !InstanceId.IsValid()
 		|| !IsValid(ExpectedSourceDefinition)
 		|| !IsValid(TargetDefinition)
 		|| ExpectedSourceDefinition == TargetDefinition)
@@ -53,223 +115,251 @@ bool UDRInventoryComponent::TryReplaceEntryDefinition(
 		return false;
 	}
 
-	FDRInventoryEntry* Entry = Entries.FindByPredicate(
-		[EntryId](const FDRInventoryEntry& InventoryEntry)
-		{
-			return InventoryEntry.EntryId == EntryId;
-		});
+	const int32 SlotIndex = FindSlotIndex(InstanceId);
 
-	if (!Entry
-		|| Entry->Definition != ExpectedSourceDefinition
-		|| Entry->Quantity != 1)
+	if (!Slots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+	
+	FDRItemInstance& ItemInstance = Slots[SlotIndex];
+	
+	if (ItemInstance.Definition != ExpectedSourceDefinition
+		|| ItemInstance.Quantity != 1)
 	{
 		return false;
 	}
 
-	Entry->Definition = TargetDefinition;
-	OnEntryDefinitionReplacedDelegate.Broadcast(
-		ExpectedSourceDefinition,
-		TargetDefinition);
+	FDRItemInstance Replacement = DRItemInstanceFactory::Create(TargetDefinition, 1);
+	
+	if (!Replacement.IsValid())
+	{
+		return false;
+	}
+	
+	Replacement.InstanceId = ItemInstance.InstanceId;
+	ItemInstance = MoveTemp(Replacement);
+	
+	OnItemDefinitionReplacedDelegate.Broadcast(ExpectedSourceDefinition, TargetDefinition);
+	
 	HandleInventoryChangedOnServer();
 	return true;
 }
 
-bool UDRInventoryComponent::TryRemoveFromEntry(FGuid EntryId, int32 Quantity)
+bool UDRInventoryComponent::TryRemoveFromItemInstance(FGuid InstanceId, int32 Quantity)
 {
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry start"), *GetName());
-	
 	if (!HasInventoryAuthority()
-		|| !EntryId.IsValid()
+		|| !InstanceId.IsValid()
 		|| Quantity <= 0)
 	{
 		return false;
 	}
 	
-	const int32 EntryIndex = Entries.IndexOfByPredicate(
-		[&EntryId](const FDRInventoryEntry& Entry)
-		{
-			return Entry.EntryId == EntryId;
-		});
+	const int32 SlotIndex = FindSlotIndex(InstanceId);
 	
-	if (!Entries.IsValidIndex(EntryIndex) || Entries[EntryIndex].Quantity < Quantity)
+	if (!Slots.IsValidIndex(SlotIndex) || Slots[SlotIndex].Quantity < Quantity)
 	{
 		return false;
 	}
 	
-	RemoveFromEntryInternal(EntryIndex, Quantity);	
+	RemoveFromSlotInternal(SlotIndex, Quantity);	
 	HandleInventoryChangedOnServer();
 	
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry End"), *GetName());
 	return true;
 }
 
 bool UDRInventoryComponent::TryRemoveItemByDefinition(UDRItemDefinition* Definition, int32 Quantity)
 {
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveItemByDefinition start, Quantity : %d"), *GetName(), GetItemCount(Definition));
-	
 	if (!HasInventoryAuthority()
 	|| !IsValid(Definition)
-	|| Quantity <= 0)
+	|| Quantity <= 0
+	|| GetItemCount(Definition) < Quantity)
 	{
-		return false;
-	}
-	
-	if (GetItemCount(Definition) < Quantity)
-	{
-		// 수량만큼 가지고 있지 않다면 그냥 실패
 		return false;
 	}
 	
 	int32 RemainingQuantity = Quantity;
 	
 	// 배열 뒤에서부터 제거
-	for (int32 Index = Entries.Num() -1; Index >= 0 && RemainingQuantity > 0 ; --Index)
+	for (int32 SlotIndex = Slots.Num() - 1; SlotIndex >= 0 && RemainingQuantity > 0 ; --SlotIndex)
 	{
-		FDRInventoryEntry& Entry = Entries[Index];
+		FDRItemInstance& ItemInstance = Slots[SlotIndex];
 		
-		if (Entry.Definition != Definition)
+		if (!ItemInstance.IsValid()
+			|| ItemInstance.Definition != Definition)
 		{
 			continue;
 		}
 		
-		if (Entry.Quantity <= RemainingQuantity)
-		{
-			RemainingQuantity -= Entry.Quantity;
-			Entries.RemoveAt(Index);
-		}
-		else
-		{
-			Entry.Quantity -= RemainingQuantity;
-			RemainingQuantity = 0;
-		}
+		const int32 RemovedQuantity = FMath::Min(ItemInstance.Quantity, RemainingQuantity);
+		
+		RemoveFromSlotInternal(SlotIndex, RemovedQuantity);
+		
+		RemainingQuantity -= RemovedQuantity;
 	}
 	
 	HandleInventoryChangedOnServer();
 	
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveItemByDefinition start, Quantity : %d"), *GetName(), GetItemCount(Definition));
 	return true;
 }
 
-bool UDRInventoryComponent::TryRemoveEntries(const TArray<FGuid>& EntryIds)
+bool UDRInventoryComponent::TryRemoveItemInstances(const TArray<FGuid>& InstanceIds)
 {
 	if (!HasInventoryAuthority()
-		|| EntryIds.IsEmpty())
+		|| InstanceIds.IsEmpty())
 	{
 		return false;
 	}
 
-	TSet<FGuid> UniqueEntryIds;
+	TSet<FGuid> UniqueInstanceIds;
 
-	for (const FGuid& EntryId : EntryIds)
+	for (const FGuid& InstanceId : InstanceIds)
 	{
-		if (!EntryId.IsValid()
-			|| UniqueEntryIds.Contains(EntryId)
-			|| !Entries.ContainsByPredicate(
-				[&EntryId](const FDRInventoryEntry& Entry)
-				{
-					return Entry.EntryId == EntryId;
-				}))
+		if (!InstanceId.IsValid()
+			|| UniqueInstanceIds.Contains(InstanceId)
+			|| FindSlotIndex(InstanceId) == INDEX_NONE)
 		{
 			return false;
 		}
 
-		UniqueEntryIds.Add(EntryId);
+		UniqueInstanceIds.Add(InstanceId);
 	}
 
-	Entries.RemoveAll(
-		[&UniqueEntryIds](const FDRInventoryEntry& Entry)
+	for (FDRItemInstance& ItemInstance : Slots)
+	{
+		if (ItemInstance.IsValid()
+			&& UniqueInstanceIds.Contains(ItemInstance.InstanceId))
 		{
-			return UniqueEntryIds.Contains(Entry.EntryId);
-		});
-
+			ItemInstance = FDRItemInstance();
+		}
+	}
+	
 	HandleInventoryChangedOnServer();
 	return true;
 }
 
-int32 UDRInventoryComponent::TryTransferFromEntry(UDRInventoryComponent* DestinationInventory, FGuid SourceEntryId,
-	int32 RequestedQuantity)
+int32 UDRInventoryComponent::TryTransferFromItemInstance(UDRInventoryComponent* DestinationInventory
+	, FGuid SourceInstanceId, int32 RequestedQuantity)
 {
 	if (!HasInventoryAuthority()
 		|| !IsValid(DestinationInventory)
 		|| DestinationInventory == this
 		|| !DestinationInventory->HasInventoryAuthority()
-		|| !SourceEntryId.IsValid()
+		|| !SourceInstanceId.IsValid()
 		|| RequestedQuantity <= 0)
 	{
 		return 0;
 	}
 	
-	const int32 SourceEntryIndex = Entries.IndexOfByPredicate(
-		[&SourceEntryId](const FDRInventoryEntry& Entry)
-		{
-			return Entry.EntryId == SourceEntryId;	
-		}
-		);
+	const int32 SourceSlotIndex = FindSlotIndex(SourceInstanceId);
 	
-	if (!Entries.IsValidIndex(SourceEntryIndex))
+	if (!Slots.IsValidIndex(SourceSlotIndex))
 	{
 		return 0;
 	}
 	
-	const FDRInventoryEntry& SourceEntry = Entries[SourceEntryIndex];
-	UDRItemDefinition* Definition = SourceEntry.Definition;
+	const FDRItemInstance SourceItem = Slots[SourceSlotIndex];
 	
-	if (!IsValid(Definition) || SourceEntry.Quantity <= 0)
+	if (!SourceItem.IsValid()
+		|| SourceItem.Quantity < RequestedQuantity
+		|| DestinationInventory->GetAddableQuantity(SourceItem.Definition) < RequestedQuantity)
 	{
 		return 0;
 	}
 	
-	// 요청한 수량의 처리가 불가능한 경우 항상 실패
-	if(SourceEntry.Quantity < RequestedQuantity
-		|| DestinationInventory->GetAddableQuantity(Definition) < RequestedQuantity)
+	if (SourceItem.RuntimeState.IsValid()
+		&& RequestedQuantity != SourceItem.Quantity)
 	{
 		return 0;
 	}
 	
-	const int32 AddableQuantity = DestinationInventory->GetAddableQuantity(Definition);
-	const int32 TransferQuantity = FMath::Min(RequestedQuantity, FMath::Min(SourceEntry.Quantity, AddableQuantity));
+	// 기존 Item의 정보 복사
+	FDRItemInstance TransferredItem = SourceItem;
+	TransferredItem.Quantity = RequestedQuantity;
 	
-	if (TransferQuantity <= 0)
+	// 새로운 InstanceId 발급
+	if (RequestedQuantity < SourceItem.Quantity)
+	{
+		TransferredItem.InstanceId = FGuid::NewGuid();
+	}
+	
+	if (!DestinationInventory->TryAddItemInstance(TransferredItem))
 	{
 		return 0;
 	}
 	
-	DestinationInventory->AddItemInternal(Definition, TransferQuantity);
-	RemoveFromEntryInternal(SourceEntryIndex, TransferQuantity);
-	
+	RemoveFromSlotInternal(SourceSlotIndex, RequestedQuantity);
+
 	HandleInventoryChangedOnServer();
-	DestinationInventory->HandleInventoryChangedOnServer();
 	
-	return TransferQuantity;	
+	return RequestedQuantity;	
 }
 
-bool UDRInventoryComponent::FindEntry(FGuid EntryId, FDRInventoryEntry& OutEntry) const
+void UDRInventoryComponent::RequestSwapSlots(int32 SourceSlotIndex, int32 TargetSlotIndex)
 {
-	UE_LOG(LogTemp, Log, TEXT("[%s] FindEntry Start"), *GetName());
-	
-	if (!EntryId.IsValid())
+	if (!IsValidSlotIndex(SourceSlotIndex)
+		|| !IsValidSlotIndex(TargetSlotIndex)
+		|| SourceSlotIndex == TargetSlotIndex
+		|| IsSlotLocked(SourceSlotIndex)
+		|| IsSlotLocked(TargetSlotIndex))
 	{
-		OutEntry = FDRInventoryEntry();
+		return;
+	}
+	
+	const FGuid ExpectedSourceInstanceId = GetInstanceIdAtSlot(SourceSlotIndex);
+	const FGuid ExpectedTargetInstanceId = GetInstanceIdAtSlot(TargetSlotIndex);
+	
+	if (!ExpectedSourceInstanceId.IsValid())
+	{
+		return;
+	}
+	
+	// 서버인 경우 즉시 교체를 시도한다.
+	if (HasInventoryAuthority())
+	{
+		SwapSlotsInternal(SourceSlotIndex, TargetSlotIndex);
+		return;
+	}
+	
+	const APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	
+	if (IsValid(PlayerController)
+		&& PlayerController->IsLocalController())
+	{
+		ServerRequestSwapSlots(SourceSlotIndex, TargetSlotIndex
+			, ExpectedSourceInstanceId, ExpectedTargetInstanceId);
+	}	
+}
+
+void UDRInventoryComponent::ServerRequestSwapSlots_Implementation(int32 SourceSlotIndex, int32 TargetSlotIndex,
+	FGuid ExpectedSourceInstanceId, FGuid ExpectedTargetInstanceId)
+{
+	if (!IsValidSlotIndex(SourceSlotIndex)
+		|| !IsValidSlotIndex(TargetSlotIndex)
+		|| SourceSlotIndex == TargetSlotIndex
+		|| IsSlotLocked(SourceSlotIndex)
+		|| IsSlotLocked(TargetSlotIndex)
+		|| GetInstanceIdAtSlot(SourceSlotIndex) != ExpectedSourceInstanceId
+		|| GetInstanceIdAtSlot(TargetSlotIndex) != ExpectedTargetInstanceId)
+	{
+		return;
+	}
+	
+	SwapSlotsInternal(SourceSlotIndex, TargetSlotIndex);
+}
+
+bool UDRInventoryComponent::FindItemInstance(FGuid InstanceId, FDRItemInstance& OutItemInstance) const
+{
+	const FDRItemInstance* ItemInstance = FindItemInstance(InstanceId);
+	
+	if (!ItemInstance)
+	{
+		OutItemInstance = FDRItemInstance();
 		return false;
 	}
 	
-	const FDRInventoryEntry* FoundEntry = Entries.FindByPredicate(
-		[&EntryId](const FDRInventoryEntry& Entry)
-		{
-			return Entry.EntryId == EntryId;
-		});
-	
-	if (FoundEntry == nullptr)
-	{
-		OutEntry = FDRInventoryEntry();
-		return false;
-	}
-	
-	OutEntry = *FoundEntry;
-	
-	UE_LOG(LogTemp, Log, TEXT("[%s] FindEntry End, Quantity : %d"), *GetName(), OutEntry.Quantity);
-	
-	return true;
+	OutItemInstance = *ItemInstance;
+	return true;	
 }
 
 bool UDRInventoryComponent::CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const
@@ -290,21 +380,22 @@ int32 UDRInventoryComponent::GetAddableQuantity(UDRItemDefinition* Definition) c
 	int32 AvailableQuantity = 0;
 	
 	// 기존 스택의 남은 공간 계산
-	for (const FDRInventoryEntry& Entry : Entries)
+	for (int32 SlotIndex = LockedSlotCount; SlotIndex < Slots.Num(); ++SlotIndex)
 	{
-		if (Entry.Definition != Definition)
+		const FDRItemInstance& ItemInstance = Slots[SlotIndex];
+		
+		if (!ItemInstance.IsValid())
 		{
+			AvailableQuantity += MaxStackSize;
 			continue;
 		}
 		
-		AvailableQuantity += FMath::Max(0, MaxStackSize - Entry.Quantity);
+		if (ItemInstance.Definition == Definition
+			&& !ItemInstance.RuntimeState.IsValid())
+		{
+			AvailableQuantity += FMath::Max(0, MaxStackSize - ItemInstance.Quantity);
+		}
 	}
-	
-	// 새 스택을 만들 수 있는지 계산
-	const int32 ClampedMaxSlots = FMath::Max(1, MaxSlots);
-	const int32 FreeSlots = FMath::Max(0, ClampedMaxSlots - Entries.Num());
-	
-	AvailableQuantity += FreeSlots * MaxStackSize;
 	
 	return AvailableQuantity;
 }
@@ -318,28 +409,89 @@ int32 UDRInventoryComponent::GetItemCount(const UDRItemDefinition* Definition) c
 	
 	int32 TotalQuantity = 0;
 	
-	for (const FDRInventoryEntry& Entry : Entries)
+	for (const FDRItemInstance& ItemInstance : Slots)
 	{
-		if (Entry.Definition == Definition)
+		if (ItemInstance.IsValid()
+			&& ItemInstance.Definition == Definition)
 		{
-			TotalQuantity += Entry. Quantity;
+			TotalQuantity += ItemInstance.Quantity;
 		}
 	}
 	
 	return TotalQuantity;
 }
 
-const FDRInventoryEntry* UDRInventoryComponent::GetEntry(FGuid EntryId) const
+const FDRItemInstance* UDRInventoryComponent::GetItemInstance(FGuid InstanceId) const
 {
-	return Entries.FindByPredicate(
-	[&EntryId](const FDRInventoryEntry& Entry)
-	{
-		return Entry.EntryId == EntryId;	
-	}
-	);
+	return FindItemInstance(InstanceId);
 }
 
-void UDRInventoryComponent::OnRep_Entries()
+const FDRItemInstance* UDRInventoryComponent::GetItemAtSlot(int32 SlotIndex) const
+{
+	if (!Slots.IsValidIndex(SlotIndex)
+		|| !Slots[SlotIndex].IsValid())
+	{
+		return nullptr;
+	}
+	
+	return &Slots[SlotIndex];
+}
+
+const FDRItemInstance* UDRInventoryComponent::FindItemInstance(FGuid InstanceId) const
+{
+	if (!InstanceId.IsValid())
+	{
+		return nullptr;
+	}
+	
+	return Slots.FindByPredicate([InstanceId](const FDRItemInstance& ItemInstance)
+	{
+		return ItemInstance.IsValid() && ItemInstance.InstanceId == InstanceId;
+	});
+}
+
+int32 UDRInventoryComponent::FindSlotIndex(FGuid InstanceId) const
+{
+	if (!InstanceId.IsValid())
+	{
+		return INDEX_NONE;
+	}
+	
+	return Slots.IndexOfByPredicate([InstanceId](const FDRItemInstance& ItemInstance)
+	{
+		return ItemInstance.IsValid() && ItemInstance.InstanceId == InstanceId;
+	});
+}
+
+bool UDRInventoryComponent::ModifyItemInstance(FGuid InstanceId, TFunctionRef<bool(FDRItemInstance&)> Modifier)
+{
+	if (!HasInventoryAuthority())
+	{
+		return false;
+	}
+	
+	const int32 SlotIndex = FindSlotIndex(InstanceId);
+	
+	if (!Slots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+	
+	FDRItemInstance Candidate = Slots[SlotIndex];
+	
+	if (!Modifier(Candidate)
+		|| !Candidate.IsValid()
+		|| Candidate.InstanceId != InstanceId)
+	{
+		return false;
+	}
+	
+	Slots[SlotIndex] = MoveTemp(Candidate);
+	HandleInventoryChangedOnServer();
+	return true;	
+}
+
+void UDRInventoryComponent::OnRep_Slots()
 {
 	BroadcastInventoryChanged();
 }
@@ -361,12 +513,22 @@ void UDRInventoryComponent::HandleInventoryChangedOnServer()
 	OwnerActor->ForceNetUpdate();	
 }
 
+void UDRInventoryComponent::BroadcastInventoryChanged()
+{
+	OnInventoryChangedDelegate.Broadcast();
+}
+
 bool UDRInventoryComponent::HasInventoryAuthority() const
 {
 	const AActor* OwnerActor = GetOwner();
 	
 	return IsValid(OwnerActor) 
 		&& OwnerActor->HasAuthority();
+}
+
+bool UDRInventoryComponent::IsValidSlotIndex(int32 SlotIndex) const
+{
+	return Slots.IsValidIndex(SlotIndex);
 }
 
 int32 UDRInventoryComponent::GetMaxStackSize(const UDRItemDefinition* Definition) const
@@ -379,9 +541,24 @@ int32 UDRInventoryComponent::GetMaxStackSize(const UDRItemDefinition* Definition
 	return FMath::Max(1, Definition->MaxStackSize);
 }
 
-void UDRInventoryComponent::BroadcastInventoryChanged()
+int32 UDRInventoryComponent::FindFirstEmptyUnlockedSlot() const
 {
-	OnInventoryChangedDelegate.Broadcast();
+	for (int32 SlotIndex = LockedSlotCount; SlotIndex < Slots.Num(); ++SlotIndex)
+	{
+		if (!Slots[SlotIndex].IsValid())
+		{
+			return SlotIndex;
+		}
+	}
+	
+	return INDEX_NONE;	
+}
+
+FGuid UDRInventoryComponent::GetInstanceIdAtSlot(int32 SlotIndex) const
+{
+	const FDRItemInstance* ItemInstance = GetItemAtSlot(SlotIndex);
+	
+	return ItemInstance ? ItemInstance->InstanceId : FGuid();
 }
 
 void UDRInventoryComponent::AddItemInternal(UDRItemDefinition* Definition, int32 Quantity)
@@ -394,59 +571,122 @@ void UDRInventoryComponent::AddItemInternal(UDRItemDefinition* Definition, int32
 	
 	int32 RemainingQuantity = Quantity;
 	
-	// 기존 스택 먼저 채운다.
-	for (FDRInventoryEntry& Entry : Entries)
+	for (int32 SlotIndex = LockedSlotCount ; SlotIndex < Slots.Num(); ++SlotIndex)
 	{
-		if (RemainingQuantity <= 0)
-		{
-			break;
-		}
-		
-		if (Entry.Definition != Definition)
+		FDRItemInstance& ItemInstance = Slots[SlotIndex];
+
+		if (!ItemInstance.IsValid()
+			|| ItemInstance.Definition != Definition 
+			|| ItemInstance.RuntimeState.IsValid())
 		{
 			continue;
 		}
 		
-		const int32 FreeQuantity = FMath::Max(0, MaxStackSize - Entry.Quantity);
+		const int32 FreeQuantity = FMath::Max(0, MaxStackSize - ItemInstance.Quantity);
 		const int32 AddedQuantity = FMath::Min(RemainingQuantity, FreeQuantity);
 		
-		if (AddedQuantity <= 0)
-		{
-			continue;
-		}
-		
-		Entry.Quantity += AddedQuantity;
-		RemainingQuantity -= AddedQuantity;		
+		ItemInstance.Quantity += AddedQuantity;
+		RemainingQuantity -= AddedQuantity;
 	}
 	
-	// 남은 수량은 새로운 스택을 만들어 넣는다.
 	while (RemainingQuantity > 0)
 	{
+		const int32 EmptySlotIndex = FindFirstEmptyUnlockedSlot();
+		
+		check(EmptySlotIndex != INDEX_NONE);
+		
 		const int32 NewStackQuantity = FMath::Min(RemainingQuantity, MaxStackSize);
 		
-		FDRInventoryEntry& NewEntry = Entries.AddDefaulted_GetRef();
-		NewEntry.EntryId = FGuid::NewGuid();
-		NewEntry.Definition = Definition;
-		NewEntry.Quantity = NewStackQuantity;
+		Slots[EmptySlotIndex]= DRItemInstanceFactory::Create(Definition, NewStackQuantity);
+		
+		check(Slots[EmptySlotIndex].IsValid());
 		
 		RemainingQuantity -= NewStackQuantity;
 	}
 }
 
-void UDRInventoryComponent::RemoveFromEntryInternal(int32 EntryIndex, int32 Quantity)
+void UDRInventoryComponent::AddItemInstanceInternal(const FDRItemInstance& ItemInstance)
 {
-	check(Entries.IsValidIndex(EntryIndex));
-	check(Quantity > 0);
-	check(Entries[EntryIndex].Quantity >= Quantity);
+	check(ItemInstance.IsValid());
 	
-	FDRInventoryEntry& Entry = Entries[EntryIndex];
-
-	if (Entry.Quantity == Quantity)
+	int32 RemainingQuantity = ItemInstance.Quantity;
+	const int32 MaxStackSize = GetMaxStackSize(ItemInstance.Definition);
+	
+	// RuntimeState가 없는 아이템
+	if (!ItemInstance.RuntimeState.IsValid())
 	{
-		Entries.RemoveAt(EntryIndex);
+		for (int32 SlotIndex = LockedSlotCount; SlotIndex < Slots.Num() && RemainingQuantity > 0; ++SlotIndex)
+		{
+			FDRItemInstance& ExistingItem = Slots[SlotIndex];
+			
+			if (!ExistingItem.IsValid()
+				|| ExistingItem.Definition != ItemInstance.Definition
+				|| ExistingItem.RuntimeState.IsValid())
+			{
+				continue;
+			}
+			
+			const int32 AddedQuantity = FMath::Min(RemainingQuantity, MaxStackSize - ExistingItem.Quantity);
+			
+			if (AddedQuantity <= 0)
+			{
+				continue;
+			}
+			
+			ExistingItem.Quantity += AddedQuantity;
+			RemainingQuantity -= AddedQuantity;
+		}
+	}
+	
+	if (RemainingQuantity <= 0)
+	{
 		return;
 	}
 	
-	Entry.Quantity -= Quantity;
-	UE_LOG(LogTemp, Log, TEXT("[%s] TryRemoveFromEntry process, Quantity : %d"), *GetName(), Entry.Quantity);
+	const int32 EmptySlotIndex = FindFirstEmptyUnlockedSlot();
+	
+	// 추가 함수가 호출되기 이전에 추가 가능 여부 확인이 일어나므로
+	// 빈 슬롯이 없어서는 안된다.
+	check(EmptySlotIndex != INDEX_NONE);
+	
+	FDRItemInstance RemainingItem = ItemInstance;
+	RemainingItem.Quantity = RemainingQuantity;
+	
+	Slots[EmptySlotIndex] = MoveTemp(RemainingItem);
+}
+
+void UDRInventoryComponent::RemoveFromSlotInternal(int32 SlotIndex, int32 Quantity)
+{
+	check(Slots.IsValidIndex(SlotIndex));
+	check(Quantity > 0);
+	check(Slots[SlotIndex].Quantity >= Quantity);
+	
+	FDRItemInstance& ItemInstance = Slots[SlotIndex];
+	
+	if (ItemInstance.Quantity == Quantity)
+	{
+		ItemInstance = FDRItemInstance();
+		return;
+	}
+	
+	ItemInstance.Quantity -= Quantity;	
+}
+
+bool UDRInventoryComponent::SwapSlotsInternal(int32 SourceSlotIndex, int32 TargetSlotIndex)
+{
+	if (!HasInventoryAuthority()
+		|| !IsValidSlotIndex(SourceSlotIndex)
+		|| !IsValidSlotIndex(TargetSlotIndex)
+		|| SourceSlotIndex == TargetSlotIndex
+		|| !IsSlotLocked(SourceSlotIndex)
+		|| !IsSlotLocked(TargetSlotIndex)
+		|| !Slots[SourceSlotIndex].IsValid())
+	{
+		return false;
+	}
+	
+	Slots.Swap(SourceSlotIndex, TargetSlotIndex);
+	
+	HandleInventoryChangedOnServer();
+	return true;
 }

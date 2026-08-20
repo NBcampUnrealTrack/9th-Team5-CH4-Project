@@ -4,6 +4,7 @@
 #include "DRWorldItemSubsystem.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -22,27 +23,14 @@ ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItemFromDefinition(UDRItemDe
 		return nullptr;
 	}
 	
-	if (!IsValid(Definition))
+	const FDRItemInstance ItemInstance = DRItemInstanceFactory::Create(Definition, Quantity);
+	
+	if (!ItemInstance.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] : Invalid Definition"), *GetName());
-		
 		return nullptr;
 	}
 	
-	if (Quantity <= 0)
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] : invalid Quantity=%d"), *GetName(), Quantity);
-		
-		return nullptr;
-	}
-	
-	// 새로운 ItemInstance 생성
-	FDRItemInstance NewInstance;
-	NewInstance.Definition =  Definition;
-	NewInstance.InstanceId = FGuid::NewGuid();
-	NewInstance.Quantity = FMath::Min(Quantity, Definition->MaxStackSize);
-	
-	return SpawnWorldItem(NewInstance, BaseSpawnTransform);
+	return SpawnWorldItem(ItemInstance, BaseSpawnTransform);
 }
 
 ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItem(const FDRItemInstance& ItemInstance, 

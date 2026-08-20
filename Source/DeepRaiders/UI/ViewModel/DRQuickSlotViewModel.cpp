@@ -28,13 +28,12 @@ void UDRQuickSlotEntryViewModel::Refresh()
 		return;
 	}
 
-	FDRQuickSlotEntry Entry;
-	QuickSlotComponent->GetQuickSlot(SlotIndex, Entry);
+	FDRItemInstance ItemInstance;
+	const bool bNewHasItem = QuickSlotComponent->GetQuickSlot(SlotIndex, ItemInstance);
 
-	UDRItemDefinition* NewItemDefinition = Entry.Definition.Get();
-	UTexture2D* NewItemIcon = IsValid(NewItemDefinition) ? NewItemDefinition->Icon.Get() : nullptr;
-	const int32 NewQuantity = QuickSlotComponent->GetSlotItemCount(SlotIndex);
-	const bool bNewHasItem = IsValid(NewItemDefinition);
+	UDRItemDefinition* NewItemDefinition = bNewHasItem ? ItemInstance.Definition.Get() : nullptr;
+	UTexture2D* NewItemIcon = bNewHasItem ? NewItemDefinition->Icon.Get() : nullptr;
+	const int32 NewQuantity = bNewHasItem ? ItemInstance.Quantity : 0;
 
 	UE_MVVM_SET_PROPERTY_VALUE(ItemDefinition, NewItemDefinition);
 	UE_MVVM_SET_PROPERTY_VALUE(ItemIcon, NewItemIcon);

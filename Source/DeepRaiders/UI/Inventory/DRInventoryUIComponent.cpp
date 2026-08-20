@@ -13,9 +13,6 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "GameFramework/PlayerState.h"
 
-// 현재 이 클래스는 사라진 DRPlayerController 코드를 상당수 의존하고 있었기에
-// 사용이 불가능한 클래스입니다.
-
 UDRInventoryUIComponent::UDRInventoryUIComponent()
 {
 	check(true);
@@ -228,36 +225,42 @@ void UDRInventoryUIComponent::HideStorageInventory()
 	StorageInventoryWidget = nullptr;
 }
 
-void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid EntryId)
+void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid InstanceId)
 {
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
-		//PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::PlayerToStorage, EntryId);
+		// 추후 저장고 전송 요청 함수 호출
+		return;
 	}
-	else if (UIState == EDRInventoryUIState::PlayerOnly)
+	
+	if (UIState != EDRInventoryUIState::PlayerOnly
+		|| IsValid(PlayerController))
 	{
-		UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
-		if (!IsValid(QuickSlot))
-		{
-			return;
-		}
-		
-		UDRInventoryComponent* PlayerInventory = PlayerController->GetInventoryComponent();
-		if (!IsValid(PlayerInventory))
-		{
-			return;
-		}
-		const FDRInventoryEntry* Entry = PlayerInventory->GetEntry(EntryId);
-		
-		QuickSlot->RequestBindSelectedSlot(Entry->Definition);
+		return;
+	}
+
+	UDRInventoryComponent* PlayerInventory = PlayerController->GetInventoryComponent();
+	
+	UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
+	if (!IsValid(QuickSlot)
+		|| !IsValid(PlayerInventory))
+	{
+		return;
+	}
+	
+	const int32 SlotIndex = PlayerInventory->FindSlotIndex(InstanceId);
+	
+	if (SlotIndex != INDEX_NONE)
+	{
+		QuickSlot->RequestSelectSlot(SlotIndex);
 	}
 }
 
-void UDRInventoryUIComponent::HandleStorageEntryClicked(FGuid EntryId)
+void UDRInventoryUIComponent::HandleStorageEntryClicked(FGuid InstanceId)
 {
 	if (UIState == EDRInventoryUIState::PlayerAndStorage)
 	{
-		//PlayerController->RequestTransferStorageItem(EDRStorageTransferDirection::StorageToPlayer, EntryId);
+		// 추후 StorageToPlayer 전송 함수 추가
 	}
 }
 

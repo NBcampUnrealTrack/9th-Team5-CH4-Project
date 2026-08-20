@@ -8,10 +8,8 @@
 #include "StructUtils/InstancedStruct.h"
 #include "DRItemInstance.generated.h"
 
-class UDRItemDefinition;
-
 USTRUCT(BlueprintType)
-struct FDRItemInstance
+struct DEEPRAIDERS_API FDRItemInstance
 {
 	GENERATED_BODY()
 public:
@@ -22,7 +20,7 @@ public:
 	FGuid InstanceId;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
-	int32 Quantity = 1;
+	int32 Quantity = 0;
 	
 	// 런타임 인스턴스가 보유 중인 특이 사항 정보
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")

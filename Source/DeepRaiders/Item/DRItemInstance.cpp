@@ -28,6 +28,7 @@ FDRItemInstance DRItemInstanceFactory::Create(UDRItemDefinition* Definition, int
 		
 		FDRProjectileWeaponRuntimeState* State = Result.RuntimeState.GetMutablePtr<FDRProjectileWeaponRuntimeState>();
 		
+		check(State);
 		State->CurrentAmmo = FMath::Max(0, ProjectileDefinition->InitialAmmo);
 	}
 	

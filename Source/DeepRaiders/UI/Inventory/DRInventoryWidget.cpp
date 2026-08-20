@@ -84,6 +84,7 @@ void UDRInventoryWidget::RebuildSlot()
 			return;
 		}
 		
+		SlotWidget->OnMoveRequestedDelegate.AddDynamic(this, &ThisClass::HandleMoveRequested);
 		SlotWidget->OnSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);
 		
 		SlotPanel->AddChildToUniformGrid(SlotWidget, SlotIndex / ColumnCount, SlotIndex % ColumnCount);
@@ -101,7 +102,7 @@ void UDRInventoryWidget::RefreshSlots()
 		return;
 	}
 	
-	const TArray<FDRInventoryEntry> Entries = Inventory->GetEntries();
+	const TArray<FDRItemInstance> ItemInstances = Inventory->GetItemInstances();
 	
 	for (int32 SlotIndex = 0; SlotIndex < SlotWidgets.Num(); ++SlotIndex)
 	{
@@ -112,15 +113,18 @@ void UDRInventoryWidget::RefreshSlots()
 			continue;
 		}
 		
+		const bool bLocked = Inventory->IsSlotLocked(SlotIndex);
+		
 		// 현재 구현 상 InventoryComponent::Entries의 Index와 SlotIndex가 1:1 매칭된다.
 		// 슬롯의 위치가 고정되어 있지 않고, 앞 쪽 슬롯이 빌 시 앞으로 당겨진다.
-		if (Entries.IsValidIndex(SlotIndex))
+		if (ItemInstances.IsValidIndex(SlotIndex)
+			&& ItemInstances[SlotIndex].IsValid())
 		{
-			SlotWidget->SetEntry(Entries[SlotIndex]);
+			SlotWidget->SetItemInstance(SlotIndex, ItemInstances[SlotIndex], bLocked);
 		}
 		else
 		{
-			SlotWidget->ClearSlot();
+			SlotWidget->ClearSlot(SlotIndex, bLocked);
 		}
 	}
 }
@@ -130,9 +134,17 @@ void UDRInventoryWidget::HandleInventoryChanged()
 	RefreshSlots();
 }
 
-void UDRInventoryWidget::HandleSlotClicked(FGuid EntryId)
+void UDRInventoryWidget::HandleSlotClicked(FGuid InstanceId)
 {
-	OnEntryClickedDelegate.Broadcast(EntryId);
+	OnEntryClickedDelegate.Broadcast(InstanceId);
+}
+
+void UDRInventoryWidget::HandleMoveRequested(int32 SourceSlotIndex, int32 TargetSlotIndex)
+{
+	if (UDRInventoryComponent* Inventory = InventoryComponent.Get())
+	{
+		Inventory->RequestSwapSlots(SourceSlotIndex, TargetSlotIndex);
+	}
 }
 
 void UDRInventoryWidget::HandleCloseClicked()
