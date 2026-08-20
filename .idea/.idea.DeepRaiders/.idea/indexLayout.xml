@@ -6,12 +6,16 @@
       <Path>Plugins/GameplayMessageRouter</Path>
       <Path>Plugins/VoxelFree</Path>
       <Path>Source/DeepRaiders/Audio</Path>
+      <Path>Source/DeepRaiders/GAS</Path>
+      <Path>Source/DeepRaiders/Input</Path>
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
       <Path>Source/DeepRaiders/Inventory/DRInventoryTypes.h</Path>
       <Path>Source/DeepRaiders/Item/GAS</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.cpp</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.h</Path>
+      <Path>Source/DeepRaiders/MessageSystem</Path>
+      <Path>Source/DeepRaiders/Perk</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.cpp</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.h</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHeldItemComponent.cpp</Path>
@@ -32,7 +36,13 @@
       <Path>Source/DeepRaiders/Teleport</Path>
       <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.cpp</Path>
       <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.h</Path>
+      <Path>Source/DeepRaiders/UI/Perk</Path>
       <Path>Source/DeepRaiders/UI/Teleport</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRInventoryViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRInventoryViewModel.h</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.h</Path>
+      <Path>Source/DeepRaidersEditor</Path>
     </explicitIncludes>
     <explicitExcludes />
   </component>

@@ -13,7 +13,26 @@ class UDRPlayerAttributeSet;
 class UDRPerkComponent;
 class UGameplayAbility;
 class UGameplayEffect;
+class UDRInventoryComponent;
+class UDRItemDefinition;
 struct FOnAttributeChangeData;
+
+USTRUCT(BlueprintType)
+struct FDRPublicInventorySlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UDRItemDefinition> ItemDefinition;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 Quantity = 0;
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsLocked = false;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicInventoryChanged);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -41,6 +60,17 @@ public:
 	{
 		return PerkComponent;
 	}
+
+	/** 서버 인벤토리를 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
+	void UpdatePublicInventory(const UDRInventoryComponent* InventoryComponent);
+
+	const TArray<FDRPublicInventorySlot>& GetPublicInventorySlots() const
+	{
+		return PublicInventorySlots;
+	}
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Inventory")
+	FDRPublicInventoryChanged OnPublicInventoryChanged;
 	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -200,6 +230,12 @@ protected:
 	int32 Coins = 1000;
 
 private:
+	UFUNCTION()
+	void OnRep_PublicInventorySlots();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PublicInventorySlots)
+	TArray<FDRPublicInventorySlot> PublicInventorySlots;
+
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
 

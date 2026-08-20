@@ -9,6 +9,7 @@
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -46,6 +47,33 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, Coins);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
+	DOREPLIFETIME(ADRPlayerState, PublicInventorySlots);
+}
+
+void ADRPlayerState::UpdatePublicInventory(const UDRInventoryComponent* InventoryComponent)
+{
+	if (!HasAuthority() || !IsValid(InventoryComponent))
+	{
+		return;
+	}
+
+	PublicInventorySlots.SetNum(InventoryComponent->GetMaxSlots());
+	for (int32 SlotIndex = 0; SlotIndex < PublicInventorySlots.Num(); ++SlotIndex)
+	{
+		FDRPublicInventorySlot& SnapshotSlot = PublicInventorySlots[SlotIndex];
+		const FDRItemInstance* Item = InventoryComponent->GetItemAtSlot(SlotIndex);
+		SnapshotSlot.ItemDefinition = Item && Item->IsValid() ? Item->Definition.Get() : nullptr;
+		SnapshotSlot.Quantity = Item && Item->IsValid() ? Item->Quantity : 0;
+		SnapshotSlot.bIsLocked = InventoryComponent->IsSlotLocked(SlotIndex);
+	}
+
+	OnPublicInventoryChanged.Broadcast();
+	ForceNetUpdate();
+}
+
+void ADRPlayerState::OnRep_PublicInventorySlots()
+{
+	OnPublicInventoryChanged.Broadcast();
 }
 
 bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)

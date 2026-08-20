@@ -76,6 +76,9 @@ private:
 	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
+
+	UFUNCTION()
+	void RefreshPublicInventorySnapshot();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
