@@ -53,6 +53,9 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> QuantityText;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory|Drag", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float DragVisualOpacity = 0.85f;
+	
 private:
 	int32 SlotIndex = INDEX_NONE;
 	FGuid InstanceId;	

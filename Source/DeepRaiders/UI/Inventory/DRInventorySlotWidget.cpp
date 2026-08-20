@@ -130,6 +130,32 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 	Operation->SourceInstanceId = InstanceId;
 	Operation->Pivot = EDragPivot::CenterCenter;
 	
+	if (IsValid(ItemIcon))
+	{
+		UImage* DragVisual = NewObject<UImage>(Operation);
+		
+		if (IsValid(DragVisual))
+		{
+			DragVisual->SetBrush(ItemIcon->GetBrush());
+			
+			FLinearColor DragVisualColor = ItemIcon->GetColorAndOpacity();
+			DragVisualColor.A *= DragVisualOpacity;
+			
+			DragVisual->SetColorAndOpacity(DragVisualColor);
+			DragVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
+			
+			const FVector2D IconSize = ItemIcon->GetCachedGeometry().GetLocalSize();
+			
+			if (!IconSize.IsNearlyZero())
+			{
+				DragVisual->SetDesiredSizeOverride(IconSize);
+			}
+			
+			Operation->DefaultDragVisual = DragVisual;
+		}
+	}
+	
+	
 	OutOperation = Operation;
 }
 
