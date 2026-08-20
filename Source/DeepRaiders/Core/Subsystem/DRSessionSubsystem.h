@@ -45,14 +45,12 @@ private:
 
 	bool bDedicatedSessionCreationRequested = false; // 세션 생성 중복 방지
 
-	// 외부에는 고정된 서버 생성 API만 노출하고, 실제 세션 설정 구성은 내부로 모읍니다.
 	void CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName,
 	                           const FString& MatchType);
 
 	void HandleCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void ClearSessionDelegateHandles();
 
-	// 현재는 Null OSS만 사용합니다. Steam으로 바꿀 때 이 함수와 설정 이름만 교체하면 됩니다.
 	bool RefreshOnlineSubsystem();
 
 	static bool TryResolveConnectAddress(const FString& Address, FString& OutResolvedAddress);

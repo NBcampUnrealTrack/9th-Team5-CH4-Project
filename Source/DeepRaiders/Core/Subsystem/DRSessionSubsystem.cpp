@@ -46,7 +46,6 @@ void UDRSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	// 직접 IP 접속은 OSS 초기화 실패와 무관하게 동작할 수 있으므로 경고만 남깁니다.
 	if (!RefreshOnlineSubsystem())
 	{
 		UE_LOG(LogDRSession, Warning, TEXT("[Session] OSS 초기화 실패 하위시스템=NULL 직접접속=가능"));
