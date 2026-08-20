@@ -19,6 +19,7 @@ class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
+class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
@@ -97,6 +98,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> SecondaryAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InventoryAction;
+	
 #pragma region QuickSlot
 
 public:
@@ -129,6 +133,11 @@ protected:
 #pragma region UI
 
 public:
+	UDRInventoryUIComponent* GetInventoryUIComponent() const
+	{
+		return InventoryUIComponent;
+	}
+	
 	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
 	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
 
@@ -157,6 +166,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 

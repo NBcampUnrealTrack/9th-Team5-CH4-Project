@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
 #include "DRQuickSlotComponent.generated.h"
 
@@ -19,21 +20,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRSelectedQuickSlotIndexChanged, i
 // 슬롯 내의 아이템 변경
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRSelectedQuickSlotItemChanged, UDRItemDefinition*, ItemDefinition);
 
-USTRUCT(BlueprintType)
-struct FDRQuickSlotEntry
-{
-	GENERATED_BODY()
-	
-public:
-	UPROPERTY(VisibleAnywhere,BlueprintReadOnly, Category = "Quick Slot")
-	TObjectPtr<UDRItemDefinition> Definition = nullptr;	
-	
-	bool IsBound() const
-	{
-		return Definition != nullptr;
-	}
-};
-
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DEEPRAIDERS_API UDRQuickSlotComponent : public UActorComponent
 {
@@ -44,67 +30,28 @@ public:
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
-protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	
-public:
-	// 서버에서 빈 퀵슬롯에 아이템 등록 시도
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
-	bool TryBindFirstEmptySlot(UDRItemDefinition* Definition);
-	
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
-	bool TryBindSelectedSlot(UDRItemDefinition* Definition);
-	
-	// 로컬 플레이어가 특정 슬롯에 아이템 바인딩 요청
-	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
-	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
-	void RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition);
-	
-	// 로컬 플레이어가 선택한 슬롯에 아이템 바인딩 요청
-	// 서버는 플레이어 인벤토리에 해당 아이템이 있는지 검증
-	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
-	void RequestBindSelectedSlot(UDRItemDefinition* Definition);
-	
-	// 특정 퀵슬롯 바인딩 제거
-	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
-	void RequestClearSlot(int32 SlotIndex);
 	
 	// 숫자 키에 해당하는 슬롯을 선택하도록 요청
 	// 비어있는 경우도 선택 가능하며 이 경우, 빈 손이 된다.
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
 	void RequestSelectSlot(int32 SlotIndex);
 	
-	// 서버에서 퀵슬롯의 전체 개수를 변경
-	// 슬롯 수 감소 시 범위 밖 바인딩 제거
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
-	bool SetSlotCount(int32 NewSlotCount);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Quick Slot")
-	bool ReplaceBoundDefinition(
-		UDRItemDefinition* SourceDefinition,
-		UDRItemDefinition* TargetDefinition);
+	UFUNCTION(BlueprintPure, Category = "Quick Slot")
+	int32 GetSlotCount() const;
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
-	int32 GetSlotCount() const
+	int32 GetSelectedSlotIndex() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Quick Slot")
+	FGuid GetSelectedInstanceId() const
 	{
-		return QuickSlots.Num();
+		return SelectedInstanceId;
 	}
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
-	int32 GetSelectedSlotIndex() const
-	{
-		return SelectedSlotIndex;
-	}
-	
-	UFUNCTION(BlueprintPure, Category = "Quick Slot")
-	TArray<FDRQuickSlotEntry> GetQuickSlots() const
-	{
-		return QuickSlots;
-	}
-	
-	UFUNCTION(BlueprintPure, Category = "Quick Slot")
-	bool GetQuickSlot(int32 SlotIndex, FDRQuickSlotEntry& OutSlot) const;
+	bool GetQuickSlot(int32 SlotIndex, FDRItemInstance& OutItemInstance) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	bool IsSlotBound(int32 SlotIndex) const;
@@ -122,54 +69,43 @@ public:
 		return HeldItemDefinition;
 	}	
 	
+	void RefreshSelectedItem();
+	
 	// Character에게 SelectedItem 외형 반영
 	void ApplySelectedItemToCharacter();
 	
 protected:
+
 	UFUNCTION(Server, Reliable)
-	void ServerBindSlot(int32 SlotIndex, UDRItemDefinition* Definition);
-	
-	UFUNCTION(Server, Reliable)
-	void ServerBindSelectedSlot(UDRItemDefinition* Definition);
-	
-	UFUNCTION(Server, Reliable)
-	void ServerClearSlot(int32 SlotIndex);
-	
-	UFUNCTION(Server, Reliable)
-	void ServerSelectSlot(int32 SlotIndex);
+	void ServerSelectSlot(int32 SlotIndex, FGuid ExpectedInstanceId);
 	
 	UFUNCTION()
-	void OnRep_QuickSlots();
-	
-	UFUNCTION()
-	void OnRep_SelectedSlotIndex(int32 PreviousSlotIndex);
+	void OnRep_SelectedInstanceId();
 	
 	UFUNCTION()
 	void HandleInventoryChanged();
-
-	UFUNCTION()
-	void HandleInventoryEntryDefinitionReplaced(
-		UDRItemDefinition* SourceDefinition,
-		UDRItemDefinition* TargetDefinition);
 	
 private:
-	bool CacheInventoryComponent();
+	bool CachedInventoryComponent();
 	
 	bool HasQuickSlotAuthority() const;
 	bool IsLocalPlayer() const;
 	
-	bool BindSlotInternal(int32 SlotIndex, UDRItemDefinition* Definition);
+	bool SelectSlotInternal(int32 SlotIndex, FGuid ExpectedInstanceId);
 	
-	bool ClearSlotInternal(int32 SlotIndex);
-	bool SelectSlotInternal(int32 SlotIndex);
+	// 인벤토리 내 변경에도 현재 선택중인 ItemInstance가 유효한지 검사
+	// ItemInstance가 유효하지 않아 변경이 필요한 경우, 기본 무기를 우선 선택한다.
+	bool EnsureValidSelection();
 	
-	UDRItemDefinition* ResolveHandedItemDefinition(int32 SlotIndex) const;
+	const FDRItemInstance* ResolveSelectedItem() const;
 	
+	void RefreshDerivedState();	
 	// 손에 든 장비에 따라 ASC의 Ability, Effect 또한 함께 새로고침
-	void RefreshHandedItem();
+	void RefreshHeldItem();
 	void RequestReplicationUpdate() const;
 	
 public:
+	// 모든 퀵슬롯 변경에 호출
 	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")
 	FDRQuickSlotsChanged OnQuickSlotsChangedDelegate;
 	
@@ -185,32 +121,26 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")
 	FDRSelectedQuickSlotItemChanged OnSelectedQuickSlotItemChangedDelegate;
 
-protected:
-	// 기본으로 제공되는 최초 슬롯 수
-	// 실제 슬롯 수는 QuickSlots.Num()
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "QuickSlot", meta = (ClampMin = 1, UIMin = 1))
-	int32 InitialSlotCount = 5;
-	
-	UPROPERTY(ReplicatedUsing = OnRep_QuickSlots, VisibleInstanceOnly, BlueprintReadOnly, Category = "Quick Slot")
-	TArray<FDRQuickSlotEntry> QuickSlots;
-	
-	UPROPERTY(ReplicatedUsing = OnRep_SelectedSlotIndex, VisibleInstanceOnly, BlueprintReadOnly, Category = "Quick Slot")
-	int32 SelectedSlotIndex = INDEX_NONE;
-	
 private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
+	
+	UPROPERTY(ReplicatedUsing = OnRep_SelectedInstanceId, VisibleInstanceOnly, BlueprintReadOnly
+		, Category = "Quick Slot", meta = (AllowPrivateAccess = "true"))
+	FGuid SelectedInstanceId;
 	
 	/**
  	* UI에 슬롯 수 변경을 알리기 위해
  	* 마지막으로 확인한 슬롯 수를 보관한다.
  	*/
 	int32 CachedSlotCount = 0;
+	int32 CachedSelectedSlotIndex = INDEX_NONE;
 	
 	// 실제로 손에 쥐어질 아이템의 Definition
 	// 수량이 0인 경우 nullptr
 	UPROPERTY(Transient)
 	TObjectPtr<UDRItemDefinition> HeldItemDefinition;
 	
+	FGuid EquippedInstanceId;
 	FDRItemAbilitySet_GrantedHandles GrantedHandles;
 };

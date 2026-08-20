@@ -26,6 +26,7 @@
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
+#include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -47,6 +48,7 @@ ADRPlayerController::ADRPlayerController()
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
+	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -199,14 +201,19 @@ void ADRPlayerController::SetupGASInputComponent()
 
 	if (IsValid(PrimaryAction))
 	{
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Primary));
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Primary));
 	}
 
 	if (IsValid(SecondaryAction))
 	{
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputID::Secondary));
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputID::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
+	}
+	
+	if (IsValid(InventoryAction))
+	{
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Inventory));
 	}
 
 	bGASInputBound = true;
@@ -218,7 +225,7 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 	if (IsValid(QuickSlotComponent))
 	{
-		QuickSlotComponent->ApplySelectedItemToCharacter();
+		QuickSlotComponent->RefreshSelectedItem();
 	}
 
 	if (IsValid(HUDUIComponent))
@@ -309,53 +316,23 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(InventoryComponent) ||
 		!IsValid(QuickSlotComponent) ||
 		!IsValid(StartingShovelDefinition) ||
-		!IsValid(StartingProjectileWeaponDefinition))
+		!IsValid(StartingProjectileWeaponDefinition) ||
+		InventoryComponent->GetMaxSlots() < 2)
 	{
 		return;
 	}
 
-	// 1번 = 삽, 2번 = 눈총이 필요
-	if (QuickSlotComponent->GetSlotCount() < 2)
+	if (!InventoryComponent->GetItemAtSlot(0))
 	{
-		UE_LOG(LogTemp, Error, TEXT( "[StartingItem] " "At least 2 quick slots are required. " "Controller=%s"), *GetName());
-
-		return;
+		InventoryComponent->TryAddItemToSlot(0, StartingShovelDefinition, 1);
 	}
-
-	// ===== 1. 시작 삽 지급 =====
-
-	if (InventoryComponent->GetItemCount(StartingShovelDefinition) <= 0)
+	
+	if (!InventoryComponent->GetItemAtSlot(1))
 	{
-		InventoryComponent->TryAddItem(StartingShovelDefinition, 1);
+		InventoryComponent->TryAddItemToSlot(1, StartingProjectileWeaponDefinition, 1);
 	}
-
-	// ===== 2. 시작 눈총 지급 =====
-
-	if (InventoryComponent->GetItemCount(StartingProjectileWeaponDefinition) <= 0)
-	{
-		InventoryComponent->TryAddItem(StartingProjectileWeaponDefinition, 1);
-	}
-
-	// ===== 3. 퀵슬롯 고정 배치 =====
-
-	// 사용자 기준 1번 슬롯 = Index 0 = 삽
-	if (!QuickSlotComponent->IsSlotBound(0))
-	{
-		QuickSlotComponent->RequestBindSlot(0, StartingShovelDefinition);
-	}
-
-	// 사용자 기준 2번 슬롯 = Index 1 = 눈총
-	if (!QuickSlotComponent->IsSlotBound(1))
-	{
-		QuickSlotComponent->RequestBindSlot(1, StartingProjectileWeaponDefinition);
-	}
-
-	// ===== 4. 기본 장비는 삽 =====
-
-	if (QuickSlotComponent->GetSelectedSlotIndex() == INDEX_NONE)
-	{
-		QuickSlotComponent->RequestSelectSlot(0);
-	}
+	
+	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
 void ADRPlayerController::HandleGASInputPressed(int32 InputId)

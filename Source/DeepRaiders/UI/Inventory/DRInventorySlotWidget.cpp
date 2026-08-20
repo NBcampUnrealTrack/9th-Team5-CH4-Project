@@ -7,6 +7,9 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "DRInventoryDragDropOperation.h"
+#include "InputCoreTypes.h"
 
 void UDRInventorySlotWidget::NativeConstruct()
 {
@@ -22,34 +25,109 @@ void UDRInventorySlotWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UDRInventorySlotWidget::SetEntry(const FDRInventoryEntry& Entry)
+void UDRInventorySlotWidget::SetItemInstance(int32 InSlotIndex, const FDRItemInstance& ItemInstance, bool bInLocked)
 {
-	EntryId = Entry.EntryId;
+	SlotIndex = InSlotIndex;
+	bLocked = bInLocked;
 	
-	UTexture2D* Icon = IsValid(Entry.Definition) ? Entry.Definition->Icon : nullptr;
+	if (!ItemInstance.IsValid())
+	{
+		ClearSlot(InSlotIndex, bInLocked);
+		return;
+	}
+	
+	InstanceId = ItemInstance.InstanceId;
+	
+	UTexture2D* Icon = IsValid(ItemInstance.Definition) ? ItemInstance.Definition->Icon : nullptr;
 	
 	ItemIcon->SetBrushFromTexture(Icon);
+	
 	ItemIcon->SetVisibility(IsValid(Icon) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	
-	QuantityText->SetText(FText::AsNumber(Entry.Quantity));
-	QuantityText->SetVisibility((ESlateVisibility::HitTestInvisible));
+	QuantityText->SetText(FText::AsNumber(ItemInstance.Quantity));
+	QuantityText->SetVisibility(ItemInstance.Quantity > 1 
+		? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 }
 
-void UDRInventorySlotWidget::ClearSlot()
+void UDRInventorySlotWidget::ClearSlot(int32 InSlotIndex, bool bInLocked)
 {
-	EntryId.Invalidate();
+	SlotIndex = InSlotIndex;
+	bLocked = bInLocked;
+	InstanceId.Invalidate();
 	
 	ItemIcon->SetBrushFromTexture(nullptr);
 	ItemIcon->SetVisibility(ESlateVisibility::Hidden);
 	
 	QuantityText->SetText(FText::GetEmpty());
-	QuantityText->SetVisibility((ESlateVisibility::Hidden));
+	QuantityText->SetVisibility(ESlateVisibility::Hidden);	
+}
+
+FReply UDRInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (!bLocked
+		&& InstanceId.IsValid()
+		&& InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this,
+			EKeys::LeftMouseButton).NativeReply;
+	}
+	
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent,
+	UDragDropOperation*& OutOperation)
+{
+	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+	
+	if (bLocked
+		|| !InstanceId.IsValid()
+		|| SlotIndex == INDEX_NONE)
+	{
+		return;
+	}
+	
+	UDRInventoryDragDropOperation* Operation = Cast<UDRInventoryDragDropOperation>(
+		UWidgetBlueprintLibrary::CreateDragDropOperation(UDRInventoryDragDropOperation::StaticClass()));
+	
+	if (!Operation)
+	{
+		return;
+	}
+	
+	Operation->SourceSlotIndex = SlotIndex;
+	Operation->SourceInstanceId = InstanceId;
+	Operation->Pivot = EDragPivot::CenterCenter;
+	
+	OutOperation = Operation;
+}
+
+bool UDRInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+	UDragDropOperation* InOperation)
+{
+	if (bLocked || SlotIndex == INDEX_NONE)
+	{
+		return false;
+	}
+	
+	const UDRInventoryDragDropOperation* Operation = Cast<UDRInventoryDragDropOperation>(InOperation);
+	
+	if (!Operation
+		|| !Operation->SourceInstanceId.IsValid()
+		|| Operation->SourceSlotIndex == SlotIndex)
+	{
+		return false;
+	}
+	
+	OnMoveRequestedDelegate.Broadcast(Operation->SourceSlotIndex, SlotIndex);
+	
+	return true;
 }
 
 void UDRInventorySlotWidget::HandleSlotClicked()
 {
-	if(EntryId.IsValid())
+	if(InstanceId.IsValid())
 	{
-		OnSlotClickedDelegate.Broadcast(EntryId);
+		OnSlotClickedDelegate.Broadcast(InstanceId);
 	}
 }

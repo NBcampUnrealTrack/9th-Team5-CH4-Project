@@ -4,23 +4,27 @@
 
 #include "CoreMinimal.h"
 #include "DRItemDefinition.h"
+#include "DRItemTypes.h"
+#include "StructUtils/InstancedStruct.h"
 #include "DRItemInstance.generated.h"
 
-class UDRItemDefinition;
-
 USTRUCT(BlueprintType)
-struct FDRItemInstance
+struct DEEPRAIDERS_API FDRItemInstance
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
 	TObjectPtr<UDRItemDefinition> Definition = nullptr;
 	
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
 	FGuid InstanceId;
 	
-	UPROPERTY(BlueprintReadOnly)
-	int32 Quantity = 1;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
+	int32 Quantity = 0;
+	
+	// 런타임 인스턴스가 보유 중인 특이 사항 정보
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
+	TInstancedStruct<FDRItemRuntimeState> RuntimeState;
 	
 	const UDRItemDefinition* GetDefinition() const
 	{
@@ -34,3 +38,8 @@ public:
 		&& Quantity > 0;
 	}
 };
+
+namespace DRItemInstanceFactory
+{
+	DEEPRAIDERS_API FDRItemInstance Create(UDRItemDefinition* Definition, int32 Quantity = 1);
+}

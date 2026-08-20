@@ -2,28 +2,9 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
-#include "DRInventoryTypes.generated.h"
-
-class UDRItemDefinition;
-
-USTRUCT(BlueprintType)
-struct DEEPRAIDERS_API FDRInventoryEntry
+namespace DRInventorySlots
 {
-	GENERATED_BODY()
-
-public:	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
-	FGuid EntryId;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
-	TObjectPtr<UDRItemDefinition> Definition = nullptr;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
-	int32 Quantity = 0;
-	
-	bool IsValid() const
-	{
-		return EntryId.IsValid() && Definition != nullptr && Quantity > 0;
-	}
-};
+	// 기본 무기는 버릴 수 없는 무기라고 가정하고 진행
+	// 기본 무기 슬롯
+	inline constexpr int32 DefaultWeapon = 0;
+}

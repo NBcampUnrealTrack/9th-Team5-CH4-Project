@@ -15,7 +15,7 @@ struct FDRUpgradeOperation
 	GENERATED_BODY()
 
 	UPROPERTY()
-	FGuid SourceEntryId;
+	FGuid SourceInstanceId;
 
 	UPROPERTY()
 	TObjectPtr<UDRItemDefinition> SourceDefinition;
@@ -71,8 +71,8 @@ private:
 		const UDRInventoryComponent* Inventory) const;
 
 	/** 교체할 장비 Entry를 찾아 고유 ID를 반환한다. */
-	bool FindUpgradeSourceEntryId(
+	bool FindUpgradeSourceInstanceId(
 		const UDRInventoryComponent* Inventory,
 		const UDRItemDefinition* SourceDefinition,
-		FGuid& OutEntryId) const;
+		FGuid& OutInstanceId) const;
 };
