@@ -4,9 +4,13 @@
 #include "DRInventoryWidget.h"
 
 #include "Components/Button.h"
+#include "Components/HorizontalBox.h"
 #include "Components/UniformGridPanel.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/UI/ViewModel/DRInventoryViewModel.h"
 #include "DRInventorySlotWidget.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
 
 void UDRInventoryWidget::NativeConstruct()
 {
@@ -21,6 +25,11 @@ void UDRInventoryWidget::NativeConstruct()
 void UDRInventoryWidget::NativeDestruct()
 {
 	UnBindInventory();
+
+	if (IsValid(InventoryViewModel))
+	{
+		InventoryViewModel->Deinitialize();
+	}
 	
 	if (IsValid(CloseButton))
 	{
@@ -32,12 +41,113 @@ void UDRInventoryWidget::NativeDestruct()
 
 void UDRInventoryWidget::InitializeInventory(UDRInventoryComponent* NewInventoryComponent)
 {
+	if (!IsValid(InventoryViewModel))
+	{
+		InventoryViewModel = NewObject<UDRInventoryViewModel>(this);
+	}
+
+	if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+		IsValid(View) && View->SetViewModel(InventoryViewModelName, InventoryViewModel))
+	{
+		InventoryViewModel->Initialize(NewInventoryComponent);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Inventory ViewModel '%s' is not registered on %s"),
+			*InventoryViewModelName.ToString(), *GetName());
+	}
+
 	UnBindInventory();
 	InventoryComponent= NewInventoryComponent;
 	
 	BindInventory();
 	RebuildSlot();
 	RefreshSlots();
+}
+
+void UDRInventoryWidget::InitializeViewModel(UDRInventoryViewModel* NewViewModel)
+{
+	if (!IsValid(NewViewModel))
+	{
+		return;
+	}
+
+	InventoryViewModel = NewViewModel;
+	InventoryComponent = NewViewModel->GetInventoryComponent();
+	if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this))
+	{
+		View->SetViewModel(InventoryViewModelName, InventoryViewModel);
+	}
+}
+
+void UDRInventoryWidget::SetSlotEntries(
+	const TArray<UDRInventorySlotEntryViewModel*>& NewSlotEntries)
+{
+	if (!IsValid(SlotPanel) || !InventorySlotWidgetClass)
+	{
+		return;
+	}
+
+	SlotPanel->ClearChildren();
+	SlotWidgets.Reset();
+	const int32 ColumnCount = FMath::Max(1, SlotsPerRow);
+
+	for (UDRInventorySlotEntryViewModel* EntryViewModel : NewSlotEntries)
+	{
+		if (!IsValid(EntryViewModel))
+		{
+			continue;
+		}
+
+		UDRInventorySlotWidget* SlotWidget = CreateWidget<UDRInventorySlotWidget>(
+			GetOwningPlayer(),
+			InventorySlotWidgetClass);
+
+		if (!IsValid(SlotWidget))
+		{
+			continue;
+		}
+
+		SlotWidget->InitializeViewModel(EntryViewModel);
+		SlotWidget->OnMoveRequestedDelegate.AddDynamic(this, &ThisClass::HandleMoveRequested);
+		SlotWidget->OnSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);
+		const int32 SlotIndex = EntryViewModel->GetSlotIndex();
+		SlotPanel->AddChildToUniformGrid(
+			SlotWidget,
+			SlotIndex / ColumnCount,
+			SlotIndex % ColumnCount);
+		SlotWidgets.Add(SlotWidget);
+	}
+}
+
+void UDRInventoryWidget::SetQuickSlotEntries(
+	const TArray<UDRInventorySlotEntryViewModel*>& NewQuickSlotEntries)
+{
+	if (!IsValid(QuickSlotPanel) || !QuickSlotWidgetClass)
+	{
+		return;
+	}
+
+	QuickSlotPanel->ClearChildren();
+	for (UDRInventorySlotEntryViewModel* EntryViewModel : NewQuickSlotEntries)
+	{
+		if (!IsValid(EntryViewModel))
+		{
+			continue;
+		}
+
+		UDRInventorySlotWidget* SlotWidget = CreateWidget<UDRInventorySlotWidget>(
+			GetOwningPlayer(),
+			QuickSlotWidgetClass);
+		if (!IsValid(SlotWidget))
+		{
+			continue;
+		}
+
+		SlotWidget->InitializeViewModel(EntryViewModel);
+		SlotWidget->OnSlotClickedDelegate.AddDynamic(this, &ThisClass::HandleSlotClicked);
+		QuickSlotPanel->AddChild(SlotWidget);
+	}
 }
 
 void UDRInventoryWidget::BindInventory()

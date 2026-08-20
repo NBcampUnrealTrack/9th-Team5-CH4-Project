@@ -9,7 +9,32 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "DRInventoryDragDropOperation.h"
+#include "DeepRaiders/UI/ViewModel/DRInventoryViewModel.h"
 #include "InputCoreTypes.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
+
+void UDRInventorySlotWidget::InitializeViewModel(
+	UDRInventorySlotEntryViewModel* NewViewModel)
+{
+	EntryViewModel = NewViewModel;
+
+	if (!IsValid(EntryViewModel))
+	{
+		return;
+	}
+
+	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+
+	if (!IsValid(View) || !View->SetViewModel(EntryViewModelName, EntryViewModel))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Inventory Entry ViewModel '%s' is not registered on %s"),
+			*EntryViewModelName.ToString(), *GetName());
+	}
+
+	SlotIndex = EntryViewModel->GetSlotIndex();
+	InstanceId = EntryViewModel->GetInstanceId();
+}
 
 void UDRInventorySlotWidget::NativeConstruct()
 {
@@ -60,14 +85,15 @@ void UDRInventorySlotWidget::ClearSlot(int32 InSlotIndex, bool bInLocked)
 
 FReply UDRInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (!InstanceId.IsValid() || InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	if (!GetCurrentInstanceId().IsValid()
+		|| InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
 	{
 		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 	}
 	
 	bPointerPressed = true;
 	
-	if (bLocked)
+	if (IsCurrentLocked())
 	{
 		return FReply::Handled().CaptureMouse(TakeWidget());
 	}
@@ -89,7 +115,7 @@ FReply UDRInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry
 	
 	const bool bReleasedInside = InGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
 	
-	if (bReleasedInside && InstanceId.IsValid())
+	if (bReleasedInside && GetCurrentInstanceId().IsValid())
 	{
 		HandleSlotClicked();
 	}
@@ -111,8 +137,10 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 	
 	bPointerPressed = false;
 	
-	if (bLocked
-		|| !InstanceId.IsValid()
+	const FGuid CurrentInstanceId = GetCurrentInstanceId();
+
+	if (IsCurrentLocked()
+		|| !CurrentInstanceId.IsValid()
 		|| SlotIndex == INDEX_NONE)
 	{
 		return;
@@ -127,7 +155,7 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 	}
 	
 	Operation->SourceSlotIndex = SlotIndex;
-	Operation->SourceInstanceId = InstanceId;
+	Operation->SourceInstanceId = CurrentInstanceId;
 	Operation->Pivot = EDragPivot::CenterCenter;
 	
 	if (IsValid(ItemIcon))
@@ -162,7 +190,7 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 bool UDRInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
 	UDragDropOperation* InOperation)
 {
-	if (bLocked || SlotIndex == INDEX_NONE)
+	if (IsCurrentLocked() || SlotIndex == INDEX_NONE)
 	{
 		return false;
 	}
@@ -183,8 +211,20 @@ bool UDRInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDr
 
 void UDRInventorySlotWidget::HandleSlotClicked()
 {
-	if(InstanceId.IsValid())
+	const FGuid CurrentInstanceId = GetCurrentInstanceId();
+
+	if (CurrentInstanceId.IsValid())
 	{
-		OnSlotClickedDelegate.Broadcast(InstanceId);
+		OnSlotClickedDelegate.Broadcast(CurrentInstanceId);
 	}
+}
+
+FGuid UDRInventorySlotWidget::GetCurrentInstanceId() const
+{
+	return IsValid(EntryViewModel) ? EntryViewModel->GetInstanceId() : InstanceId;
+}
+
+bool UDRInventorySlotWidget::IsCurrentLocked() const
+{
+	return IsValid(EntryViewModel) ? EntryViewModel->IsLocked() : bLocked;
 }

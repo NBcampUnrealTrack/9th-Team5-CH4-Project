@@ -2,10 +2,12 @@
 #include "DRInventoryUIComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Storage/DRStorage.h"
-#include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryWidget.h"
+#include "DeepRaiders/UI/Inventory/DRInventoryScreenWidget.h"
+#include "AbilitySystemComponent.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -63,7 +65,7 @@ void UDRInventoryUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		
 		if (IsValid(UIManager))
 		{
-			UIManager->ReleaseManagedWidget(PlayerInventoryWidget);
+			UIManager->PopScreen(DRGameplayTags::UI_Screen_Inventory_Player);
 		}
 		else
 		{
@@ -103,6 +105,11 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 	}
 }
 
+void UDRInventoryUIComponent::CloseInventory()
+{
+	CloseInventoryScreen();
+}
+
 void UDRInventoryUIComponent::HandleCurrentStorageChanged(ADRStorage* NewStorage)
 {
 	if (IsValid(NewStorage))
@@ -129,34 +136,34 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	if (IsValid(PlayerInventoryWidget))
 	{
 		UIManager->SetManagedWidgetVisible(PlayerInventoryWidget, true);
+		SetInventoryOpenTag(true);
 		return;
 	}
 	
-	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
-	if (!IsValid(UIConfig) || !UIConfig->PlayerInventoryWidgetClass)
+	if (!IsValid(UIManager))
 	{
 		return;
 	}
 	
-	PlayerInventoryWidget = Cast<UDRInventoryWidget>(
-		UIManager->CreateManagedWidget(
-			UIConfig->PlayerInventoryWidgetClass,
-			UIConfig->PlayerInventoryLayer));
+	PlayerInventoryWidget = Cast<UDRInventoryScreenWidget>(
+		UIManager->PushScreen(DRGameplayTags::UI_Screen_Inventory_Player));
 	if (!IsValid(PlayerInventoryWidget))
 	{
 		return;
 	}
 	
-	// InventoryComponent와 Widget 연결
-	PlayerInventoryWidget->InitializeInventory(PlayerController->GetInventoryComponent());
+	// Screen ViewModel이 로컬 플레이어와 팀원 패널을 구성한다.
+	PlayerInventoryWidget->InitializeScreen(PlayerController);
 	
 	PlayerInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 	PlayerInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
-	
+	SetInventoryOpenTag(true);
 }
 
 void UDRInventoryUIComponent::HidePlayerInventory()
 {
+	SetInventoryOpenTag(false);
+
 	if (!IsValid(PlayerInventoryWidget))
 	{
 		return;
@@ -167,15 +174,28 @@ void UDRInventoryUIComponent::HidePlayerInventory()
 	UIManager->SetManagedWidgetVisible(PlayerInventoryWidget, false);
 }
 
+void UDRInventoryUIComponent::SetInventoryOpenTag(bool bIsOpen) const
+{
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = PlayerController->GetAbilitySystemComponent())
+	{
+		ASC->SetLooseGameplayTagCount(
+			DRGameplayTags::State_UI_InventoryOpen,
+			bIsOpen ? 1 : 0);
+	}
+}
+
 void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 {
 	HideStorageInventory();
 	
-	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
 	if (!IsValid(Storage)
 		|| !IsValid(Storage->GetInventoryComponent())
-		|| !IsValid(UIConfig)
-		|| !UIConfig->StorageInventoryWidgetClass)
+		|| !IsValid(UIManager))
 	{
 		return;
 	}
@@ -184,9 +204,7 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 	Storage->OnStorageOwnerChangedDelegate.AddDynamic(this, &ThisClass::HandleStorageOwnerChanged);
 	
 	StorageInventoryWidget = Cast<UDRInventoryWidget>(
-		UIManager->CreateManagedWidget(
-			UIConfig->StorageInventoryWidgetClass,
-			UIConfig->StorageInventoryLayer));
+		UIManager->PushScreen(DRGameplayTags::UI_Screen_Inventory_Storage));
 	if (!IsValid(StorageInventoryWidget))
 	{
 		return;
@@ -215,7 +233,7 @@ void UDRInventoryUIComponent::HideStorageInventory()
 	
 	if (IsValid(UIManager))
 	{
-		UIManager->ReleaseManagedWidget(StorageInventoryWidget);
+		UIManager->PopScreen(DRGameplayTags::UI_Screen_Inventory_Storage);
 	}
 	else
 	{

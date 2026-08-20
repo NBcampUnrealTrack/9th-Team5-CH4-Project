@@ -8,6 +8,7 @@
 #include "DRInventorySlotWidget.generated.h"
 
 class UButton;
+class UDRInventorySlotEntryViewModel;
 class UImage;
 class UTextBlock;
 
@@ -20,6 +21,8 @@ class DEEPRAIDERS_API UDRInventorySlotWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
+	void InitializeViewModel(UDRInventorySlotEntryViewModel* NewViewModel);
+
 	void SetItemInstance(int32 InSlotIndex, const FDRItemInstance& ItemInstance, bool bInLocked);
 	
 	void ClearSlot(int32 InSlotIndex, bool bInLocked);
@@ -42,6 +45,8 @@ protected:
 private:
 	UFUNCTION()
 	void HandleSlotClicked();
+	FGuid GetCurrentInstanceId() const;
+	bool IsCurrentLocked() const;
 	
 protected:
 	UPROPERTY(meta = (BindWidget))
@@ -57,6 +62,12 @@ protected:
 	float DragVisualOpacity = 0.85f;
 	
 private:
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory|MVVM")
+	FName EntryViewModelName = TEXT("InventorySlotEntryViewModel");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRInventorySlotEntryViewModel> EntryViewModel;
+
 	int32 SlotIndex = INDEX_NONE;
 	FGuid InstanceId;	
 	uint8 bLocked:1 = false;
