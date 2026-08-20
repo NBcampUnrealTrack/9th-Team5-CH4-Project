@@ -39,6 +39,19 @@ public:
 	/** 보유 중인 동일 퍽 개수를 반환한다. */
 	int32 GetPerkCount(const UDRPerkDefinition* PerkDefinition) const;
 
+	/** UI에 표시할 현재 퍽 목록을 반환한다. */
+	const TArray<FDRPerkEntry>& GetPerkEntries() const
+	{
+		return PerkEntries;
+	}
+
+	/** UI에 표시할 전체 퍽 슬롯 수를 반환한다. */
+	UFUNCTION(BlueprintPure, Category = "Perk")
+	int32 GetMaxPerkSlotCount() const
+	{
+		return MaxPerkSlotCount;
+	}
+
 	/** 전체 퍽 슬롯 제한 안에서 퍽을 추가할 수 있는지 확인한다. */
 	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition) const;
 
