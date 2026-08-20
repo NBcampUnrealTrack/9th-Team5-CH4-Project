@@ -67,7 +67,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 350.f;
+	CameraBoom->TargetArmLength = 450.f;
 	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 70.f));
 	CameraBoom->SocketOffset = FVector(0.f, 65.f, 20.f);
 	CameraBoom->bUsePawnControlRotation = true;
