@@ -153,22 +153,6 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
-	
-	UFUNCTION(BlueprintPure, Category = "Player|Combat")
-	bool IsCombatLocomotionActive() const
-	{
-		return bCombatLocomotion;
-	}
-
-	/**
-	 * 사격 시 조준 방향 회전을 일정 시간 유지한다.
-	 * LocalPredicted 클라이언트와 서버 양쪽에서 호출 가능.
-	 */
-	void RefreshCombatLocomotion(float HoldDuration);
-	
-	void EnterCombatLocomotion();
-	void ExitCombatLocomotion();
-	void StopCombatLocomotion();
 
 	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
 	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
@@ -195,7 +179,6 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void InitializeAbilitySystem();
 	
@@ -244,11 +227,6 @@ private:
 	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
 	
 	void ApplySpawnAttributeReset();
-	
-	UPROPERTY(Replicated)
-	bool bCombatLocomotion = false;
-
-	FTimerHandle CombatLocomotionTimerHandle;
 	
 	bool bAbilitySystemReady = false;
 

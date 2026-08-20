@@ -25,7 +25,6 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
-#include "Net/UnrealNetwork.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -61,9 +60,10 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	GetCharacterMovement()->bOrientRotationToMovement = true;
-
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = false;
+	Movement->bUseControllerDesiredRotation = true;
+	Movement->RotationRate = FRotator(0.f, 720.f, 0.f);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
@@ -448,82 +448,6 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-void ADRPlayerCharacter::RefreshCombatLocomotion(float HoldDuration)
-{
-	if ((!HasAuthority() && !IsLocallyControlled()) ||
-		IsDead() ||
-		IsFrozen())
-	{
-		return;
-	}
-
-	EnterCombatLocomotion();
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			CombatLocomotionTimerHandle,
-			this,
-			&ThisClass::StopCombatLocomotion,
-			FMath::Max(HoldDuration, 0.05f),
-			false);
-	}
-
-	if (HasAuthority())
-	{
-		ForceNetUpdate();
-	}
-}
-
-void ADRPlayerCharacter::EnterCombatLocomotion()
-{
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	if (!IsValid(Movement))
-	{
-		return;
-	}
-
-	bCombatLocomotion = true;
-
-	Movement->bOrientRotationToMovement = false;
-	Movement->bUseControllerDesiredRotation = true;
-}
-
-void ADRPlayerCharacter::ExitCombatLocomotion()
-{
-	bCombatLocomotion = false;
-
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	if (!IsValid(Movement))
-	{
-		return;
-	}
-
-	Movement->bUseControllerDesiredRotation = false;
-	Movement->bOrientRotationToMovement = true;
-}
-
-void ADRPlayerCharacter::StopCombatLocomotion()
-{
-	if (!HasAuthority() && !IsLocallyControlled())
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(
-			CombatLocomotionTimerHandle);
-	}
-
-	ExitCombatLocomotion();
-
-	if (HasAuthority())
-	{
-		ForceNetUpdate();
-	}
-}
-
 void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage)
 {
 	if (IsValid(ItemActionPresentationComponent))
@@ -572,13 +496,6 @@ float ADRPlayerCharacter::GetNormalizedAimPitch() const
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-}
-
-void ADRPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ADRPlayerCharacter, bCombatLocomotion);
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()
