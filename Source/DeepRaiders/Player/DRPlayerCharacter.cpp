@@ -67,9 +67,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 420.f;
+	CameraBoom->TargetArmLength = 350.f;
 	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 70.f));
-	CameraBoom->SocketOffset = FVector(0.f, 0.f, 0.f);
+	CameraBoom->SocketOffset = FVector(0.f, 65.f, 20.f);
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = true;
 	CameraBoom->bEnableCameraLag = false;
@@ -448,44 +448,25 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-void ADRPlayerCharacter::RefreshCombatAim(const float HoldDuration)
+void ADRPlayerCharacter::RefreshCombatLocomotion(float HoldDuration)
 {
-	// Local Prediction 또는 서버에서만 상태를 바꾼다.
-	if ((!HasAuthority() && !IsLocallyControlled()) || IsDead() || IsFrozen())
+	if ((!HasAuthority() && !IsLocallyControlled()) ||
+		IsDead() ||
+		IsFrozen())
 	{
 		return;
 	}
 
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-
-	if (!IsValid(Movement))
-	{
-		return;
-	}
-
-	bCombatAiming = true;
-
-	/*
-	 * 평상시:
-	 * 이동 방향으로 회전
-	 *
-	 * Combat Aim:
-	 * Controller(Camera)의 방향을 바라봄
-	 */
-	Movement->bOrientRotationToMovement = false;
-	Movement->bUseControllerDesiredRotation = true;
-
-	if (Controller)
-	{
-		const FRotator ControlRotation = Controller->GetControlRotation();
-
-		SetActorRotation(FRotator(0.f, ControlRotation.Yaw, 0.f));
-	}
+	EnterCombatLocomotion();
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimer(
-			CombatAimTimerHandle, this, &ThisClass::StopCombatAim, FMath::Max(HoldDuration, 0.05f), false);
+			CombatLocomotionTimerHandle,
+			this,
+			&ThisClass::StopCombatLocomotion,
+			FMath::Max(HoldDuration, 0.05f),
+			false);
 	}
 
 	if (HasAuthority())
@@ -494,7 +475,35 @@ void ADRPlayerCharacter::RefreshCombatAim(const float HoldDuration)
 	}
 }
 
-void ADRPlayerCharacter::StopCombatAim()
+void ADRPlayerCharacter::EnterCombatLocomotion()
+{
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	bCombatLocomotion = true;
+
+	Movement->bOrientRotationToMovement = false;
+	Movement->bUseControllerDesiredRotation = true;
+}
+
+void ADRPlayerCharacter::ExitCombatLocomotion()
+{
+	bCombatLocomotion = false;
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	Movement->bUseControllerDesiredRotation = false;
+	Movement->bOrientRotationToMovement = true;
+}
+
+void ADRPlayerCharacter::StopCombatLocomotion()
 {
 	if (!HasAuthority() && !IsLocallyControlled())
 	{
@@ -503,16 +512,11 @@ void ADRPlayerCharacter::StopCombatAim()
 
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(CombatAimTimerHandle);
+		World->GetTimerManager().ClearTimer(
+			CombatLocomotionTimerHandle);
 	}
 
-	bCombatAiming = false;
-
-	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
-	{
-		Movement->bUseControllerDesiredRotation = false;
-		Movement->bOrientRotationToMovement = true;
-	}
+	ExitCombatLocomotion();
 
 	if (HasAuthority())
 	{
@@ -574,7 +578,7 @@ void ADRPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME(ADRPlayerCharacter, bCombatAiming);
+	DOREPLIFETIME(ADRPlayerCharacter, bCombatLocomotion);
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()

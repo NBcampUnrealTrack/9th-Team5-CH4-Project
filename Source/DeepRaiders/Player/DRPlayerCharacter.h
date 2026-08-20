@@ -155,21 +155,22 @@ public:
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
 	
 	UFUNCTION(BlueprintPure, Category = "Player|Combat")
-	bool IsCombatAiming() const
+	bool IsCombatLocomotionActive() const
 	{
-		return bCombatAiming;
+		return bCombatLocomotion;
 	}
 
 	/**
 	 * 사격 시 조준 방향 회전을 일정 시간 유지한다.
 	 * LocalPredicted 클라이언트와 서버 양쪽에서 호출 가능.
 	 */
-	void RefreshCombatAim(float HoldDuration);
-
-	void StopCombatAim();
+	void RefreshCombatLocomotion(float HoldDuration);
+	
+	void EnterCombatLocomotion();
+	void ExitCombatLocomotion();
+	void StopCombatLocomotion();
 
 	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
-
 	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
 	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
@@ -245,9 +246,9 @@ private:
 	void ApplySpawnAttributeReset();
 	
 	UPROPERTY(Replicated)
-	bool bCombatAiming = false;
+	bool bCombatLocomotion = false;
 
-	FTimerHandle CombatAimTimerHandle;
+	FTimerHandle CombatLocomotionTimerHandle;
 	
 	bool bAbilitySystemReady = false;
 

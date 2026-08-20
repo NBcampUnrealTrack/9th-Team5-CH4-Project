@@ -60,7 +60,7 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	{
 		const float AimHoldDuration = WeaponDefinition->BaseFireInterval + 0.15f;
 
-		Character->RefreshCombatAim(AimHoldDuration);
+		Character->RefreshCombatLocomotion(AimHoldDuration);
 
 		// Remote owning client 예측 재생
 		if (!ActorInfo->IsNetAuthority() && Character->IsLocallyControlled() && IsValid(PrimaryActionMontage))
