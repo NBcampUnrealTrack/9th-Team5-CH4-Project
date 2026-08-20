@@ -10,13 +10,17 @@
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
+#include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	ShopWidgetLayer = EDRUILayer::Menu;
 }
 
 void UDRShopUIComponent::BeginPlay()
@@ -58,6 +62,8 @@ void UDRShopUIComponent::EndPlay(
 	}
 
 	HideShopWidget();
+	PlayerController = nullptr;
+	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -69,16 +75,24 @@ void UDRShopUIComponent::HandlePawnEntered(APawn* Pawn)
 		return;
 	}
 
-	ADRPlayerController* PlayerController =
+	ADRPlayerController* NewPlayerController =
 		Cast<ADRPlayerController>(Pawn->GetController());
 
-	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	if (!IsValid(NewPlayerController)
+		|| !NewPlayerController->IsLocalController())
 	{
 		return;
 	}
 
 	// 입력을 처리할 로컬 플레이어에게 현재 상점을 등록한다.
-	PlayerController->SetAvailableShop(this);
+	PlayerController = NewPlayerController;
+
+	if (ULocalPlayer* LocalPlayer = NewPlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	}
+
+	NewPlayerController->SetAvailableShop(this);
 }
 
 void UDRShopUIComponent::ToggleShopWidget()
@@ -102,10 +116,9 @@ void UDRShopUIComponent::ShowShopWidget()
 		return;
 	}
 
-	ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(GetWorld()->GetFirstPlayerController());
-
-	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	if (!IsValid(PlayerController)
+		|| !PlayerController->IsLocalController()
+		|| !IsValid(UIManager))
 	{
 		return;
 	}
@@ -125,9 +138,9 @@ void UDRShopUIComponent::ShowShopWidget()
 		return;
 	}
 
-	ShopWidget = CreateWidget<UDRShopWidget>(
-		PlayerController,
-		ShopWidgetClass);
+	ShopWidget = Cast<UDRShopWidget>(UIManager->CreateManagedWidget(
+		ShopWidgetClass,
+		ShopWidgetLayer));
 
 	if (!IsValid(ShopWidget))
 	{
@@ -135,9 +148,11 @@ void UDRShopUIComponent::ShowShopWidget()
 	}
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
-	ShopWidget->InitializeShop(MakeOfferViews(
-		ShopComponent->GetItemOffers(),
-		EDRShopOfferType::Purchase));
+	ShopWidget->SetOffers(
+		EDRShopOfferType::Purchase,
+		MakeOfferViews(
+			ShopComponent->GetItemOffers(),
+			EDRShopOfferType::Purchase));
 	RefreshUpgradeOffers();
 	RefreshPerkOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(
@@ -146,9 +161,6 @@ void UDRShopUIComponent::ShowShopWidget()
 	ShopWidget->OnOfferRequested.AddDynamic(
 		this,
 		&ThisClass::HandleOfferRequested);
-	ShopWidget->OnSellAllOresRequested.AddDynamic(
-		this,
-		&ThisClass::HandleSellAllOresRequested);
 	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
 		this,
 		&ThisClass::HandleInventoryChanged);
@@ -158,11 +170,7 @@ void UDRShopUIComponent::ShowShopWidget()
 	PlayerState->OnCoinsChanged.AddDynamic(
 		this,
 		&ThisClass::HandleCoinsChanged);
-	ShopWidget->AddToViewport();
-
-	// 상점 UI를 조작할 수 있도록 마우스와 입력 모드를 전환한다.
-	FInputModeGameAndUI InputMode;
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	// 상점 UI를 조작하는 동안 캐릭터 이동만 차단한다.
 	PlayerController->FlushPressedKeys();
 
 	if (!IsMoveInputBlocked)
@@ -171,18 +179,16 @@ void UDRShopUIComponent::ShowShopWidget()
 		IsMoveInputBlocked = true;
 	}
 
-	PlayerController->SetInputMode(InputMode);
-	PlayerController->bShowMouseCursor = true;
 }
 
 void UDRShopUIComponent::HandlePawnExited(APawn* Pawn)
 {
 	if (IsValid(Pawn) && Pawn->IsLocallyControlled())
 	{
-		if (ADRPlayerController* PlayerController =
+		if (ADRPlayerController* ExitingPlayerController =
 			Cast<ADRPlayerController>(Pawn->GetController()))
 		{
-			PlayerController->ClearAvailableShop(this);
+			ExitingPlayerController->ClearAvailableShop(this);
 		}
 
 		// 범위를 벗어나면 열려 있는 상점 UI도 함께 닫는다.
@@ -213,10 +219,6 @@ void UDRShopUIComponent::HideShopWidget()
 			&ThisClass::HandleCoinsChanged);
 	}
 
-	APlayerController* PlayerController = IsValid(ShopWidget)
-		? ShopWidget->GetOwningPlayer()
-		: nullptr;
-
 	if (IsValid(ShopWidget))
 	{
 		ShopWidget->OnCloseRequested.RemoveDynamic(
@@ -225,10 +227,15 @@ void UDRShopUIComponent::HideShopWidget()
 		ShopWidget->OnOfferRequested.RemoveDynamic(
 			this,
 			&ThisClass::HandleOfferRequested);
-		ShopWidget->OnSellAllOresRequested.RemoveDynamic(
-			this,
-			&ThisClass::HandleSellAllOresRequested);
-		ShopWidget->RemoveFromParent();
+
+		if (IsValid(UIManager))
+		{
+			UIManager->ReleaseManagedWidget(ShopWidget);
+		}
+		else
+		{
+			ShopWidget->RemoveFromParent();
+		}
 	}
 
 	ShopWidget = nullptr;
@@ -239,7 +246,7 @@ void UDRShopUIComponent::HideShopWidget()
 
 	if (IsValid(PlayerController))
 	{
-		// 상점 종료 후 게임 입력 상태로 복구한다.
+		// 상점 종료 후 이동 입력을 복구한다.
 		PlayerController->FlushPressedKeys();
 
 		if (IsMoveInputBlocked)
@@ -248,8 +255,6 @@ void UDRShopUIComponent::HideShopWidget()
 			IsMoveInputBlocked = false;
 		}
 
-		PlayerController->SetInputMode(FInputModeGameOnly());
-		PlayerController->bShowMouseCursor = false;
 	}
 
 	IsMoveInputBlocked = false;
@@ -263,16 +268,9 @@ void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 	}
 }
 
-void UDRShopUIComponent::HandleSellAllOresRequested()
-{
-	if (IsValid(ShopTransactionComponent))
-	{
-		ShopTransactionComponent->RequestSellAllOres(GetOwner());
-	}
-}
-
 void UDRShopUIComponent::HandleInventoryChanged()
 {
+	RefreshItemOffers();
 	RefreshUpgradeOffers();
 }
 
@@ -283,7 +281,23 @@ void UDRShopUIComponent::HandlePerksChanged()
 
 void UDRShopUIComponent::HandleCoinsChanged(int32)
 {
+	RefreshItemOffers();
+	RefreshUpgradeOffers();
 	RefreshPerkOffers();
+}
+
+void UDRShopUIComponent::RefreshItemOffers()
+{
+	if (!IsValid(ShopWidget) || !IsValid(ShopComponent))
+	{
+		return;
+	}
+
+	ShopWidget->SetOffers(
+		EDRShopOfferType::Purchase,
+		MakeOfferViews(
+			ShopComponent->GetItemOffers(),
+			EDRShopOfferType::Purchase));
 }
 
 void UDRShopUIComponent::RefreshUpgradeOffers()
@@ -296,18 +310,24 @@ void UDRShopUIComponent::RefreshUpgradeOffers()
 		return;
 	}
 
-	ShopWidget->SetUpgradeOffers(MakeOfferViews(
-		UpgradeComponent->GetNextUpgradeOffers(
-			ShopComponent,
-			InventoryComponent),
-		EDRShopOfferType::Upgrade));
+	ShopWidget->SetOffers(
+		EDRShopOfferType::Upgrade,
+		MakeOfferViews(
+			UpgradeComponent->GetNextUpgradeOffers(
+				ShopComponent,
+				InventoryComponent),
+			EDRShopOfferType::Upgrade));
 }
 
 void UDRShopUIComponent::RefreshPerkOffers()
 {
-	if (IsValid(ShopWidget))
+	if (IsValid(ShopWidget) && IsValid(ShopComponent))
 	{
-		ShopWidget->SetPerkOffers(BuildPerkOfferViews());
+		ShopWidget->SetOffers(
+			EDRShopOfferType::Perk,
+			MakeOfferViews(
+				ShopComponent->GetItemOffers(),
+				EDRShopOfferType::Perk));
 	}
 }
 
@@ -325,17 +345,34 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			continue;
 		}
 
+		UDRPerkDefinition* PerkDefinition = OfferType == EDRShopOfferType::Perk
+			? Cast<UDRPerkDefinition>(Offer.ItemDefinition)
+			: nullptr;
+
+		if (OfferType == EDRShopOfferType::Perk
+			&& !IsValid(PerkDefinition))
+		{
+			continue;
+		}
+
 		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
 		OfferView.Request = Offer.MakeRequest();
-		OfferView.Request.OfferType = OfferType;
-		OfferView.Section = OfferType == EDRShopOfferType::Upgrade
-			? EDRShopOfferSection::Upgrade
-			: Offer.ItemDefinition->Category == EDRItemCategory::Consumable
-				? EDRShopOfferSection::Consumable
-				: EDRShopOfferSection::Equipment;
+		OfferView.Section = OfferType == EDRShopOfferType::Perk
+			? EDRShopOfferSection::Perk
+			: OfferType == EDRShopOfferType::Upgrade
+				? EDRShopOfferSection::Upgrade
+				: Offer.ItemDefinition->Category == EDRItemCategory::Consumable
+					? EDRShopOfferSection::Consumable
+					: EDRShopOfferSection::Equipment;
 		OfferView.DisplayName = Offer.ItemDefinition->DisplayName;
 
-		if (OfferType == EDRShopOfferType::Upgrade
+		if (IsValid(PerkDefinition))
+		{
+			OfferView.DisplayName = FText::Format(
+				FText::FromString(TEXT("{0} 퍽")),
+				PerkDefinition->DisplayName);
+		}
+		else if (OfferType == EDRShopOfferType::Upgrade
 			&& IsValid(Offer.UpgradeSourceDefinition))
 		{
 			OfferView.DisplayName = FText::Format(
@@ -347,56 +384,35 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		OfferView.Description = Offer.ItemDefinition->Description;
 		OfferView.Icon = Offer.ItemDefinition->Icon;
 		OfferView.Price = Offer.ItemDefinition->Price;
-	}
 
-	return OfferViews;
-}
-
-TArray<FDRShopOfferView> UDRShopUIComponent::BuildPerkOfferViews() const
-{
-	TArray<FDRShopOfferView> OfferViews;
-
-	// 퍽 상품과 플레이어 구매 상태를 모두 확인할 수 있을 때만 View를 생성한다.
-	if (!IsValid(ShopComponent)
-		|| !IsValid(PerkComponent)
-		|| !IsValid(PlayerState))
-	{
-		return OfferViews;
-	}
-
-	for (const FDRShopItemOffer& Offer : ShopComponent->GetItemOffers())
-	{
-		// 일반 상품과 장비 업그레이드는 퍽 UI에서 제외한다.
-		if (Offer.OfferType != EDRShopOfferType::Perk)
+		if (!IsValid(ShopComponent) || !IsValid(PlayerState))
 		{
+			OfferView.IsPurchasable = false;
 			continue;
 		}
 
-		// 상점 ItemDefinition이 실제 퍽 Definition인지 확인한다.
-		UDRPerkDefinition* PerkDefinition =
-			Cast<UDRPerkDefinition>(Offer.ItemDefinition);
-
-		if (!IsValid(PerkDefinition))
+		switch (OfferType)
 		{
-			continue;
-		}
+		case EDRShopOfferType::Purchase:
+			OfferView.IsPurchasable = ShopComponent->CanPurchaseItem(
+				InventoryComponent,
+				Offer.ItemDefinition,
+				PlayerState->GetCoins());
+			break;
 
-		// 퍽 Definition의 표시 데이터로 상점 UI View를 구성한다.
-		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
-		OfferView.Request = Offer.MakeRequest();
-		OfferView.Request.OfferType = EDRShopOfferType::Perk;
-		OfferView.Section = EDRShopOfferSection::Perk;
-		OfferView.DisplayName = FText::Format(
-			FText::FromString(TEXT("{0} 퍽")),
-			PerkDefinition->DisplayName);
-		OfferView.Description = PerkDefinition->Description;
-		OfferView.Icon = PerkDefinition->Icon;
-		OfferView.Price = PerkDefinition->Price;
-		// 현재 코인과 전체 퍽 슬롯 제한을 기준으로 버튼 활성 상태를 결정한다.
-		OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
-			Offer.RowName,
-			PerkComponent,
-			PlayerState->GetCoins());
+		case EDRShopOfferType::Perk:
+			OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
+				PerkDefinition,
+				PerkComponent,
+				PlayerState->GetCoins());
+			break;
+
+		default:
+			OfferView.IsPurchasable = ShopComponent->CanAfford(
+				Offer.ItemDefinition,
+				PlayerState->GetCoins());
+			break;
+		}
 	}
 
 	return OfferViews;

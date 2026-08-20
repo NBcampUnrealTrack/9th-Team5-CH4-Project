@@ -3,15 +3,18 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Shop/DRShopItemTable.h"
+#include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DRShopUIComponent.generated.h"
 
 class APawn;
+class ADRPlayerController;
 class ADRPlayerState;
 class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopAreaComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
+class UDRUIManagerSubsystem;
 class UDRShopWidget;
 class UDRUpgradeComponent;
 
@@ -54,10 +57,6 @@ private:
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
 
-	/** UI의 전체 광물 판매 요청을 서버로 전달한다. */
-	UFUNCTION()
-	void HandleSellAllOresRequested();
-
 	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
 	UFUNCTION()
 	void HandleInventoryChanged();
@@ -73,18 +72,22 @@ private:
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
 
+	/** 현재 코인과 인벤토리 공간에 맞춰 일반 상품을 갱신한다. */
+	void RefreshItemOffers();
+
 	/** 퍽 구매 횟수에 맞춰 Offer UI를 갱신한다. */
 	void RefreshPerkOffers();
 
-	/** 아이템 Offer를 UI 표시용 View 데이터로 변환한다. */
+	/** 상점 Offer를 UI 표시용 View 데이터로 변환한다. */
 	TArray<FDRShopOfferView> MakeOfferViews(
 		const TArray<FDRShopItemOffer>& Offers,
 		EDRShopOfferType OfferType) const;
-	/** 퍽 정의와 플레이어 상태를 조합해 퍽 UI View를 구성한다. */
-	TArray<FDRShopOfferView> BuildPerkOfferViews() const;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
+	EDRUILayer ShopWidgetLayer;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopWidget> ShopWidget;
@@ -109,6 +112,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerState> PlayerState;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 
 	bool IsMoveInputBlocked = false;
 };

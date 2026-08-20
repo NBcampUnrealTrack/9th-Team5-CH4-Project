@@ -390,25 +390,34 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
 {
-	if (IsValid(AvailableShop))
+	AvailableShops.RemoveAll(
+		[](const TWeakObjectPtr<UDRShopUIComponent>& Shop)
+		{
+			return !Shop.IsValid();
+		});
+
+	if (!AvailableShops.IsEmpty())
 	{
-		AvailableShop->ToggleShopWidget();
+		AvailableShops.Last()->ToggleShopWidget();
 	}
 }
 
 void ADRPlayerController::SetAvailableShop(
 	UDRShopUIComponent* ShopUIComponent)
 {
-	AvailableShop = ShopUIComponent;
+	if (!IsValid(ShopUIComponent))
+	{
+		return;
+	}
+
+	AvailableShops.Remove(ShopUIComponent);
+	AvailableShops.Add(ShopUIComponent);
 }
 
 void ADRPlayerController::ClearAvailableShop(
 	UDRShopUIComponent* ShopUIComponent)
 {
-	if (AvailableShop == ShopUIComponent)
-	{
-		AvailableShop = nullptr;
-	}
+	AvailableShops.Remove(ShopUIComponent);
 }
 
 #pragma region Teleport

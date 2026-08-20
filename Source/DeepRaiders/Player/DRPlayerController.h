@@ -156,9 +156,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점이다. */
-	UPROPERTY(Transient)
-	TObjectPtr<UDRShopUIComponent> AvailableShop;
+	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
+	TArray<TWeakObjectPtr<UDRShopUIComponent>> AvailableShops;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;

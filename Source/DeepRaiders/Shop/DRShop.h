@@ -24,11 +24,6 @@ public:
 		return PurchaseSound;
 	}
 
-	USoundBase* GetSellSound() const
-	{
-		return SellSound;
-	}
-
 	float GetTransactionSoundVolume() const
 	{
 		return TransactionSoundVolume;
@@ -52,9 +47,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
 	TObjectPtr<USoundBase> PurchaseSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
-	TObjectPtr<USoundBase> SellSound;
 
 	UPROPERTY(
 		EditDefaultsOnly,
