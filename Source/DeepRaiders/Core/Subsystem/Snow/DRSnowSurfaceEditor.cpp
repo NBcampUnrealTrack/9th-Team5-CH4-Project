@@ -67,112 +67,26 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 }
 
 
-float ApplyVolumeRemovalFromSurfaceChanges(
-	FDRSnowVolumeStore* VolumeStore,
-	AVoxelWorld* VoxelWorld,
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const TArray<FModifiedVoxelValue>& ModifiedValues,
-	float MaxRemovedAmount)
-{
-	if (!VolumeStore ||
-		!IsValid(VoxelWorld) ||
-		MaxRemovedAmount <= 0.f)
-	{
-		return 0.f;
-	}
-
-	float RemovedAmount = 0.f;
-	const float VoxelRadius = FMath::Max(1.f, VoxelWorld->VoxelSize * 0.75f);
-	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
-	{
-		const float RemainingAmount = MaxRemovedAmount - RemovedAmount;
-		if (RemainingAmount <= 0.f)
-		{
-			break;
-		}
-
-		// 제거 방향으로 실제 값이 움직인 voxel만 SnowVolume 감소 대상으로 쓴다.
-		if (ModifiedValue.NewValue <= ModifiedValue.OldValue)
-		{
-			continue;
-		}
-
-		FDRSnowSurfaceRemoveRequest CellRequest = Request;
-		CellRequest.WorldLocation = VoxelWorld->LocalToGlobal(ModifiedValue.Position);
-		CellRequest.Radius = VoxelRadius;
-		CellRequest.RequestedAmount = FMath::Min(
-			RemainingAmount,
-			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
-
-		const FDRSnowRemoveResult Result = VolumeStore->RemoveSnow(CellRequest);
-		RemovedAmount += Result.RemovedAmount;
-	}
-
-	return RemovedAmount;
 }
 
-float ApplyVolumeAddFromSurfaceChanges(
-	FDRSnowVolumeStore* VolumeStore,
-	AVoxelWorld* VoxelWorld,
-	const FDRSnowSurfaceAddRequest& Request,
-	const TArray<FModifiedVoxelValue>& ModifiedValues,
-	float MaxAddedAmount)
-{
-	if (!VolumeStore ||
-		!IsValid(VoxelWorld) ||
-		MaxAddedAmount <= 0.f)
-	{
-		return 0.f;
-	}
-
-	float AddedAmount = 0.f;
-	const float VoxelRadius = FMath::Max(1.f, VoxelWorld->VoxelSize * 0.75f);
-	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
-	{
-		const float RemainingAmount = MaxAddedAmount - AddedAmount;
-		if (RemainingAmount <= 0.f)
-		{
-			break;
-		}
-
-		// 생성 방향으로 실제 값이 움직인 voxel만 SnowVolume 추가 대상으로 쓴다.
-		if (ModifiedValue.NewValue >= ModifiedValue.OldValue)
-		{
-			continue;
-		}
-
-		FDRSnowSurfaceAddRequest CellRequest = Request;
-		CellRequest.WorldLocation = VoxelWorld->LocalToGlobal(ModifiedValue.Position);
-		CellRequest.Radius = VoxelRadius;
-		CellRequest.Amount = FMath::Min(
-			RemainingAmount,
-			FMath::Abs(ModifiedValue.NewValue - ModifiedValue.OldValue));
-
-		const FDRSnowAddResult Result = VolumeStore->AddSnow(CellRequest);
-		AddedAmount += Result.AddedAmount;
-	}
-
-	return AddedAmount;
-}
-
-}
-
-float FDRSnowSurfaceEditor::AddSnowAtArea(
+FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	const FDRSnowSurfaceAddRequest& Request)
 {
+	FDRSnowSurfaceEditResult Result;
 	if (Request.Radius <= 0.f || Request.Amount <= 0.f)
 	{
-		return 0.f;
+		return Result;
 	}
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
-		return 0.f;
+		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
+		// Directional 도구의 실제 변경 목록은 Subsystem이 Ownership/Volume 원본 데이터를 갱신할 때 사용한다.
 		const FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint =
 			UDRDirectionalSurfaceTool::FindSurfaceFootprint(
 				VoxelWorld,
@@ -191,25 +105,9 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 			true,
 			ModifiedValues,
 			EditedBounds);
-		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
-		if (AddedAmount > 0.f)
+		Result.AppliedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+		if (Result.AppliedAmount > 0.f)
 		{
-			if (OwnershipStore)
-			{
-				OwnershipStore->RecordAddedVoxels(
-					VoxelWorld,
-					ModifiedValues,
-					Request.Context.TeamId);
-			}
-
-			// CustomTool은 surface footprint에서 실제 변경된 voxel만 원본 density로 기록한다.
-			ApplyVolumeAddFromSurfaceChanges(
-				VolumeStore,
-				VoxelWorld,
-				Request,
-				ModifiedValues,
-				AddedAmount);
-
 			if (EditedBounds.IsValid())
 			{
 				UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
@@ -222,10 +120,12 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 					true);
 			}
 
-			OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
+			Result.VoxelWorld = VoxelWorld;
+			Result.ModifiedValues = MoveTemp(ModifiedValues);
+			Result.bUseModifiedValuesForVolume = true;
 		}
 
-		return AddedAmount;
+		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
@@ -246,8 +146,8 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 
 		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
-		const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
-		if (AddedAmount > 0.f)
+		Result.AppliedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+		if (Result.AppliedAmount > 0.f)
 		{
 			const FVoxelIntBox SurfaceBounds =
 				UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
@@ -281,10 +181,10 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 					true);
 			}
 
-			OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
 		}
 
-		return AddedAmount;
+		Result.VoxelWorld = VoxelWorld;
+		return Result;
 	}
 
 	// 눈 쌓기도 SurfaceTool 객체 대신 함수형 API로 처리한다.
@@ -296,7 +196,7 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 			Request.Radius);
 	if (!SurfaceBounds.IsValid())
 	{
-		return 0.f;
+		return Result;
 	}
 
 	FVoxelSurfaceEditsVoxels SurfaceVoxels;
@@ -334,8 +234,8 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 
 	const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
-	const float AddedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
-	if (AddedAmount > 0.f)
+	Result.AppliedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
+	if (Result.AppliedAmount > 0.f)
 	{
 		// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
 		// 단, 기존 표면과 겹친 교집합은 유지하고 이번 Add로 새로 채워진 위치만 칠한다.
@@ -345,23 +245,25 @@ float FDRSnowSurfaceEditor::AddSnowAtArea(
 			Request.Context.TeamId,
 			true);
 
-		OnSnowAddedToSurface.Broadcast(Request, AddedAmount);
 	}
 
-	return AddedAmount;
+	Result.VoxelWorld = VoxelWorld;
+	return Result;
 }
 
-float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request)
+FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
+	const FDRSnowSurfaceRemoveRequest& Request)
 {
+	FDRSnowSurfaceEditResult Result;
 	if (Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
 	{
-		return 0.f;
+		return Result;
 	}
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
-		return 0.f;
+		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
@@ -384,26 +286,15 @@ float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& 
 			Request.bInvertSurfaceStrength,
 			ModifiedValues,
 			EditedBounds);
-		const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-		if (RemovedAmount > 0.f)
+		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+		if (Result.AppliedAmount > 0.f)
 		{
-			if (OwnershipStore)
-			{
-				OwnershipStore->RemoveClearedVoxels(VoxelWorld, ModifiedValues);
-			}
-
-			// CustomTool이 직접 비운 voxel만 SnowVolume 감소 대상으로 쓴다.
-			ApplyVolumeRemovalFromSurfaceChanges(
-				VolumeStore,
-				VoxelWorld,
-				Request,
-				ModifiedValues,
-				RemovedAmount);
-
-			OnSnowRemovedFromSurface.Broadcast(Request, RemovedAmount);
+			Result.VoxelWorld = VoxelWorld;
+			Result.ModifiedValues = MoveTemp(ModifiedValues);
+			Result.bUseModifiedValuesForVolume = true;
 		}
 
-		return RemovedAmount;
+		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
@@ -429,13 +320,9 @@ float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& 
 
 		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
-		const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-		if (RemovedAmount > 0.f)
-		{
-			OnSnowRemovedFromSurface.Broadcast(Request, RemovedAmount);
-		}
-
-		return RemovedAmount;
+		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+		Result.VoxelWorld = VoxelWorld;
+		return Result;
 	}
 
 	// SurfaceTool 객체를 직접 쓰지 않고 함수형 API만 감싼다.
@@ -447,7 +334,7 @@ float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& 
 	
 	if (!SurfaceBounds.IsValid())
 	{
-		return 0.f;
+		return Result;
 	}
 
 	FVoxelSurfaceEditsVoxels SurfaceVoxels;
@@ -490,17 +377,15 @@ float FDRSnowSurfaceEditor::RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& 
 
 	// 실제 Voxel 값 변화량만 흡수량으로 인정한다.
 	// 이 값이 이후 SnowAmmo 회복과 SnowLedger 감소량의 기준이 된다.
-	const float RemovedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-	if (RemovedAmount > 0.f)
-	{
-		OnSnowRemovedFromSurface.Broadcast(Request, RemovedAmount);
-	}
-
-	return RemovedAmount;
+	Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+	Result.VoxelWorld = VoxelWorld;
+	return Result;
 }
 
 bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
-	const FDRSnowSurfaceRemoveRequest& Request)
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowOwnershipStore& OwnershipStore,
+	const FDRSnowVolumeStore& VolumeStore)
 {
 	if (Request.Radius <= 0.f)
 	{
@@ -509,11 +394,6 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
-	{
-		return false;
-	}
-
-	if (!VolumeStore || !OwnershipStore)
 	{
 		return false;
 	}
@@ -551,7 +431,8 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 	for (const FVoxelSurfaceEditsVoxel& Voxel : *ProcessedVoxels.Voxels)
 	{
 		int32 DominantTeamId = INDEX_NONE;
-		const bool bFoundOwnership = OwnershipStore->GetNearestTeamAtVoxel(
+		// 새로 생긴 눈은 ownership 기록이 더 정확하고, 기존 표면은 Volume 우세 팀으로 fallback 한다.
+		const bool bFoundOwnership = OwnershipStore.GetNearestTeamAtVoxel(
 				VoxelWorld,
 				Voxel.Position,
 				2,
@@ -563,7 +444,7 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 				ProcessedVoxels.Info.bHasSurfacePositions
 					? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
 					: VoxelWorld->LocalToGlobal(Voxel.Position);
-			DominantTeamId = VolumeStore->GetDominantTeamAtLocation(SampleWorldLocation);
+			DominantTeamId = VolumeStore.GetDominantTeamAtLocation(SampleWorldLocation);
 		}
 
 		VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);

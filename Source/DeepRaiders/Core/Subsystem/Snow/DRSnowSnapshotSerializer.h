@@ -10,6 +10,7 @@ class FDRSnowVolumeStore;
 
 struct FDRSnowJoinCheckpoint
 {
+	// OperationSequence 이후의 recent history를 재생하기 위한 checkpoint 기준점이다.
 	int32 SnapshotId = 0;
 	int32 OperationSequence = 0;
 	FName VoxelWorldName = NAME_None;
@@ -104,6 +105,14 @@ struct DEEPRAIDERS_API FDRJoinSnapshotSizeReport
 class DEEPRAIDERS_API FDRSnowSnapshotSerializer
 {
 public:
+	FDRSnowSnapshotSerializer(
+		FDRSnowVolumeStore& InVolumeStore,
+		FDRSnowOwnershipStore& InOwnershipStore)
+		: VolumeStore(InVolumeStore)
+		, OwnershipStore(InOwnershipStore)
+	{
+	}
+
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(
 		AVoxelWorld* TargetVoxelWorld = nullptr,
 		bool bLogResult = true) const;
@@ -120,20 +129,21 @@ public:
 		const TArray<uint8>& SnowVolumeData,
 		const TArray<uint8>& OwnershipData);
 
-	void Configure(
-		UWorld* InWorld,
-		FDRSnowVolumeStore& InVolumeStore,
-		FDRSnowOwnershipStore& InOwnershipStore)
+	// serializer는 UObject가 아니므로 VoxelWorld 탐색에 쓸 World context를 호출 전에 받는다.
+	void SetWorld(UWorld* InWorld)
 	{
 		World = InWorld;
-		VolumeStore = &InVolumeStore;
-		OwnershipStore = &InOwnershipStore;
 	}
 
 private:
 	AVoxelWorld* ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotVoxelSaveSizeReport MeasureVoxelSave(AVoxelWorld* TargetVoxelWorld) const;
 	FDRSnapshotSnowVolumeSizeReport MeasureSnowVolume() const;
+	// 크기 측정과 실제 checkpoint 저장이 동일한 sparse Volume 바이트 포맷을 사용하도록 한다.
+	// OutSizeReport가 있으면 직렬화 중 집계 정보도 함께 채운다.
+	void SerializeSnowVolumePayload(
+		FArchive& Archive,
+		FDRSnapshotSnowVolumeSizeReport* OutSizeReport) const;
 	bool SerializeSnowVolume(TArray<uint8>& OutCompressedData) const;
 	bool DeserializeSnowVolume(const TArray<uint8>& CompressedData);
 	bool SerializeOwnership(AVoxelWorld* VoxelWorld, TArray<uint8>& OutCompressedData) const;
@@ -143,6 +153,6 @@ private:
 	FDRSnowJoinCheckpoint LatestCheckpoint;
 	TMap<int32, FDRSnowJoinCheckpoint> CheckpointsById;
 	UWorld* World = nullptr;
-	FDRSnowVolumeStore* VolumeStore = nullptr;
-	FDRSnowOwnershipStore* OwnershipStore = nullptr;
+	FDRSnowVolumeStore& VolumeStore;
+	FDRSnowOwnershipStore& OwnershipStore;
 };

@@ -234,6 +234,7 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 		return false;
 	}
 
+	// Voxel 표현을 먼저 복원한 뒤, 그 표현의 팀 재질 판단에 쓰는 Store를 같은 checkpoint로 맞춘다.
 	FMemoryReader VoxelReader(VoxelSaveData);
 	FVoxelCompressedWorldSave CompressedSave;
 	CompressedSave.Serialize(VoxelReader);
@@ -295,60 +296,13 @@ FDRSnapshotSnowVolumeSizeReport FDRSnowSnapshotSerializer::MeasureSnowVolume() c
 {
 	FDRSnapshotSnowVolumeSizeReport Report;
 
-	if (!VolumeStore)
-	{
-		return Report;
-	}
-
 	FBufferArchive SparseArchive;
-	int32 Version = SnowVolumeSnapshotVersion;
-	const FDRSnowVolumeStore& SnowVolumeStore = *VolumeStore;
-	float CellSize = SnowVolumeStore.CellSize;
-	int32 ChunkSize = SnowVolumeStore.ChunkSize;
-	int32 ChunkCount = SnowVolumeStore.Chunks.Num();
-	SparseArchive << Version;
-	SparseArchive << CellSize;
-	SparseArchive << ChunkSize;
-	SparseArchive << ChunkCount;
-
-	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeStore.Chunks)
-	{
-		const FDRSnowVolumeChunk& Chunk = Pair.Value;
-		int32 NonEmptyCellCount = 0;
-		for (const FDRSnowCell& Cell : Chunk.Cells)
-		{
-			NonEmptyCellCount += Cell.GetTotalAmount() > 0.f ? 1 : 0;
-		}
-
-		FIntVector Origin = Chunk.Origin;
-		int32 TeamIdA = Chunk.TeamIdA;
-		int32 TeamIdB = Chunk.TeamIdB;
-		SparseArchive << Origin;
-		SparseArchive << TeamIdA;
-		SparseArchive << TeamIdB;
-		SparseArchive << NonEmptyCellCount;
-
-		for (int32 LocalIndex = 0; LocalIndex < Chunk.Cells.Num(); ++LocalIndex)
-		{
-			const FDRSnowCell& Cell = Chunk.Cells[LocalIndex];
-			if (Cell.GetTotalAmount() <= 0.f)
-			{
-				continue;
-			}
-
-			SerializeSnowCell(SparseArchive, FIntVector(
-				LocalIndex % Chunk.Size,
-				(LocalIndex / Chunk.Size) % Chunk.Size,
-				LocalIndex / (Chunk.Size * Chunk.Size)), Cell);
-			++Report.NonEmptyCellCount;
-		}
-	}
+	SerializeSnowVolumePayload(SparseArchive, &Report);
 
 	TArray<uint8> CompressedData;
 	FVoxelSerializationUtilities::CompressData(SparseArchive.GetData(), SparseArchive.Num(), CompressedData);
 
 	Report.bSuccess = true;
-	Report.ChunkCount = ChunkCount;
 	Report.SparseSerializedBytes = SparseArchive.Num();
 	Report.CompressedSparseBytes = CompressedData.Num();
 	Report.SparseSerializedMB = BytesToMB(Report.SparseSerializedBytes);
@@ -363,26 +317,28 @@ FDRSnapshotSnowVolumeSizeReport FDRSnowSnapshotSerializer::MeasureSnowVolume() c
 	return Report;
 }
 
-bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressedData) const
+void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
+	FArchive& Archive,
+	FDRSnapshotSnowVolumeSizeReport* OutSizeReport) const
 {
-	OutCompressedData.Reset();
-	if (!VolumeStore)
-	{
-		return false;
-	}
+	FDRSnowVolumeSnapshot VolumeSnapshot;
+	VolumeStore.CopySnapshotData(VolumeSnapshot);
 
-	FBufferArchive Archive;
 	int32 Version = SnowVolumeSnapshotVersion;
-	const FDRSnowVolumeStore& SnowVolumeStore = *VolumeStore;
-	float CellSize = SnowVolumeStore.CellSize;
-	int32 ChunkSize = SnowVolumeStore.ChunkSize;
-	int32 ChunkCount = SnowVolumeStore.Chunks.Num();
+	float CellSize = VolumeSnapshot.CellSize;
+	int32 ChunkSize = VolumeSnapshot.ChunkSize;
+	int32 ChunkCount = VolumeSnapshot.Chunks.Num();
 	Archive << Version;
 	Archive << CellSize;
 	Archive << ChunkSize;
 	Archive << ChunkCount;
 
-	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : SnowVolumeStore.Chunks)
+	if (OutSizeReport)
+	{
+		OutSizeReport->ChunkCount = ChunkCount;
+	}
+
+	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : VolumeSnapshot.Chunks)
 	{
 		const FDRSnowVolumeChunk& Chunk = Pair.Value;
 		int32 NonEmptyCellCount = 0;
@@ -411,8 +367,20 @@ bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressed
 				LocalIndex % Chunk.Size,
 				(LocalIndex / Chunk.Size) % Chunk.Size,
 				LocalIndex / (Chunk.Size * Chunk.Size)), Cell);
+
+			if (OutSizeReport)
+			{
+				++OutSizeReport->NonEmptyCellCount;
+			}
 		}
 	}
+}
+
+bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressedData) const
+{
+	OutCompressedData.Reset();
+	FBufferArchive Archive;
+	SerializeSnowVolumePayload(Archive, nullptr);
 
 	FVoxelSerializationUtilities::CompressData(Archive.GetData(), Archive.Num(), OutCompressedData);
 	return !OutCompressedData.IsEmpty();
@@ -420,7 +388,7 @@ bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressed
 
 bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& CompressedData)
 {
-	if (!VolumeStore || CompressedData.IsEmpty())
+	if (CompressedData.IsEmpty())
 	{
 		return false;
 	}
@@ -492,7 +460,11 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& Compr
 		RestoredChunks.Add(Origin, MoveTemp(Chunk));
 	}
 
-	VolumeStore->ReplaceSnapshotData(CellSize, ChunkSize, MoveTemp(RestoredChunks));
+	FDRSnowVolumeSnapshot VolumeSnapshot;
+	VolumeSnapshot.CellSize = CellSize;
+	VolumeSnapshot.ChunkSize = ChunkSize;
+	VolumeSnapshot.Chunks = MoveTemp(RestoredChunks);
+	VolumeStore.ReplaceSnapshotData(MoveTemp(VolumeSnapshot));
 	return true;
 }
 
@@ -501,13 +473,13 @@ bool FDRSnowSnapshotSerializer::SerializeOwnership(
 	TArray<uint8>& OutCompressedData) const
 {
 	OutCompressedData.Reset();
-	if (!OwnershipStore || !IsValid(VoxelWorld))
+	if (!IsValid(VoxelWorld))
 	{
 		return false;
 	}
 
 	TMap<FIntVector, int32> TeamByVoxel;
-	OwnershipStore->CopySnapshotData(VoxelWorld, TeamByVoxel);
+	OwnershipStore.CopySnapshotData(VoxelWorld, TeamByVoxel);
 	FBufferArchive Archive;
 	int32 Version = OwnershipSnapshotVersion;
 	int32 Count = TeamByVoxel.Num();
@@ -529,7 +501,7 @@ bool FDRSnowSnapshotSerializer::DeserializeOwnership(
 	AVoxelWorld* VoxelWorld,
 	const TArray<uint8>& CompressedData)
 {
-	if (!OwnershipStore || !IsValid(VoxelWorld) || CompressedData.IsEmpty())
+	if (!IsValid(VoxelWorld) || CompressedData.IsEmpty())
 	{
 		return false;
 	}
@@ -567,6 +539,6 @@ bool FDRSnowSnapshotSerializer::DeserializeOwnership(
 		TeamByVoxel.Add(VoxelPosition, TeamId);
 	}
 
-	OwnershipStore->ReplaceSnapshotData(VoxelWorld, MoveTemp(TeamByVoxel));
+	OwnershipStore.ReplaceSnapshotData(VoxelWorld, MoveTemp(TeamByVoxel));
 	return true;
 }

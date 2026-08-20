@@ -4,20 +4,16 @@
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 
-DECLARE_MULTICAST_DELEGATE_TwoParams(
-	FDRSnowAddedToVolumeDelegate,
-	const FDRSnowSurfaceAddRequest&,
-	const FDRSnowAddResult&);
-
-DECLARE_MULTICAST_DELEGATE_TwoParams(
-	FDRSnowRemovedFromVolumeDelegate,
-	const FDRSnowSurfaceRemoveRequest&,
-	const FDRSnowRemoveResult&);
+// Snapshot serializer가 Store 내부 멤버를 직접 알지 않도록 하는 교환용 데이터다.
+struct FDRSnowVolumeSnapshot
+{
+	float CellSize = 20.f;
+	int32 ChunkSize = 32;
+	TMap<FIntVector, FDRSnowVolumeChunk> Chunks;
+};
 
 class DEEPRAIDERS_API FDRSnowVolumeStore
 {
-	friend class FDRSnowSnapshotSerializer;
-
 public:
 	// 팀별 눈 Amount의 원본 데이터 갱신 진입점이다.
 	// VoxelWorld는 이 결과를 보여주는 렌더/충돌 표현으로만 사용한다.
@@ -46,14 +42,9 @@ public:
 		int32 TeamIdA = INDEX_NONE,
 		int32 TeamIdB = INDEX_NONE) const;
 
-	FDRSnowAddedToVolumeDelegate OnSnowAddedToVolume;
-	FDRSnowRemovedFromVolumeDelegate OnSnowRemovedFromVolume;
-
-	// Join snapshot 적용 전용. Voxel 표현과 같은 checkpoint에서 복원되어야 한다.
-	void ReplaceSnapshotData(
-		float InCellSize,
-		int32 InChunkSize,
-		TMap<FIntVector, FDRSnowVolumeChunk>&& InChunks);
+	// Join snapshot 직렬화/복원 전용. 표현 계층과 동일 checkpoint에서 함께 처리한다.
+	void CopySnapshotData(FDRSnowVolumeSnapshot& OutSnapshot) const;
+	void ReplaceSnapshotData(FDRSnowVolumeSnapshot&& InSnapshot);
 
 protected:
 	FIntVector WorldToCell(const FVector& WorldLocation) const;

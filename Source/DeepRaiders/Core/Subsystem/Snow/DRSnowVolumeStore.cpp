@@ -10,15 +10,23 @@ namespace
 	}
 }
 
-void FDRSnowVolumeStore::ReplaceSnapshotData(
-	float InCellSize,
-	int32 InChunkSize,
-	TMap<FIntVector, FDRSnowVolumeChunk>&& InChunks)
+void FDRSnowVolumeStore::CopySnapshotData(
+	FDRSnowVolumeSnapshot& OutSnapshot) const
 {
-	CellSize = FMath::Max(1.f, InCellSize);
-	ChunkSize = FMath::Max(1, InChunkSize);
-	Chunks = MoveTemp(InChunks);
+	// 직렬화 중 Store가 변하지 않도록 현재 상태를 snapshot DTO로 분리한다.
+	OutSnapshot.CellSize = CellSize;
+	OutSnapshot.ChunkSize = ChunkSize;
+	OutSnapshot.Chunks = Chunks;
+}
 
+void FDRSnowVolumeStore::ReplaceSnapshotData(
+	FDRSnowVolumeSnapshot&& InSnapshot)
+{
+	CellSize = FMath::Max(1.f, InSnapshot.CellSize);
+	ChunkSize = FMath::Max(1, InSnapshot.ChunkSize);
+	Chunks = MoveTemp(InSnapshot.Chunks);
+
+	// ActiveCellIndices는 전송하지 않는 조회용 캐시이므로 복원 뒤 dense cell 데이터에서 다시 만든다.
 	for (TPair<FIntVector, FDRSnowVolumeChunk>& ChunkPair : Chunks)
 	{
 		FDRSnowVolumeChunk& Chunk = ChunkPair.Value;
@@ -102,11 +110,6 @@ FDRSnowAddResult FDRSnowVolumeStore::AddSnow(
 		}
 	}
 
-	if (Result.AddedAmount > 0.f)
-	{
-		OnSnowAddedToVolume.Broadcast(Request, Result);
-	}
-
 	return Result;
 }
 
@@ -188,11 +191,6 @@ FDRSnowRemoveResult FDRSnowVolumeStore::RemoveSnow(
 				++Result.TouchedCellCount;
 			}
 		}
-	}
-
-	if (Result.RemovedAmount > 0.f)
-	{
-		OnSnowRemovedFromVolume.Broadcast(Request, Result);
 	}
 
 	return Result;
