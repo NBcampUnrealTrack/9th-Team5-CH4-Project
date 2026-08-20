@@ -242,6 +242,11 @@ void ADRPlayerController::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	SetupGASInputComponent();
+
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPerks();
+	}
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
