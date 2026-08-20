@@ -2,6 +2,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/DeepRaiders.h"
+#include "DeepRaiders/Core/Subsystem/DRSessionSubsystem.h"
 #include "GameFramework/PlayerController.h"
 
 ADRTitleGameMode::ADRTitleGameMode()
@@ -38,5 +39,21 @@ void ADRTitleGameMode::PostLogin(APlayerController* NewPlayer)
 		InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 
 		NewPlayer->SetInputMode(InputModeData);
+	}
+}
+
+void ADRTitleGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (UDRSessionSubsystem* SessionSubsystem =
+		GetGameInstance()->GetSubsystem<UDRSessionSubsystem>())
+	{
+		SessionSubsystem->CreateServerSession();
 	}
 }

@@ -13,26 +13,15 @@ bool UHostOrJoinWidget::Initialize()
 	{
 		if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
 		{
-			SessionSubsystem->OnCreateSessionComplete.AddDynamic(this, &UHostOrJoinWidget::OnCreateSessionComplete);
 			SessionSubsystem->OnJoinSessionComplete.AddDynamic(this, &UHostOrJoinWidget::OnJoinSessionComplete);
 		}
 	}
 
-	if (Btn_Host) Btn_Host->OnClicked.AddDynamic(this, &UHostOrJoinWidget::OnHostButtonClicked);
+	if (Btn_Host) Btn_Host->SetIsEnabled(false);
 	if (Btn_Join) Btn_Join->OnClicked.AddDynamic(this, &UHostOrJoinWidget::OnJoinButtonClicked);
-	if (ETB_IPAddress) ETB_IPAddress->SetHintText(FText::FromString(TEXT("서버 IP 주소를 입력하세요...")));
+	if (ETB_IPAddress) ETB_IPAddress->SetHintText(FText::FromString(TEXT("서버 IP:Port 입력")));
 
 	return true;
-}
-
-void UHostOrJoinWidget::OnHostButtonClicked()
-{
-	if (Btn_Host) Btn_Host->SetIsEnabled(false);
-
-	if (UDRSessionSubsystem* SessionSubsystem = GetGameInstance()->GetSubsystem<UDRSessionSubsystem>())
-	{
-		SessionSubsystem->CreateSession(4, FName("FreeForAll"), FName(MapPath));
-	}
 }
 
 void UHostOrJoinWidget::OnJoinButtonClicked()
@@ -41,29 +30,29 @@ void UHostOrJoinWidget::OnJoinButtonClicked()
 
 	UDRSessionSubsystem* SessionSubsystem = GetGameInstance()->GetSubsystem<UDRSessionSubsystem>();
 	if (!SessionSubsystem)
+	{
+		if (Btn_Join) Btn_Join->SetIsEnabled(true);
 		return;
+	}
 
-	if (ETB_IPAddress) // 입력을 위한 위젯이 있을 경우
+	if (ETB_IPAddress)
 	{
 		FString TargetIP = ETB_IPAddress->GetText().ToString();
 
 		TargetIP = TargetIP.TrimStartAndEnd();
-		if (TargetIP.IsEmpty()) return;
+		if (TargetIP.IsEmpty())
+		{
+			if (Btn_Join) Btn_Join->SetIsEnabled(true);
+			UE_LOG(LogTemp, Warning, TEXT("서버 주소를 입력하세요."));
+			return;
+		}
 
-		SessionSubsystem->JoinSession(TargetIP); // 입력을 받은 IP 주소로 세션 입장
+		SessionSubsystem->JoinServer(TargetIP);
 	}
 	else
 	{
-		SessionSubsystem->FindAndJoinSession(); // 세션 입장
-	}
-}
-
-void UHostOrJoinWidget::OnCreateSessionComplete(bool bWasSuccessful)
-{
-	if (!bWasSuccessful)
-	{
-		if (Btn_Host) Btn_Host->SetIsEnabled(true);
-		UE_LOG(LogTemp, Warning, TEXT("방 생성 실패!"));
+		if (Btn_Join) Btn_Join->SetIsEnabled(true);
+		UE_LOG(LogTemp, Warning, TEXT("IP 주소 입력 위젯이 없습니다."));
 	}
 }
 
