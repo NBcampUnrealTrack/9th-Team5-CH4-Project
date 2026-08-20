@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
-#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRQuickSlotComponent.generated.h"
 
 class UDRInventoryComponent;
@@ -142,5 +142,5 @@ private:
 	TObjectPtr<UDRItemDefinition> HeldItemDefinition;
 	
 	FGuid EquippedInstanceId;
-	FDRItemAbilitySet_GrantedHandles GrantedHandles;
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 };

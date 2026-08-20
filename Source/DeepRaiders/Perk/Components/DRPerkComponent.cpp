@@ -1,7 +1,7 @@
 #include "DRPerkComponent.h"
 
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "Net/UnrealNetwork.h"
@@ -83,7 +83,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		return false;
 	}
 
-	FDRItemAbilitySet_GrantedHandles GrantedHandles;
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 
 	// Definition에 설정된 AbilitySet을 적용하고 회수용 핸들을 받는다.
 	PerkDefinition->ItemAbilitySet->GiveToAbilitySystem(
