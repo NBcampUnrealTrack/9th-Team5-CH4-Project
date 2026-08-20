@@ -234,14 +234,14 @@ void UDRInventoryUIComponent::HandlePlayerEntryClicked(FGuid InstanceId)
 	}
 	
 	if (UIState != EDRInventoryUIState::PlayerOnly
-		|| IsValid(PlayerController))
+		|| !IsValid(PlayerController))
 	{
 		return;
 	}
 
 	UDRInventoryComponent* PlayerInventory = PlayerController->GetInventoryComponent();
-	
 	UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
+	
 	if (!IsValid(QuickSlot)
 		|| !IsValid(PlayerInventory))
 	{

@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
 #include "TimerManager.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
@@ -127,9 +128,11 @@ protected:
 	FDelegateHandle HealthChangedHandle;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
-	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
+	TObjectPtr<UDRAbilitySet> DefaultAbilitySet;
 
 	void GrantDefaultAbilities();
+	
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;

@@ -31,13 +31,14 @@ public:
 	FDRInventorySlotMoveRequested OnMoveRequestedDelegate;
 	
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 		
 protected:
 	virtual void NativeConstruct() override;
-	virtual void NativeDestruct() override;
-	
+
 private:
 	UFUNCTION()
 	void HandleSlotClicked();
@@ -52,8 +53,13 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> QuantityText;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory|Drag", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float DragVisualOpacity = 0.85f;
+	
 private:
 	int32 SlotIndex = INDEX_NONE;
 	FGuid InstanceId;	
 	uint8 bLocked:1 = false;
+	
+	uint8 bPointerPressed : 1 = false;
 };
