@@ -7,6 +7,7 @@
 
 class UButton;
 class UTextBlock;
+class UImage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopItemOfferRequestedSignature,
@@ -19,18 +20,24 @@ class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void SetItemOffer(const FDRShopItemOffer& NewItemOffer);
+	/** 위젯에 표시할 상점 Offer 데이터를 설정한다. */
+	void SetOffer(const FDRShopOfferView& NewOffer);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopItemOfferRequestedSignature OnOfferRequested;
 
 protected:
+	/** 바인딩된 위젯을 확인하고 구매 버튼 이벤트를 연결한다. */
 	virtual void NativeConstruct() override;
+
+	/** 구매 버튼 이벤트 연결을 해제한다. */
 	virtual void NativeDestruct() override;
 
 private:
-	void ApplyItemDefinition();
+	/** 현재 Offer의 이름, 설명, 가격, 아이콘과 구매 가능 상태를 표시한다. */
+	void ApplyOffer();
 
+	/** 유효한 Offer의 구매 요청을 상위 상점 위젯에 전달한다. */
 	UFUNCTION()
 	void HandleBuyButtonClicked();
 
@@ -46,8 +53,11 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> DescriptionText;
 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> ItemIcon;
+
 	UPROPERTY(Transient)
-	FDRShopItemOffer ItemOffer;
+	FDRShopOfferView Offer;
 
 	bool IsWidgetConstructed = false;
 };

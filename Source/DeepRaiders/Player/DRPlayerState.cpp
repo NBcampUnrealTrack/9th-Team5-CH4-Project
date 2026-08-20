@@ -4,6 +4,7 @@
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
@@ -23,6 +24,10 @@ ADRPlayerState::ADRPlayerState()
 	PlayerAttributeSet =
 		CreateDefaultSubobject<UDRPlayerAttributeSet>(
 			TEXT("PlayerAttributeSet"));
+
+	PerkComponent =
+		CreateDefaultSubobject<UDRPerkComponent>(
+			TEXT("PerkComponent"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
@@ -258,34 +263,10 @@ void ADRPlayerState::GrantDefaultAbilities()
 	{
 		return;
 	}
-
-	for (const TSubclassOf<UGameplayAbility>& AbilityClass
-		 : DefaultAbilities)
+	
+	if (DefaultAbilitySet)
 	{
-		if (!IsValid(AbilityClass))
-		{
-			continue;
-		}
-
-		FGameplayAbilitySpec AbilitySpec(
-			AbilityClass,
-			1);
-
-		const FGameplayAbilitySpecHandle Handle =
-			AbilitySystemComponent->GiveAbility(
-				AbilitySpec);
-
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[GAS][GiveAbility] "
-				"PlayerState=%s "
-				"Ability=%s "
-				"HandleValid=%d"),
-			*GetNameSafe(this),
-			*GetNameSafe(AbilityClass),
-			Handle.IsValid());
+		DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
 	}
 }
 

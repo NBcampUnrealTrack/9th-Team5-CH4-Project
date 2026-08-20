@@ -8,14 +8,12 @@
 class UButton;
 class UDRShopItemWidget;
 class UScrollBox;
-enum class EDRItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopOfferRequestedSignature,
 	FDRShopOfferRequest,
 	Request);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopSellAllOresRequestedSignature);
 
 UCLASS()
 class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
@@ -23,8 +21,9 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeShop(const TArray<FDRShopItemOffer>& NewItemOffers);
-	void SetUpgradeOffers(const TArray<FDRShopItemOffer>& NewUpgradeOffers);
+	void SetOffers(
+		EDRShopOfferType OfferType,
+		const TArray<FDRShopOfferView>& NewOffers);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -32,20 +31,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopOfferRequestedSignature OnOfferRequested;
 
-	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
-	FDRShopSellAllOresRequestedSignature OnSellAllOresRequested;
-
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 
 private:
-	void InitializeSellAllOresButton();
-	void InitializeUpgradeButton();
-	void SelectCategory(EDRItemCategory Category);
-	void RefreshItems(EDRItemCategory Category);
-	void RefreshUpgradeItems();
-	bool CreateItemWidget(const FDRShopItemOffer& ItemOffer);
+	void SelectSection(EDRShopOfferSection Section);
+	void RefreshSelectedSection();
+	void CreateItemWidget(const FDRShopOfferView& Offer);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -60,7 +53,7 @@ private:
 	void HandleUpgradeButtonClicked();
 
 	UFUNCTION()
-	void HandleSellAllOresButtonClicked();
+	void HandlePerkButtonClicked();
 
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
@@ -74,11 +67,11 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> ConsumableButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> SellAllOresButton;
-
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> UpgradeButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> PerkButton;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
@@ -87,10 +80,7 @@ private:
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
 	UPROPERTY(Transient)
-	TArray<FDRShopItemOffer> ItemOffers;
+	TArray<FDRShopOfferView> Offers;
 
-	UPROPERTY(Transient)
-	TArray<FDRShopItemOffer> UpgradeOffers;
-
-	bool IsUpgradeSelected = false;
+	EDRShopOfferSection SelectedSection = EDRShopOfferSection::Equipment;
 };

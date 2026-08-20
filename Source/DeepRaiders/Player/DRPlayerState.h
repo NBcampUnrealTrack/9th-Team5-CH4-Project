@@ -4,11 +4,13 @@
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
 #include "TimerManager.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPlayerState.generated.h"
 
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
+class UDRPerkComponent;
 class UGameplayAbility;
 class UGameplayEffect;
 struct FOnAttributeChangeData;
@@ -33,6 +35,11 @@ public:
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
 	{
 		return PlayerAttributeSet;
+	}
+
+	UDRPerkComponent* GetPerkComponent() const
+	{
+		return PerkComponent;
 	}
 	
 	virtual void GetLifetimeReplicatedProps(
@@ -121,15 +128,20 @@ protected:
 	FDelegateHandle HealthChangedHandle;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
-	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
+	TObjectPtr<UDRAbilitySet> DefaultAbilitySet;
 
 	void GrantDefaultAbilities();
+	
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
+	TObjectPtr<UDRPerkComponent> PerkComponent;
 
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();

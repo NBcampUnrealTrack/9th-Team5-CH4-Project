@@ -94,10 +94,10 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 	else if (!IsValid(SourceDefinition)
 		|| SourceDefinition == TargetDefinition
 		|| SourceDefinition->Category != EDRItemCategory::Equipment
-		|| !FindUpgradeSourceEntryId(
+		|| !FindUpgradeSourceInstanceId(
 			Inventory,
 			SourceDefinition,
-			OutOperation.SourceEntryId))
+			OutOperation.SourceInstanceId))
 	{
 		return false;
 	}
@@ -124,8 +124,8 @@ bool UDRUpgradeComponent::ApplyUpgrade(
 		return Inventory->TryAddItem(Operation.TargetDefinition, 1);
 	}
 
-	return Inventory->TryReplaceEntryDefinition(
-		Operation.SourceEntryId,
+	return Inventory->TryReplaceItemDefinition(
+		Operation.SourceInstanceId,
 		Operation.SourceDefinition,
 		Operation.TargetDefinition);
 }
@@ -194,25 +194,25 @@ bool UDRUpgradeComponent::HasAnyItemInUpgradeChain(
 	return false;
 }
 
-bool UDRUpgradeComponent::FindUpgradeSourceEntryId(
+bool UDRUpgradeComponent::FindUpgradeSourceInstanceId(
 	const UDRInventoryComponent* Inventory,
 	const UDRItemDefinition* SourceDefinition,
-	FGuid& OutEntryId) const
+	FGuid& OutInstanceId) const
 {
-	OutEntryId.Invalidate();
+	OutInstanceId.Invalidate();
 
 	if (!IsValid(Inventory) || !IsValid(SourceDefinition))
 	{
 		return false;
 	}
 
-	for (const FDRInventoryEntry& Entry : Inventory->GetEntries())
+	for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
 	{
-		if (Entry.IsValid()
-			&& Entry.Quantity == 1
-			&& Entry.Definition == SourceDefinition)
+		if (ItemInstance.IsValid()
+			&& ItemInstance.Quantity == 1
+			&& ItemInstance.Definition == SourceDefinition)
 		{
-			OutEntryId = Entry.EntryId;
+			OutInstanceId = ItemInstance.InstanceId;
 			return true;
 		}
 	}

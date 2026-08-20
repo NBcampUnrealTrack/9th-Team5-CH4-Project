@@ -5,22 +5,14 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/DataTable.h"
+#include "DRItemTypes.h"
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
-class UDRItemAbilitySet;
+class UDRAbilitySet;
 class UTexture2D;
 class USoundBase;
 class UDRItemAnimationSet;
-
-UENUM(BlueprintType)
-enum class EDRItemCategory : uint8
-{
-	Ore,
-	Equipment,
-	Consumable,
-	End,
-};
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
@@ -73,6 +65,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item", meta = (ClampMin = 1, UIMin = 1))
 	int32 MaxStackSize = 1;
 	
+	// 아이템 버리기, 사망 시 드랍 여부
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Policy")
+	uint8 bCanBeDropped : 1 = true;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade")
 	uint8 bCanBeSold:1 = false;
 	
@@ -83,7 +79,7 @@ public:
 	
 	// 아이템이 장착되었을 때 ASC에 부여할 Ability와 Effect 셋
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
-	TObjectPtr<UDRItemAbilitySet> ItemAbilitySet;
+	TObjectPtr<UDRAbilitySet> ItemAbilitySet;
 	
 	// Mesh
 	

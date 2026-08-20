@@ -5,6 +5,8 @@
 #include "DRCharacterMovementComponent.generated.h"
 
 class FSavedMove_DRCharacter;
+class UAbilitySystemComponent;
+struct FOnAttributeChangeData;
 
 UCLASS()
 class DEEPRAIDERS_API UDRCharacterMovementComponent : public UCharacterMovementComponent
@@ -13,6 +15,8 @@ class DEEPRAIDERS_API UDRCharacterMovementComponent : public UCharacterMovementC
 
 public:
     UDRCharacterMovementComponent();
+
+    void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
     /** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
     void SetWantsJetpack(bool bNewWantsJetpack);
@@ -34,12 +38,22 @@ public:
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 
 protected:
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
     /** 낙하 물리 안에서 예측 가능한 제트팩 추진력을 적용한다. */
     virtual void PhysFalling(
         float DeltaTime,
         int32 Iterations) override;
 
 private:
+    void UnbindAbilitySystem();
+    void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
+    void ApplyMoveSpeedMultiplier(float Multiplier);
+
+    TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+    FDelegateHandle MoveSpeedChangedDelegateHandle;
+    float BaseWalkSpeed = 0.f;
+
     bool CanApplyJetpackThrust() const;
 
     /** 로컬 입력 또는 서버가 복원한 입력 상태 */

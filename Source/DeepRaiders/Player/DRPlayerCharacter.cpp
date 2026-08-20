@@ -521,6 +521,12 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 		PlayerLifecycleComponent->BindAbilitySystem(ASC);
 	}
 
+	if (UDRCharacterMovementComponent* MovementComponent =
+		Cast<UDRCharacterMovementComponent>(GetCharacterMovement()))
+	{
+		MovementComponent->BindAbilitySystem(ASC);
+	}
+
 	const UDRPlayerAttributeSet* RegisteredAttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
 
 	if (!IsValid(RegisteredAttributeSet))

@@ -1,83 +1,44 @@
-// ReSharper disable CppMemberFunctionMayBeConst
 #include "DRSessionSubsystem.h"
 
-#include "OnlineSessionSettings.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "OnlineSubsystem.h"
+#include "OnlineSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
 #include "SocketSubsystem.h"
-#include "DeepRaiders/DeepRaiders.h"
-#include "Kismet/GameplayStatics.h"
-#include "Online/OnlineSessionNames.h"
 
-UDRSessionSubsystem::UDRSessionSubsystem()
+DEFINE_LOG_CATEGORY_STATIC(LogDRSession, Log, All);
+
+namespace DRSessionKeys
 {
-}
+	// 현재 단계에서는 서버 목록 검색 없이 직접 접속만 사용하므로 Null OSS로 세션 등록만 합니다.
+	// Steam 전환 시 DefaultEngine.ini의 DefaultPlatformService와 이 이름을 함께 바꾸면 됩니다.
+	static const FName LocalSubsystemName(TEXT("NULL"));
+	static const FName ServerName(TEXT("ServerName"));
+	static const FName MapName(TEXT("MapName"));
+	static const FName MatchType(TEXT("MatchType"));
+	static const FName GameVersion(TEXT("GameVersion"));
 
-void UDRSessionSubsystem::CreateSession(const int32 NumPublicConnections, const FName MatchType, const FName InLoadLevelName)
-{
-	if (!SessionInterface.IsValid())
+	static const FString DefaultServerName(TEXT("DeepRaiders Dedicated Server"));
+	static const FString DefaultMatchType(TEXT("Default"));
+	static constexpr int32 DefaultMaxPlayers = 8;
+
+	static FString GetNetModeName(ENetMode NetMode)
 	{
-		OnCreateSessionComplete.Broadcast(false);
-		return;
-	}
-
-	//기존 세션이 남아있는 경우 제거
-	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr)
-		SessionInterface->DestroySession(NAME_GameSession);
-
-	FOnlineSessionSettings SessionSettings;
-	SessionSettings.bIsLANMatch = true;
-	SessionSettings.NumPublicConnections = NumPublicConnections; //최대 입장 인원 수
-	SessionSettings.bAllowJoinInProgress = true; //게임중 난입 허용
-	SessionSettings.bAllowJoinViaPresence = true;
-	SessionSettings.bShouldAdvertise = true; //서버 목록 노출 여부
-
-	SessionSettings.bUsesPresence = true;
-	SessionSettings.bUseLobbiesIfAvailable = true;
-
-	SessionSettings.Set(FName("MatchType"), MatchType.ToString(),
-	                    EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-
-	LoadLevelName = InLoadLevelName; // 세션 생성 후 레벨 이동을 위한 부분
-
-	const ULocalPlayer* LocalPlayer = GetGameInstance()->GetFirstGamePlayer();
-	if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionSettings))
-		OnCreateSessionComplete.Broadcast(false);
-}
-
-void UDRSessionSubsystem::FindAndJoinSession()
-{
-	if (!SessionInterface.IsValid()) return;
-
-	SessionSearch = MakeShareable(new FOnlineSessionSearch());
-	SessionSearch->bIsLanQuery = true; //lan 매치 검색
-	SessionSearch->MaxSearchResults = 20;
-
-	SessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
-
-	const ULocalPlayer* LocalPlayer = GetGameInstance()->GetFirstGamePlayer();
-	if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef()))
-	{
-		OnJoinSessionComplete.Broadcast(false);
-	}
-}
-
-void UDRSessionSubsystem::JoinSession(const FString& IPAddress)
-{
-	FString OutFinalConnectURL;
-	if (!TryConvertDomainToIP(IPAddress, OutFinalConnectURL)) // 입력 받은 주소를 IP 주소로 변환
-	{
-		DR_PRINT_ERROR(TEXT("올바르지 않은 주소 입니다: %s"), *IPAddress);
-		OnJoinSessionComplete.Broadcast(false);
-
-		return;
-	}
-
-	DR_PRINT_LOG(TEXT("[접속 시도 URL] 최종 목적지: %s"), *OutFinalConnectURL);
-
-	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-	{
-		PlayerController->ClientTravel(OutFinalConnectURL, TRAVEL_Absolute);
+		// 로그에서 실행 주체를 바로 구분하기 위한 표시 문자열입니다.
+		switch (NetMode)
+		{
+		case NM_Standalone:
+			return TEXT("스탠드얼론");
+		case NM_DedicatedServer:
+			return TEXT("전용서버");
+		case NM_ListenServer:
+			return TEXT("리슨서버");
+		case NM_Client:
+			return TEXT("클라이언트");
+		default:
+			return TEXT("알수없음");
+		}
 	}
 }
 
@@ -85,134 +46,345 @@ void UDRSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	if (const IOnlineSubsystem* Subsystem = Online::GetSubsystem(GetWorld()))
+	if (!RefreshOnlineSubsystem())
 	{
-		SessionInterface = Subsystem->GetSessionInterface();
-		if (!SessionInterface.IsValid())
-			return;
-
-		SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(
-			this, &UDRSessionSubsystem::HandleCreateSessionComplete);
-		SessionInterface->OnFindSessionsCompleteDelegates.AddUObject(
-			this, &UDRSessionSubsystem::HandleFindSessionsComplete);
-		SessionInterface->OnJoinSessionCompleteDelegates.AddUObject(
-			this, &UDRSessionSubsystem::HandleJoinSessionComplete);
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] OSS 초기화 실패 하위시스템=NULL 직접접속=가능"));
+		return;
 	}
+
+	UE_LOG(LogDRSession, Log, TEXT("[Session] OSS 준비 완료 하위시스템=%s"), *DRSessionKeys::LocalSubsystemName.ToString());
 }
 
 void UDRSessionSubsystem::Deinitialize()
 {
+	ClearSessionDelegateHandles();
+
+	SessionInterface.Reset();
+	bDedicatedSessionCreationRequested = false;
+
 	Super::Deinitialize();
+}
+
+void UDRSessionSubsystem::CreateServerSession()
+{
+	const UWorld* World = GetWorld();
+
+	// 이 함수는 Dedicated Server의 GameMode에서 호출되는 진입점입니다.
+	// 클라이언트나 에디터 단독 실행에서 실수로 호출해도 세션을 만들지 않습니다.
+	if (!IsValid(World))
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 세션 생성 실패: 월드가 유효하지 않음"));
+		OnCreateSessionComplete.Broadcast(false);
+		return;
+	}
+
+	if (World->GetNetMode() != NM_DedicatedServer)
+	{
+		UE_LOG(
+			LogDRSession,
+			Warning,
+			TEXT("[Session] 세션 생성 생략: 전용 서버에서만 생성 가능 모드=%s"),
+			*DRSessionKeys::GetNetModeName(World->GetNetMode()));
+		OnCreateSessionComplete.Broadcast(false);
+		return;
+	}
+
+	if (bDedicatedSessionCreationRequested)
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 세션 생성 생략: 이미 요청됨"));
+		return;
+	}
+
+	bDedicatedSessionCreationRequested = true;
+
+	UE_LOG(
+		LogDRSession,
+		Log,
+		TEXT("[Session] 세션 생성 요청 서버명=\"%s\" 매치타입=\"%s\" 최대인원=%d"),
+		*DRSessionKeys::DefaultServerName,
+		*DRSessionKeys::DefaultMatchType,
+		DRSessionKeys::DefaultMaxPlayers);
+
+	CreateSessionInternal(
+		World,
+		DRSessionKeys::DefaultMaxPlayers,
+		DRSessionKeys::DefaultServerName,
+		DRSessionKeys::DefaultMatchType);
+}
+
+void UDRSessionSubsystem::CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName,
+                                                const FString& MatchType)
+{
+	if (!IsValid(ServerWorld))
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 세션 생성 실패: 서버 월드가 유효하지 않음"));
+		HandleCreateSessionComplete(NAME_GameSession, false);
+		return;
+	}
+
+	if (!RefreshOnlineSubsystem())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 세션 생성 실패: OSS NULL 세션 인터페이스 없음 직접접속=가능"));
+		HandleCreateSessionComplete(NAME_GameSession, false);
+		return;
+	}
+
+	if (SessionInterface->GetNamedSession(NAME_GameSession) != nullptr) // 이미 생성된 경우 성공 취급
+	{
+		UE_LOG(LogDRSession, Log, TEXT("[Session] 세션 생성 생략: 기존 GameSession 재사용"));
+		HandleCreateSessionComplete(NAME_GameSession, true);
+		return;
+	}
+
+	FString CurrentMapName = ServerWorld->GetMapName();
+	CurrentMapName.RemoveFromStart(ServerWorld->StreamingLevelsPrefix);
+
+	FOnlineSessionSettings Settings;
+	Settings.bIsDedicated = true;
+	Settings.bIsLANMatch = true;
+	Settings.NumPublicConnections = MaxPlayers;
+	Settings.NumPrivateConnections = 0;
+	Settings.bAllowInvites = true;
+	Settings.bAllowJoinInProgress = true;
+	Settings.bAllowJoinViaPresence = false;
+	Settings.bAllowJoinViaPresenceFriendsOnly = false;
+	Settings.bShouldAdvertise = true;
+	Settings.bUsesPresence = false;
+	Settings.bUseLobbiesIfAvailable = false;
+
+	Settings.Set(DRSessionKeys::ServerName, ServerName, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	Settings.Set(DRSessionKeys::MapName, CurrentMapName, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	Settings.Set(DRSessionKeys::MatchType, MatchType, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	Settings.Set(DRSessionKeys::GameVersion, FString(TEXT("1.0.0")),
+	             EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+
+	UE_LOG(
+		LogDRSession,
+		Log,
+		TEXT("[Session] 세션 생성 시작 이름=%s 하위시스템=%s 맵=\"%s\" 최대인원=%d"),
+		*FName(NAME_GameSession).ToString(),
+		*DRSessionKeys::LocalSubsystemName.ToString(),
+		*CurrentMapName,
+		Settings.NumPublicConnections);
+
+	CreateSessionCompleteDelegateHandle = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(
+		FOnCreateSessionCompleteDelegate::CreateUObject(this, &UDRSessionSubsystem::HandleCreateSessionComplete));
+
+	if (!SessionInterface->CreateSession(0, NAME_GameSession, Settings))
+	{
+		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+		CreateSessionCompleteDelegateHandle.Reset();
+
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 세션 생성 호출 실패 이름=%s"), *FName(NAME_GameSession).ToString());
+		HandleCreateSessionComplete(NAME_GameSession, false);
+	}
+}
+
+void UDRSessionSubsystem::JoinServer(const FString& Address)
+{
+	const UWorld* World = GetWorld();
+
+	if (IsValid(World) && World->GetNetMode() == NM_DedicatedServer)
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 접속 생략: 전용 서버는 접속할 수 없음"));
+		OnJoinSessionComplete.Broadcast(false);
+		return;
+	}
+
+	const FString TrimmedAddress = Address.TrimStartAndEnd();
+
+	if (TrimmedAddress.IsEmpty())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 접속 실패: 주소가 비어 있음"));
+		OnJoinSessionComplete.Broadcast(false);
+		return;
+	}
+
+	if (!TrimmedAddress.Contains(TEXT(":")))
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 접속 주소에 포트 없음 주소=\"%s\" 힌트=\"IP:Port 형식 사용 예: 127.0.0.1:17777\""),
+		       *TrimmedAddress);
+	}
+
+	FString ResolvedAddress;
+	if (!TryResolveConnectAddress(TrimmedAddress, ResolvedAddress))
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 접속 실패: 주소 변환 실패 주소=\"%s\""), *TrimmedAddress);
+		OnJoinSessionComplete.Broadcast(false);
+		return;
+	}
+
+	APlayerController* PlayerController = IsValid(World) ? World->GetFirstPlayerController() : nullptr;
+
+	if (!IsValid(PlayerController))
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 접속 실패: 플레이어 컨트롤러가 유효하지 않음 주소=\"%s\""), *ResolvedAddress);
+		OnJoinSessionComplete.Broadcast(false);
+		return;
+	}
+
+	UE_LOG(LogDRSession, Log, TEXT("[Session] 서버 접속 이동 입력=\"%s\" 변환주소=\"%s\""), *TrimmedAddress, *ResolvedAddress);
+	OnJoinSessionComplete.Broadcast(true);
+
+	PlayerController->ClientTravel(ResolvedAddress, TRAVEL_Absolute);
+}
+
+bool UDRSessionSubsystem::ServerTravel(const FString& MapPath)
+{
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 서버 이동 실패: 월드가 유효하지 않음"));
+		return false;
+	}
+
+	if (World->GetNetMode() != NM_DedicatedServer)
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 서버 이동 생략: 전용 서버에서만 실행 가능 모드=%s"),
+		       *DRSessionKeys::GetNetModeName(World->GetNetMode()));
+		return false;
+	}
+
+	FString TravelMapPath = MapPath.TrimStartAndEnd();
+	if (TravelMapPath.IsEmpty())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 서버 이동 실패: 맵 경로가 비어 있음"));
+		return false;
+	}
+
+	if (World->IsInSeamlessTravel())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 서버 이동 생략: 이미 다른 맵으로 이동 중"));
+		return false;
+	}
+
+	const bool bTravelStarted = World->ServerTravel(TravelMapPath, true);
+	if (bTravelStarted)
+	{
+		UE_LOG(LogDRSession, Log, TEXT("[Session] 서버 이동 시작 맵=\"%s\""), *TravelMapPath);
+	}
+	else
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 서버 이동 실패 맵=\"%s\""), *TravelMapPath);
+	}
+
+	return bTravelStarted;
 }
 
 void UDRSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	OnCreateSessionComplete.Broadcast(bWasSuccessful);
-
-	UWorld* World = GetWorld();
-	if (!World)
-		return;
+	if (SessionInterface.IsValid() && CreateSessionCompleteDelegateHandle.IsValid())
+	{
+		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+		CreateSessionCompleteDelegateHandle.Reset();
+	}
 
 	if (bWasSuccessful)
 	{
-		if (!LoadLevelName.IsNone())
-		{
-			UGameplayStatics::OpenLevel(World, LoadLevelName, true, "listen");
-		}
-		else
-		{
-			FString CurrentMapName = World->GetMapName();
-			CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix); //레벨 접두사 제거
-			World->ServerTravel(FString::Printf(TEXT("%s?listen"), *CurrentMapName));
-		}
+		UE_LOG(LogDRSession, Log, TEXT("[Session] 세션 생성 성공 이름=%s"), *SessionName.ToString());
+	}
+	else
+	{
+		UE_LOG(LogDRSession, Error, TEXT("[Session] 세션 생성 실패 이름=%s"), *SessionName.ToString());
+		bDedicatedSessionCreationRequested = false;
 	}
 
-	LoadLevelName = NAME_None;
+	OnCreateSessionComplete.Broadcast(bWasSuccessful);
 }
 
-void UDRSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
+void UDRSessionSubsystem::ClearSessionDelegateHandles()
 {
-	if (!bWasSuccessful || !SessionSearch.IsValid() || SessionSearch->SearchResults.Num() <= 0)
+	if (SessionInterface.IsValid() && CreateSessionCompleteDelegateHandle.IsValid())
 	{
-		OnJoinSessionComplete.Broadcast(false);
-		return;
+		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
 	}
 
-	FOnlineSessionSearchResult BestResult = SessionSearch->SearchResults[0]; // 상태 좋은 순으로 정렬되는듯
-
-	BestResult.Session.SessionSettings.bUseLobbiesIfAvailable = true;
-
-	const ULocalPlayer* LocalPlayer = GetGameInstance()->GetFirstGamePlayer();
-	if (!SessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, BestResult))
-		OnJoinSessionComplete.Broadcast(false);
+	CreateSessionCompleteDelegateHandle.Reset();
 }
 
-void UDRSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
+bool UDRSessionSubsystem::RefreshOnlineSubsystem()
 {
-	const bool bSuccess = Result == EOnJoinSessionCompleteResult::Success;
-	OnJoinSessionComplete.Broadcast(bSuccess);
+	IOnlineSubsystem* OnlineSubsystem = Online::GetSubsystem(GetWorld(), DRSessionKeys::LocalSubsystemName);
 
-	if (bSuccess)
+	if (OnlineSubsystem == nullptr)
 	{
-		FString ConnectInfo;
-		if (SessionInterface->GetResolvedConnectString(NAME_GameSession, ConnectInfo))
-		{
-			if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-				PlayerController->ClientTravel(ConnectInfo, TRAVEL_Absolute);
-		}
+		SessionInterface.Reset();
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] OSS 조회 실패 하위시스템=NULL"));
+		return false;
 	}
+
+	SessionInterface = OnlineSubsystem->GetSessionInterface();
+	if (!SessionInterface.IsValid())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] OSS 세션 인터페이스 없음 하위시스템=%s"),
+		       *OnlineSubsystem->GetSubsystemName().ToString());
+		return false;
+	}
+
+	return true;
 }
 
-bool UDRSessionSubsystem::TryConvertDomainToIP(const FString& IPAddress, FString& OutFinalConnectURL)
+bool UDRSessionSubsystem::TryResolveConnectAddress(const FString& Address, FString& OutResolvedAddress)
 {
-	FString CleanedIP = IPAddress.TrimStartAndEnd();
-	if (CleanedIP.IsEmpty()) return false;
-
-	// http://, tcp:// 와 같은 접두사를 제거하는 부분
-	if (CleanedIP.Contains(TEXT("://")))
+	FString CleanAddress = Address.TrimStartAndEnd();
+	if (CleanAddress.IsEmpty())
 	{
-		int32 ProtocolIndex = CleanedIP.Find(TEXT("://"));
-		CleanedIP = CleanedIP.RightChop(ProtocolIndex + 3);
+		return false;
 	}
 
-	FString HostDomain = CleanedIP;
-	FString PortSuffix = TEXT(":7777"); // 기본 포트 지정
-	int32 LastColonIndex;
-
-	// 주소와 포트 분리
-	if (CleanedIP.FindLastChar(':', LastColonIndex))
+	if (CleanAddress.Contains(TEXT("://"))) // 주소 앞에 tcp:// 이나 http:// 를 제거
 	{
-		HostDomain = CleanedIP.Left(LastColonIndex);
-		PortSuffix = CleanedIP.RightChop(LastColonIndex);
+		int32 ProtocolIndex = INDEX_NONE;
+		CleanAddress.FindChar(TEXT(':'), ProtocolIndex);
+		CleanAddress = CleanAddress.RightChop(ProtocolIndex + 3); // "://" 까지 포함
 	}
 
-	if (ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM))
+	FString Host = CleanAddress;
+	FString PortSuffix;
+	int32 LastColonIndex = INDEX_NONE;
+	if (CleanAddress.FindLastChar(TEXT(':'), LastColonIndex)) // 주소와 포트 분리
 	{
-		TSharedRef<FInternetAddr> ResolvedAddr = SocketSubsystem->CreateInternetAddr();
-		bool bIsValidIP = false;
+		Host = CleanAddress.Left(LastColonIndex);
+		PortSuffix = CleanAddress.RightChop(LastColonIndex);
+	}
 
-		ResolvedAddr->SetIp(*HostDomain, bIsValidIP); // 입력된 주소가 도메인 주소가 아니라 IP 주소인지 확인
+	if (Host.IsEmpty())
+	{
+		return false;
+	}
 
-		if (!bIsValidIP)
+	ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+	if (SocketSubsystem == nullptr)
+	{
+		return false;
+	}
+
+	TSharedRef<FInternetAddr> ResolvedAddr = SocketSubsystem->CreateInternetAddr();
+
+	bool bIsValidIp = false;
+	ResolvedAddr->SetIp(*Host, bIsValidIp);
+
+	if (!bIsValidIp)
+	{
+		// IP가 아니면 도메인으로 보고 DNS 조회를 시도합니다.
+		const FAddressInfoResult AddressInfo = SocketSubsystem->GetAddressInfo(
+			*Host, nullptr, EAddressInfoFlags::Default, NAME_None, SOCKTYPE_Datagram);
+
+		if (AddressInfo.Results.IsEmpty())
 		{
-			// 도메인 주소를 IP 주소로 변환
-			const FAddressInfoResult AddressInfo = SocketSubsystem->GetAddressInfo(
-				*HostDomain, nullptr, EAddressInfoFlags::Default, NAME_None, SOCKTYPE_Datagram
-			);
-
-			if (AddressInfo.Results.Num() > 0) // 도메인 주소를 IP 주소로 변환한 결과가 있는지 확인
-			{
-				ResolvedAddr = AddressInfo.Results[0].Address;
-				bIsValidIP = true;
-			}
-		}
-
-		if (bIsValidIP)
-			HostDomain = ResolvedAddr->ToString(false); // 도메인 주소를 IP 주소로 변환한 결과를 사용
-		else
 			return false;
+		}
+
+		ResolvedAddr = AddressInfo.Results[0].Address;
+		bIsValidIp = true;
 	}
 
-	OutFinalConnectURL = FString::Printf(TEXT("%s%s"), *HostDomain, *PortSuffix);
+	if (!bIsValidIp)
+	{
+		return false;
+	}
+
+	OutResolvedAddress = FString::Printf(TEXT("%s%s"), *ResolvedAddr->ToString(false), *PortSuffix);
 	return true;
 }

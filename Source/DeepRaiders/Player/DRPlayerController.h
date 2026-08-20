@@ -8,6 +8,7 @@
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
+class ADRShop;
 class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
@@ -19,6 +20,7 @@ class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
+class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
@@ -99,6 +101,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> SecondaryAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InventoryAction;
+	
 #pragma region QuickSlot
 
 public:
@@ -131,11 +136,16 @@ protected:
 #pragma region UI
 
 public:
+	UDRInventoryUIComponent* GetInventoryUIComponent() const
+	{
+		return InventoryUIComponent;
+	}
+	
 	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
-	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void SetAvailableShop(ADRShop* Shop);
 
 	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
-	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void ClearAvailableShop(ADRShop* Shop);
 
 private:
 	/** 현재 상점의 UI를 열거나 닫는다. */
@@ -149,9 +159,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점이다. */
-	UPROPERTY(Transient)
-	TObjectPtr<UDRShopUIComponent> AvailableShop;
+	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
+	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
@@ -159,6 +171,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 

@@ -19,7 +19,10 @@ public class DeepRaiders : ModuleRules
 			"Voxel",
 			
 			// GAS
-			"GameplayAbilities", "GameplayTags", "GameplayTasks", "ModelViewViewModel"
+			"GameplayAbilities", "GameplayTags", "GameplayTasks", "ModelViewViewModel",
+			
+			// Struct
+			"StructUtils",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

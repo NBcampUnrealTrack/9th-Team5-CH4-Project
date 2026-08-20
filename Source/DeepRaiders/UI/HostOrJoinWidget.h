@@ -13,9 +13,6 @@ class DEEPRAIDERS_API UHostOrJoinWidget : public UUserWidget
 	GENERATED_BODY()
 
 protected:
-	UPROPERTY(EditAnywhere)
-	FString MapPath;
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Btn_Host;
 
@@ -30,13 +27,7 @@ public:
 
 private:
 	UFUNCTION()
-	void OnHostButtonClicked();
-
-	UFUNCTION()
 	void OnJoinButtonClicked();
-
-	UFUNCTION()
-	void OnCreateSessionComplete(bool bWasSuccessful);
 
 	UFUNCTION()
 	void OnJoinSessionComplete(bool bWasSuccessful);

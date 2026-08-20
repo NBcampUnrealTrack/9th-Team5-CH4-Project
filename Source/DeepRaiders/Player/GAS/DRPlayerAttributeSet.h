@@ -32,6 +32,7 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
 
 protected:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Player|Health")
@@ -51,6 +52,12 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingDamage;
+
+	UPROPERTY(
+		BlueprintReadOnly,
+		ReplicatedUsing = OnRep_MoveSpeedMultiplier,
+		Category = "Player|Movement")
+	FGameplayAttributeData MoveSpeedMultiplier;
 	
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);
@@ -66,6 +73,10 @@ protected:
 	void OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge);
 	UFUNCTION()
 	void OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge);
+
+	UFUNCTION()
+	void OnRep_MoveSpeedMultiplier(
+		const FGameplayAttributeData& OldMoveSpeedMultiplier);
 	
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;

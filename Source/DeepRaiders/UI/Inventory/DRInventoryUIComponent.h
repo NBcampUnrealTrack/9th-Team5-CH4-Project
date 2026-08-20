@@ -58,10 +58,10 @@ private:
 	void HandleCurrentStorageChanged(ADRStorage* NewStorage);
 	
 	UFUNCTION()
-	void HandlePlayerEntryClicked(FGuid EntryId);
+	void HandlePlayerEntryClicked(FGuid InstanceId);
 	
 	UFUNCTION()
-	void HandleStorageEntryClicked(FGuid EntryId);
+	void HandleStorageEntryClicked(FGuid InstanceId);
 	
 	UFUNCTION()
 	void HandleCloseRequested();
