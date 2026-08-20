@@ -4,9 +4,9 @@
 #include "GameFramework/Actor.h"
 #include "DRShop.generated.h"
 
-class UDRInteractionComponent;
+class APawn;
 class UDRShopComponent;
-class UDRShopUIComponent;
+class UDRShopAreaComponent;
 class UDRUpgradeComponent;
 class USceneComponent;
 class USoundBase;
@@ -24,22 +24,27 @@ public:
 		return PurchaseSound;
 	}
 
-	USoundBase* GetSellSound() const
-	{
-		return SellSound;
-	}
-
 	float GetTransactionSoundVolume() const
 	{
 		return TransactionSoundVolume;
 	}
 
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
+	UFUNCTION()
+	void HandlePawnEntered(APawn* Pawn);
+
+	UFUNCTION()
+	void HandlePawnExited(APawn* Pawn);
+
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;
+	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRShopComponent> ShopComponent;
@@ -47,14 +52,8 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
 
-	UPROPERTY(VisibleAnywhere, Category = "Shop")
-	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
-
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
 	TObjectPtr<USoundBase> PurchaseSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
-	TObjectPtr<USoundBase> SellSound;
 
 	UPROPERTY(
 		EditDefaultsOnly,

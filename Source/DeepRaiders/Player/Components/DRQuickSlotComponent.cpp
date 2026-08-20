@@ -4,10 +4,12 @@
 #include "DRQuickSlotComponent.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Inventory/DRInventoryTypes.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
 #include "Net/UnrealNetwork.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
@@ -21,16 +23,17 @@ void UDRQuickSlotComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	CacheInventoryComponent();
+	CachedInventoryComponent();
+	
+	CachedSlotCount = GetSlotCount();
+	CachedSelectedSlotIndex = GetSelectedSlotIndex();
 	
 	if (HasQuickSlotAuthority())
 	{
-		QuickSlots.SetNum(FMath::Max(1, InitialSlotCount));
+		EnsureValidSelection();
 	}
 	
-	CachedSlotCount = QuickSlots.Num();
-	
-	RefreshHandedItem();
+	RefreshDerivedState();
 }
 
 void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -38,9 +41,11 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (UDRInventoryComponent* Inventory = InventoryComponent.Get())
 	{
 		Inventory->OnInventoryChangedDelegate.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
-		Inventory->OnEntryDefinitionReplacedDelegate.RemoveDynamic(
-			this,
-			&ThisClass::HandleInventoryEntryDefinitionReplaced);
+	}
+	
+	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
+	{
+		GrantedHandles.TakeFromAbilitySystem(ASC);	
 	}
 	
 	Super::EndPlay(EndPlayReason);
@@ -50,350 +55,117 @@ void UDRQuickSlotComponent::GetLifetimeReplicatedProps(TArray<class FLifetimePro
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
-	DOREPLIFETIME(ThisClass, QuickSlots);
-	DOREPLIFETIME(ThisClass, SelectedSlotIndex);
-}
-
-bool UDRQuickSlotComponent::TryBindFirstEmptySlot(UDRItemDefinition* Definition)
-{
-	if (!HasQuickSlotAuthority()
-	|| !IsValid(Definition)
-	|| !CacheInventoryComponent())
-	{
-		return false;
-	}
-	
-	// 이미 바인딩 된 Definition
-	for (const FDRQuickSlotEntry& Slot : QuickSlots)
-	{
-		if (Slot.Definition == Definition)
-		{
-			return true;
-		}
-	}
-	
-	// 가장 앞의 슬롯에 바인딩
-	// 서버 호출이므로 Request 없이 구현부 실행
-	for (int32 Index = 0; Index < QuickSlots.Num(); ++Index)
-	{
-		if (!QuickSlots[Index].IsBound())
-		{
-			return BindSlotInternal(Index, Definition);
-		}
-	}
-	
-	return false;
-}
-
-bool UDRQuickSlotComponent::TryBindSelectedSlot(UDRItemDefinition* Definition)
-{
-	if (!HasQuickSlotAuthority()
-		|| !IsValid(Definition)
-		|| !CacheInventoryComponent())
-	{
-		return false;
-	}
-	
-	// 이미 바인딩 된 Definition인 경우, 해제한다.
-	for (FDRQuickSlotEntry& Slot : QuickSlots)
-	{
-		if (Slot.Definition == Definition)
-		{
-			Slot.Definition = nullptr;
-			break;
-		}
-	}
-	
-	for (int32 Index = 0; Index < QuickSlots.Num(); ++Index)
-	{
-		QuickSlots[SelectedSlotIndex].Definition = nullptr;
-		return BindSlotInternal(SelectedSlotIndex, Definition);
-	}
-	
-	return false;
-}
-
-void UDRQuickSlotComponent::RequestBindSlot(int32 SlotIndex, UDRItemDefinition* Definition)
-{
-	if (!QuickSlots.IsValidIndex(SlotIndex)
-		|| !IsValid(Definition))
-	{
-		return;
-	}
-	
-	if (HasQuickSlotAuthority())
-	{
-		BindSlotInternal(SlotIndex, Definition);
-		
-		return;
-	}
-	
-	if (IsLocalPlayer())
-	{
-		ServerBindSlot(SlotIndex, Definition);
-	}
-}
-
-void UDRQuickSlotComponent::RequestBindSelectedSlot(UDRItemDefinition* Definition)
-{
-	if (!IsValid(Definition))
-	{
-		return;
-	}
-	
-	if (HasQuickSlotAuthority())
-	{
-		TryBindSelectedSlot(Definition);
-		
-		return;
-	}
-	
-	if (IsLocalPlayer())
-	{
-		ServerBindSelectedSlot(Definition);
-	}
-}
-
-void UDRQuickSlotComponent::RequestClearSlot(int32 SlotIndex)
-{
-	if (!QuickSlots.IsValidIndex(SlotIndex))
-	{
-		return;
-	}
-
-	if (HasQuickSlotAuthority())
-	{
-		ClearSlotInternal(SlotIndex);
-		return;
-	}
-
-	if (IsLocalPlayer())
-	{
-		ServerClearSlot(SlotIndex);
-	}
+	DOREPLIFETIME(ThisClass, SelectedInstanceId);
 }
 
 void UDRQuickSlotComponent::RequestSelectSlot(int32 SlotIndex)
 {
-	if (!QuickSlots.IsValidIndex(SlotIndex))
+	if (!CachedInventoryComponent())
 	{
 		return;
 	}
 
+	const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
+	
+	if (!ItemInstance)
+	{
+		return;
+	}
+	
 	if (HasQuickSlotAuthority())
 	{
-		SelectSlotInternal(SlotIndex);
+		SelectSlotInternal(SlotIndex, ItemInstance->InstanceId);
 		return;
 	}
 
 	if (IsLocalPlayer())
 	{
-		ServerSelectSlot(SlotIndex);
+		ServerSelectSlot(SlotIndex, ItemInstance->InstanceId);
 	}
 }
 
-bool UDRQuickSlotComponent::SetSlotCount(int32 NewSlotCount)
+void UDRQuickSlotComponent::ServerSelectSlot_Implementation(int32 SlotIndex, FGuid ExpectedInstanceId)
 {
-	if (!HasQuickSlotAuthority()
-		|| NewSlotCount <= 0
-		|| QuickSlots.Num() == NewSlotCount)
-	{
-		return false;
-	}
-	
-	const int32 PreviousSlotCount = QuickSlots.Num();
-	const int32 PreviousSelectedSlotIndex = SelectedSlotIndex;
-	
-	QuickSlots.SetNum(NewSlotCount);
-	CachedSlotCount = NewSlotCount;
-	
-	if (!QuickSlots.IsValidIndex(SelectedSlotIndex))
-	{
-		SelectedSlotIndex = INDEX_NONE;
-	}
-	
-	OnQuickSlotCountChangedDelegate.Broadcast(NewSlotCount);
-	OnQuickSlotsChangedDelegate.Broadcast();
-	
-	// 현재로선 슬롯 수 감소로 선택되어 있던 SlotIndex가 Invalid된 경우
-	if (PreviousSelectedSlotIndex != SelectedSlotIndex)
-	{
-		OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSelectedSlotIndex, SelectedSlotIndex);
-	}
-	
-	RefreshHandedItem();
-	RequestReplicationUpdate();
-	
-	UE_LOG(LogTemp, Log, TEXT("[%s] Quick Slot count Chanaged : %d -> %d"), *GetName(), PreviousSlotCount, NewSlotCount);
-	
-	return true;	
+	SelectSlotInternal(SlotIndex, ExpectedInstanceId);
 }
 
-bool UDRQuickSlotComponent::ReplaceBoundDefinition(
-	UDRItemDefinition* SourceDefinition,
-	UDRItemDefinition* TargetDefinition)
+int32 UDRQuickSlotComponent::GetSlotCount() const
 {
-	if (!HasQuickSlotAuthority()
-		|| !IsValid(SourceDefinition)
-		|| !IsValid(TargetDefinition)
-		|| SourceDefinition == TargetDefinition)
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	
+	return IsValid(Inventory) ? Inventory->GetMaxSlots() : 0;	
+}
+
+int32 UDRQuickSlotComponent::GetSelectedSlotIndex() const
+{
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	
+	// 퀵슬롯과 인벤토리의 슬롯 인덱스가 1:1로 매칭됨.
+	return IsValid(Inventory) ? Inventory->FindSlotIndex(SelectedInstanceId) : INDEX_NONE;	
+}
+
+bool UDRQuickSlotComponent::GetQuickSlot(int32 SlotIndex, FDRItemInstance& OutItemInstance) const
+{
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	
+	const FDRItemInstance* ItemInstance = IsValid(Inventory) ? Inventory->GetItemAtSlot(SlotIndex) : nullptr;
+
+	if (!ItemInstance)
 	{
+		OutItemInstance = FDRItemInstance();
 		return false;
 	}
-
-	bool IsReplaced = false;
-
-	for (FDRQuickSlotEntry& QuickSlot : QuickSlots)
-	{
-		if (QuickSlot.Definition == SourceDefinition)
-		{
-			QuickSlot.Definition = TargetDefinition;
-			IsReplaced = true;
-		}
-	}
-
-	if (!IsReplaced)
-	{
-		return false;
-	}
-
-	OnQuickSlotsChangedDelegate.Broadcast();
-	RefreshHandedItem();
-	RequestReplicationUpdate();
+	
+	OutItemInstance = *ItemInstance;
 	return true;
-}
-
-bool UDRQuickSlotComponent::GetQuickSlot(int32 SlotIndex, FDRQuickSlotEntry& OutSlot) const
-{
-	if (!QuickSlots.IsValidIndex(SlotIndex))
-	{
-		OutSlot = FDRQuickSlotEntry();
-		return false;
-	}
 	
-	OutSlot = QuickSlots[SlotIndex];
-	return true;
 }
 
 bool UDRQuickSlotComponent::IsSlotBound(int32 SlotIndex) const
 {
-	return QuickSlots.IsValidIndex(SlotIndex)
-		&& QuickSlots[SlotIndex].IsBound();
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	
+	return IsValid(Inventory)
+		&& Inventory->GetItemAtSlot(SlotIndex) != nullptr;
 }
 
 bool UDRQuickSlotComponent::IsSlotItemAvailable(int32 SlotIndex) const
 {
-	// 슬롯에 바인딩된 아이템을 인벤토리에 보유하고 있는지 확인
-	return ResolveHandedItemDefinition(SlotIndex) != nullptr;
+	return IsSlotBound(SlotIndex);
 }
 
 int32 UDRQuickSlotComponent::GetSlotItemCount(int32 SlotIndex) const
 {
-	if (!QuickSlots.IsValidIndex(SlotIndex))
-	{
-		return 0;
-	}
-	
-	const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	
-	if (!IsValid(Definition)
-		|| !IsValid(Inventory))
-	{
-		return 0;
-	}
+	const FDRItemInstance* ItemInstance = IsValid(Inventory) ? Inventory->GetItemAtSlot(SlotIndex) : nullptr;
 	
-	return Inventory->GetItemCount(Definition);
+	return ItemInstance ? ItemInstance->Quantity : 0;
 }
 
-void UDRQuickSlotComponent::ServerBindSlot_Implementation(int32 SlotIndex, UDRItemDefinition* Definition)
+void UDRQuickSlotComponent::OnRep_SelectedInstanceId()
 {
-	BindSlotInternal(SlotIndex, Definition);
-}
-
-void UDRQuickSlotComponent::ServerBindSelectedSlot_Implementation(UDRItemDefinition* Definition)
-{
-	TryBindSelectedSlot(Definition);
-}
-
-void UDRQuickSlotComponent::ServerClearSlot_Implementation(int32 SlotIndex)
-{
-	ClearSlotInternal(SlotIndex);
-}
-
-void UDRQuickSlotComponent::ServerSelectSlot_Implementation(int32 SlotIndex)
-{
-	SelectSlotInternal(SlotIndex);
-}
-
-void UDRQuickSlotComponent::OnRep_QuickSlots()
-{
-	const int32 NewSlotCount = QuickSlots.Num();
-	
-	if (CachedSlotCount != NewSlotCount)
-	{
-		CachedSlotCount = NewSlotCount;
-		
-		// UI에 퀵슬롯 개수 변경 알림
-		OnQuickSlotCountChangedDelegate.Broadcast(NewSlotCount);
-	}
-	
-	OnQuickSlotsChangedDelegate.Broadcast();
-	
-	RefreshHandedItem();
-}
-
-void UDRQuickSlotComponent::OnRep_SelectedSlotIndex(int32 PreviousSlotIndex)
-{
-	OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, SelectedSlotIndex);
-	
-	RefreshHandedItem();
+	RefreshDerivedState();
 }
 
 void UDRQuickSlotComponent::HandleInventoryChanged()
 {
-	// 임시 코드, 신다인
-	// 보유량이 0개가 되면 슬롯 바인딩을 해제한다.
-	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
-	if (IsValid(Inventory))
+	bool bSelectionChanged = false;
+	
+	if (HasQuickSlotAuthority())
 	{
-		for (int32 SlotIndex = 0; SlotIndex < QuickSlots.Num(); ++SlotIndex)
-		{
-			const UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
-			if (!IsValid(Definition))
-			{
-				continue;
-			}
-			if (Inventory->GetItemCount(Definition) <= 0)
-			{
-				QuickSlots[SlotIndex].Definition = nullptr;
-			}
-		}
+		bSelectionChanged = EnsureValidSelection();
 	}
 	
-	// 바인딩된 ItemDefinition은 그대로여도
-	// 실제 Inventory 내의 보유 정보가 변하는 경우
-	OnQuickSlotsChangedDelegate.Broadcast();
+	RefreshDerivedState();
 	
-	RefreshHandedItem();
-}
-
-void UDRQuickSlotComponent::HandleInventoryEntryDefinitionReplaced(
-	UDRItemDefinition* SourceDefinition,
-	UDRItemDefinition* TargetDefinition)
-{
-	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
-
-	if (!IsValid(Inventory)
-		|| Inventory->GetItemCount(SourceDefinition) > 0)
+	if (bSelectionChanged)
 	{
-		return;
+		RequestReplicationUpdate();
 	}
-
-	ReplaceBoundDefinition(SourceDefinition, TargetDefinition);
 }
 
-bool UDRQuickSlotComponent::CacheInventoryComponent()
+bool UDRQuickSlotComponent::CachedInventoryComponent()
 {
 	// 이미 캐시된 경우 캐시된 InventoryComponent 반환
 	// 캐시된 InventoryComponent가 없는 경우 Owner에게서 캐싱
@@ -420,9 +192,6 @@ bool UDRQuickSlotComponent::CacheInventoryComponent()
 	InventoryComponent = FoundInventory;
 	
 	FoundInventory->OnInventoryChangedDelegate.AddDynamic(this, &ThisClass::HandleInventoryChanged);
-	FoundInventory->OnEntryDefinitionReplacedDelegate.AddDynamic(
-		this,
-		&ThisClass::HandleInventoryEntryDefinitionReplaced);
 	
 	return true;	
 }
@@ -443,138 +212,135 @@ bool UDRQuickSlotComponent::IsLocalPlayer() const
 		&& PlayerController->IsLocalController();
 }
 
-bool UDRQuickSlotComponent::BindSlotInternal(int32 SlotIndex, UDRItemDefinition* Definition)
+bool UDRQuickSlotComponent::SelectSlotInternal(int32 SlotIndex, FGuid ExpectedInstanceId)
 {
 	if (!HasQuickSlotAuthority()
-		|| !QuickSlots.IsValidIndex(SlotIndex)
-		|| !IsValid(Definition)
-		|| !CacheInventoryComponent())
+		|| !CachedInventoryComponent())
 	{
 		return false;
 	}
 	
+	const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
+	
+	if (!ItemInstance
+		|| ItemInstance->InstanceId != ExpectedInstanceId
+		|| ItemInstance->InstanceId == SelectedInstanceId)
+	{
+		return false;
+	}
+	
+	SelectedInstanceId = ItemInstance->InstanceId;
+	
+	RefreshDerivedState();
+	RequestReplicationUpdate();
+	
+	return true;	
+}
+
+bool UDRQuickSlotComponent::EnsureValidSelection()
+{
 	UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	
-	if (!IsValid(Inventory)
-		|| Inventory->GetItemCount(Definition) <= 0)
+	if (!IsValid(Inventory))
 	{
 		return false;
 	}
 	
-	FDRQuickSlotEntry& Slot = QuickSlots[SlotIndex];
-	
-	if (Slot.Definition == Definition)
+	if (SelectedInstanceId.IsValid()
+		&& Inventory->FindItemInstance(SelectedInstanceId))
 	{
 		return false;
 	}
 	
-	Slot.Definition = Definition;
-	OnQuickSlotsChangedDelegate.Broadcast();
+	FGuid FallbackInstanceId;
 	
-	if (SelectedSlotIndex == SlotIndex)
+	const FDRItemInstance* DefaultItem = Inventory->GetItemAtSlot(DRInventorySlots::DefaultWeapon);
+	
+	// 기본 무기가 있는 경우, 현재 장착 중인 무기가 제거될 때 자동으로 기본 무기를 들게 한다.
+	if (DefaultItem)
 	{
-		RefreshHandedItem();
+		FallbackInstanceId = DefaultItem->InstanceId;
 	}
 	
-	RequestReplicationUpdate();
+	if (FallbackInstanceId == SelectedInstanceId)
+	{
+		return false;
+	}
 	
-	return true;
+	SelectedInstanceId = FallbackInstanceId;
+	
+	return true;	
 }
 
-bool UDRQuickSlotComponent::ClearSlotInternal(int32 SlotIndex)
+const FDRItemInstance* UDRQuickSlotComponent::ResolveSelectedItem() const
 {
-	if (!HasQuickSlotAuthority()
-		|| !QuickSlots.IsValidIndex(SlotIndex)
-		|| !QuickSlots[SlotIndex].IsBound())
-	{
-		return false;
-	}
-	
-	QuickSlots[SlotIndex] = FDRQuickSlotEntry();
-	
-	OnQuickSlotsChangedDelegate.Broadcast();
-	
-	if (SelectedSlotIndex == SlotIndex)
-	{
-		RefreshHandedItem();
-	}
-	
-	RequestReplicationUpdate();
-	
-	return true;
-}
-
-bool UDRQuickSlotComponent::SelectSlotInternal(int32 SlotIndex)
-{
-	if (!HasQuickSlotAuthority()
-		|| !QuickSlots.IsValidIndex(SlotIndex)
-		|| SelectedSlotIndex == SlotIndex)
-	{
-		return false;
-	}
-	
-	const int32 PreviousSlotIndex =	SelectedSlotIndex;
-	SelectedSlotIndex = SlotIndex;
-
-	OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, SelectedSlotIndex);
-	
-	RefreshHandedItem();
-	RequestReplicationUpdate();
-	
-	return true;
-}
-
-UDRItemDefinition* UDRQuickSlotComponent::ResolveHandedItemDefinition(int32 SlotIndex) const
-{
-	if (!QuickSlots.IsValidIndex(SlotIndex))
-	{
-		return nullptr;
-	}
-	
-	UDRItemDefinition* Definition = QuickSlots[SlotIndex].Definition.Get();
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	
-	// 인벤토리 내에 보유하지 않은 경우 nullptr 반환
-	if (!IsValid(Definition)
-		|| !IsValid(Inventory)
-		|| Inventory->GetItemCount(Definition) <= 0)
-	{
-		return nullptr;
-	}
-	
-	return Definition;	
+	return IsValid(Inventory) ? Inventory->FindItemInstance(SelectedInstanceId) : nullptr;
 }
 
-void UDRQuickSlotComponent::RefreshHandedItem()
+void UDRQuickSlotComponent::RefreshDerivedState()
 {
-	UDRItemDefinition* NewHandedItem = ResolveHandedItemDefinition(SelectedSlotIndex);
+	const int32 NewSlotCount = GetSlotCount();
+	const int32 NewSelectedSlotIndex = GetSelectedSlotIndex();
 	
-	// 이미 쥐고 있는 아이템과 동일한 Definition
-	if (HeldItemDefinition == NewHandedItem)
+	if (NewSlotCount != CachedSlotCount)
+	{
+		CachedSlotCount = NewSlotCount;
+		
+		OnQuickSlotCountChangedDelegate.Broadcast(NewSlotCount);
+	}
+	
+	OnQuickSlotsChangedDelegate.Broadcast();
+	
+	if (NewSelectedSlotIndex != CachedSelectedSlotIndex)
+	{
+		const int32 PreviousSlotIndex = CachedSelectedSlotIndex;
+		
+		CachedSelectedSlotIndex = NewSelectedSlotIndex;
+		
+		OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, NewSelectedSlotIndex);
+	}
+	
+	RefreshHeldItem();
+}
+
+void UDRQuickSlotComponent::RefreshHeldItem()
+{
+	const FDRItemInstance* SelectedItem = ResolveSelectedItem();
+	
+	UDRItemDefinition* NewDefinition = SelectedItem ? SelectedItem->Definition.Get() : nullptr;
+	const FGuid NewInstanceId = SelectedItem ? SelectedItem->InstanceId : FGuid();
+	
+	if (EquippedInstanceId == NewInstanceId
+		&& HeldItemDefinition == NewDefinition)
 	{
 		return;
 	}
 	
-	HeldItemDefinition = NewHandedItem;
+	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
+	{
+		GrantedHandles.TakeFromAbilitySystem(ASC);
+		
+		if (IsValid(NewDefinition)
+			&& IsValid(NewDefinition->ItemAbilitySet))
+		{
+			NewDefinition->ItemAbilitySet->GiveToAbilitySystem(ASC, &GrantedHandles, NewDefinition);
+		}
+	}
 	
-	// 캐릭터 외형에 반영
+	EquippedInstanceId = NewInstanceId;
+	HeldItemDefinition = NewDefinition;
+	
 	ApplySelectedItemToCharacter();
 	
-	OnSelectedQuickSlotItemChangedDelegate.Broadcast(HeldItemDefinition.Get());	
+	OnSelectedQuickSlotItemChangedDelegate.Broadcast(HeldItemDefinition);	
 }
 
-void UDRQuickSlotComponent::RequestReplicationUpdate() const
+void UDRQuickSlotComponent::RefreshSelectedItem()
 {
-	AActor* OwnerActor = GetOwner();
-	
-	if (!IsValid(OwnerActor)
-		|| !OwnerActor->GetIsReplicated())
-	{
-		return;
-	}
-	
-	OwnerActor->FlushNetDormancy();
-	OwnerActor->ForceNetUpdate();
+	RefreshHeldItem();
+	ApplySelectedItemToCharacter();	
 }
 
 void UDRQuickSlotComponent::ApplySelectedItemToCharacter()
@@ -592,4 +358,18 @@ void UDRQuickSlotComponent::ApplySelectedItemToCharacter()
 	{
 		Character->SetHeldItemDefinition(HeldItemDefinition);
 	}
+}
+
+void UDRQuickSlotComponent::RequestReplicationUpdate() const
+{
+	AActor* OwnerActor = GetOwner();
+	
+	if (!IsValid(OwnerActor)
+		|| !OwnerActor->GetIsReplicated())
+	{
+		return;
+	}
+	
+	OwnerActor->FlushNetDormancy();
+	OwnerActor->ForceNetUpdate();
 }

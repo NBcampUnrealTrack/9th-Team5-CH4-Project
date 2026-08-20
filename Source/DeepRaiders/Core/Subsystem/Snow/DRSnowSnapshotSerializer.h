@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 
 #include "DRSnowSnapshotSerializer.generated.h"
 

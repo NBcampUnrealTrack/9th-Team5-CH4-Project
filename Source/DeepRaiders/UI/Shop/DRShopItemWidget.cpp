@@ -1,17 +1,17 @@
 #include "DRShopItemWidget.h"
 
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
 
-void UDRShopItemWidget::SetItemOffer(
-	const FDRShopItemOffer& NewItemOffer)
+void UDRShopItemWidget::SetOffer(
+	const FDRShopOfferView& NewOffer)
 {
-	ItemOffer = NewItemOffer;
+	Offer = NewOffer;
 
 	if (IsWidgetConstructed)
 	{
-		ApplyItemDefinition();
+		ApplyOffer();
 	}
 }
 
@@ -22,14 +22,15 @@ void UDRShopItemWidget::NativeConstruct()
 	if (!IsValid(Buy)
 		|| !IsValid(DisplayNameText)
 		|| !IsValid(PriceText)
-		|| !IsValid(DescriptionText))
+		|| !IsValid(DescriptionText)
+		|| !IsValid(ItemIcon))
 	{
 		return;
 	}
 
 	Buy->OnClicked.AddDynamic(this, &ThisClass::HandleBuyButtonClicked);
 	IsWidgetConstructed = true;
-	ApplyItemDefinition();
+	ApplyOffer();
 }
 
 void UDRShopItemWidget::NativeDestruct()
@@ -45,52 +46,32 @@ void UDRShopItemWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UDRShopItemWidget::ApplyItemDefinition()
+void UDRShopItemWidget::ApplyOffer()
 {
-	UDRItemDefinition* ItemDefinition = ItemOffer.ItemDefinition;
-
-	if (!IsValid(ItemDefinition)
-		|| !IsValid(Buy)
+	if (!IsValid(Buy)
 		|| !IsValid(DisplayNameText)
 		|| !IsValid(PriceText)
-		|| !IsValid(DescriptionText))
+		|| !IsValid(DescriptionText)
+		|| !IsValid(ItemIcon))
 	{
 		return;
 	}
 
-	if (ItemOffer.IsUpgrade())
-	{
-		if (IsValid(ItemOffer.UpgradeSourceDefinition))
-		{
-			DisplayNameText->SetText(FText::Format(
-				FText::FromString(TEXT("{0} → {1}")),
-				ItemOffer.UpgradeSourceDefinition->DisplayName,
-				ItemDefinition->DisplayName));
-		}
-		else
-		{
-			DisplayNameText->SetText(ItemDefinition->DisplayName);
-		}
-
-		if (UTextBlock* ButtonText = Cast<UTextBlock>(Buy->GetContent()))
-		{
-			ButtonText->SetText(FText::FromString(TEXT("업그레이드")));
-		}
-	}
-	else
-	{
-		DisplayNameText->SetText(ItemDefinition->DisplayName);
-	}
-
-	DescriptionText->SetText(ItemDefinition->Description);
-	PriceText->SetText(FText::AsNumber(ItemDefinition->Price));
+	DisplayNameText->SetText(Offer.DisplayName);
+	DescriptionText->SetText(Offer.Description);
+	ItemIcon->SetBrushFromTexture(Offer.Icon);
+	ItemIcon->SetVisibility(
+		IsValid(Offer.Icon)
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Hidden);
+	PriceText->SetText(FText::AsNumber(Offer.Price));
+	Buy->SetIsEnabled(Offer.IsPurchasable);
 }
 
 void UDRShopItemWidget::HandleBuyButtonClicked()
 {
-	if (!ItemOffer.RowName.IsNone()
-		&& IsValid(ItemOffer.ItemDefinition))
+	if (!Offer.Request.RowName.IsNone() && Offer.IsPurchasable)
 	{
-		OnOfferRequested.Broadcast(ItemOffer.MakeRequest());
+		OnOfferRequested.Broadcast(Offer.Request);
 	}
 }

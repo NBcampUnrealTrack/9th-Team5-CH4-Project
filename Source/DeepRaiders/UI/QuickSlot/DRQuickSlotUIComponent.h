@@ -8,6 +8,7 @@
 
 class ADRPlayerController;
 class UDRQuickSlotWidget;
+class UDRUIManagerSubsystem;
 
 UCLASS()
 class DEEPRAIDERS_API UDRQuickSlotUIComponent : public UActorComponent
@@ -20,12 +21,11 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
-protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Quick Slot|UI")
-	TSubclassOf<UDRQuickSlotWidget> QuickSlotWidgetClass;
 	
 private:
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UDRQuickSlotWidget> QuickSlotWidget;
 };

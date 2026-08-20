@@ -79,7 +79,7 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 
 	// 1단계는 신규 지급, 이후 단계는 직전 Definition을 가진 Entry 교체로 처리한다.
 	if (!IsValid(TargetDefinition)
-		|| TargetDefinition->Category != EItemCategory::Equipment)
+		|| TargetDefinition->Category != EDRItemCategory::Equipment)
 	{
 		return false;
 	}
@@ -93,11 +93,11 @@ bool UDRUpgradeComponent::BuildUpgradeOperation(
 	}
 	else if (!IsValid(SourceDefinition)
 		|| SourceDefinition == TargetDefinition
-		|| SourceDefinition->Category != EItemCategory::Equipment
-		|| !FindUpgradeSourceEntryId(
+		|| SourceDefinition->Category != EDRItemCategory::Equipment
+		|| !FindUpgradeSourceInstanceId(
 			Inventory,
 			SourceDefinition,
-			OutOperation.SourceEntryId))
+			OutOperation.SourceInstanceId))
 	{
 		return false;
 	}
@@ -124,8 +124,8 @@ bool UDRUpgradeComponent::ApplyUpgrade(
 		return Inventory->TryAddItem(Operation.TargetDefinition, 1);
 	}
 
-	return Inventory->TryReplaceEntryDefinition(
-		Operation.SourceEntryId,
+	return Inventory->TryReplaceItemDefinition(
+		Operation.SourceInstanceId,
 		Operation.SourceDefinition,
 		Operation.TargetDefinition);
 }
@@ -194,25 +194,25 @@ bool UDRUpgradeComponent::HasAnyItemInUpgradeChain(
 	return false;
 }
 
-bool UDRUpgradeComponent::FindUpgradeSourceEntryId(
+bool UDRUpgradeComponent::FindUpgradeSourceInstanceId(
 	const UDRInventoryComponent* Inventory,
 	const UDRItemDefinition* SourceDefinition,
-	FGuid& OutEntryId) const
+	FGuid& OutInstanceId) const
 {
-	OutEntryId.Invalidate();
+	OutInstanceId.Invalidate();
 
 	if (!IsValid(Inventory) || !IsValid(SourceDefinition))
 	{
 		return false;
 	}
 
-	for (const FDRInventoryEntry& Entry : Inventory->GetEntries())
+	for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
 	{
-		if (Entry.IsValid()
-			&& Entry.Quantity == 1
-			&& Entry.Definition == SourceDefinition)
+		if (ItemInstance.IsValid()
+			&& ItemInstance.Quantity == 1
+			&& ItemInstance.Definition == SourceDefinition)
 		{
-			OutEntryId = Entry.EntryId;
+			OutInstanceId = ItemInstance.InstanceId;
 			return true;
 		}
 	}

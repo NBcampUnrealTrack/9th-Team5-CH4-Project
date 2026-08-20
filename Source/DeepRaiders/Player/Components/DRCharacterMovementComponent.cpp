@@ -2,7 +2,9 @@
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
+#include "AbilitySystemComponent.h"
 
 class FSavedMove_DRCharacter : public FSavedMove_Character
 {
@@ -123,6 +125,67 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     : bWantsJetpack(false)
 {
     GravityScale = 1.0f;
+}
+
+void UDRCharacterMovementComponent::BindAbilitySystem(
+    UAbilitySystemComponent* AbilitySystemComponent)
+{
+    UnbindAbilitySystem();
+
+    if (!IsValid(AbilitySystemComponent))
+    {
+        return;
+    }
+
+    BoundAbilitySystemComponent = AbilitySystemComponent;
+
+    if (BaseWalkSpeed <= 0.f)
+    {
+        BaseWalkSpeed = MaxWalkSpeed;
+    }
+
+    MoveSpeedChangedDelegateHandle =
+        AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+            UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute())
+        .AddUObject(
+            this,
+            &ThisClass::HandleMoveSpeedMultiplierChanged);
+
+    ApplyMoveSpeedMultiplier(
+        AbilitySystemComponent->GetNumericAttribute(
+            UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
+}
+
+void UDRCharacterMovementComponent::EndPlay(
+    const EEndPlayReason::Type EndPlayReason)
+{
+    UnbindAbilitySystem();
+    Super::EndPlay(EndPlayReason);
+}
+
+void UDRCharacterMovementComponent::UnbindAbilitySystem()
+{
+    if (BoundAbilitySystemComponent.IsValid()
+        && MoveSpeedChangedDelegateHandle.IsValid())
+    {
+        BoundAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+            UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute())
+        .Remove(MoveSpeedChangedDelegateHandle);
+    }
+
+    MoveSpeedChangedDelegateHandle.Reset();
+    BoundAbilitySystemComponent.Reset();
+}
+
+void UDRCharacterMovementComponent::HandleMoveSpeedMultiplierChanged(
+    const FOnAttributeChangeData& Data)
+{
+    ApplyMoveSpeedMultiplier(Data.NewValue);
+}
+
+void UDRCharacterMovementComponent::ApplyMoveSpeedMultiplier(float Multiplier)
+{
+    MaxWalkSpeed = BaseWalkSpeed * FMath::Max(0.f, Multiplier);
 }
 
 void UDRCharacterMovementComponent::SetWantsJetpack(

@@ -5,12 +5,23 @@
 #include "DRShopItemTable.generated.h"
 
 class UDRItemDefinition;
+class UTexture2D;
 
 UENUM(BlueprintType)
 enum class EDRShopOfferType : uint8
 {
 	Purchase,
-	Upgrade
+	Upgrade,
+	Perk
+};
+
+UENUM(BlueprintType)
+enum class EDRShopOfferSection : uint8
+{
+	Equipment,
+	Consumable,
+	Upgrade,
+	Perk
 };
 
 USTRUCT(BlueprintType)
@@ -87,6 +98,33 @@ struct FDRShopOfferRequest
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	int32 TargetLevel = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FDRShopOfferView
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	FDRShopOfferRequest Request;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	EDRShopOfferSection Section = EDRShopOfferSection::Equipment;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	FText DisplayName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	FText Description;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	TObjectPtr<UTexture2D> Icon;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	int32 Price = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	bool IsPurchasable = true;
 };
 
 USTRUCT(BlueprintType)

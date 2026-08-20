@@ -20,16 +20,18 @@ class UDRTeleportComponent;
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
-class UDRHealthComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
-
 class UAbilitySystemComponent;
 class UGameplayEffect;
-
 class USpringArmComponent;
+class UDRPlayerAttributeSet;
+class UDRItemAnimationSet;
+class UAnimMontage;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FDROnAbilitySystemReady, UAbilitySystemComponent*);
 
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
@@ -46,6 +48,17 @@ public:
 	ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
+	float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser);
+	
+	float GetCurrentHealth() const;
+	float GetMaxHealth() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	float GetHealthRatio() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	bool IsDead() const;
 
 	virtual void Landed(const FHitResult& Hit) override;
 
@@ -84,20 +97,6 @@ public:
 
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetCurrentHealth() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetMaxHealth() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	float GetHealthRatio() const;
-
-	UFUNCTION(BlueprintPure, Category = "Player|Health")
-	bool IsDead() const;
-
-	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
 	void RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
@@ -148,18 +147,44 @@ public:
 	/** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
 	void ReconcileJetpackFuelFromServer(float ServerFuel);
 
-	UDRHealthComponent* GetHealthComponent() const
+	FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
+	
+	bool IsFrozen() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Animation")
+	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Combat")
+	bool IsCombatAiming() const
 	{
-		return HealthComponent;
+		return bCombatAiming;
 	}
 
-	FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
+	/**
+	 * 사격 시 조준 방향 회전을 일정 시간 유지한다.
+	 * LocalPredicted 클라이언트와 서버 양쪽에서 호출 가능.
+	 */
+	void RefreshCombatAim(float HoldDuration);
 
+	void StopCombatAim();
+
+	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
+
+	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
+	
+	FDROnAbilitySystemReady OnAbilitySystemReady;
+
+	bool IsAbilitySystemReady() const
+	{
+		return bAbilitySystemReady;
+	}
+	
 protected:
 	virtual void BeginPlay() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void InitializeAbilitySystem();
-
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	TObjectPtr<UDRMiningComponent> MiningComponent;
 
@@ -174,9 +199,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Item Action", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRItemActionPresentationComponent> ItemActionPresentationComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Health", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRHealthComponent> HealthComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
@@ -197,6 +219,27 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 
+	
+private:
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Damage")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Respawn")
+	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
+	
+	void ApplySpawnAttributeReset();
+	
+	UPROPERTY(Replicated)
+	bool bCombatAiming = false;
+
+	FTimerHandle CombatAimTimerHandle;
+	
+	bool bAbilitySystemReady = false;
+
+	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+	
 #pragma region QuickSlot
 
 public:

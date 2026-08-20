@@ -9,6 +9,7 @@
 class ADRPlayerController;
 class ADRStorage;
 class UDRInventoryWidget;
+class UDRUIManagerSubsystem;
 class APlayerState;
 
 enum class EDRInventoryUIState : uint8
@@ -18,11 +19,8 @@ enum class EDRInventoryUIState : uint8
 	PlayerAndStorage,
 };
 
-enum class EDRInventoryInputMode : uint8
-{
-	GameOnly,
-	GameAndUI
-};
+// 현재 이 클래스는 사라진 DRPlayerController 코드를 상당수 의존하고 있었기에
+// 사용이 불가능한 클래스입니다.
 
 // 창고 인벤토리를 보여줄 UI와 플레이어 인벤토리 UI를 모두 관리
 // 필요 시 추후 변경 필요
@@ -48,9 +46,8 @@ private:
 	void ShowStorageInventory(ADRStorage* Storage);
 	void HideStorageInventory();
 	
-	// 호출 시 UIState 및 InputMode 초기화
+	// 열린 인벤토리를 닫고 상태를 초기화
 	void CloseInventoryScreen();
-	void ApplyInputMode(EDRInventoryInputMode InInputMode);
 	
 	// 창고와의 거리가 멀어지면 자동으로 UI가 닫히도록 타이머로 체크
 	void StartStorageDistanceCheck();
@@ -61,10 +58,10 @@ private:
 	void HandleCurrentStorageChanged(ADRStorage* NewStorage);
 	
 	UFUNCTION()
-	void HandlePlayerEntryClicked(FGuid EntryId);
+	void HandlePlayerEntryClicked(FGuid InstanceId);
 	
 	UFUNCTION()
-	void HandleStorageEntryClicked(FGuid EntryId);
+	void HandleStorageEntryClicked(FGuid InstanceId);
 	
 	UFUNCTION()
 	void HandleCloseRequested();
@@ -72,20 +69,12 @@ private:
 	UFUNCTION()
 	void HandleStorageOwnerChanged(AActor* PreviousOwner, AActor* NewOwner);
 	
-protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI")
-	TSubclassOf<UDRInventoryWidget> PlayerInventoryWidgetClass;
-	
-	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI")
-	TSubclassOf<UDRInventoryWidget> StorageInventoryWidgetClass;
-	
-	// 현재 접근 중인 창고와의 거리 체크 간격
-	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI", meta = (ClampMin = "0.05", Units = "s"))
-	float StorageDistanceCheckInterval = 0.2f;
-	
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInventoryWidget> PlayerInventoryWidget;
