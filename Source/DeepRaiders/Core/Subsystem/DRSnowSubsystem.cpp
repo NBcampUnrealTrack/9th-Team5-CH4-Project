@@ -102,11 +102,6 @@ FDRSnowControlRatio UDRSnowSubsystem::QuerySnowInBounds(const FBox& Bounds, int3
 	return VolumeStore.QuerySnowInBounds(Bounds, A, B);
 }
 
-FDRSnowControlRatio UDRSnowSubsystem::QuerySnowInHexPrism(const FBox& Bounds, const FTransform& Transform, const FVector& Extent, int32 A, int32 B) const
-{
-	return VolumeStore.QuerySnowInHexPrism(Bounds, Transform, Extent, A, B);
-}
-
 FDRJoinSnapshotSizeReport UDRSnowSubsystem::MeasureCompressedSnapshotSize(AVoxelWorld* Target, bool bLog)
 {
 	ConfigureSnapshotSerializer();

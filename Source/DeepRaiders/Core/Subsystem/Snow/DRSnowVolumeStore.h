@@ -46,15 +46,6 @@ public:
 		int32 TeamIdA = INDEX_NONE,
 		int32 TeamIdB = INDEX_NONE) const;
 
-	// 회전/스케일된 정육각형 기둥 안의 팀별 Amount를 합산한다.
-	// HexExtent.X/Y 중 작은 값을 외접 반지름으로 사용하고, HexExtent.Z를 높이 절반으로 사용한다.
-	FDRSnowControlRatio QuerySnowInHexPrism(
-		const FBox& WorldBounds,
-		const FTransform& HexTransform,
-		const FVector& HexExtent,
-		int32 TeamIdA = INDEX_NONE,
-		int32 TeamIdB = INDEX_NONE) const;
-
 	FDRSnowAddedToVolumeDelegate OnSnowAddedToVolume;
 	FDRSnowRemovedFromVolumeDelegate OnSnowRemovedFromVolume;
 

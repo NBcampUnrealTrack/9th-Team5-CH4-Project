@@ -8,31 +8,6 @@ namespace
 			? Value / Divisor
 			: -((-Value + Divisor - 1) / Divisor);
 	}
-
-	bool IsWorldLocationInsideHexPrism(
-		const FVector& WorldLocation,
-		const FTransform& HexTransform,
-		const FVector& HexExtent)
-	{
-		const FVector LocalLocation =
-			HexTransform.InverseTransformPosition(WorldLocation);
-
-		if (FMath::Abs(LocalLocation.Z) > HexExtent.Z)
-		{
-			return false;
-		}
-
-		const float HexRadius = FMath::Max(
-			1.f,
-			FMath::Min(HexExtent.X, HexExtent.Y));
-		const float AbsX = FMath::Abs(LocalLocation.X);
-		const float AbsY = FMath::Abs(LocalLocation.Y);
-		const float HalfSqrt3 = 0.86602540378f;
-
-		return AbsX <= HexRadius &&
-			AbsY <= HalfSqrt3 * HexRadius &&
-			HalfSqrt3 * AbsX + 0.5f * AbsY <= HalfSqrt3 * HexRadius;
-	}
 }
 
 void FDRSnowVolumeStore::ReplaceSnapshotData(
@@ -43,6 +18,19 @@ void FDRSnowVolumeStore::ReplaceSnapshotData(
 	CellSize = FMath::Max(1.f, InCellSize);
 	ChunkSize = FMath::Max(1, InChunkSize);
 	Chunks = MoveTemp(InChunks);
+
+	for (TPair<FIntVector, FDRSnowVolumeChunk>& ChunkPair : Chunks)
+	{
+		FDRSnowVolumeChunk& Chunk = ChunkPair.Value;
+		Chunk.ActiveCellIndices.Reset();
+		for (int32 LocalIndex = 0; LocalIndex < Chunk.Cells.Num(); ++LocalIndex)
+		{
+			if (Chunk.Cells[LocalIndex].GetTotalAmount() > 0.f)
+			{
+				Chunk.ActiveCellIndices.Add(LocalIndex);
+			}
+		}
+	}
 }
 
 FDRSnowAddResult FDRSnowVolumeStore::AddSnow(
@@ -270,48 +258,40 @@ FDRSnowControlRatio FDRSnowVolumeStore::QuerySnowInBounds(
 	const FIntVector MinCell = WorldToCell(WorldBounds.Min);
 	const FIntVector MaxCell = WorldToCell(WorldBounds.Max);
 
-	// Bounds 안의 모든 snow cell을 합산한다.
+	// 존재하는 chunk와 실제 눈이 있는 cell만 순회한다.
 	// 중립 눈은 TotalAmount에는 포함되지만 RatioA/B의 분자에는 포함되지 않는다.
-	for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
+	for (const TPair<FIntVector, FDRSnowVolumeChunk>& ChunkPair : Chunks)
 	{
-		for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+		const FDRSnowVolumeChunk& Chunk = ChunkPair.Value;
+		for (const int32 LocalIndex : Chunk.ActiveCellIndices)
 		{
-			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+			const int32 LocalZ = LocalIndex / (Chunk.Size * Chunk.Size);
+			const int32 LocalY = (LocalIndex / Chunk.Size) % Chunk.Size;
+			const int32 LocalX = LocalIndex % Chunk.Size;
+			const FIntVector GlobalCell = Chunk.Origin + FIntVector(LocalX, LocalY, LocalZ);
+			if (GlobalCell.X < MinCell.X || GlobalCell.X > MaxCell.X ||
+				GlobalCell.Y < MinCell.Y || GlobalCell.Y > MaxCell.Y ||
+				GlobalCell.Z < MinCell.Z || GlobalCell.Z > MaxCell.Z)
 			{
-				const FIntVector GlobalCell(X, Y, Z);
-				const FDRSnowVolumeChunk* Chunk =
-					FindChunk(CellToChunkOrigin(GlobalCell));
-				if (!Chunk)
-				{
-					continue;
-				}
-
-				int32 LocalIndex = INDEX_NONE;
-				if (!Chunk->GetLocalIndex(GlobalCell - Chunk->Origin, LocalIndex))
-				{
-					continue;
-				}
-
-				const FDRSnowCell& Cell = Chunk->Cells[LocalIndex];
-				Ratio.NeutralAmount += Cell.NeutralAmount;
-				if (Cell.AmountA > 0.f)
-				{
-					AddQueriedAmount(Ratio, Chunk->TeamIdA, Cell.AmountA);
-				}
-				if (Cell.AmountB > 0.f)
-				{
-					AddQueriedAmount(Ratio, Chunk->TeamIdB, Cell.AmountB);
-				}
-
-				++Ratio.SampledCellCount;
+				continue;
 			}
+
+			const FDRSnowCell& Cell = Chunk.Cells[LocalIndex];
+			Ratio.NeutralAmount += Cell.NeutralAmount;
+			if (Cell.AmountA > 0.f)
+			{
+				AddQueriedAmount(Ratio, Chunk.TeamIdA, Cell.AmountA);
+			}
+			if (Cell.AmountB > 0.f)
+			{
+				AddQueriedAmount(Ratio, Chunk.TeamIdB, Cell.AmountB);
+			}
+
+			++Ratio.SampledCellCount;
 		}
 	}
 
-	Ratio.TotalAmount =
-		Ratio.NeutralAmount +
-		Ratio.AmountA +
-		Ratio.AmountB;
+	Ratio.TotalAmount = Ratio.NeutralAmount + Ratio.AmountA + Ratio.AmountB;
 	if (Ratio.TotalAmount > 0.f)
 	{
 		Ratio.RatioA = Ratio.AmountA / Ratio.TotalAmount;
@@ -321,91 +301,7 @@ FDRSnowControlRatio FDRSnowVolumeStore::QuerySnowInBounds(
 	return Ratio;
 }
 
-FDRSnowControlRatio FDRSnowVolumeStore::QuerySnowInHexPrism(
-	const FBox& WorldBounds,
-	const FTransform& HexTransform,
-	const FVector& HexExtent,
-	int32 TeamIdA,
-	int32 TeamIdB) const
-{
-	FDRSnowControlRatio Ratio;
-	Ratio.TeamIdA = TeamIdA;
-	Ratio.TeamIdB = TeamIdB;
-
-	if (!WorldBounds.IsValid)
-	{
-		return Ratio;
-	}
-
-	const FIntVector MinCell = WorldToCell(WorldBounds.Min);
-	const FIntVector MaxCell = WorldToCell(WorldBounds.Max);
-
-	for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
-	{
-		for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
-		{
-			for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
-			{
-				const FIntVector GlobalCell(X, Y, Z);
-				const FVector CellCenter =
-					(FVector(
-						static_cast<double>(GlobalCell.X),
-						static_cast<double>(GlobalCell.Y),
-						static_cast<double>(GlobalCell.Z)) +
-						FVector(0.5, 0.5, 0.5)) *
-					CellSize;
-				if (!IsWorldLocationInsideHexPrism(
-					CellCenter,
-					HexTransform,
-					HexExtent))
-				{
-					continue;
-				}
-
-				const FDRSnowVolumeChunk* Chunk =
-					FindChunk(CellToChunkOrigin(GlobalCell));
-				if (!Chunk)
-				{
-					continue;
-				}
-
-				int32 LocalIndex = INDEX_NONE;
-				if (!Chunk->GetLocalIndex(GlobalCell - Chunk->Origin, LocalIndex))
-				{
-					continue;
-				}
-
-				const FDRSnowCell& Cell = Chunk->Cells[LocalIndex];
-				Ratio.NeutralAmount += Cell.NeutralAmount;
-				if (Cell.AmountA > 0.f)
-				{
-					AddQueriedAmount(Ratio, Chunk->TeamIdA, Cell.AmountA);
-				}
-				if (Cell.AmountB > 0.f)
-				{
-					AddQueriedAmount(Ratio, Chunk->TeamIdB, Cell.AmountB);
-				}
-
-				++Ratio.SampledCellCount;
-			}
-		}
-	}
-
-	Ratio.TotalAmount =
-		Ratio.NeutralAmount +
-		Ratio.AmountA +
-		Ratio.AmountB;
-	if (Ratio.TotalAmount > 0.f)
-	{
-		Ratio.RatioA = Ratio.AmountA / Ratio.TotalAmount;
-		Ratio.RatioB = Ratio.AmountB / Ratio.TotalAmount;
-	}
-
-	return Ratio;
-}
-
-FIntVector FDRSnowVolumeStore::WorldToCell(
-	const FVector& WorldLocation) const
+FIntVector FDRSnowVolumeStore::WorldToCell(const FVector& WorldLocation) const
 {
 	const float SafeCellSize = FMath::Max(1.f, CellSize);
 	return FIntVector(
@@ -414,8 +310,7 @@ FIntVector FDRSnowVolumeStore::WorldToCell(
 		FMath::FloorToInt(WorldLocation.Z / SafeCellSize));
 }
 
-FIntVector FDRSnowVolumeStore::CellToChunkOrigin(
-	const FIntVector& Cell) const
+FIntVector FDRSnowVolumeStore::CellToChunkOrigin(const FIntVector& Cell) const
 {
 	const int32 SafeChunkSize = FMath::Max(1, ChunkSize);
 	return FIntVector(
@@ -424,14 +319,12 @@ FIntVector FDRSnowVolumeStore::CellToChunkOrigin(
 		FloorDivide(Cell.Z, SafeChunkSize) * SafeChunkSize);
 }
 
-const FDRSnowVolumeChunk* FDRSnowVolumeStore::FindChunk(
-	const FIntVector& ChunkOrigin) const
+const FDRSnowVolumeChunk* FDRSnowVolumeStore::FindChunk(const FIntVector& ChunkOrigin) const
 {
 	return Chunks.Find(ChunkOrigin);
 }
 
-FDRSnowVolumeChunk& FDRSnowVolumeStore::FindOrCreateChunk(
-	const FIntVector& ChunkOrigin)
+FDRSnowVolumeChunk& FDRSnowVolumeStore::FindOrCreateChunk(const FIntVector& ChunkOrigin)
 {
 	if (FDRSnowVolumeChunk* ExistingChunk = Chunks.Find(ChunkOrigin))
 	{
@@ -439,10 +332,7 @@ FDRSnowVolumeChunk& FDRSnowVolumeStore::FindOrCreateChunk(
 	}
 
 	FDRSnowVolumeChunk NewChunk;
-	NewChunk.Initialize(
-		ChunkOrigin,
-		FMath::Max(1, ChunkSize),
-		FMath::Max(1.f, CellSize));
+	NewChunk.Initialize(ChunkOrigin, FMath::Max(1, ChunkSize), FMath::Max(1.f, CellSize));
 
 	return Chunks.Add(ChunkOrigin, MoveTemp(NewChunk));
 }
@@ -470,6 +360,7 @@ bool FDRSnowVolumeStore::AddSnowToCell(
 	if (TeamId == INDEX_NONE)
 	{
 		Cell.NeutralAmount += Amount;
+		Chunk.ActiveCellIndices.Add(LocalIndex);
 		return true;
 	}
 
@@ -487,6 +378,8 @@ bool FDRSnowVolumeStore::AddSnowToCell(
 	{
 		Cell.AmountB += Amount;
 	}
+
+	Chunk.ActiveCellIndices.Add(LocalIndex);
 
 	return true;
 }
@@ -517,15 +410,13 @@ float FDRSnowVolumeStore::RemoveSnowFromCell(
 	const float RemovedAmount = FMath::Min(Amount, TotalAmount);
 	const float RemoveRatio = RemovedAmount / TotalAmount;
 
-	Cell.NeutralAmount = FMath::Max(
-		0.f,
-		Cell.NeutralAmount - Cell.NeutralAmount * RemoveRatio);
-	Cell.AmountA = FMath::Max(
-		0.f,
-		Cell.AmountA - Cell.AmountA * RemoveRatio);
-	Cell.AmountB = FMath::Max(
-		0.f,
-		Cell.AmountB - Cell.AmountB * RemoveRatio);
+	Cell.NeutralAmount = FMath::Max( 0.f, Cell.NeutralAmount - Cell.NeutralAmount * RemoveRatio);
+	Cell.AmountA = FMath::Max(0.f, Cell.AmountA - Cell.AmountA * RemoveRatio);
+	Cell.AmountB = FMath::Max(0.f, Cell.AmountB - Cell.AmountB * RemoveRatio);
+	if (Cell.GetTotalAmount() <= 0.f)
+	{
+		Chunk.ActiveCellIndices.Remove(LocalIndex);
+	}
 
 	return RemovedAmount;
 }

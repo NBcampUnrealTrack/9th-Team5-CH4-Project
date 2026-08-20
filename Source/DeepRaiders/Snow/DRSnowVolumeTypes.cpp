@@ -61,6 +61,7 @@ void FDRSnowVolumeChunk::Initialize(
 	Size = FMath::Max(1, InSize);
 	CellSize = FMath::Max(1.f, InCellSize);
 	Cells.SetNum(Size * Size * Size);
+	ActiveCellIndices.Reset();
 }
 
 bool FDRSnowVolumeChunk::GetLocalIndex(

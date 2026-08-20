@@ -8,6 +8,7 @@
 #include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "TimerManager.h"
 #include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelData/VoxelDataLock.h"
 #include "VoxelIntBox.h"
@@ -121,46 +122,11 @@ namespace
 
 		return FVoxelIntBox(Min, Max);
 	}
-
-	FString GetRatioWinnerText(const FDRSnowControlRatio& Ratio)
-	{
-		if (Ratio.TotalAmount <= 0.f)
-		{
-			return TEXT("None");
-		}
-
-		if (FMath::IsNearlyEqual(Ratio.AmountA, Ratio.AmountB))
-		{
-			return TEXT("Draw");
-		}
-
-		return Ratio.AmountA > Ratio.AmountB
-			? FString::Printf(TEXT("Team %d"), Ratio.TeamIdA)
-			: FString::Printf(TEXT("Team %d"), Ratio.TeamIdB);
-	}
-
-	FString BuildControlRatioDebugText(
-		const AActor* ZoneActor,
-		const FDRSnowControlRatio& Ratio)
-	{
-		return FString::Printf(
-			TEXT("[Snow][ControlZone] %s Winner=%s TeamA=%d %.1f(%.1f%%) TeamB=%d %.1f(%.1f%%) Total=%.1f Cells=%d"),
-			*GetNameSafe(ZoneActor),
-			*GetRatioWinnerText(Ratio),
-			Ratio.TeamIdA,
-			Ratio.AmountA,
-			Ratio.RatioA * 100.f,
-			Ratio.TeamIdB,
-			Ratio.AmountB,
-			Ratio.RatioB * 100.f,
-			Ratio.TotalAmount,
-			Ratio.SampledCellCount);
-	}
 }
 
 ADRSnowControlZone::ADRSnowControlZone()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -178,30 +144,34 @@ void ADRSnowControlZone::BeginPlay()
 
 	if (bCreateDebugWidget && DebugWidgetClass)
 	{
-		APlayerController* PlayerController =
-			GetWorld()
-				? GetWorld()->GetFirstPlayerController()
-				: nullptr;
+		APlayerController* PlayerController = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 		if (IsValid(PlayerController))
 		{
-			DebugWidget = CreateWidget<UUserWidget>(
-				PlayerController,
-				DebugWidgetClass);
+			DebugWidget = CreateWidget<UUserWidget>(PlayerController, DebugWidgetClass);
 			if (IsValid(DebugWidget))
 			{
 				DebugWidget->AddToViewport();
-				DebugTextBlock = Cast<UTextBlock>(
-					DebugWidget->GetWidgetFromName(DebugTextBlockName));
+				DebugTextBlock = Cast<UTextBlock>(DebugWidget->GetWidgetFromName(DebugTextBlockName));
 			}
 		}
 	}
 
 	UpdateDebugWidget();
-	TimeUntilNextDebugUpdate = DebugUpdateInterval;
+	if (IsValid(DebugTextBlock))
+	{
+		GetWorldTimerManager().SetTimer(
+			DebugUpdateTimerHandle,
+			this,
+			&ADRSnowControlZone::UpdateDebugWidget,
+			FMath::Max(0.01f, DebugUpdateInterval),
+			true);
+	}
 }
 
 void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(DebugUpdateTimerHandle);
+
 	if (IsValid(DebugWidget))
 	{
 		DebugWidget->RemoveFromParent();
@@ -211,31 +181,9 @@ void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	Super::EndPlay(EndPlayReason);
 }
-
-void ADRSnowControlZone::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (!bCreateDebugWidget && !IsValid(DebugTextBlock))
-	{
-		return;
-	}
-
-	TimeUntilNextDebugUpdate -= DeltaSeconds;
-	if (TimeUntilNextDebugUpdate > 0.f)
-	{
-		return;
-	}
-
-	UpdateDebugWidget();
-	TimeUntilNextDebugUpdate = FMath::Max(0.01f, DebugUpdateInterval);
-}
-
 FBox ADRSnowControlZone::GetZoneWorldBounds() const
 {
-	return IsValid(ZoneBounds)
-		? ZoneBounds->Bounds.GetBox()
-		: FBox(ForceInit);
+	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
 }
 
 FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
@@ -254,20 +202,7 @@ FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
 		return EmptyRatio;
 	}
 
-	if (bUseHexPrismShape && IsValid(ZoneBounds))
-	{
-		return SnowSubsystem->QuerySnowInHexPrism(
-			GetZoneWorldBounds(),
-			ZoneBounds->GetComponentTransform(),
-			ZoneBounds->GetUnscaledBoxExtent(),
-			TeamIdA,
-			TeamIdB);
-	}
-
-	return SnowSubsystem->QuerySnowInBounds(
-		GetZoneWorldBounds(),
-		TeamIdA,
-		TeamIdB);
+	return SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds(), TeamIdA, TeamIdB);
 }
 
 FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
@@ -284,10 +219,7 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 		return Result;
 	}
 
-	const FVoxelIntBox VoxelBounds =
-		MakeVoxelBoundsFromWorldBounds(
-			VoxelWorld,
-			GetZoneWorldBounds());
+	const FVoxelIntBox VoxelBounds = MakeVoxelBoundsFromWorldBounds(VoxelWorld, GetZoneWorldBounds());
 	if (!VoxelBounds.IsValid())
 	{
 		return Result;
@@ -311,17 +243,15 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 			{
 				for (int32 X = VoxelBounds.Min.X; X < VoxelBounds.Max.X; ++X)
 				{
-					if (MaxVoxelScanCount > 0 &&
-						Result.ScannedVoxelCount >= MaxVoxelScanCount)
+					if (MaxVoxelScanCount > 0 && Result.ScannedVoxelCount >= MaxVoxelScanCount)
 					{
 						Result.bTruncated = true;
 						break;
 					}
 
 					const FIntVector VoxelPosition(X, Y, Z);
-					const FVector WorldLocation =
-						VoxelWorld->LocalToGlobal(VoxelPosition);
-					if (!IsWorldLocationInsideQueryShape(WorldLocation))
+					const FVector WorldLocation = VoxelWorld->LocalToGlobal(VoxelPosition);
+					if (!IsWorldLocationInsideZoneBounds(WorldLocation))
 					{
 						continue;
 					}
@@ -336,12 +266,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 
 					++Result.FilledVoxelCount;
 
-					const FVoxelMaterial Material =
-						Data.GetMaterial(VoxelPosition, 0);
-					const int32 MaterialIndex =
-						GetDominantMaterialIndex(
-							Material,
-							VoxelWorld->MaterialConfig);
+					const FVoxelMaterial Material = Data.GetMaterial(VoxelPosition, 0);
+					const int32 MaterialIndex = GetDominantMaterialIndex(Material, VoxelWorld->MaterialConfig);
 					if (MaterialIndex == INDEX_NONE)
 					{
 						++Result.UnknownCount;
@@ -409,70 +335,29 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 	const int32 KnownTeamCount = Result.CountA + Result.CountB;
 	if (KnownTeamCount > 0)
 	{
-		Result.RatioA =
-			static_cast<float>(Result.CountA) /
-			static_cast<float>(KnownTeamCount);
-		Result.RatioB =
-			static_cast<float>(Result.CountB) /
-			static_cast<float>(KnownTeamCount);
+		Result.RatioA = static_cast<float>(Result.CountA) / static_cast<float>(KnownTeamCount);
+		Result.RatioB = static_cast<float>(Result.CountB) / static_cast<float>(KnownTeamCount);
 	}
 
 	if (Result.FilledVoxelCount > 0)
 	{
-		Result.Coverage =
-			static_cast<float>(Result.MaterialVoxelCount) /
-			static_cast<float>(Result.FilledVoxelCount);
+		Result.Coverage = static_cast<float>(Result.MaterialVoxelCount) / static_cast<float>(Result.FilledVoxelCount);
 	}
 
 	return Result;
 }
 
-FDRSnowControlRatio ADRSnowControlZone::DebugPrintControlRatio(
-	float DisplayTime) const
-{
-	const FDRSnowControlRatio Ratio = GetControlRatio();
-	const FString DebugMessage = BuildControlRatioDebugText(this, Ratio);
-
-	UE_LOG(LogTemp, Warning, TEXT("%s"), *DebugMessage);
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			-1,
-			FMath::Max(0.1f, DisplayTime),
-			FColor::Yellow,
-			DebugMessage);
-	}
-
-	return Ratio;
-}
-
-FString ADRSnowControlZone::DebugGetControlRatioText() const
-{
-	return BuildControlRatioDebugText(this, GetControlRatio());
-}
-
 FString ADRSnowControlZone::BuildSnowCountDebugText() const
 {
 	const FDRSnowVoxelMaterialScanResult MaterialScan = ScanVoxelMaterials();
-	const FDRSnowControlRatio VolumeRatio = GetControlRatio();
-
-	const float DiffA =
-		FMath::Abs(
-			static_cast<float>(MaterialScan.CountA) -
-			VolumeRatio.AmountA);
-	const float DiffB =
-		FMath::Abs(
-			static_cast<float>(MaterialScan.CountB) -
-			VolumeRatio.AmountB);
-
 	return FString::Printf(
-		TEXT("[Hex Zone Debug]%s\n\n")
+		TEXT("[Snow Zone Debug]%s\n\n")
 		TEXT("Voxel Material Scan\n")
 		TEXT("A: %d  B: %d  Neutral: %d  Unknown: %d\n")
 		TEXT("Filled Voxels: %d\n")
 		TEXT("Material Voxels: %d\n")
 		TEXT("Coverage: %.1f%%\n")
-		TEXT("Scanned: %d%s\n\n"),
+		TEXT("Scanned: %d\n\n"),
 		MaterialScan.bTruncated ? TEXT(" [Truncated]") : TEXT(""),
 		MaterialScan.CountA,
 		MaterialScan.CountB,
@@ -481,8 +366,7 @@ FString ADRSnowControlZone::BuildSnowCountDebugText() const
 		MaterialScan.FilledVoxelCount,
 		MaterialScan.MaterialVoxelCount,
 		MaterialScan.Coverage * 100.f,
-		MaterialScan.ScannedVoxelCount,
-		bUseHexPrismShape ? TEXT(" Hex") : TEXT(" Box"));
+		MaterialScan.ScannedVoxelCount);
 }
 
 AVoxelWorld* ADRSnowControlZone::ResolveVoxelWorld() const
@@ -509,17 +393,14 @@ AVoxelWorld* ADRSnowControlZone::ResolveVoxelWorld() const
 	return nullptr;
 }
 
-bool ADRSnowControlZone::IsWorldLocationInsideQueryShape(
-	const FVector& WorldLocation) const
+bool ADRSnowControlZone::IsWorldLocationInsideZoneBounds(const FVector& WorldLocation) const
 {
 	if (!IsValid(ZoneBounds))
 	{
 		return false;
 	}
 
-	const FVector LocalLocation =
-		ZoneBounds->GetComponentTransform().InverseTransformPosition(
-			WorldLocation);
+	const FVector LocalLocation = ZoneBounds->GetComponentTransform().InverseTransformPosition(WorldLocation);
 	const FVector Extent = ZoneBounds->GetUnscaledBoxExtent();
 
 	if (FMath::Abs(LocalLocation.Z) > Extent.Z)
@@ -527,28 +408,15 @@ bool ADRSnowControlZone::IsWorldLocationInsideQueryShape(
 		return false;
 	}
 
-	if (!bUseHexPrismShape)
-	{
-		return FMath::Abs(LocalLocation.X) <= Extent.X &&
-			FMath::Abs(LocalLocation.Y) <= Extent.Y;
-	}
-
-	const float HexRadius = FMath::Max(1.f, FMath::Min(Extent.X, Extent.Y));
-	const float AbsX = FMath::Abs(LocalLocation.X);
-	const float AbsY = FMath::Abs(LocalLocation.Y);
-	const float HalfSqrt3 = 0.86602540378f;
-
-	return AbsX <= HexRadius &&
-		AbsY <= HalfSqrt3 * HexRadius &&
-		HalfSqrt3 * AbsX + 0.5f * AbsY <= HalfSqrt3 * HexRadius;
+	return FMath::Abs(LocalLocation.X) <= Extent.X &&
+		FMath::Abs(LocalLocation.Y) <= Extent.Y;
 }
 
 void ADRSnowControlZone::UpdateDebugWidget()
 {
 	if (!IsValid(DebugTextBlock) && IsValid(DebugWidget))
 	{
-		DebugTextBlock = Cast<UTextBlock>(
-			DebugWidget->GetWidgetFromName(DebugTextBlockName));
+		DebugTextBlock = Cast<UTextBlock>(DebugWidget->GetWidgetFromName(DebugTextBlockName));
 	}
 
 	if (!IsValid(DebugTextBlock))

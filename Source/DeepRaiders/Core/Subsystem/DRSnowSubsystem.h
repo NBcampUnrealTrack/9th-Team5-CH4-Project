@@ -24,15 +24,12 @@ public:
 
 	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
 	FDRSnowRemoveResult RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request);
-	bool ApplyReplicatedSnowRemoval(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		float AppliedAmount);
+	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
 	bool RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 
 	bool GetSnowCellAtLocation(FVector WorldLocation, FDRSnowCell& OutCell, int32& OutTeamIdA, int32& OutTeamIdB) const;
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds, int32 TeamIdA = INDEX_NONE, int32 TeamIdB = INDEX_NONE) const;
-	FDRSnowControlRatio QuerySnowInHexPrism(const FBox& WorldBounds, const FTransform& HexTransform, const FVector& HexExtent, int32 TeamIdA = INDEX_NONE, int32 TeamIdB = INDEX_NONE) const;
 
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(AVoxelWorld* TargetVoxelWorld = nullptr, bool bLogResult = true);
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);

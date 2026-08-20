@@ -66,7 +66,6 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	FBox GetZoneWorldBounds() const;
@@ -76,12 +75,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
 	FDRSnowVoxelMaterialScanResult ScanVoxelMaterials() const;
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	FDRSnowControlRatio DebugPrintControlRatio(float DisplayTime = 2.f) const;
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	FString DebugGetControlRatioText() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
 	FString BuildSnowCountDebugText() const;
@@ -105,11 +98,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug")
 	TObjectPtr<AVoxelWorld> TargetVoxelWorld = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug")
-	bool bUseHexPrismShape = true;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug", meta = (ClampMin = "0.01"))
-	float DebugUpdateInterval = 0.2f;
+	float DebugUpdateInterval = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug")
 	bool bCreateDebugWidget = false;
@@ -125,7 +115,7 @@ protected:
 
 private:
 	AVoxelWorld* ResolveVoxelWorld() const;
-	bool IsWorldLocationInsideQueryShape(const FVector& WorldLocation) const;
+	bool IsWorldLocationInsideZoneBounds(const FVector& WorldLocation) const;
 	void UpdateDebugWidget();
 
 	UPROPERTY(Transient)
@@ -134,5 +124,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> DebugTextBlock = nullptr;
 
-	float TimeUntilNextDebugUpdate = 0.f;
+	FTimerHandle DebugUpdateTimerHandle;
 };

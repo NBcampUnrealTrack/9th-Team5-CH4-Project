@@ -54,6 +54,9 @@ struct DEEPRAIDERS_API FDRSnowVolumeChunk
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	TArray<FDRSnowCell> Cells;
 
+	// Cells는 snapshot/직렬화를 위해 밀집 배열로 유지하고, 조회용으로 실제 눈이 있는 cell만 별도 추적한다.
+	TSet<int32> ActiveCellIndices;
+
 	void Initialize(const FIntVector& InOrigin, int32 InSize, float InCellSize);
 	bool GetLocalIndex(const FIntVector& LocalCell, int32& OutIndex) const;
 	bool ResolveTeamSlot(int32 TeamId, bool& bOutTeamA);
