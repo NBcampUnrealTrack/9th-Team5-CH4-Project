@@ -264,7 +264,10 @@ void ADRPlayerState::GrantDefaultAbilities()
 		return;
 	}
 	
-	DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
+	if (DefaultAbilitySet)
+	{
+		DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
+	}
 }
 
 void ADRPlayerState::BindStatusPolicy()
