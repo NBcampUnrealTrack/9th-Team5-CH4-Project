@@ -23,6 +23,14 @@ void ADRTerrainAreaScannerActor::BeginPlay()
 		ScanInterval,
 		true,
 		0.f);
+
+	GetWorldTimerManager().SetTimer(
+		SnowTimerHandle,
+		this,
+		&ThisClass::AddSnowArea,
+		SnowInterval,
+		true,
+		0.f);
 }
 
 void ADRTerrainAreaScannerActor::Tick(float DeltaSeconds)
@@ -33,6 +41,28 @@ void ADRTerrainAreaScannerActor::Tick(float DeltaSeconds)
 	{
 		DrawScanDebugBox();
 	}
+
+	if (bEnableSnowAccumulation && DepositRequests.Num() > 0)
+	{
+		int32 ModifiedVoxelCount = 0;
+		int32 RemainingRequestCount = 0;
+
+		UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
+			DepositRequests,
+			MaxSnowColumnsPerTick,
+			ModifiedVoxelCount,
+			RemainingRequestCount);
+
+		if (ModifiedVoxelCount > 0)
+		{
+			UE_LOG(
+				LogTemp,
+				Verbose,
+				TEXT("Deposit processed. ModifiedVoxelCount=%d RemainingRequestCount=%d"),
+				ModifiedVoxelCount,
+				RemainingRequestCount);
+		}
+	}
 }
 
 void ADRTerrainAreaScannerActor::ScanVoxelArea()
@@ -41,33 +71,6 @@ void ADRTerrainAreaScannerActor::ScanVoxelArea()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld is not valid."));
 		return;
-	}
-
-	if (bEnableSnowAccumulation)
-	{
-		int32 ModifiedVoxelCount = 0;
-
-		const bool bSnowApplied = UDRVoxelTerrainQueryLibrary::AddSnowInBox(
-			VoxelWorld,
-			GetActorLocation(),
-			BoxExtent,
-			SampleStep,
-			SnowAmountPerTick,
-			SnowMaterialIndex,
-			ModifiedVoxelCount);
-
-		if (bSnowApplied)
-		{
-			UE_LOG(
-				LogTemp,
-				Log,
-				TEXT("Snow applied. ModifiedVoxelCount=%d"),
-				ModifiedVoxelCount);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Failed to apply snow."));
-		}
 	}
 
 	TMap<uint8, int32> MaterialCounts;
@@ -111,6 +114,49 @@ void ADRTerrainAreaScannerActor::ScanVoxelArea()
 			Count,
 			Percent);
 	}
+}
+
+void ADRTerrainAreaScannerActor::AddSnowArea()
+{
+	if (!bEnableSnowAccumulation)
+	{
+		DepositRequests.Reset();
+		return;
+	}
+
+	if (!IsValid(VoxelWorld))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld is not valid."));
+		DepositRequests.Reset();
+		return;
+	}
+
+	DepositRequests.Reset();
+
+	const int32 RandomSeed = FMath::Rand();
+
+	FDRVoxelDepositInBoxRequest Request;
+	const bool bRequestCreated = UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
+		VoxelWorld,
+		GetActorLocation(),
+		BoxExtent,
+		SampleStep,
+		SnowAmountPerTick,
+		SnowMaterialIndex,
+		SmoothRadius,
+		MaxHeightStep,
+		RandomSeed,
+		Request);
+
+	if (!bRequestCreated)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to create snow deposit request."));
+		return;
+	}
+
+	DepositRequests.Add(MoveTemp(Request));
+
+	UE_LOG(LogTemp, Verbose, TEXT("Snow deposit request created."));
 }
 
 void ADRTerrainAreaScannerActor::DrawScanDebugBox() const
