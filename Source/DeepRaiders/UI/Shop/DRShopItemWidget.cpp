@@ -66,14 +66,6 @@ void UDRShopItemWidget::ApplyOffer()
 			: ESlateVisibility::Hidden);
 	PriceText->SetText(FText::AsNumber(Offer.Price));
 	Buy->SetIsEnabled(Offer.IsPurchasable);
-
-	if (UTextBlock* ButtonText = Cast<UTextBlock>(Buy->GetContent()))
-	{
-		const bool IsUpgrade =
-			Offer.Request.OfferType == EDRShopOfferType::Upgrade;
-		ButtonText->SetText(FText::FromString(
-			IsUpgrade ? TEXT("업그레이드") : TEXT("구매")));
-	}
 }
 
 void UDRShopItemWidget::HandleBuyButtonClicked()

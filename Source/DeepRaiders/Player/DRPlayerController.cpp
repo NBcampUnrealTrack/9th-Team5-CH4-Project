@@ -18,6 +18,7 @@
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
 #include "DeepRaiders/Shop/Components/DRShopTransactionComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopUIComponent.h"
+#include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 
@@ -43,6 +44,7 @@ ADRPlayerController::ADRPlayerController()
 	InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
+	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
 
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
@@ -390,24 +392,38 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
 {
-	if (IsValid(AvailableShop))
+	AvailableShops.RemoveAll(
+		[](const TWeakObjectPtr<ADRShop>& Shop)
+		{
+			return !Shop.IsValid();
+		});
+
+	if (!AvailableShops.IsEmpty())
 	{
-		AvailableShop->ToggleShopWidget();
+		ShopUIComponent->ToggleShopWidget(AvailableShops.Last().Get());
 	}
 }
 
 void ADRPlayerController::SetAvailableShop(
-	UDRShopUIComponent* ShopUIComponent)
+	ADRShop* Shop)
 {
-	AvailableShop = ShopUIComponent;
+	if (!IsValid(Shop))
+	{
+		return;
+	}
+
+	AvailableShops.Remove(Shop);
+	AvailableShops.Add(Shop);
 }
 
 void ADRPlayerController::ClearAvailableShop(
-	UDRShopUIComponent* ShopUIComponent)
+	ADRShop* Shop)
 {
-	if (AvailableShop == ShopUIComponent)
+	AvailableShops.Remove(Shop);
+
+	if (IsValid(ShopUIComponent))
 	{
-		AvailableShop = nullptr;
+		ShopUIComponent->CloseShop(Shop);
 	}
 }
 

@@ -1,6 +1,7 @@
 #include "DRShopComponent.h"
 
 #include "DRShopAreaComponent.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
@@ -10,22 +11,6 @@
 UDRShopComponent::UDRShopComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-}
-
-void UDRShopComponent::SetItemTable(UDataTable* NewItemTable)
-{
-	if (!IsValid(NewItemTable) || ItemTable == NewItemTable)
-	{
-		return;
-	}
-
-	ItemTable = NewItemTable;
-	LoadItemOffers();
-}
-
-bool UDRShopComponent::HasItemTable() const
-{
-	return IsValid(ItemTable);
 }
 
 const TArray<FDRShopItemOffer>& UDRShopComponent::GetItemOffers() const
@@ -73,43 +58,40 @@ bool UDRShopComponent::GetPerkDefinition(
 }
 
 bool UDRShopComponent::CanPurchasePerk(
-	FName RowName,
+	const UDRPerkDefinition* PerkDefinition,
 	const UDRPerkComponent* PerkComponent,
 	int32 AvailableCoins) const
 {
-	UDRPerkDefinition* PerkDefinition = nullptr;
-
-	// 퍽 데이터 유효성과 플레이어의 남은 퍽 슬롯을 확인한다.
-	if (!IsValid(PerkComponent)
-		|| !GetPerkDefinition(RowName, PerkDefinition)
-		|| !PerkComponent->CanAddPerk(PerkDefinition))
-	{
-		return false;
-	}
-
-	// 가격 데이터와 현재 보유 코인을 마지막으로 검증한다.
-	return PerkDefinition->Price >= 0
-		&& AvailableCoins >= PerkDefinition->Price;
+	return IsValid(PerkComponent)
+		&& IsValid(PerkDefinition)
+		&& PerkComponent->CanAddPerk(PerkDefinition)
+		&& CanAfford(PerkDefinition, AvailableCoins);
 }
 
-bool UDRShopComponent::IsItemAvailable(
-	const UDRItemDefinition* ItemDefinition) const
+bool UDRShopComponent::CanAfford(
+	const UDRItemDefinition* ItemDefinition,
+	int32 AvailableCoins) const
 {
 	return IsValid(ItemDefinition)
+		&& ItemDefinition->Price >= 0
+		&& AvailableCoins >= ItemDefinition->Price;
+}
+
+bool UDRShopComponent::CanPurchaseItem(
+	const UDRInventoryComponent* Inventory,
+	UDRItemDefinition* ItemDefinition,
+	int32 AvailableCoins) const
+{
+	return IsValid(Inventory)
+		&& IsValid(ItemDefinition)
 		&& ItemOffers.ContainsByPredicate(
 			[ItemDefinition](const FDRShopItemOffer& ItemOffer)
 			{
 				return ItemOffer.OfferType == EDRShopOfferType::Purchase
 					&& ItemOffer.ItemDefinition == ItemDefinition;
-			});
-}
-
-bool UDRShopComponent::CanPurchase(
-	const APawn* Pawn,
-	const UDRItemDefinition* ItemDefinition) const
-{
-	return IsItemAvailable(ItemDefinition)
-		&& IsTransactionAllowed(Pawn);
+			})
+		&& CanAfford(ItemDefinition, AvailableCoins)
+		&& Inventory->CanAddItem(ItemDefinition, 1);
 }
 
 bool UDRShopComponent::IsTransactionAllowed(const APawn* Pawn) const

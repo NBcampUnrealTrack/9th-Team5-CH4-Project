@@ -32,7 +32,13 @@ void UDRShopAreaComponent::HandleBeginOverlap(
 {
 	if (APawn* Pawn = Cast<APawn>(OtherActor))
 	{
-		OnPawnEntered.Broadcast(Pawn);
+		int32& OverlapCount = PawnOverlapCounts.FindOrAdd(Pawn);
+		++OverlapCount;
+
+		if (OverlapCount == 1)
+		{
+			OnPawnEntered.Broadcast(Pawn);
+		}
 	}
 }
 
@@ -44,6 +50,19 @@ void UDRShopAreaComponent::HandleEndOverlap(
 {
 	if (APawn* Pawn = Cast<APawn>(OtherActor))
 	{
-		OnPawnExited.Broadcast(Pawn);
+		int32* OverlapCount = PawnOverlapCounts.Find(Pawn);
+
+		if (!OverlapCount)
+		{
+			return;
+		}
+
+		--(*OverlapCount);
+
+		if (*OverlapCount <= 0)
+		{
+			PawnOverlapCounts.Remove(Pawn);
+			OnPawnExited.Broadcast(Pawn);
+		}
 	}
 }
