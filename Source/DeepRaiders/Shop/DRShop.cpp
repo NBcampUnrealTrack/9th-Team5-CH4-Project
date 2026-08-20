@@ -14,7 +14,7 @@ ADRShop::ADRShop()
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 
-	// 상점 액터는 접근 범위와 UI 기능을 컴포넌트로 구성합니다.
+	// 상점 액터는 접근 범위와 거래 기능을 컴포넌트로 구성합니다.
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 
