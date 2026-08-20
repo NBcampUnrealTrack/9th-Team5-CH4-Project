@@ -1,6 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
@@ -8,7 +6,7 @@
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
-#include "DRItemAbilitySet.generated.h"
+#include "DRAbilitySet.generated.h"
 
 class UAbilitySystemComponent;
 class UGameplayAbility;
@@ -16,7 +14,7 @@ class UGameplayEffect;
 
 // ItemAbilitySet이 부여할 하나의 GameplayAbility 항목
 USTRUCT(BlueprintType)
-struct FDRItemAbilitySet_GameplayAbility
+struct FDRAbilitySet_GameplayAbility
 {
 	GENERATED_BODY()
 public:
@@ -32,7 +30,7 @@ public:
 
 // 아이템이 장착된 동안 적용할 GameplayEffect 항목
 USTRUCT(BlueprintType)
-struct FDRItemAbilitySet_GameplayEffect
+struct FDRAbilitySet_GameplayEffect
 {
 	GENERATED_BODY()
 public:
@@ -44,7 +42,7 @@ public:
 };
 
 // ItemAbilitySet이 제공한 Handle 모음
-struct DEEPRAIDERS_API FDRItemAbilitySet_GrantedHandles
+struct DEEPRAIDERS_API FDRAbilitySet_GrantedHandles
 {
 public:
 	void AddAbilitySpecHandle(FGameplayAbilitySpecHandle Handle);
@@ -63,7 +61,7 @@ private:
 
 // 아이템 장착 시 ASC에 부여할 Ability와 지속 Effect의 정적 정의
 UCLASS(BlueprintType)
-class DEEPRAIDERS_API UDRItemAbilitySet : public UDataAsset
+class DEEPRAIDERS_API UDRAbilitySet : public UDataAsset
 {
 	GENERATED_BODY()
 public:
@@ -71,14 +69,14 @@ public:
 	// SourceObject는 ItemDefinition 전달 (추후 수정될 가능성 농후)
 	void GiveToAbilitySystem(
 		UAbilitySystemComponent* AbilitySystemComponent
-		, FDRItemAbilitySet_GrantedHandles* OutGrantedHandles
+		, FDRAbilitySet_GrantedHandles* OutGrantedHandles
 		, UObject* SourceObject) const;
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability Set")
-	TArray<FDRItemAbilitySet_GameplayAbility> GrantedAbilities;
+	TArray<FDRAbilitySet_GameplayAbility> GrantedAbilities;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability Set")
-	TArray<FDRItemAbilitySet_GameplayEffect> GrantedEffects;
+	TArray<FDRAbilitySet_GameplayEffect> GrantedEffects;
 	
 };

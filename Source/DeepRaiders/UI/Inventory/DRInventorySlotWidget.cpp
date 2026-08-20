@@ -15,14 +15,10 @@ void UDRInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	
-	SlotButton->OnClicked.AddDynamic(this, &ThisClass::HandleSlotClicked);
-}
-
-void UDRInventorySlotWidget::NativeDestruct()
-{
-	SlotButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleSlotClicked);
-	
-	Super::NativeDestruct();
+	if (ensure(IsValid(SlotButton)))
+	{
+		SlotButton->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
 }
 
 void UDRInventorySlotWidget::SetItemInstance(int32 InSlotIndex, const FDRItemInstance& ItemInstance, bool bInLocked)
@@ -64,21 +60,56 @@ void UDRInventorySlotWidget::ClearSlot(int32 InSlotIndex, bool bInLocked)
 
 FReply UDRInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (!bLocked
-		&& InstanceId.IsValid()
-		&& InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	if (!InstanceId.IsValid() || InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
 	{
-		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this,
-			EKeys::LeftMouseButton).NativeReply;
+		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 	}
 	
-	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+	bPointerPressed = true;
+	
+	if (bLocked)
+	{
+		return FReply::Handled().CaptureMouse(TakeWidget());
+	}
+	
+	FReply DragReply = UWidgetBlueprintLibrary::DetectDragIfPressed(
+		InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+	
+	return DragReply.CaptureMouse(TakeWidget());	
+}
+
+FReply UDRInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton || !bPointerPressed)
+	{
+		return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+	}
+	
+	bPointerPressed = false;
+	
+	const bool bReleasedInside = InGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
+	
+	if (bReleasedInside && InstanceId.IsValid())
+	{
+		HandleSlotClicked();
+	}
+	
+	return FReply::Handled().ReleaseMouseCapture();
+}
+
+void UDRInventorySlotWidget::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	bPointerPressed = false;
+	
+	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
 }
 
 void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent,
-	UDragDropOperation*& OutOperation)
+                                                  UDragDropOperation*& OutOperation)
 {
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+	
+	bPointerPressed = false;
 	
 	if (bLocked
 		|| !InstanceId.IsValid()
@@ -98,6 +129,32 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 	Operation->SourceSlotIndex = SlotIndex;
 	Operation->SourceInstanceId = InstanceId;
 	Operation->Pivot = EDragPivot::CenterCenter;
+	
+	if (IsValid(ItemIcon))
+	{
+		UImage* DragVisual = NewObject<UImage>(Operation);
+		
+		if (IsValid(DragVisual))
+		{
+			DragVisual->SetBrush(ItemIcon->GetBrush());
+			
+			FLinearColor DragVisualColor = ItemIcon->GetColorAndOpacity();
+			DragVisualColor.A *= DragVisualOpacity;
+			
+			DragVisual->SetColorAndOpacity(DragVisualColor);
+			DragVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
+			
+			const FVector2D IconSize = ItemIcon->GetCachedGeometry().GetLocalSize();
+			
+			if (!IconSize.IsNearlyZero())
+			{
+				DragVisual->SetDesiredSizeOverride(IconSize);
+			}
+			
+			Operation->DefaultDragVisual = DragVisual;
+		}
+	}
+	
 	
 	OutOperation = Operation;
 }

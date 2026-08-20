@@ -9,7 +9,7 @@
 #include "DRItemDefinition.generated.h"
 
 class ADRWorldItemActor;
-class UDRItemAbilitySet;
+class UDRAbilitySet;
 class UTexture2D;
 class USoundBase;
 class UDRItemAnimationSet;
@@ -79,7 +79,7 @@ public:
 	
 	// 아이템이 장착되었을 때 ASC에 부여할 Ability와 Effect 셋
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
-	TObjectPtr<UDRItemAbilitySet> ItemAbilitySet;
+	TObjectPtr<UDRAbilitySet> ItemAbilitySet;
 	
 	// Mesh
 	

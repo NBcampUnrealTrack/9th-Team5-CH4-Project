@@ -1,14 +1,16 @@
+﻿#include "DRAbilitySet.h"
+
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "DRItemAbilitySet.h"
+#include "DRAbilitySet.h"
 
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 
-void FDRItemAbilitySet_GrantedHandles::AddAbilitySpecHandle(FGameplayAbilitySpecHandle Handle)
+void FDRAbilitySet_GrantedHandles::AddAbilitySpecHandle(FGameplayAbilitySpecHandle Handle)
 {
 	if (Handle.IsValid())
 	{
@@ -16,7 +18,7 @@ void FDRItemAbilitySet_GrantedHandles::AddAbilitySpecHandle(FGameplayAbilitySpec
 	}
 }
 
-void FDRItemAbilitySet_GrantedHandles::AddGameplayEffectHandle(FActiveGameplayEffectHandle Handle)
+void FDRAbilitySet_GrantedHandles::AddGameplayEffectHandle(FActiveGameplayEffectHandle Handle)
 {
 	if (Handle.IsValid())
 	{
@@ -24,7 +26,7 @@ void FDRItemAbilitySet_GrantedHandles::AddGameplayEffectHandle(FActiveGameplayEf
 	}
 }
 
-void FDRItemAbilitySet_GrantedHandles::TakeFromAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent)
+void FDRAbilitySet_GrantedHandles::TakeFromAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent)
 {
 	if (!IsValid(AbilitySystemComponent)
 		|| !AbilitySystemComponent->IsOwnerActorAuthoritative())
@@ -56,15 +58,15 @@ void FDRItemAbilitySet_GrantedHandles::TakeFromAbilitySystem(UAbilitySystemCompo
 	GameplayEffectHandles.Reset();
 }
 
-bool FDRItemAbilitySet_GrantedHandles::IsEmpty() const
+bool FDRAbilitySet_GrantedHandles::IsEmpty() const
 {
 	return AbilitySpecHandles.IsEmpty() && GameplayEffectHandles.IsEmpty();
 }
 
 // 등록된 Ability와 Effect를 ASC에 부여
 // 현재 SourceObject는 ItemDefinition, 추후 수정 가능성 농후
-void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent,
-	FDRItemAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject) const
+void UDRAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent,
+	FDRAbilitySet_GrantedHandles* OutGrantedHandles, UObject* SourceObject) const
 {
 	if (!IsValid(AbilitySystemComponent)
 		|| !AbilitySystemComponent->IsOwnerActorAuthoritative())
@@ -73,7 +75,7 @@ void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySyst
 	}
 	
 	// Ability 부여
-	for (const FDRItemAbilitySet_GameplayAbility& AbilityToGrant : GrantedAbilities)
+	for (const FDRAbilitySet_GameplayAbility& AbilityToGrant : GrantedAbilities)
 	{
 		if (!AbilityToGrant.Ability)
 		{
@@ -96,7 +98,7 @@ void UDRItemAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySyst
 	}
 	
 	// Effect 부여
-	for (const FDRItemAbilitySet_GameplayEffect& EffectToGrant : GrantedEffects)
+	for (const FDRAbilitySet_GameplayEffect& EffectToGrant : GrantedEffects)
 	{
 		if (!EffectToGrant.GameplayEffect)
 		{

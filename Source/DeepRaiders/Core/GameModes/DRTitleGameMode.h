@@ -22,4 +22,7 @@ private:
 public:
 	ADRTitleGameMode();
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+
+protected:
+	virtual void BeginPlay() override;
 };

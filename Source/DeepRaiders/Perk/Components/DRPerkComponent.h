@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPerkComponent.generated.h"
 
 class UDRPerkDefinition;
@@ -20,7 +20,7 @@ struct DEEPRAIDERS_API FDRPerkEntry
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
 
 	/** 초기화 시 Ability와 Effect를 회수하기 위한 서버 전용 핸들이다. */
-	FDRItemAbilitySet_GrantedHandles GrantedHandles;
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 };
 
 UCLASS(ClassGroup = (DeepRaiders))

@@ -678,8 +678,8 @@ bool UDRInventoryComponent::SwapSlotsInternal(int32 SourceSlotIndex, int32 Targe
 		|| !IsValidSlotIndex(SourceSlotIndex)
 		|| !IsValidSlotIndex(TargetSlotIndex)
 		|| SourceSlotIndex == TargetSlotIndex
-		|| !IsSlotLocked(SourceSlotIndex)
-		|| !IsSlotLocked(TargetSlotIndex)
+		|| IsSlotLocked(SourceSlotIndex)
+		|| IsSlotLocked(TargetSlotIndex)
 		|| !Slots[SourceSlotIndex].IsValid())
 	{
 		return false;
