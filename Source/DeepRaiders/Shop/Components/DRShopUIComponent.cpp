@@ -1,6 +1,5 @@
 #include "DRShopUIComponent.h"
 
-#include "DRShopAreaComponent.h"
 #include "DRShopComponent.h"
 #include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
@@ -14,88 +13,39 @@
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "Engine/LocalPlayer.h"
-#include "GameFramework/Pawn.h"
-#include "GameFramework/PlayerController.h"
 
 UDRShopUIComponent::UDRShopUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	ShopWidgetLayer = EDRUILayer::Menu;
 }
 
 void UDRShopUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ShopAreaComponent =
-		GetOwner()->FindComponentByClass<UDRShopAreaComponent>();
-	ShopComponent = GetOwner()->FindComponentByClass<UDRShopComponent>();
-	UpgradeComponent = GetOwner()->FindComponentByClass<UDRUpgradeComponent>();
+	PlayerController = Cast<ADRPlayerController>(GetOwner());
 
-	if (!IsValid(ShopAreaComponent)
-		|| !IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent))
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
 	{
 		return;
 	}
 
-	// 상점 범위 진입과 이탈에 맞춰 상호작용 가능 상태를 변경한다.
-	ShopAreaComponent->OnPawnEntered.AddDynamic(
-		this,
-		&ThisClass::HandlePawnEntered);
-	ShopAreaComponent->OnPawnExited.AddDynamic(
-		this,
-		&ThisClass::HandlePawnExited);
+	if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
+	{
+		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	}
 }
 
 void UDRShopUIComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
-	if (IsValid(ShopAreaComponent))
-	{
-		ShopAreaComponent->OnPawnEntered.RemoveDynamic(
-			this,
-			&ThisClass::HandlePawnEntered);
-		ShopAreaComponent->OnPawnExited.RemoveDynamic(
-			this,
-			&ThisClass::HandlePawnExited);
-	}
-
 	HideShopWidget();
 	PlayerController = nullptr;
 	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
-void UDRShopUIComponent::HandlePawnEntered(APawn* Pawn)
-{
-	if (!IsValid(Pawn)
-		|| !Pawn->IsLocallyControlled())
-	{
-		return;
-	}
-
-	ADRPlayerController* NewPlayerController =
-		Cast<ADRPlayerController>(Pawn->GetController());
-
-	if (!IsValid(NewPlayerController)
-		|| !NewPlayerController->IsLocalController())
-	{
-		return;
-	}
-
-	// 입력을 처리할 로컬 플레이어에게 현재 상점을 등록한다.
-	PlayerController = NewPlayerController;
-
-	if (ULocalPlayer* LocalPlayer = NewPlayerController->GetLocalPlayer())
-	{
-		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
-	}
-
-	NewPlayerController->SetAvailableShop(this);
-}
-
-void UDRShopUIComponent::ToggleShopWidget()
+void UDRShopUIComponent::ToggleShopWidget(AActor* ShopActor)
 {
 	if (IsValid(ShopWidget))
 	{
@@ -103,15 +53,20 @@ void UDRShopUIComponent::ToggleShopWidget()
 		return;
 	}
 
-	ShowShopWidget();
+	ShowShopWidget(ShopActor);
 }
 
-void UDRShopUIComponent::ShowShopWidget()
+void UDRShopUIComponent::CloseShop(const AActor* ShopActor)
 {
-	if (IsValid(ShopWidget)
-		|| !ShopWidgetClass
-		|| !IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent))
+	if (ActiveShop.Get() == ShopActor)
+	{
+		HideShopWidget();
+	}
+}
+
+void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
+{
+	if (IsValid(ShopWidget) || !IsValid(ShopActor))
 	{
 		return;
 	}
@@ -119,6 +74,18 @@ void UDRShopUIComponent::ShowShopWidget()
 	if (!IsValid(PlayerController)
 		|| !PlayerController->IsLocalController()
 		|| !IsValid(UIManager))
+	{
+		return;
+	}
+
+	ShopComponent = ShopActor->FindComponentByClass<UDRShopComponent>();
+	UpgradeComponent = ShopActor->FindComponentByClass<UDRUpgradeComponent>();
+	const UDRUIConfig* UIConfig = UIManager->GetUIConfig();
+
+	if (!IsValid(ShopComponent)
+		|| !IsValid(UpgradeComponent)
+		|| !IsValid(UIConfig)
+		|| !UIConfig->ShopWidgetClass)
 	{
 		return;
 	}
@@ -139,13 +106,15 @@ void UDRShopUIComponent::ShowShopWidget()
 	}
 
 	ShopWidget = Cast<UDRShopWidget>(UIManager->CreateManagedWidget(
-		ShopWidgetClass,
-		ShopWidgetLayer));
+		UIConfig->ShopWidgetClass,
+		UIConfig->ShopLayer));
 
 	if (!IsValid(ShopWidget))
 	{
 		return;
 	}
+
+	ActiveShop = ShopActor;
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
 	ShopWidget->SetOffers(
@@ -179,21 +148,6 @@ void UDRShopUIComponent::ShowShopWidget()
 		IsMoveInputBlocked = true;
 	}
 
-}
-
-void UDRShopUIComponent::HandlePawnExited(APawn* Pawn)
-{
-	if (IsValid(Pawn) && Pawn->IsLocallyControlled())
-	{
-		if (ADRPlayerController* ExitingPlayerController =
-			Cast<ADRPlayerController>(Pawn->GetController()))
-		{
-			ExitingPlayerController->ClearAvailableShop(this);
-		}
-
-		// 범위를 벗어나면 열려 있는 상점 UI도 함께 닫는다.
-		HideShopWidget();
-	}
 }
 
 void UDRShopUIComponent::HideShopWidget()
@@ -239,8 +193,11 @@ void UDRShopUIComponent::HideShopWidget()
 	}
 
 	ShopWidget = nullptr;
+	ActiveShop = nullptr;
 	InventoryComponent = nullptr;
 	ShopTransactionComponent = nullptr;
+	ShopComponent = nullptr;
+	UpgradeComponent = nullptr;
 	PerkComponent = nullptr;
 	PlayerState = nullptr;
 
@@ -264,7 +221,7 @@ void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 {
 	if (IsValid(ShopTransactionComponent))
 	{
-		ShopTransactionComponent->RequestOffer(GetOwner(), Request);
+		ShopTransactionComponent->RequestOffer(ActiveShop.Get(), Request);
 	}
 }
 

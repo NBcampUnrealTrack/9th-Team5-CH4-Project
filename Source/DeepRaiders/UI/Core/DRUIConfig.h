@@ -6,6 +6,7 @@
 
 class UDRInventoryWidget;
 class UDRQuickSlotWidget;
+class UDRShopWidget;
 class UDRTeleportSelectWidget;
 class UUserWidget;
 
@@ -51,6 +52,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HUD|MVVM")
 	FName HUDViewModelName = TEXT("DRHUDViewModel");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shop")
+	TSubclassOf<UDRShopWidget> ShopWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shop")
+	EDRUILayer ShopLayer = EDRUILayer::Menu;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Teleport")
 	TSubclassOf<UDRTeleportSelectWidget> TeleportSelectWidgetClass;

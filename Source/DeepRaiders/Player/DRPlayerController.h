@@ -8,6 +8,7 @@
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
+class ADRShop;
 class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
@@ -139,10 +140,10 @@ public:
 	}
 	
 	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
-	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void SetAvailableShop(ADRShop* Shop);
 
 	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
-	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void ClearAvailableShop(ADRShop* Shop);
 
 private:
 	/** 현재 상점의 UI를 열거나 닫는다. */
@@ -157,7 +158,10 @@ protected:
 	TObjectPtr<UInputAction> ShopAction;
 
 	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
-	TArray<TWeakObjectPtr<UDRShopUIComponent>> AvailableShops;
+	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;

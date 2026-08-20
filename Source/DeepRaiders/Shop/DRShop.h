@@ -4,9 +4,9 @@
 #include "GameFramework/Actor.h"
 #include "DRShop.generated.h"
 
+class APawn;
 class UDRShopComponent;
 class UDRShopAreaComponent;
-class UDRShopUIComponent;
 class UDRUpgradeComponent;
 class USceneComponent;
 class USoundBase;
@@ -29,7 +29,17 @@ public:
 		return TransactionSoundVolume;
 	}
 
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
+	UFUNCTION()
+	void HandlePawnEntered(APawn* Pawn);
+
+	UFUNCTION()
+	void HandlePawnExited(APawn* Pawn);
+
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<USceneComponent> Root;
 
@@ -41,9 +51,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
-
-	UPROPERTY(VisibleAnywhere, Category = "Shop")
-	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
 	TObjectPtr<USoundBase> PurchaseSound;
