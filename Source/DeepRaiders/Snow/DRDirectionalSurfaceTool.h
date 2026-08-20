@@ -9,8 +9,8 @@
 
 class AVoxelWorld;
 
-// SurfaceTool의 브러시 모양은 재사용하되, 최종 write는 add/remove 방향으로만 합성하는 Voxel Tool이다.
-// 겹쳐 쏜 눈이 기존 팀 영역을 밀어 섞지 않도록 Snow 시스템에서 사용한다.
+// SurfaceTool의 브러시 모양은 재사용하되, 밀어낼 surface shell을 실제 이동시키지 않고
+// 이번 이동이 지나갈 swept volume만 stamp처럼 add/remove 합성하는 Voxel Tool이다.
 UCLASS()
 class DEEPRAIDERS_API UDRDirectionalSurfaceTool : public UVoxelToolBase
 {
@@ -52,8 +52,8 @@ public:
 		float Strength,
 		bool bAdd);
 
-	// Processed surface 결과를 실제 voxel 값에 반영한다.
-	// Add는 더 filled 되는 값만, Remove는 더 empty 되는 값만 적용한다.
+	// Processed surface 결과에서 0면을 가로지르는 swept volume만 실제 voxel 값에 반영한다.
+	// Add는 비어 있던 stamp 부피를 채우고, Remove는 해당 stamp 부피를 비운다.
 	static float ApplySurfaceVolumeEdit(
 		AVoxelWorld* VoxelWorld,
 		const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,

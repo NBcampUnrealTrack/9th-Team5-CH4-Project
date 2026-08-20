@@ -227,11 +227,12 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 	Request.SurfaceNormal = FVector(Operation.SurfaceNormal).IsNearlyZero()
 		? FVector::UpVector
 		: FVector(Operation.SurfaceNormal).GetSafeNormal();
+	Request.BrushOrigin = Operation.BrushOrigin;
 	Request.TargetVoxelWorld = VoxelWorld;
 	Request.Radius = Operation.Radius;
 	Request.RequestedAmount = Operation.RequestedAmount;
-	Request.bInvertSurfaceStrength = Operation.bInvertSurfaceStrength;
-	Request.EditTool = Operation.EditTool;
+	Request.RemovalBrushShape = Operation.RemovalBrushShape;
+	Request.RemovalMode = Operation.RemovalMode;
 	Request.Context.TeamId = Operation.TeamId;
 
 	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();

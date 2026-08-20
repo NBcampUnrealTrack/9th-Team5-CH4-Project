@@ -43,7 +43,7 @@ public:
 	bool ApplyCheckpoint(FName VoxelWorldName, const TArray<uint8>& VoxelSaveData, const TArray<uint8>& SnowVolumeData, const TArray<uint8>& OwnershipData);
 
 private:
-	// DirectionalSurfaceTool은 실제로 변경된 voxel만 반환한다.
+	// 제거 brush는 실제로 변경된 voxel만 반환한다.
 	// 이 결과를 기준으로 해야 Volume 원본 데이터가 Voxel 표현과 같은 변화만 기록한다.
 	void ApplyAddedSurfaceEdit(
 		const FDRSnowSurfaceAddRequest& Request,

@@ -30,28 +30,13 @@ public:
 	bool TryAddSnowFromHit(const FHitResult& HitResult);
 
 	// 호출자의 Owner/PlayerState에서 팀을 해석하고, 대상 VoxelWorld는 subsystem이 찾는다.
-	// 여러 VoxelWorld가 있는 상황에서는 TryAddSnowAtLocationForTeam을 우선 사용한다.
+	// 명시적인 팀/월드/방향이 필요하면 TryAddSnow request API를 사용한다.
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
-	bool TryAddSnowAtLocation(
-		FVector WorldLocation,
-		FVector SurfaceNormal);
+	bool TryAddSnowAtLocation(FVector WorldLocation, FVector SurfaceNormal);
 
-	// 팀과 VoxelWorld를 외부에서 확정해 전달하는 경로다.
-	// 투사체, 장판, 디버그처럼 Owner의 팀 추론에 의존하면 안 되는 경우에 사용한다.
+	// 팀, VoxelWorld, ImpactDirection을 호출자가 직접 채운 상세 요청 경로다.
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
-	bool TryAddSnowAtLocationForTeam(
-		FVector WorldLocation,
-		FVector SurfaceNormal,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
-	bool TryAddSnowImpactAtLocationForTeam(
-		FVector WorldLocation,
-		FVector SurfaceNormal,
-		FVector ImpactDirection,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
+	bool TryAddSnow(const FDRSnowSurfaceAddRequest& Request);
 
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
 	void SetAddSettings(float InAddRadius, float InAddAmount);
@@ -59,74 +44,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
 	void SetAddEditTool(EDRSnowVoxelEditTool InEditTool);
 
-	// 카메라 방향으로 trace한 뒤 명시한 팀으로 눈 추가를 시도한다.
-	// 실제 팀 material paint는 DRSnowSubsystem의 SurfaceEditor에서 처리한다.
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	bool DebugTryAddSnowFromView(
-		float TraceDistance,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
-
-	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
-	bool DebugTryAddSnowFromViewWithTool(
-		float TraceDistance,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld,
-		EDRSnowVoxelEditTool DebugEditTool);
-
 protected:
 	// 위치/노멀/반경/양/기본 interaction context만 채운다.
 	// TeamId나 TargetVoxelWorld를 강제로 지정해야 하면 호출자가 Request 생성 후 덮어쓴다.
-	FDRSnowSurfaceAddRequest MakeAddRequest(
-		FVector WorldLocation,
-		FVector SurfaceNormal);
+	FDRSnowSurfaceAddRequest MakeAddRequest(FVector WorldLocation, FVector SurfaceNormal);
 
-	// 디버그용 시선 trace만 담당한다. 눈 추가/재질 처리는 여기서 하지 않는다.
-	bool MakeDebugViewHit(
-		float TraceDistance,
-		FHitResult& OutHitResult) const;
-
-	// 디버그 trace 결과를 실제 AddSnow 요청으로 바꾸고, 화면 표시용 debug sphere만 그린다.
-	bool DebugAddSnowFromHit(
-		const FHitResult& HitResult,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld,
-		EDRSnowVoxelEditTool DebugEditTool);
-
-	// SnowVolume 원본 데이터 갱신 후, 성공한 경우에만 Voxel 표면 표현을 갱신한다.
-	bool ExecuteAddSnow(const FDRSnowSurfaceAddRequest& Request);
+	// Voxel add, 상호작용 fallback, operation 등록, 이벤트 broadcast를 공통 처리한다.
+	bool ExecuteAddRequest(const FDRSnowSurfaceAddRequest& Request, AActor* FallbackTarget = nullptr);
 
 	UFUNCTION(Server, Reliable)
 	void ServerTryAddSnowFromHit(const FHitResult& HitResult);
 
 	UFUNCTION(Server, Reliable)
-	void ServerTryAddSnowAtLocation(
-		FVector_NetQuantize WorldLocation,
-		FVector_NetQuantizeNormal SurfaceNormal);
-
-	UFUNCTION(Server, Reliable)
-	void ServerTryAddSnowAtLocationForTeam(
-		FVector_NetQuantize WorldLocation,
-		FVector_NetQuantizeNormal SurfaceNormal,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
-
-	UFUNCTION(Server, Reliable)
-	void ServerTryAddSnowImpactAtLocationForTeam(
-		FVector_NetQuantize WorldLocation,
-		FVector_NetQuantizeNormal SurfaceNormal,
-		FVector_NetQuantizeNormal ImpactDirection,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld);
-
-	UFUNCTION(Server, Reliable)
-	void ServerDebugAddSnowAtLocationForTeam(
-		FVector_NetQuantize WorldLocation,
-		FVector_NetQuantizeNormal SurfaceNormal,
-		FVector_NetQuantizeNormal ImpactDirection,
-		int32 TeamId,
-		AVoxelWorld* TargetVoxelWorld,
-		EDRSnowVoxelEditTool DebugEditTool);
+	void ServerTryAddSnow(const FDRSnowSurfaceAddRequest& Request);
 
 	// VoxelWorld actor를 직접 맞거나, VoxelWorld 하위 collision component를 맞은 경우를 모두 처리한다.
 	AVoxelWorld* GetVoxelWorldFromHit(const FHitResult& HitResult) const;

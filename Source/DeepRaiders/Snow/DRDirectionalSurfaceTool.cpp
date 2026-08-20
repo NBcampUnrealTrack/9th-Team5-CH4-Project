@@ -25,6 +25,18 @@ float GetSurfaceToolTargetValue(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, flo
 	// 차이는 아래 write 단계에서 반대 방향 변화는 버린다는 점이다.
 	return (SurfaceVoxel.Value + SurfaceVoxel.Strength) / DistanceDivisor;
 }
+
+bool IsInsideSweptSurfaceVolume(const FVoxelSurfaceEditsVoxel& SurfaceVoxel, bool bAdd)
+{
+	const float OldDistance = SurfaceVoxel.Value;
+	const float TargetDistance = SurfaceVoxel.Value + SurfaceVoxel.Strength;
+
+	// FindSurfaceVoxelsFromDistanceField의 Value는 현재 표면에서의 signed distance다.
+	// SurfaceTool이 만들려던 이동 중 0면을 가로지르는 구간만 이번 stamp 부피로 취급한다.
+	return bAdd
+		? OldDistance > 0.f && TargetDistance <= 0.f
+		: OldDistance <= 0.f && TargetDistance > 0.f;
+}
 }
 
 UDRDirectionalSurfaceTool::UDRDirectionalSurfaceTool()
@@ -145,7 +157,7 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 	}
 	EditedBounds = Bounds;
 
-	TMap<FIntVector, float> TargetValueByPosition;
+	TMap<FIntVector, float> StampValueByPosition;
 	for (const FVoxelSurfaceEditsVoxel& SurfaceVoxel : *SurfaceFootprint.Voxels)
 	{
 		const float SignedStrength = SurfaceVoxel.Strength;
@@ -154,13 +166,17 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 		{
 			continue;
 		}
+		if (!IsInsideSweptSurfaceVolume(SurfaceVoxel, bAdd))
+		{
+			continue;
+		}
 
 		const float TargetValue = GetSurfaceToolTargetValue(SurfaceVoxel, DistanceDivisor);
-		float& StoredValue = TargetValueByPosition.FindOrAdd(SurfaceVoxel.Position, TargetValue);
+		float& StoredValue = StampValueByPosition.FindOrAdd(SurfaceVoxel.Position, TargetValue);
 		StoredValue = bAdd ? FMath::Min(StoredValue, TargetValue) : FMath::Max(StoredValue, TargetValue);
 	}
 
-	if (TargetValueByPosition.Num() == 0)
+	if (StampValueByPosition.Num() == 0)
 	{
 		EditedBounds = FVoxelIntBox();
 		return 0.f;
@@ -172,18 +188,18 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 		FVoxelWriteScopeLock Lock(Data, Bounds, FUNCTION_FNAME);
 		DataImpl.Set<FVoxelValue>(Bounds, [&](int32 X, int32 Y, int32 Z, FVoxelValue& Value)
 		{
-			const float* TargetValue = TargetValueByPosition.Find(FIntVector(X, Y, Z));
-			if (!TargetValue)
+			const float* StampValue = StampValueByPosition.Find(FIntVector(X, Y, Z));
+			if (!StampValue)
 			{
 				return;
 			}
 
 			const float CurrentValue = Value.ToFloat();
 			// FVoxelValue는 값이 낮을수록 filled, 높을수록 empty 쪽이다.
-			// 그래서 Add는 더 낮은 값만, Remove는 더 높은 값만 반영한다.
-			if ((bAdd && *TargetValue < CurrentValue) || (!bAdd && *TargetValue > CurrentValue))
+			// 그래서 Add는 swept volume 중 비어 있던 곳만 채우고, Remove는 그 stamp 부피만 비운다.
+			if ((bAdd && *StampValue < CurrentValue) || (!bAdd && *StampValue > CurrentValue))
 			{
-				Value = FVoxelValue(*TargetValue);
+				Value = FVoxelValue(*StampValue);
 			}
 		});
 	}

@@ -5,7 +5,6 @@
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
-#include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -225,14 +224,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 		return Result;
 	}
 
-	const int32 TeamMaterialIndexA =
-		TeamIdA == INDEX_NONE
-			? INDEX_NONE
-			: UDRVoxelTeamColorLibrary::GetTeamMaterialIndex(TeamIdA);
-	const int32 TeamMaterialIndexB =
-		TeamIdB == INDEX_NONE
-			? INDEX_NONE
-			: UDRVoxelTeamColorLibrary::GetTeamMaterialIndex(TeamIdB);
+	const int32 TeamMaterialIndexA = TeamIdA == INDEX_NONE ? INDEX_NONE : FMath::Max(0, TeamIdA) + 1;
+	const int32 TeamMaterialIndexB = TeamIdB == INDEX_NONE ? INDEX_NONE : FMath::Max(0, TeamIdB) + 1;
 
 	FVoxelData& Data = VoxelWorld->GetData();
 	{

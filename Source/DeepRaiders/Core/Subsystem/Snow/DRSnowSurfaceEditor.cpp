@@ -2,12 +2,13 @@
 
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
-#include "DeepRaiders/Voxel/DRDirectionalSurfaceTool.h"
-#include "DeepRaiders/Voxel/DRVoxelTeamColorLibrary.h"
+#include "DeepRaiders/Snow/DRDirectionalSurfaceTool.h"
 #include "EngineUtils.h"
+#include "VoxelTools/Gen/VoxelBoxTools.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
 #include "VoxelTools/Gen/VoxelSurfaceEditTools.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
+#include "VoxelTools/VoxelPaintMaterial.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
 #include "VoxelWorld.h"
 
@@ -15,6 +16,52 @@ namespace
 {
 constexpr float SnowSurfaceDistanceDivisor = 4.f;
 constexpr float SnowSurfaceFalloff = 0.35f;
+
+int32 GetTeamMaterialIndex(const int32 TeamId) { return TeamId == INDEX_NONE ? 0 : FMath::Max(0, TeamId) + 1; }
+
+FVoxelPaintMaterial MakeTeamPaintMaterial(const EVoxelMaterialConfig MaterialConfig, const int32 TeamId)
+{
+	FVoxelPaintMaterial PaintMaterial;
+	const int32 MaterialIndex = GetTeamMaterialIndex(TeamId);
+	if (MaterialConfig == EVoxelMaterialConfig::SingleIndex)
+	{
+		PaintMaterial.Type = EVoxelPaintMaterialType::SingleIndex;
+		PaintMaterial.SingleIndex.Channel.Channel = MaterialIndex;
+	}
+	else if (MaterialConfig == EVoxelMaterialConfig::MultiIndex)
+	{
+		PaintMaterial.Type = EVoxelPaintMaterialType::MultiIndex;
+		PaintMaterial.SingleIndex.Channel.Channel = MaterialIndex;
+		PaintMaterial.MultiIndex.TargetValue = 1.f;
+	}
+
+	return PaintMaterial;
+}
+
+bool PaintProcessedTeamSurface(
+	AVoxelWorld* VoxelWorld,
+	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
+	const int32 TeamId)
+{
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
+		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB)
+	{
+		return false;
+	}
+
+	TArray<FModifiedVoxelMaterial> ModifiedMaterials;
+	FVoxelIntBox EditedMaterialBounds;
+	UVoxelSurfaceEditTools::EditVoxelMaterials(
+		ModifiedMaterials,
+		EditedMaterialBounds,
+		VoxelWorld,
+		MakeTeamPaintMaterial(VoxelWorld->MaterialConfig, TeamId),
+		ProcessedVoxels,
+		true,
+		false,
+		true);
+	return EditedMaterialBounds.IsValid();
+}
 
 float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 {
@@ -110,14 +157,13 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 		{
 			if (EditedBounds.IsValid())
 			{
-				UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+				PaintProcessedTeamSurface(
 					VoxelWorld,
 					UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
 						EditedBounds,
 						ModifiedValues,
 						true),
-					Request.Context.TeamId,
-					true);
+					Request.Context.TeamId);
 			}
 
 			Result.VoxelWorld = VoxelWorld;
@@ -174,11 +220,10 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 
 				const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
 					UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
-				UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+				PaintProcessedTeamSurface(
 					VoxelWorld,
 					MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
-					Request.Context.TeamId,
-					true);
+					Request.Context.TeamId);
 			}
 
 		}
@@ -239,11 +284,10 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	{
 		// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
 		// 단, 기존 표면과 겹친 교집합은 유지하고 이번 Add로 새로 채워진 위치만 칠한다.
-		UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+		PaintProcessedTeamSurface(
 			VoxelWorld,
 			MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
-			Request.Context.TeamId,
-			true);
+			Request.Context.TeamId);
 
 	}
 
@@ -266,119 +310,77 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
 		return Result;
 	}
 
-	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+	// 모든 제거는 공통 brush 경로에서 mode와 shape만 바꾼다.
+	TArray<FModifiedVoxelValue> ModifiedValues;
+	FVoxelIntBox EditedBounds;
+	FVector BrushCenter = Request.WorldLocation;
+	if (Request.RemovalMode == EDRSnowRemovalMode::ContactBrush)
 	{
-		const FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint =
-			UDRDirectionalSurfaceTool::FindSurfaceFootprint(
-				VoxelWorld,
-				Request.WorldLocation,
-				Request.Radius,
-				SnowSurfaceFalloff,
-				Request.RequestedAmount,
-				Request.bInvertSurfaceStrength);
-
-		TArray<FModifiedVoxelValue> ModifiedValues;
-		FVoxelIntBox EditedBounds;
-		const float ModifiedValueAmount = UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
-			VoxelWorld,
-			SurfaceFootprint,
-			SnowSurfaceDistanceDivisor,
-			Request.bInvertSurfaceStrength,
-			ModifiedValues,
-			EditedBounds);
-		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-		if (Result.AppliedAmount > 0.f)
+		const FVector TowardTarget = (Request.WorldLocation - Request.BrushOrigin).GetSafeNormal();
+		const FVector InwardDirection = TowardTarget.IsNearlyZero()
+			? -Request.SurfaceNormal.GetSafeNormal()
+			: TowardTarget;
+		if (InwardDirection.IsNearlyZero())
 		{
-			Result.VoxelWorld = VoxelWorld;
-			Result.ModifiedValues = MoveTemp(ModifiedValues);
-			Result.bUseModifiedValuesForVolume = true;
+			return Result;
 		}
 
-		return Result;
+		const float PenetrationDepth = FMath::Min(
+			Request.Radius,
+			FMath::Clamp(
+				VoxelWorld->VoxelSize * Request.RequestedAmount,
+				VoxelWorld->VoxelSize * 0.5f,
+				VoxelWorld->VoxelSize * 2.f));
+		const float ShapeSupportDistance =
+			Request.RemovalBrushShape == EDRSnowRemovalBrushShape::Box
+				? Request.Radius * (
+					FMath::Abs(InwardDirection.X) +
+					FMath::Abs(InwardDirection.Y) +
+					FMath::Abs(InwardDirection.Z))
+				: Request.Radius;
+		BrushCenter =
+			Request.WorldLocation - InwardDirection * (ShapeSupportDistance - PenetrationDepth);
 	}
 
-	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)
+	if (Request.RemovalBrushShape == EDRSnowRemovalBrushShape::Box)
 	{
-		TArray<FModifiedVoxelValue> ModifiedValues;
-		FVoxelIntBox EditedBounds;
+		const FVoxelIntBox BoxBounds = UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
+			VoxelWorld,
+			BrushCenter,
+			Request.Radius);
+		UVoxelBoxTools::RemoveBox(
+			ModifiedValues,
+			EditedBounds,
+			VoxelWorld,
+			BoxBounds,
+			false,
+			true,
+			true);
+	}
+	else
+	{
 		UVoxelSphereTools::RemoveSphere(
 			ModifiedValues,
 			EditedBounds,
 			VoxelWorld,
-			Request.WorldLocation,
+			BrushCenter,
 			Request.Radius,
-			true,
+			false,
 			true,
 			true,
 			true);
-
-		UDRVoxelTeamColorLibrary::PaintTeamSurfaceAtArea(
-			VoxelWorld,
-			Request.WorldLocation,
-			Request.Radius,
-			INDEX_NONE);
-
-		const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
-
-		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-		Result.VoxelWorld = VoxelWorld;
-		return Result;
 	}
-
-	// SurfaceTool 객체를 직접 쓰지 않고 함수형 API만 감싼다.
-	const FVoxelIntBox SurfaceBounds =
-		UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
-			VoxelWorld,
-			Request.WorldLocation,
-			Request.Radius);
-	
-	if (!SurfaceBounds.IsValid())
-	{
-		return Result;
-	}
-
-	FVoxelSurfaceEditsVoxels SurfaceVoxels;
-	UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
-		SurfaceVoxels,
-		VoxelWorld,
-		SurfaceBounds,
-		true);
-
-	// 흡수는 표면을 따라 밀도를 조정해야 하므로 RemoveSphere가 아니라
-	// surface voxel 탐색 + falloff + constant strength 조합으로 처리한다.
-	FVoxelSurfaceEditsStack SurfaceStack;
-	SurfaceStack.Add(
-		UVoxelSurfaceTools::ApplyFalloff(
-			VoxelWorld,
-			EVoxelFalloff::Smooth,
-			Request.WorldLocation,
-			Request.Radius,
-			SnowSurfaceFalloff));
-	SurfaceStack.Add(
-		UVoxelSurfaceTools::ApplyConstantStrength(
-			Request.RequestedAmount *
-			(Request.bInvertSurfaceStrength ? -1.f : 1.f)));
-
-	const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels = UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
-
-	TArray<FModifiedVoxelValue> ModifiedValues;
-	FVoxelIntBox EditedBounds;
-	UVoxelSurfaceEditTools::EditVoxelValues(
-		ModifiedValues,
-		EditedBounds,
-		VoxelWorld,
-		ProcessedVoxels,
-		SnowSurfaceDistanceDivisor,
-		true,
-		true,
-		true);
 
 	const float ModifiedValueAmount = GetModifiedValueAmount(ModifiedValues);
 
-	// 실제 Voxel 값 변화량만 흡수량으로 인정한다.
-	// 이 값이 이후 SnowAmmo 회복과 SnowLedger 감소량의 기준이 된다.
 	Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-	Result.VoxelWorld = VoxelWorld;
+	if (Result.AppliedAmount > 0.f)
+	{
+		Result.VoxelWorld = VoxelWorld;
+		Result.ModifiedValues = MoveTemp(ModifiedValues);
+		Result.bUseModifiedValuesForVolume = true;
+	}
+
 	return Result;
 }
 
@@ -458,11 +460,10 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 			continue;
 		}
 
-		bPaintedAny |= UDRVoxelTeamColorLibrary::PaintProcessedTeamSurface(
+		bPaintedAny |= PaintProcessedTeamSurface(
 			VoxelWorld,
 			MakeProcessedVoxelGroup(ProcessedVoxels, MoveTemp(TeamVoxels.Value)),
-			TeamVoxels.Key,
-			true);
+			TeamVoxels.Key);
 	}
 
 	return bPaintedAny;

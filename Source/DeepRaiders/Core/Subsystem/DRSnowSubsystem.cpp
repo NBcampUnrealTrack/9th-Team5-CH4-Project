@@ -57,17 +57,7 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveReque
 	{
 		return Result;
 	}
-	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
-	{
-		FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-		VolumeRequest.RequestedAmount = Result.RemovedAmount;
-		VolumeStore.RemoveSnow(VolumeRequest);
-	}
-	else
-	{
-		// Directional 도구는 반경 샘플링 대신 실제로 비워진 voxel 기준으로 Volume을 줄인다.
-		ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	}
+	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
 	RepaintSnowMaterialsAtArea(Request);
 	return Result;
 }
@@ -89,16 +79,7 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 		return false;
 	}
 
-	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
-	{
-		FDRSnowSurfaceRemoveRequest VolumeRequest = Request;
-		VolumeRequest.RequestedAmount = AppliedAmount;
-		VolumeStore.RemoveSnow(VolumeRequest);
-	}
-	else
-	{
-		ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
-	}
+	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
 
 	return RepaintSnowMaterialsAtArea(Request);
 }

@@ -17,7 +17,25 @@ enum class EDRSnowVoxelEditTool : uint8
 	SphereTool UMETA(DisplayName = "Sphere Tool"),
 
 	// surface footprint만 표면에서 찾고, 실제 값 변경은 요청 방향으로만 적용한다.
-	DirectionalSurfaceTool UMETA(DisplayName = "Directional Surface Tool")
+	DirectionalSurfaceTool UMETA(DisplayName = "Directional Surface Tool"),
+
+};
+
+UENUM(BlueprintType)
+enum class EDRSnowRemovalBrushShape : uint8
+{
+	Sphere UMETA(DisplayName = "Sphere"),
+	Box UMETA(DisplayName = "Box")
+};
+
+UENUM(BlueprintType)
+enum class EDRSnowRemovalMode : uint8
+{
+	// 청소기처럼 brush를 표면 바깥에서 얕게 관통시킨다.
+	ContactBrush UMETA(DisplayName = "Contact Brush"),
+
+	// 폭탄처럼 히트 지점을 중심으로 shape 전체를 한 번에 제거한다.
+	InstantVolume UMETA(DisplayName = "Instant Volume")
 };
 
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.
@@ -85,6 +103,10 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FVector SurfaceNormal = FVector::UpVector;
 
+	// 제거 brush가 날아오는 시작점이다. 접촉형 제거는 이 위치에서 히트 지점으로 향한다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	FVector BrushOrigin = FVector::ZeroVector;
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	TObjectPtr<AVoxelWorld> TargetVoxelWorld = nullptr;
 
@@ -92,15 +114,15 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0", Units = "cm"))
 	float Radius = 100.f;
 
-	// 현재는 Voxel 표면 제거 강도이며, 이후 SnowVolume density 감소량과 맞춰야 할 값이다.
+	// 1회 제거 강도이며, SnowVolume 감소량의 기준이 된다.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0"))
 	float RequestedAmount = 1.f;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
-	bool bInvertSurfaceStrength = false;
+	EDRSnowRemovalBrushShape RemovalBrushShape = EDRSnowRemovalBrushShape::Sphere;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
-	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
@@ -148,6 +170,9 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 	FVector_NetQuantizeNormal SurfaceNormal = FVector::UpVector;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantize BrushOrigin = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	float Radius = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
@@ -159,10 +184,10 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 	float AppliedAmount = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
-	bool bInvertSurfaceStrength = false;
+	EDRSnowRemovalBrushShape RemovalBrushShape = EDRSnowRemovalBrushShape::Sphere;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
-	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	int32 TeamId = INDEX_NONE;
