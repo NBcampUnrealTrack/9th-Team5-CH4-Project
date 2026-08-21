@@ -89,6 +89,8 @@ void ADRPlayerController::BeginPlay()
 
 	Super::BeginPlay();
 
+	ApplyViewPitchLimits();
+	
 	/*
 	 * 서버에서 모든 플레이어의 시작 장비를 초기화.
 	 *
@@ -105,12 +107,6 @@ void ADRPlayerController::BeginPlay()
 	if (!IsLocalController())
 	{
 		return;
-	}
-
-	if (IsLocalController() && IsValid(PlayerCameraManager))
-	{
-		PlayerCameraManager->ViewPitchMin = -55.f;
-		PlayerCameraManager->ViewPitchMax = 45.f;
 	}
 
 	ULocalPlayer* LocalPlayer = GetLocalPlayer();
@@ -228,6 +224,8 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
+	ApplyViewPitchLimits();
+	
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->RefreshSelectedItem();
@@ -243,6 +241,8 @@ void ADRPlayerController::OnRep_Pawn()
 {
 	Super::OnRep_Pawn();
 
+	ApplyViewPitchLimits();
+	
 	if (IsValid(HUDUIComponent))
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
@@ -338,6 +338,23 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	}
 	
 	QuickSlotComponent->RequestSelectSlot(0);	
+}
+
+void ADRPlayerController::ApplyViewPitchLimits()
+{
+	if (!IsLocalController() || !IsValid(PlayerCameraManager))
+	{
+		return;
+	}
+
+	const ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+	if (!IsValid(PlayerCharacter))
+	{
+		return;
+	}
+
+	PlayerCameraManager->ViewPitchMin = PlayerCharacter->GetAimPitchMinDegrees();
+	PlayerCameraManager->ViewPitchMax = PlayerCharacter->GetAimPitchMaxDegrees();
 }
 
 void ADRPlayerController::HandleGASInputPressed(int32 InputId)

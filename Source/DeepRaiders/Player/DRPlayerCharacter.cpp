@@ -25,7 +25,6 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
-#include "Net/UnrealNetwork.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -61,15 +60,16 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	GetCharacterMovement()->bOrientRotationToMovement = true;
-
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = false;
+	Movement->bUseControllerDesiredRotation = true;
+	Movement->RotationRate = FRotator(0.f, 720.f, 0.f);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 420.f;
+	CameraBoom->TargetArmLength = 450.f;
 	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 70.f));
-	CameraBoom->SocketOffset = FVector(0.f, 0.f, 0.f);
+	CameraBoom->SocketOffset = FVector(0.f, 65.f, 20.f);
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = true;
 	CameraBoom->bEnableCameraLag = false;
@@ -448,78 +448,6 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-void ADRPlayerCharacter::RefreshCombatAim(const float HoldDuration)
-{
-	// Local Prediction 또는 서버에서만 상태를 바꾼다.
-	if ((!HasAuthority() && !IsLocallyControlled()) || IsDead() || IsFrozen())
-	{
-		return;
-	}
-
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-
-	if (!IsValid(Movement))
-	{
-		return;
-	}
-
-	bCombatAiming = true;
-
-	/*
-	 * 평상시:
-	 * 이동 방향으로 회전
-	 *
-	 * Combat Aim:
-	 * Controller(Camera)의 방향을 바라봄
-	 */
-	Movement->bOrientRotationToMovement = false;
-	Movement->bUseControllerDesiredRotation = true;
-
-	if (Controller)
-	{
-		const FRotator ControlRotation = Controller->GetControlRotation();
-
-		SetActorRotation(FRotator(0.f, ControlRotation.Yaw, 0.f));
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(
-			CombatAimTimerHandle, this, &ThisClass::StopCombatAim, FMath::Max(HoldDuration, 0.05f), false);
-	}
-
-	if (HasAuthority())
-	{
-		ForceNetUpdate();
-	}
-}
-
-void ADRPlayerCharacter::StopCombatAim()
-{
-	if (!HasAuthority() && !IsLocallyControlled())
-	{
-		return;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(CombatAimTimerHandle);
-	}
-
-	bCombatAiming = false;
-
-	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
-	{
-		Movement->bUseControllerDesiredRotation = false;
-		Movement->bOrientRotationToMovement = true;
-	}
-
-	if (HasAuthority())
-	{
-		ForceNetUpdate();
-	}
-}
-
 void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage)
 {
 	if (IsValid(ItemActionPresentationComponent))
@@ -536,16 +464,38 @@ void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* Fire
 	}
 }
 
+float ADRPlayerCharacter::GetNormalizedAimPitch() const
+{
+	const FRotator BaseAimRotation = GetBaseAimRotation();
+	const FRotator ActorRotation = GetActorRotation();
+
+	const FRotator DeltaRotation = (BaseAimRotation - ActorRotation).GetNormalized();
+
+	const float AimPitch = DeltaRotation.Pitch;
+
+	if (AimPitch >= 0.f)
+	{
+		if (AimPitchMaxDegrees <= KINDA_SMALL_NUMBER)
+		{
+			return 0.f;
+		}
+
+		return FMath::Clamp(AimPitch / AimPitchMaxDegrees, 0.f, 1.f);
+	}
+
+	const float DownRange = FMath::Abs(AimPitchMinDegrees);
+
+	if (DownRange <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	return FMath::Clamp(AimPitch / DownRange, -1.f, 0.f);
+}
+
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-}
-
-void ADRPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(ADRPlayerCharacter, bCombatAiming);
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()

@@ -78,6 +78,8 @@ private:
 
 	void InitializeStartingQuickSlot();
 	
+	void ApplyViewPitchLimits();
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;

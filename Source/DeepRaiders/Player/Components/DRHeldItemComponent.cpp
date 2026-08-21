@@ -8,6 +8,9 @@
 
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 
 
 UDRHeldItemComponent::UDRHeldItemComponent()
@@ -56,6 +59,51 @@ void UDRHeldItemComponent::OnRep_HeldItemDefinition()
 	RefreshHeldItemState();
 }
 
+void UDRHeldItemComponent::RefreshAnimationLayer()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	if (!IsValid(Character))
+	{
+		return;
+	}
+	
+	if (Character->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = Character->GetMesh();
+	if (!IsValid(Mesh))
+	{
+		return;
+	}
+
+	TSubclassOf<UAnimInstance> NewAnimLayerClass = nullptr;
+	if (IsValid(HeldItemDefinition) && IsValid(HeldItemDefinition->ItemAnimationSet))
+	{
+		NewAnimLayerClass = HeldItemDefinition->ItemAnimationSet->AnimLayerClass;
+	}
+
+	if (LinkedAnimLayerClass == NewAnimLayerClass)
+	{
+		return;
+	}
+
+	// 기존 Linked Layer 제거.
+	if (LinkedAnimLayerClass)
+	{
+		Mesh->UnlinkAnimClassLayers(LinkedAnimLayerClass);
+	}
+
+	LinkedAnimLayerClass = NewAnimLayerClass;
+
+	// 새 Linked Layer 적용.
+	if (LinkedAnimLayerClass)
+	{
+		Mesh->LinkAnimClassLayers(LinkedAnimLayerClass);
+	}
+}
+
 void UDRHeldItemComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -85,6 +133,7 @@ void UDRHeldItemComponent::RefreshHeldItemState()
 {
 	RefreshVisual();
 	RefreshMiningSettings();
+	RefreshAnimationLayer();
 	PlayEquipSound();
 }
 
