@@ -6,17 +6,14 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
-class UDRPerkResetTestWidget;
 class UDRShopItemWidget;
 class UScrollBox;
-enum class EDRItemCategory : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopOfferRequestedSignature,
 	FDRShopOfferRequest,
 	Request);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopSellAllOresRequestedSignature);
 
 UCLASS()
 class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
@@ -24,9 +21,9 @@ class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitializeShop(const TArray<FDRShopOfferView>& NewItemOffers);
-	void SetUpgradeOffers(const TArray<FDRShopOfferView>& NewUpgradeOffers);
-	void SetPerkOffers(const TArray<FDRShopOfferView>& NewPerkOffers);
+	void SetOffers(
+		EDRShopOfferType OfferType,
+		const TArray<FDRShopOfferView>& NewOffers);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -34,26 +31,14 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopOfferRequestedSignature OnOfferRequested;
 
-	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
-	FDRShopSellAllOresRequestedSignature OnSellAllOresRequested;
-
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 
 private:
-	void InitializeSellAllOresButton();
-	void InitializeUpgradeButton();
-	void InitializePerkButton();
-	void SelectCategory(EDRItemCategory Category);
-	void RefreshItems(EDRItemCategory Category);
-	void RefreshUpgradeItems();
-	/** 퍽 초기화 테스트 위젯과 판매 중인 퍽 목록을 다시 생성한다. */
-	void RefreshPerkItems();
-
-	/** 설정된 테스트 위젯 클래스로 퍽 초기화 UI를 생성한다. */
-	bool CreatePerkResetTestWidget();
-	bool CreateItemWidget(const FDRShopOfferView& Offer);
+	void SelectSection(EDRShopOfferSection Section);
+	void RefreshSelectedSection();
+	void CreateItemWidget(const FDRShopOfferView& Offer);
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
@@ -71,9 +56,6 @@ private:
 	void HandlePerkButtonClicked();
 
 	UFUNCTION()
-	void HandleSellAllOresButtonClicked();
-
-	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
 
 	UPROPERTY(meta = (BindWidget))
@@ -85,13 +67,10 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> ConsumableButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> SellAllOresButton;
-
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> UpgradeButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PerkButton;
 
 	UPROPERTY(meta = (BindWidget))
@@ -100,18 +79,8 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI|Test")
-	TSubclassOf<UDRPerkResetTestWidget> PerkResetTestWidgetClass;
-
 	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> ItemOffers;
+	TArray<FDRShopOfferView> Offers;
 
-	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> UpgradeOffers;
-
-	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> PerkOffers;
-
-	bool IsUpgradeSelected = false;
-	bool IsPerkSelected = false;
+	EDRShopOfferSection SelectedSection = EDRShopOfferSection::Equipment;
 };

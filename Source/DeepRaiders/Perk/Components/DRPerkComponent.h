@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "DeepRaiders/Item/GAS/DRItemAbilitySet.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPerkComponent.generated.h"
 
 class UDRPerkDefinition;
@@ -20,7 +20,7 @@ struct DEEPRAIDERS_API FDRPerkEntry
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
 
 	/** 초기화 시 Ability와 Effect를 회수하기 위한 서버 전용 핸들이다. */
-	FDRItemAbilitySet_GrantedHandles GrantedHandles;
+	FDRAbilitySet_GrantedHandles GrantedHandles;
 };
 
 UCLASS(ClassGroup = (DeepRaiders))
@@ -38,6 +38,19 @@ public:
 
 	/** 보유 중인 동일 퍽 개수를 반환한다. */
 	int32 GetPerkCount(const UDRPerkDefinition* PerkDefinition) const;
+
+	/** UI에 표시할 현재 퍽 목록을 반환한다. */
+	const TArray<FDRPerkEntry>& GetPerkEntries() const
+	{
+		return PerkEntries;
+	}
+
+	/** UI에 표시할 전체 퍽 슬롯 수를 반환한다. */
+	UFUNCTION(BlueprintPure, Category = "Perk")
+	int32 GetMaxPerkSlotCount() const
+	{
+		return MaxPerkSlotCount;
+	}
 
 	/** 전체 퍽 슬롯 제한 안에서 퍽을 추가할 수 있는지 확인한다. */
 	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition) const;

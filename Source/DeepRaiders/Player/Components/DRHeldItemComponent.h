@@ -10,6 +10,7 @@ class UDRItemDefinition;
 class USoundBase;
 class UDRMiningComponent;
 class UDRItemActionPresentationComponent;
+class UAnimInstance;
 
 UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRHeldItemComponent : public UActorComponent
@@ -56,6 +57,11 @@ private:
 	UFUNCTION()
 	void OnRep_HeldItemDefinition();
 
+	void RefreshAnimationLayer();
+
+	UPROPERTY(Transient)
+	TSubclassOf<UAnimInstance> LinkedAnimLayerClass;
+	
 private:
 	UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)
 	TObjectPtr<UDRItemDefinition> HeldItemDefinition;

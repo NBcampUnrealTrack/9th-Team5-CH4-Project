@@ -7,6 +7,7 @@
 
 class APawn;
 class UDataTable;
+class UDRInventoryComponent;
 class UDRShopAreaComponent;
 class UDRItemDefinition;
 class UDRPerkComponent;
@@ -21,12 +22,6 @@ public:
 	/** 상점 데이터와 거래 범위 참조를 관리하는 컴포넌트를 초기화한다. */
 	UDRShopComponent();
 
-	/** 상점에서 사용할 DataTable을 설정하고 Offer 목록을 다시 생성한다. */
-	void SetItemTable(UDataTable* NewItemTable);
-
-	/** 유효한 상점 DataTable이 설정되어 있는지 확인한다. */
-	bool HasItemTable() const;
-
 	/** DataTable에서 생성된 구매 및 업그레이드 Offer 목록을 반환한다. */
 	const TArray<FDRShopItemOffer>& GetItemOffers() const;
 
@@ -40,17 +35,20 @@ public:
 
 	/** 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
-		FName RowName,
+		const UDRPerkDefinition* PerkDefinition,
 		const UDRPerkComponent* PerkComponent,
 		int32 AvailableCoins) const;
 
-	/** 일반 구매 Offer에 포함된 아이템인지 확인한다. */
-	bool IsItemAvailable(const UDRItemDefinition* ItemDefinition) const;
+	/** 가격과 보유 코인을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
+	bool CanAfford(
+		const UDRItemDefinition* ItemDefinition,
+		int32 AvailableCoins) const;
 
-	/** 상점 접근 상태와 판매 목록을 기준으로 구매 가능 여부를 확인한다. */
-	bool CanPurchase(
-		const APawn* Pawn,
-		const UDRItemDefinition* ItemDefinition) const;
+	/** 판매 목록, 가격, 보유 코인과 인벤토리 공간을 기준으로 구매 가능 여부를 판단한다. */
+	bool CanPurchaseItem(
+		const UDRInventoryComponent* Inventory,
+		UDRItemDefinition* ItemDefinition,
+		int32 AvailableCoins) const;
 
 	/** 플레이어가 현재 상점 범위 안에 있는지 확인한다. */
 	bool IsTransactionAllowed(const APawn* Pawn) const;

@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "GameFramework/GameStateBase.h"
 #include "DRMiningGameStateBase.generated.h"
 
 class ADRTeleportPoint;
+class AVoxelWorld;
 class FLifetimeProperty;
 
 USTRUCT()
@@ -38,6 +40,28 @@ public:
 private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
 #pragma endregion 
+
+#pragma region Snow
+public:
+	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
+	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation);
+	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
+	void GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const;
+	void DiscardSnowOperationsThrough(int32 Sequence);
+	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ApplySnowOperation(const FDRSnowOperationRecord& Record);
+
+private:
+	bool ApplySnowAddOnce(const FDRSnowAddOperation& Operation);
+	bool ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation);
+	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
+	void TryCreateSnowCheckpoint();
+
+	int32 NextSnowOperationSequence = 0;
+	TArray<FDRSnowOperationRecord> SnowOperationHistory;
+#pragma endregion
 	
 #pragma region Teleport
 public:

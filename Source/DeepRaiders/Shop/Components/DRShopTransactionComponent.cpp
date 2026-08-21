@@ -33,14 +33,6 @@ void UDRShopTransactionComponent::RequestOffer(
 	ServerRequestOffer(ShopActor, Request);
 }
 
-void UDRShopTransactionComponent::RequestSellAllOres(AActor* ShopActor)
-{
-	if (IsValid(ShopActor))
-	{
-		ServerSellAllOres(ShopActor);
-	}
-}
-
 void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	AActor* ShopActor,
 	FDRShopOfferRequest Request)
@@ -75,11 +67,12 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	case EDRShopOfferType::Upgrade:
 		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
 			&& TryUpgrade(
-			PlayerState,
-			ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
-			Inventory,
-			ItemRow,
-			Request.TargetLevel))
+				PlayerState,
+				ShopComponent,
+				ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
+				Inventory,
+				ItemRow,
+				Request.TargetLevel))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
@@ -96,44 +89,6 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		}
 		break;
 	}
-}
-
-void UDRShopTransactionComponent::ServerSellAllOres_Implementation(
-	AActor* ShopActor)
-{
-	ADRPlayerState* PlayerState = GetPlayerState();
-	const UDRShopComponent* ShopComponent = IsValid(ShopActor)
-		? ShopActor->FindComponentByClass<UDRShopComponent>()
-		: nullptr;
-	UDRInventoryComponent* Inventory = GetInventoryComponent();
-
-	if (!IsValid(PlayerState)
-		|| !IsValid(ShopComponent)
-		|| !IsValid(Inventory)
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
-	{
-		return;
-	}
-
-	TArray<FGuid> EntryIds;
-	int32 TotalQuantity = 0;
-	const int64 TotalPrice = CollectSellableOreEntries(
-		Inventory,
-		EntryIds,
-		TotalQuantity);
-
-	// 인벤토리 제거가 완료된 경우에만 판매 금액을 지급한다.
-	if (EntryIds.IsEmpty()
-		|| TotalPrice <= 0
-		|| TotalPrice > static_cast<int64>(MAX_int32) - PlayerState->GetCoins()
-		|| !Inventory->TryRemoveEntries(EntryIds))
-	{
-		return;
-	}
-
-	PlayerState->SetCoins(
-		PlayerState->GetCoins() + static_cast<int32>(TotalPrice));
-	PlaySellSound(ShopActor);
 }
 
 void UDRShopTransactionComponent::ClientPlayTransactionSound_Implementation(
@@ -179,19 +134,6 @@ void UDRShopTransactionComponent::PlayPurchaseSound(
 	}
 }
 
-void UDRShopTransactionComponent::PlaySellSound(
-	const AActor* ShopActor)
-{
-	const ADRShop* Shop = Cast<ADRShop>(ShopActor);
-
-	if (IsValid(Shop))
-	{
-		ClientPlayTransactionSound(
-			Shop->GetSellSound(),
-			Shop->GetTransactionSoundVolume());
-	}
-}
-
 bool UDRShopTransactionComponent::TryPurchase(
 	ADRPlayerState* PlayerState,
 	const UDRShopComponent* ShopComponent,
@@ -206,10 +148,10 @@ bool UDRShopTransactionComponent::TryPurchase(
 		|| !IsValid(Inventory)
 		|| ItemRow.IsUpgradeRow()
 		|| !IsValid(ItemDefinition)
-		|| ItemDefinition->Price < 0
-		|| !ShopComponent->IsItemAvailable(ItemDefinition)
-		|| PlayerState->GetCoins() < ItemDefinition->Price
-		|| !Inventory->CanAddItem(ItemDefinition, 1)
+		|| !ShopComponent->CanPurchaseItem(
+			Inventory,
+			ItemDefinition,
+			PlayerState->GetCoins())
 		|| !Inventory->TryAddItem(ItemDefinition, 1))
 	{
 		return false;
@@ -218,9 +160,9 @@ bool UDRShopTransactionComponent::TryPurchase(
 	PlayerState->SetCoins(PlayerState->GetCoins() - ItemDefinition->Price);
 	return true;
 }
-
 bool UDRShopTransactionComponent::TryUpgrade(
 	ADRPlayerState* PlayerState,
+	const UDRShopComponent* ShopComponent,
 	const UDRUpgradeComponent* UpgradeComponent,
 	UDRInventoryComponent* Inventory,
 	const FDRShopItemTableRow& ItemRow,
@@ -230,6 +172,7 @@ bool UDRShopTransactionComponent::TryUpgrade(
 
 	// 현재 인벤토리를 기준으로 작업을 다시 만들고 성공한 경우에만 비용을 차감한다.
 	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
 		|| !IsValid(UpgradeComponent)
 		|| !IsValid(Inventory)
 		|| !UpgradeComponent->BuildUpgradeOperation(
@@ -238,44 +181,12 @@ bool UDRShopTransactionComponent::TryUpgrade(
 			Inventory,
 			Operation)
 		|| !IsValid(Operation.TargetDefinition)
-		|| Operation.TargetDefinition->Price < 0
-		|| PlayerState->GetCoins() < Operation.TargetDefinition->Price
+		|| !ShopComponent->CanAfford(
+			Operation.TargetDefinition,
+			PlayerState->GetCoins())
 		|| !UpgradeComponent->ApplyUpgrade(Inventory, Operation))
 	{
 		return false;
-	}
-
-	if (Operation.TargetLevel == 1)
-	{
-		ADRPlayerController* PlayerController =
-			Cast<ADRPlayerController>(GetOwner());
-		UDRQuickSlotComponent* QuickSlotComponent =
-			IsValid(PlayerController)
-				? PlayerController->GetQuickSlotComponent()
-				: nullptr;
-		bool IsBindingRestored = false;
-
-		if (IsValid(QuickSlotComponent))
-		{
-			for (int32 Level = 2;
-				Level <= ItemRow.GetMaxUpgradeLevel();
-				++Level)
-			{
-				if (QuickSlotComponent->ReplaceBoundDefinition(
-					ItemRow.GetDefinitionForLevel(Level),
-					Operation.TargetDefinition))
-				{
-					IsBindingRestored = true;
-					break;
-				}
-			}
-
-			if (!IsBindingRestored)
-			{
-				QuickSlotComponent->TryBindFirstEmptySlot(
-					Operation.TargetDefinition);
-			}
-		}
 	}
 
 	PlayerState->SetCoins(
@@ -295,11 +206,11 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(PerkComponent)
+		|| !ShopComponent->GetPerkDefinition(RowName, PerkDefinition)
 		|| !ShopComponent->CanPurchasePerk(
-			RowName,
+			PerkDefinition,
 			PerkComponent,
-			PlayerState->GetCoins())
-		|| !ShopComponent->GetPerkDefinition(RowName, PerkDefinition))
+			PlayerState->GetCoins()))
 	{
 		UE_LOG(
 			LogTemp,
@@ -340,50 +251,4 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		PreviousCoins,
 		PlayerState->GetCoins());
 	return true;
-}
-
-int64 UDRShopTransactionComponent::CollectSellableOreEntries(
-	const UDRInventoryComponent* Inventory,
-	TArray<FGuid>& OutEntryIds,
-	int32& OutTotalQuantity) const
-{
-	OutEntryIds.Reset();
-	OutTotalQuantity = 0;
-	int64 TotalPrice = 0;
-
-	if (!IsValid(Inventory))
-	{
-		return TotalPrice;
-	}
-
-	for (const FDRInventoryEntry& Entry : Inventory->GetEntries())
-	{
-		const UDRItemDefinition* Definition = Entry.Definition;
-
-		if (!Entry.IsValid()
-			|| !IsValid(Definition)
-			|| Definition->Category != EDRItemCategory::Ore
-			|| !Definition->bCanBeSold
-			|| Definition->Price <= 0)
-		{
-			continue;
-		}
-
-		const int64 EntryPrice =
-			static_cast<int64>(Definition->Price) * Entry.Quantity;
-
-		if (Entry.Quantity > MAX_int32 - OutTotalQuantity
-			|| EntryPrice > MAX_int64 - TotalPrice)
-		{
-			OutEntryIds.Reset();
-			OutTotalQuantity = 0;
-			return -1;
-		}
-
-		OutEntryIds.Add(Entry.EntryId);
-		OutTotalQuantity += Entry.Quantity;
-		TotalPrice += EntryPrice;
-	}
-
-	return TotalPrice;
 }

@@ -5,9 +5,11 @@
 #include "InputActionValue.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "AbilitySystemInterface.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
+class ADRShop;
 class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
@@ -19,6 +21,7 @@ class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
+class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
@@ -75,6 +78,8 @@ private:
 
 	void InitializeStartingQuickSlot();
 	
+	void ApplyViewPitchLimits();
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -96,6 +101,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> SecondaryAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InventoryAction;
 
 #pragma region QuickSlot
 
@@ -129,11 +137,16 @@ protected:
 #pragma region UI
 
 public:
+	UDRInventoryUIComponent* GetInventoryUIComponent() const
+	{
+		return InventoryUIComponent;
+	}
+	
 	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
-	void SetAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void SetAvailableShop(ADRShop* Shop);
 
 	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
-	void ClearAvailableShop(UDRShopUIComponent* ShopUIComponent);
+	void ClearAvailableShop(ADRShop* Shop);
 
 private:
 	/** 현재 상점의 UI를 열거나 닫는다. */
@@ -147,9 +160,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점이다. */
-	UPROPERTY(Transient)
-	TObjectPtr<UDRShopUIComponent> AvailableShop;
+	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
+	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
@@ -157,6 +172,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
@@ -176,4 +194,54 @@ private:
 
 	uint8 bCanTeleportInteract : 1;
 #pragma endregion
+	
+#pragma region Snow Join Snapshot
+public:
+	UFUNCTION(Client, Reliable)
+	void Client_BeginSnowJoinSnapshot(
+		int32 SnapshotId,
+		int32 CheckpointSequence,
+		FName VoxelWorldName,
+		int32 VoxelSaveByteCount,
+		int32 SnowVolumeByteCount,
+		int32 OwnershipByteCount);
+
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveSnowJoinSnapshotChunk(
+		int32 SnapshotId,
+		uint8 PayloadType,
+		int32 ByteOffset,
+		const TArray<uint8>& ChunkData);
+
+	UFUNCTION(Client, Reliable)
+	void Client_FinishSnowJoinSnapshot(
+		int32 SnapshotId,
+		const TArray<FDRSnowOperationRecord>& RecentHistory);
+
+	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
+	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
+
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
+
+	bool TryApplyPendingSnowJoinSnapshot();
+	void RetryPendingSnowJoinSnapshot();
+	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
+
+	int32 PendingSnowSnapshotId = INDEX_NONE;
+	int32 PendingSnowCheckpointSequence = 0;
+	FName PendingSnowVoxelWorldName = NAME_None;
+	int32 PendingSnowVoxelSaveByteCount = 0;
+	int32 PendingSnowVolumeByteCount = 0;
+	int32 PendingSnowOwnershipByteCount = 0;
+	bool bPendingSnowSnapshotFinished = false;
+	TArray<uint8> PendingSnowVoxelSaveData;
+	TArray<uint8> PendingSnowVolumeData;
+	TArray<uint8> PendingSnowOwnershipData;
+	TArray<FDRSnowOperationRecord> PendingSnowHistory;
+	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
+	FTimerHandle SnowJoinSnapshotRetryTimer;
+#pragma endregion
+	
 };

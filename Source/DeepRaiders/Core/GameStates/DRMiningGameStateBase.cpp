@@ -1,8 +1,12 @@
 #include "DRMiningGameStateBase.h"
 
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "VoxelWorld.h"
 
 void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -49,6 +53,222 @@ bool ADRMiningGameStateBase::ApplyTerrainDigOnce(const FDRTerrainDigOperation& O
 
 	// VoxelWorld 준비 여부와 pending 처리는 TerrainSubsystem 하나에서 관리한다.
 	return TerrainSubsystem->ApplyOrQueueDig(Operation);
+}
+#pragma endregion
+
+#pragma region Snow
+void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operation)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FDRSnowOperationRecord Record;
+	Record.Sequence = ++NextSnowOperationSequence;
+	Record.bIsAddOperation = true;
+	Record.AddOperation = Operation;
+	SnowOperationHistory.Add(Record);
+	Multicast_ApplySnowOperation(Record);
+	TryCreateSnowCheckpoint();
+}
+
+void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Operation)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FDRSnowOperationRecord Record;
+	Record.Sequence = ++NextSnowOperationSequence;
+	Record.bIsAddOperation = false;
+	Record.RemoveOperation = Operation;
+	SnowOperationHistory.Add(Record);
+	Multicast_ApplySnowOperation(Record);
+	TryCreateSnowCheckpoint();
+}
+
+void ADRMiningGameStateBase::GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const
+{
+	OutOperations.Reset();
+	for (const FDRSnowOperationRecord& Record : SnowOperationHistory)
+	{
+		if (Record.Sequence > Sequence)
+		{
+			OutOperations.Add(Record);
+		}
+	}
+}
+
+void ADRMiningGameStateBase::DiscardSnowOperationsThrough(int32 Sequence)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	SnowOperationHistory.RemoveAll([Sequence](const FDRSnowOperationRecord& Record)
+	{
+		return Record.Sequence <= Sequence;
+	});
+}
+
+void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(SnowSubsystem))
+	{
+		return;
+	}
+
+	FDRSnowJoinCheckpoint Checkpoint;
+	constexpr int32 CheckpointInterval = 250;
+	const bool bNeedsCheckpoint =
+		!SnowSubsystem->GetLatestCheckpoint(Checkpoint) ||
+		NextSnowOperationSequence - Checkpoint.OperationSequence >= CheckpointInterval;
+	if (bNeedsCheckpoint && SnowSubsystem->CreateCheckpoint(NextSnowOperationSequence))
+	{
+		DiscardSnowOperationsThrough(NextSnowOperationSequence);
+	}
+}
+
+void ADRMiningGameStateBase::Multicast_ApplySnowOperation_Implementation(const FDRSnowOperationRecord& Record)
+{
+	if (HasAuthority())
+	{
+		return;
+	}
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetWorld()->GetFirstPlayerController()))
+	{
+		if (PlayerController->QueueSnowJoinOperation(Record))
+		{
+			return;
+		}
+	}
+
+	ApplySnowOperationRecord(Record);
+}
+
+bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationRecord& Record)
+{
+	return Record.bIsAddOperation ? ApplySnowAddOnce(Record.AddOperation) : ApplySnowRemoveOnce(Record.RemoveOperation);
+}
+
+bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operation)
+{
+	if (Operation.Radius <= 0.f || Operation.Amount <= 0.f)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorldByName(Operation.VoxelWorldName);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	FDRSnowSurfaceAddRequest Request;
+	Request.WorldLocation = Operation.WorldLocation;
+	Request.SurfaceNormal = FVector(Operation.SurfaceNormal).IsNearlyZero()
+		? FVector::UpVector
+		: FVector(Operation.SurfaceNormal).GetSafeNormal();
+	Request.ImpactDirection = FVector(Operation.ImpactDirection).IsNearlyZero()
+		? -Request.SurfaceNormal
+		: FVector(Operation.ImpactDirection).GetSafeNormal();
+	Request.TargetVoxelWorld = VoxelWorld;
+	Request.Radius = Operation.Radius;
+	Request.Amount = Operation.Amount;
+	Request.EditTool = Operation.EditTool;
+	Request.Context.TeamId = Operation.TeamId;
+
+	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
+	{
+		return SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
+	}
+
+	return false;
+}
+
+bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation)
+{
+	if (Operation.Radius <= 0.f || Operation.RequestedAmount <= 0.f || Operation.AppliedAmount <= 0.f)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorldByName(Operation.VoxelWorldName);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	FDRSnowSurfaceRemoveRequest Request;
+	Request.WorldLocation = Operation.WorldLocation;
+	Request.SurfaceNormal = FVector(Operation.SurfaceNormal).IsNearlyZero()
+		? FVector::UpVector
+		: FVector(Operation.SurfaceNormal).GetSafeNormal();
+	Request.BrushOrigin = Operation.BrushOrigin;
+	Request.TargetVoxelWorld = VoxelWorld;
+	Request.Radius = Operation.Radius;
+	Request.RequestedAmount = Operation.RequestedAmount;
+	Request.RemovalBrushShape = Operation.RemovalBrushShape;
+	Request.RemovalMode = Operation.RemovalMode;
+	Request.Context.TeamId = Operation.TeamId;
+
+	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+	if (!IsValid(SnowSubsystem))
+	{
+		return false;
+	}
+
+	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
+	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
+	return SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
+}
+
+AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	{
+		AVoxelWorld* VoxelWorld = *It;
+		if (!IsValid(VoxelWorld))
+		{
+			continue;
+		}
+
+		if (VoxelWorldName.IsNone() || VoxelWorld->GetFName() == VoxelWorldName)
+		{
+			return VoxelWorld;
+		}
+	}
+
+	return nullptr;
 }
 #pragma endregion
 

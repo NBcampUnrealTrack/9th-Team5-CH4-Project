@@ -28,6 +28,8 @@ public:
 	FDRShopAreaPawnSignature OnPawnExited;
 
 private:
+	TMap<TWeakObjectPtr<APawn>, int32> PawnOverlapCounts;
+
 	/** 진입한 액터가 Pawn이면 상점 진입 이벤트를 전달한다. */
 	UFUNCTION()
 	void HandleBeginOverlap(
@@ -40,7 +42,7 @@ private:
 
 	/** 이탈한 액터가 Pawn이면 상점 이탈 이벤트를 전달한다. */
 	UFUNCTION()
-	void HandleEndOverlap(
+void HandleEndOverlap(
 		UPrimitiveComponent* OverlappedComponent,
 		AActor* OtherActor,
 		UPrimitiveComponent* OtherComponent,
