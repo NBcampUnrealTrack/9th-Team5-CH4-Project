@@ -24,6 +24,20 @@ namespace
 		return Request.Phase == EDRVoxelDepositRequestPhase::Finished;
 	}
 
+	FDRVoxelDepositInBoxSettings SanitizeDepositSettings(
+		const FDRVoxelDepositInBoxSettings& Settings)
+	{
+		FDRVoxelDepositInBoxSettings Result = Settings;
+		Result.JitterRatio = FMath::Clamp(Result.JitterRatio, 0.f, 1.f);
+		Result.DepositPatchRadius = FMath::Max(0, Result.DepositPatchRadius);
+		Result.DepositFootprintRadius = FMath::Max(0, Result.DepositFootprintRadius);
+		Result.FootprintEdgeStrength = FMath::Clamp(Result.FootprintEdgeStrength, 0.f, 1.f);
+		Result.MinSurfaceDepositChance = FMath::Clamp(Result.MinSurfaceDepositChance, 0.f, 1.f);
+		Result.MaxSurfaceDepositChance = FMath::Clamp(Result.MaxSurfaceDepositChance, 0.f, 1.f);
+		Result.LowerSurfaceSelectionBias = FMath::Max(0.01f, Result.LowerSurfaceSelectionBias);
+		return Result;
+	}
+
 	void ShuffleVoxels(TArray<FIntVector>& Voxels, FRandomStream& RandomStream)
 	{
 		for (int32 Index = Voxels.Num() - 1; Index > 0; --Index)
@@ -186,7 +200,7 @@ namespace
 		TArray<FIntVector>& PendingVoxels)
 	{
 		const int32 Radius = FMath::Max(
-			FMath::Max(0, Request.DepositPatchRadius),
+			Request.DepositSettings.DepositPatchRadius,
 			Request.VoxelSampleStep / 2);
 
 		TArray<FDRDepositPatchSurface> PatchSurfaces;
@@ -236,11 +250,12 @@ namespace
 			return;
 		}
 
-		const float ClampedMinChance = FMath::Clamp(Request.MinSurfaceDepositChance, 0.f, 1.f);
-		const float ClampedMaxChance = FMath::Clamp(Request.MaxSurfaceDepositChance, 0.f, 1.f);
-		const float MinChance = FMath::Min(ClampedMinChance, ClampedMaxChance);
-		const float MaxChance = FMath::Max(ClampedMinChance, ClampedMaxChance);
-		const float SelectionBias = FMath::Max(0.01f, Request.LowerSurfaceSelectionBias);
+		const float MinChance = FMath::Min(
+			Request.DepositSettings.MinSurfaceDepositChance,
+			Request.DepositSettings.MaxSurfaceDepositChance);
+		const float MaxChance = FMath::Max(
+			Request.DepositSettings.MinSurfaceDepositChance,
+			Request.DepositSettings.MaxSurfaceDepositChance);
 		const float HeightRange = static_cast<float>(MaxSurfaceZ - MinSurfaceZ);
 
 		for (const FDRDepositPatchSurface& PatchSurface : PatchSurfaces)
@@ -250,7 +265,7 @@ namespace
 				: 1.f;
 			const float BiasedLowerSurfaceAlpha = FMath::Pow(
 				FMath::Clamp(LowerSurfaceAlpha, 0.f, 1.f),
-				SelectionBias);
+				Request.DepositSettings.LowerSurfaceSelectionBias);
 			const float DepositChance = FMath::Lerp(MinChance, MaxChance, BiasedLowerSurfaceAlpha);
 
 			if (Request.RandomStream.FRand() > DepositChance)
@@ -273,12 +288,19 @@ namespace
 		AVoxelWorld* VoxelWorld,
 		const FVoxelMaterial& DepositMaterial,
 		const FIntVector& Position,
+		float AmountScale,
 		bool& bHasModifiedBounds,
 		FIntVector& ModifiedMin,
 		FIntVector& ModifiedMax,
 		FDRVoxelDepositDeltaRecord& DeltaRecord,
 		int32& OutModifiedVoxelCount)
 	{
+		const float ScaledDepositAmount = Request.DepositSettings.DepositAmount * FMath::Max(0.f, AmountScale);
+		if (ScaledDepositAmount <= SMALL_NUMBER)
+		{
+			return false;
+		}
+
 		if (!IsInsideBounds(Request, Position) || Request.WrittenVoxelPositions.Contains(Position))
 		{
 			return false;
@@ -301,7 +323,7 @@ namespace
 		float CurrentValue = 0.f;
 		UVoxelDataTools::GetValue(CurrentValue, VoxelWorld, Position);
 
-		const float NewValue = FMath::Clamp(CurrentValue - Request.DepositAmount, -1.f, 1.f);
+		const float NewValue = FMath::Clamp(CurrentValue - ScaledDepositAmount, -1.f, 1.f);
 		if (FMath::IsNearlyEqual(CurrentValue, NewValue))
 		{
 			return false;
@@ -320,10 +342,74 @@ namespace
 		return true;
 	}
 
+	void WriteDepositFootprint(
+		FDRVoxelDepositInBoxRequest& Request,
+		AVoxelWorld* VoxelWorld,
+		const FVoxelMaterial& DepositMaterial,
+		const FIntVector& CenterPosition,
+		bool& bHasModifiedBounds,
+		FIntVector& ModifiedMin,
+		FIntVector& ModifiedMax,
+		FDRVoxelDepositDeltaRecord& DeltaRecord,
+		int32& OutModifiedVoxelCount)
+	{
+		const int32 Radius = Request.DepositSettings.DepositFootprintRadius;
+		if (Radius == 0)
+		{
+			TryWriteDepositVoxel(
+				Request,
+				VoxelWorld,
+				DepositMaterial,
+				CenterPosition,
+				1.f,
+				bHasModifiedBounds,
+				ModifiedMin,
+				ModifiedMax,
+				DeltaRecord,
+				OutModifiedVoxelCount);
+			return;
+		}
+
+		const float RadiusAsFloat = static_cast<float>(Radius);
+		const float EdgeStrength = Request.DepositSettings.FootprintEdgeStrength;
+
+		for (int32 OffsetX = -Radius; OffsetX <= Radius; ++OffsetX)
+		{
+			for (int32 OffsetY = -Radius; OffsetY <= Radius; ++OffsetY)
+			{
+				const float Distance = FMath::Sqrt(
+					static_cast<float>(OffsetX * OffsetX + OffsetY * OffsetY));
+				if (Distance > RadiusAsFloat + 0.5f)
+				{
+					continue;
+				}
+
+				const float DistanceAlpha = FMath::Clamp(Distance / RadiusAsFloat, 0.f, 1.f);
+				const float AmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
+				const FIntVector FootprintPosition(
+					CenterPosition.X + OffsetX,
+					CenterPosition.Y + OffsetY,
+					CenterPosition.Z);
+
+				TryWriteDepositVoxel(
+					Request,
+					VoxelWorld,
+					DepositMaterial,
+					FootprintPosition,
+					AmountScale,
+					bHasModifiedBounds,
+					ModifiedMin,
+					ModifiedMax,
+					DeltaRecord,
+					OutModifiedVoxelCount);
+			}
+		}
+	}
+
 	void BuildDepositCandidatesForCurrentColumn(FDRVoxelDepositInBoxRequest& Request, AVoxelWorld* VoxelWorld)
 	{
-		const int32 JitterRadius = Request.bUseJitteredSamples
-			? FMath::RoundToInt(static_cast<float>(Request.VoxelSampleStep) * Request.JitterRatio)
+		const int32 JitterRadius = Request.DepositSettings.bUseJitteredSamples
+			? FMath::RoundToInt(static_cast<float>(Request.VoxelSampleStep) * Request.DepositSettings.JitterRatio)
 			: 0;
 
 		const int32 SampleX = FMath::Clamp(
@@ -336,7 +422,7 @@ namespace
 			Request.VoxelMin.Y,
 			Request.VoxelMax.Y);
 
-		if (Request.bOnlyTopSurface)
+		if (Request.DepositSettings.bOnlyTopSurface)
 		{
 			const int32 SurfaceZ = FindTopSurfaceZ(
 				VoxelWorld,
@@ -426,10 +512,10 @@ namespace
 	{
 		OutDeltaRecord.VoxelMin = Request.VoxelMin;
 		OutDeltaRecord.VoxelMax = Request.VoxelMax;
-		OutDeltaRecord.MaterialIndex = Request.DepositMaterialIndex;
+		OutDeltaRecord.MaterialIndex = Request.DepositSettings.DepositMaterialIndex;
 
 		FVoxelMaterial DepositMaterial;
-		DepositMaterial.SetSingleIndex(Request.DepositMaterialIndex);
+		DepositMaterial.SetSingleIndex(Request.DepositSettings.DepositMaterialIndex);
 
 		bool bHasModifiedBounds = false;
 		FIntVector ModifiedMin = FIntVector::ZeroValue;
@@ -440,7 +526,7 @@ namespace
 		{
 			const FIntVector DepositVoxelPosition = Request.PendingVoxels[Request.NextVoxelIndex++];
 
-			TryWriteDepositVoxel(
+			WriteDepositFootprint(
 				Request,
 				VoxelWorld,
 				DepositMaterial,
@@ -560,17 +646,7 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 	AVoxelWorld* VoxelWorld,
 	const FVector& BoxCenter,
 	const FVector& BoxExtent,
-	float SampleStep,
-	float DepositAmount,
-	uint8 DepositMaterialIndex,
-	int32 RandomSeed,
-	bool bOnlyTopSurface,
-	bool bUseJitteredSamples,
-	float JitterRatio,
-	int32 DepositPatchRadius,
-	float MinSurfaceDepositChance,
-	float MaxSurfaceDepositChance,
-	float LowerSurfaceSelectionBias,
+	const FDRVoxelDepositInBoxSettings& Settings,
 	FDRVoxelDepositInBoxRequest& OutRequest)
 {
 	OutRequest = FDRVoxelDepositInBoxRequest();
@@ -580,7 +656,7 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 		return false;
 	}
 
-	if (SampleStep <= 0.f || DepositAmount <= 0.f || VoxelWorld->VoxelSize <= 0.f)
+	if (Settings.SampleStep <= 0.f || Settings.DepositAmount <= 0.f || VoxelWorld->VoxelSize <= 0.f)
 	{
 		return false;
 	}
@@ -610,54 +686,16 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 		return false;
 	}
 
-	OutRequest.VoxelSampleStep = FMath::Max(1, FMath::RoundToInt(SampleStep / VoxelWorld->VoxelSize));
-	OutRequest.DepositAmount = DepositAmount;
-	OutRequest.DepositMaterialIndex = DepositMaterialIndex;
-	OutRequest.bOnlyTopSurface = bOnlyTopSurface;
-	OutRequest.bUseJitteredSamples = bUseJitteredSamples;
-	OutRequest.JitterRatio = FMath::Clamp(JitterRatio, 0.f, 1.f);
-	OutRequest.DepositPatchRadius = FMath::Max(0, DepositPatchRadius);
-	OutRequest.MinSurfaceDepositChance = FMath::Clamp(MinSurfaceDepositChance, 0.f, 1.f);
-	OutRequest.MaxSurfaceDepositChance = FMath::Clamp(MaxSurfaceDepositChance, 0.f, 1.f);
-	OutRequest.LowerSurfaceSelectionBias = FMath::Max(0.01f, LowerSurfaceSelectionBias);
+	OutRequest.DepositSettings = SanitizeDepositSettings(Settings);
+	OutRequest.VoxelSampleStep = FMath::Max(
+		1,
+		FMath::RoundToInt(OutRequest.DepositSettings.SampleStep / VoxelWorld->VoxelSize));
 	OutRequest.ScanCursor = FIntPoint(OutRequest.VoxelMin.X, OutRequest.VoxelMin.Y);
-	OutRequest.RandomStream.Initialize(RandomSeed);
+	OutRequest.RandomStream.Initialize(OutRequest.DepositSettings.RandomSeed);
 	OutRequest.NextVoxelIndex = 0;
 	OutRequest.Phase = EDRVoxelDepositRequestPhase::BuildCandidates;
 	OutRequest.bIsValid = true;
 	return true;
-}
-
-bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
-	AVoxelWorld* VoxelWorld,
-	const FVector& BoxCenter,
-	const FVector& BoxExtent,
-	float SampleStep,
-	float DepositAmount,
-	uint8 DepositMaterialIndex,
-	int32 DepositPatchRadius,
-	float MinSurfaceDepositChance,
-	float MaxSurfaceDepositChance,
-	float LowerSurfaceSelectionBias,
-	int32 RandomSeed,
-	FDRVoxelDepositInBoxRequest& OutRequest)
-{
-	return MakeDepositInBoxRequest(
-		VoxelWorld,
-		BoxCenter,
-		BoxExtent,
-		SampleStep,
-		DepositAmount,
-		DepositMaterialIndex,
-		RandomSeed,
-		true,
-		true,
-		0.4f,
-		DepositPatchRadius,
-		MinSurfaceDepositChance,
-		MaxSurfaceDepositChance,
-		LowerSurfaceSelectionBias,
-		OutRequest);
 }
 
 bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
@@ -714,43 +752,6 @@ bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
 
 	OutRemainingRequestCount = Requests.Num();
 	return OutRemainingRequestCount > 0;
-}
-
-bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
-	TArray<FDRVoxelDepositInBoxRequest>& Requests,
-	int32 MaxVoxelsToProcess,
-	int32& OutModifiedVoxelCount,
-	FDRVoxelDepositDeltaRecord& OutDeltaRecord,
-	int32& OutRemainingRequestCount)
-{
-	int32 ScannedColumnCount = 0;
-	return ProcessDepositInBoxRequestsTick(
-		Requests,
-		MaxVoxelsToProcess,
-		MaxVoxelsToProcess,
-		OutModifiedVoxelCount,
-		ScannedColumnCount,
-		OutDeltaRecord,
-		OutRemainingRequestCount);
-}
-
-bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
-	TArray<FDRVoxelDepositInBoxRequest>& Requests,
-	int32 MaxVoxelsToProcess,
-	int32& OutModifiedVoxelCount,
-	int32& OutRemainingRequestCount)
-{
-	FDRVoxelDepositDeltaRecord UnusedDeltaRecord;
-	int32 ScannedColumnCount = 0;
-
-	return ProcessDepositInBoxRequestsTick(
-		Requests,
-		MaxVoxelsToProcess,
-		MaxVoxelsToProcess,
-		OutModifiedVoxelCount,
-		ScannedColumnCount,
-		UnusedDeltaRecord,
-		OutRemainingRequestCount);
 }
 
 bool UDRVoxelTerrainQueryLibrary::ApplyDepositDeltaRecord(

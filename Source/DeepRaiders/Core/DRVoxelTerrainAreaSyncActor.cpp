@@ -99,7 +99,7 @@ void ADRVoxelTerrainAreaSyncActor::ScanVoxelArea()
 		VoxelWorld,
 		GetActorLocation(),
 		BoxExtent,
-		SampleStep,
+		DepositSettings.SampleStep,
 		TeamMaterialIndices,
 		MaterialCounts,
 		TotalCount);
@@ -160,22 +160,15 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 		return;
 	}
 
+	FDRVoxelDepositInBoxSettings RequestSettings = DepositSettings;
+	RequestSettings.RandomSeed = FMath::Rand();
+
 	FDRVoxelDepositInBoxRequest Request;
 	const bool bRequestCreated = UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 		VoxelWorld,
 		GetActorLocation(),
 		BoxExtent,
-		SampleStep,
-		DepositAmountPerTick,
-		DepositMaterialIndex,
-		FMath::Rand(),
-		bOnlyTopSurface,
-		bUseJitteredDepositSamples,
-		DepositJitterRatio,
-		DepositPatchRadius,
-		MinSurfaceDepositChance,
-		MaxSurfaceDepositChance,
-		LowerSurfaceSelectionBias,
+		RequestSettings,
 		Request);
 
 	if (!bRequestCreated)
@@ -291,7 +284,8 @@ void ADRVoxelTerrainAreaSyncActor::DrawScanDebugBox() const
 void ADRVoxelTerrainAreaSyncActor::DrawDepositGridPoints() const
 {
 	UWorld* World = GetWorld();
-	if (!IsValid(World) || SampleStep <= 0.f || MaxDebugDepositGridPoints <= 0)
+	const float GridStep = DepositSettings.SampleStep;
+	if (!IsValid(World) || GridStep <= 0.f || MaxDebugDepositGridPoints <= 0)
 	{
 		return;
 	}
@@ -312,11 +306,11 @@ void ADRVoxelTerrainAreaSyncActor::DrawDepositGridPoints() const
 
 	int32 DrawnPointCount = 0;
 
-	for (float X = Min.X; X <= Max.X && DrawnPointCount < MaxDebugDepositGridPoints; X += SampleStep)
+	for (float X = Min.X; X <= Max.X && DrawnPointCount < MaxDebugDepositGridPoints; X += GridStep)
 	{
-		for (float Y = Min.Y; Y <= Max.Y && DrawnPointCount < MaxDebugDepositGridPoints; Y += SampleStep)
+		for (float Y = Min.Y; Y <= Max.Y && DrawnPointCount < MaxDebugDepositGridPoints; Y += GridStep)
 		{
-			for (float Z = Min.Z; Z <= Max.Z && DrawnPointCount < MaxDebugDepositGridPoints; Z += SampleStep)
+			for (float Z = Min.Z; Z <= Max.Z && DrawnPointCount < MaxDebugDepositGridPoints; Z += GridStep)
 			{
 				DrawDebugPoint(
 					World,
