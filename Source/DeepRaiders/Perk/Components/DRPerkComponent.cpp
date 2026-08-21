@@ -1,9 +1,9 @@
 #include "DRPerkComponent.h"
 
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
 UDRPerkComponent::UDRPerkComponent()
@@ -43,8 +43,47 @@ bool UDRPerkComponent::CanAddPerk(
 	const UDRPerkDefinition* PerkDefinition) const
 {
 	return IsValid(PerkDefinition)
-		&& IsValid(PerkDefinition->ItemAbilitySet)
+		&& PerkDefinition->PerkEffectClass
+		&& !PerkDefinition->EffectValues.IsEmpty()
 		&& PerkEntries.Num() < MaxPerkSlotCount;
+}
+
+FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UDRPerkDefinition* PerkDefinition) const
+{
+	if (!IsValid(AbilitySystemComponent)
+		|| !IsValid(PerkDefinition)
+		|| !PerkDefinition->PerkEffectClass
+		|| PerkDefinition->EffectValues.IsEmpty())
+	{
+		return FActiveGameplayEffectHandle();
+	}
+
+	FGameplayEffectContextHandle EffectContext =
+		AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(PerkDefinition);
+
+	FGameplayEffectSpecHandle EffectSpec =
+		AbilitySystemComponent->MakeOutgoingSpec(
+			PerkDefinition->PerkEffectClass,
+			1.0f,
+			EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		return FActiveGameplayEffectHandle();
+	}
+
+	for (const TPair<FGameplayTag, float>& EffectValue
+		: PerkDefinition->EffectValues)
+	{
+		EffectSpec.Data->SetSetByCallerMagnitude(
+			EffectValue.Key,
+			EffectValue.Value);
+	}
+
+	return AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
+		*EffectSpec.Data.Get());
 }
 
 bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
@@ -59,7 +98,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		|| !PlayerState->HasAuthority()
 		|| !IsValid(AbilitySystemComponent)
 		|| !IsValid(PerkDefinition)
-		|| !IsValid(PerkDefinition->ItemAbilitySet))
+		|| !PerkDefinition->PerkEffectClass)
 	{
 		UE_LOG(
 			LogTemp,
@@ -83,20 +122,14 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		return false;
 	}
 
-	FDRAbilitySet_GrantedHandles GrantedHandles;
-
-	// Definition에 설정된 AbilitySet을 적용하고 회수용 핸들을 받는다.
-	PerkDefinition->ItemAbilitySet->GiveToAbilitySystem(
-		AbilitySystemComponent,
-		&GrantedHandles,
-		PerkDefinition);
-
-	if (GrantedHandles.IsEmpty())
+	const FActiveGameplayEffectHandle EffectHandle =
+		ApplyPerkEffect(AbilitySystemComponent, PerkDefinition);
+	if (!EffectHandle.IsValid())
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][AbilitySetFailed] Player=%s Perk=%s Reason=NoGrantedHandles"),
+			TEXT("[Perk][EffectFailed] Player=%s Perk=%s Reason=InvalidEffectHandle"),
 			*GetNameSafe(PlayerState),
 			*GetNameSafe(PerkDefinition));
 		return false;
@@ -105,14 +138,14 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][AbilitySetApplied] Player=%s Perk=%s"),
+		TEXT("[Perk][EffectApplied] Player=%s Perk=%s"),
 		*GetNameSafe(PlayerState),
 		*GetNameSafe(PerkDefinition));
 
 	// 퍽 정의와 적용 핸들을 하나의 Entry로 보관한다.
 	FDRPerkEntry& PerkEntry = PerkEntries.AddDefaulted_GetRef();
 	PerkEntry.PerkDefinition = PerkDefinition;
-	PerkEntry.GrantedHandles = MoveTemp(GrantedHandles);
+	PerkEntry.EffectHandle = EffectHandle;
 	const int32 SlotIndex = PerkEntries.Num() - 1;
 
 	UE_LOG(
@@ -145,11 +178,14 @@ bool UDRPerkComponent::ResetPerks()
 		return false;
 	}
 
-	// 각 퍽이 부여한 Ability와 Effect만 ASC에서 회수한다.
-	for (FDRPerkEntry& PerkEntry : PerkEntries)
+	// 각 퍽이 적용한 GameplayEffect만 ASC에서 회수한다.
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
 	{
-		PerkEntry.GrantedHandles.TakeFromAbilitySystem(
-			AbilitySystemComponent);
+		if (PerkEntry.EffectHandle.IsValid())
+		{
+			AbilitySystemComponent->RemoveActiveGameplayEffect(
+				PerkEntry.EffectHandle);
+		}
 	}
 
 	PerkEntries.Reset();
