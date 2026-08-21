@@ -128,6 +128,16 @@ void ADRPlayerState::SetCoins(int32 NewCoins)
 	ForceNetUpdate();
 }
 
+void ADRPlayerState::AddCoins(int32 Amount)
+{
+	if (!HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	SetCoins(Coins + Amount);
+}
+
 void ADRPlayerState::ResetForRespawn()
 {
 	if (!HasAuthority() || !IsValid(AbilitySystemComponent))

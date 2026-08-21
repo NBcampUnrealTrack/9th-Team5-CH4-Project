@@ -11,6 +11,64 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
 }
 
+void ADRMiningGameModeBase::BeginPlay()
+{
+	Super::BeginPlay();
+	PassiveCoinStartTime = GetWorld()->GetTimeSeconds();
+
+	if (PassiveCoinInterval <= 0.f || PassiveCoinAmount <= 0)
+	{
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		PassiveCoinTimerHandle,
+		this,
+		&ThisClass::GrantPassiveCoins,
+		PassiveCoinInterval,
+		true);
+}
+
+void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearTimer(PassiveCoinTimerHandle);
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ADRMiningGameModeBase::GrantPassiveCoins()
+{
+	if (!IsValid(GameState))
+	{
+		return;
+	}
+
+	const int32 CurrentPassiveCoinAmount = GetCurrentPassiveCoinAmount();
+
+	for (APlayerState* PlayerState : GameState->PlayerArray)
+	{
+		ADRPlayerState* DRPlayerState = Cast<ADRPlayerState>(PlayerState);
+
+		if (IsValid(DRPlayerState))
+		{
+			DRPlayerState->AddCoins(CurrentPassiveCoinAmount);
+		}
+	}
+}
+
+int32 ADRMiningGameModeBase::GetCurrentPassiveCoinAmount() const
+{
+	if (PassiveCoinIncreaseInterval <= 0.f || PassiveCoinIncreaseAmount <= 0)
+	{
+		return PassiveCoinAmount;
+	}
+
+	const float ElapsedTime = GetWorld()->GetTimeSeconds() - PassiveCoinStartTime;
+	const int32 IncreaseStep = FMath::FloorToInt(ElapsedTime / PassiveCoinIncreaseInterval);
+
+	return PassiveCoinAmount + IncreaseStep * PassiveCoinIncreaseAmount;
+}
+
 void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
