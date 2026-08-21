@@ -26,6 +26,8 @@ class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
+struct FGameplayAbilitySpec;
+struct FPredictionKey;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -76,6 +78,7 @@ private:
 	void HandleGASInputStarted(int32 InputId);
 	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
+	FPredictionKey GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const;
 
 	void InitializeStartingQuickSlot();
 

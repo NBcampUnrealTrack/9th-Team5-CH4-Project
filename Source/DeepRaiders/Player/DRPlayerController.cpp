@@ -37,6 +37,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
+#include "GameplayPrediction.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
@@ -432,7 +433,7 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 			ASC->InvokeReplicatedEvent(
 				EAbilityGenericReplicatedEvent::InputPressed,
 				Spec->Handle,
-				Spec->ActivationInfo.GetActivationPredictionKey());
+				GetAbilityActivationPredictionKey(*Spec));
 		}
 		else
 		{
@@ -471,7 +472,7 @@ void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 		ASC->InvokeReplicatedEvent(
 			EAbilityGenericReplicatedEvent::InputPressed,
 			Spec->Handle,
-			Spec->ActivationInfo.GetActivationPredictionKey());
+			GetAbilityActivationPredictionKey(*Spec));
 	}
 }
 
@@ -508,9 +509,20 @@ void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 			ASC->InvokeReplicatedEvent(
 				EAbilityGenericReplicatedEvent::InputReleased,
 				Spec->Handle,
-				Spec->ActivationInfo.GetActivationPredictionKey());
+				GetAbilityActivationPredictionKey(*Spec));
 		}
 	}
+}
+
+FPredictionKey ADRPlayerController::GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const
+{
+	UGameplayAbility* AbilityInstance = Spec.GetPrimaryInstance();
+	if (!AbilityInstance)
+	{
+		return FPredictionKey();
+	}
+
+	return AbilityInstance->GetCurrentActivationInfo().GetActivationPredictionKey();
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
