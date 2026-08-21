@@ -15,18 +15,23 @@ void ADRMiningGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
 	PassiveCoinStartTime = GetWorld()->GetTimeSeconds();
+	LastProcessedGrantIndex = 0;
 
 	if (PassiveCoinInterval <= 0.f || PassiveCoinAmount <= 0)
 	{
 		return;
 	}
 
+	FTimerManagerTimerParameters TimerParameters;
+	TimerParameters.bLoop = true;
+	TimerParameters.bMaxOncePerFrame = true;
+
 	GetWorldTimerManager().SetTimer(
 		PassiveCoinTimerHandle,
 		this,
 		&ThisClass::GrantPassiveCoins,
 		PassiveCoinInterval,
-		true);
+		TimerParameters);
 }
 
 void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -43,7 +48,30 @@ void ADRMiningGameModeBase::GrantPassiveCoins()
 		return;
 	}
 
-	const int32 CurrentPassiveCoinAmount = GetCurrentPassiveCoinAmount();
+	const double ElapsedTime = GetWorld()->GetTimeSeconds() - PassiveCoinStartTime;
+	const int64 CurrentGrantIndex = FMath::FloorToInt64(ElapsedTime / PassiveCoinInterval);
+
+	if (CurrentGrantIndex <= LastProcessedGrantIndex)
+	{
+		return;
+	}
+
+	int64 TotalGrantAmount = 0;
+
+	for (int64 GrantIndex = LastProcessedGrantIndex + 1; GrantIndex <= CurrentGrantIndex; ++GrantIndex)
+	{
+		TotalGrantAmount = FMath::Min<int64>(
+			MAX_int32,
+			TotalGrantAmount + GetPassiveCoinAmountAtGrantIndex(GrantIndex));
+
+		if (TotalGrantAmount == MAX_int32)
+		{
+			break;
+		}
+	}
+
+	LastProcessedGrantIndex = CurrentGrantIndex;
+	const int32 GrantAmount = static_cast<int32>(TotalGrantAmount);
 
 	for (APlayerState* PlayerState : GameState->PlayerArray)
 	{
@@ -51,20 +79,26 @@ void ADRMiningGameModeBase::GrantPassiveCoins()
 
 		if (IsValid(DRPlayerState))
 		{
-			DRPlayerState->AddCoins(CurrentPassiveCoinAmount);
+			DRPlayerState->AddCoins(GrantAmount);
 		}
 	}
 }
 
-int32 ADRMiningGameModeBase::GetCurrentPassiveCoinAmount() const
+int64 ADRMiningGameModeBase::GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) const
 {
 	if (PassiveCoinIncreaseInterval <= 0.f || PassiveCoinIncreaseAmount <= 0)
 	{
 		return PassiveCoinAmount;
 	}
 
-	const float ElapsedTime = GetWorld()->GetTimeSeconds() - PassiveCoinStartTime;
-	const int32 IncreaseStep = FMath::FloorToInt(ElapsedTime / PassiveCoinIncreaseInterval);
+	const double GrantElapsedTime = GrantIndex * static_cast<double>(PassiveCoinInterval);
+	const int64 IncreaseStep = FMath::FloorToInt64(GrantElapsedTime / PassiveCoinIncreaseInterval);
+	const int64 MaxIncreaseStep = (MAX_int32 - PassiveCoinAmount) / PassiveCoinIncreaseAmount;
+
+	if (IncreaseStep > MaxIncreaseStep)
+	{
+		return MAX_int32;
+	}
 
 	return PassiveCoinAmount + IncreaseStep * PassiveCoinIncreaseAmount;
 }

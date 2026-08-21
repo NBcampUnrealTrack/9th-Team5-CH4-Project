@@ -34,8 +34,9 @@ protected:
 
 private:
 	void GrantPassiveCoins();
-	int32 GetCurrentPassiveCoinAmount() const;
+	int64 GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) const;
 
 	FTimerHandle PassiveCoinTimerHandle;
-	float PassiveCoinStartTime = 0.f;
+	double PassiveCoinStartTime = 0.0;
+	int64 LastProcessedGrantIndex = 0;
 };

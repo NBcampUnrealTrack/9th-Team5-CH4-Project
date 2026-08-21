@@ -44,7 +44,7 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, DeepestDigLocation);
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
-	DOREPLIFETIME(ADRPlayerState, Coins);
+	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 }
 
@@ -135,7 +135,8 @@ void ADRPlayerState::AddCoins(int32 Amount)
 		return;
 	}
 
-	SetCoins(Coins + Amount);
+	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
+	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
 }
 
 void ADRPlayerState::ResetForRespawn()
