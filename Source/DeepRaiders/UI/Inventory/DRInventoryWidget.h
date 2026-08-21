@@ -8,7 +8,9 @@
 
 class  UButton;
 class UDRInventoryComponent;
+class UDRInventorySlotEntryViewModel;
 class UDRInventorySlotWidget;
+class UDRInventoryViewModel;
 class UUniformGridPanel;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRInventoryEntryClicked, FGuid, EntryId);
@@ -22,6 +24,13 @@ class DEEPRAIDERS_API UDRInventoryWidget : public UUserWidget
 public:
 	// 이 위젯과 연결될 InventoryComponent 설정
 	void InitializeInventory(UDRInventoryComponent* NewInventoryComponent);
+
+	/** Screen ViewModel이 생성한 플레이어 패널 ViewModel을 주입한다. */
+	void InitializeViewModel(UDRInventoryViewModel* NewViewModel);
+
+	/** ViewModel 퀵슬롯 목록을 지정된 열 수에 맞춰 표시한다. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|MVVM")
+	void SetQuickSlotEntries(const TArray<UDRInventorySlotEntryViewModel*>& NewQuickSlotEntries);
 	
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDRInventoryEntryClicked OnEntryClickedDelegate;
@@ -34,17 +43,9 @@ protected:
 	virtual void NativeDestruct() override;
 	
 private:
-	void BindInventory();
-	void UnBindInventory();
-	void RebuildSlot();
-	void RefreshSlots();
-	
-	UFUNCTION()
-	void HandleInventoryChanged();
-	
 	UFUNCTION()
 	void HandleSlotClicked(FGuid InstanceId);
-	
+
 	UFUNCTION()
 	void HandleMoveRequested(int32 SourceSlotIndex, int32 TargetSlotIndex);
 	
@@ -53,21 +54,22 @@ private:
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI")
-	TSubclassOf<UDRInventorySlotWidget> InventorySlotWidgetClass;
-	
+	TSubclassOf<UDRInventorySlotWidget> QuickSlotWidgetClass;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory|UI", meta = (ClampMin = "1"))
-	int32 SlotsPerRow = 5;
+	int32 QuickSlotsPerRow = 5;
 	
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UUniformGridPanel> SlotPanel;
-	
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> CloseButton;
+	TObjectPtr<UUniformGridPanel> QuickSlotPanel;
 	
 private:
+	/** Widget Blueprint에 등록한 Manual ViewModel 이름이다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory|MVVM")
+	FName InventoryViewModelName = TEXT("DRInventoryViewModel");
+
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UDRInventorySlotWidget>> SlotWidgets;
-	
+	TObjectPtr<UDRInventoryViewModel> InventoryViewModel;
+
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;	
 };

@@ -2,7 +2,7 @@
 #include "DRQuickSlotUIComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerController.h"
-#include "DeepRaiders/UI/Core/DRUIConfig.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DRQuickSlotWidget.h"
 #include "Engine/LocalPlayer.h"
@@ -35,20 +35,16 @@ void UDRQuickSlotUIComponent::BeginPlay()
 		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
 	}
 
-	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
-	if (!IsValid(UIConfig) || !UIConfig->QuickSlotWidgetClass)
+	if (!IsValid(UIManager))
 	{
-		UE_LOG(LogTemp, Error, TEXT("QuickSlotWidgetClass is not set on %s"),
-			*GetNameSafe(PlayerController));
 		return;
 	}
 	
 	QuickSlotWidget = Cast<UDRQuickSlotWidget>(
-		UIManager->CreateManagedWidget(UIConfig->QuickSlotWidgetClass, UIConfig->QuickSlotLayer));
+		UIManager->PushScreen(DRGameplayTags::UI_Screen_QuickSlot));
 	if (!IsValid(QuickSlotWidget))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create QuickSlot widget class: %s"),
-			*GetNameSafe(UIConfig->QuickSlotWidgetClass));
+		UE_LOG(LogTemp, Error, TEXT("Failed to push QuickSlot screen"));
 		return;
 	}
 
@@ -63,7 +59,7 @@ void UDRQuickSlotUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (IsValid(UIManager))
 	{
-		UIManager->ReleaseManagedWidget(QuickSlotWidget);
+		UIManager->PopScreen(DRGameplayTags::UI_Screen_QuickSlot);
 	}
 
 	QuickSlotWidget = nullptr;
