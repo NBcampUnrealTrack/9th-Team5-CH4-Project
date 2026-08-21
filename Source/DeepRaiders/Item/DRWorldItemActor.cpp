@@ -8,9 +8,12 @@
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "GameplayCueManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "DeepRaiders/DeepRaiders.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -300,9 +303,12 @@ void ADRWorldItemActor::ApplyWorldItemCollision()
 		// Dropped 상태에서는 지면과 다른 물리 아이템만 막는다.
 		StaticMeshComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 		StaticMeshComponent->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		StaticMeshComponent->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 		StaticMeshComponent->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 		StaticMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
+	
+	StaticMeshComponent->SetCollisionResponseToChannel(DRCollisionChannels::Interaction, ECR_Overlap);
 
 	if (IsValid(ThrowingPawn))
 	{
@@ -335,12 +341,19 @@ void ADRWorldItemActor::RefreshItemPresentation()
 #pragma region Interactable
 bool ADRWorldItemActor::CanInteract_Implementation(APawn* Interactor) const
 {
-	const ADRPlayerController* Controller = IsValid(Interactor) ? Cast<ADRPlayerController>(Interactor->GetController()) : nullptr;
+	if (!HasAuthority()
+		|| bInteractionInProgress
+		|| !ItemInstance.IsValid()
+		|| !IsValid(Interactor)
+		|| !IsPickupAvailable())
+	{
+		return false;
+	}
 	
-	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
-	return false;
-	// return HasAuthority() && !bInteractionInProgress &&  ItemInstance.IsValid()
-	// 	&& IsValid(Controller) && IsPickupAvailable() && Controller->CanReceiveItem(ItemInstance.Definition, ItemInstance.Quantity);
+	const ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
+	const UDRInventoryComponent* Inventory = IsValid(Controller) ? Controller->GetInventoryComponent() : nullptr;
+	
+	return IsValid(Inventory) && Inventory->CanAddItemInstance(ItemInstance);	
 }
 
 bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
@@ -351,24 +364,33 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 	}
 	
 	ADRPlayerController* Controller = Cast<ADRPlayerController>(Interactor->GetController());
+	UDRInventoryComponent* Inventory = IsValid(Controller) ? Controller->GetInventoryComponent() : nullptr;
+	
+	if (!IsValid(Inventory))
+	{
+		return false;
+	}
 	
 	bInteractionInProgress = true;
 	
-	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
-	check(true);
-	// if (!Controller->TryReceiveItem(ItemInstance.Definition, ItemInstance.Quantity))
-	// {
-	// 	bInteractionInProgress = false;
-	// 	return false;
-	// }
-
+	if (!Inventory->TryAddItemInstance(ItemInstance))
+	{
+		ResetInteractionState();
+		return false;
+	}
+	
 	MulticastPlayPickupSound(Interactor);
 	
 	if (!FinalizePickup())
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] Failed to finalize pickup."), *GetName());
+		DR_ERROR(TEXT("[%s] Failed to finalize pickup."), *GetName());
 		
-		// 이미 인벤토리에 추가되었기 때문에 상호작용은 그대로 불가능
+		/*
+		 * 인벤토리 추가는 이미 완료
+		 * 상호작용 허용 시 아이템이 복제될 수 있으므로
+		 * bInteractionInProgress 유지
+		 */
+		
 		return false;
 	}
 	

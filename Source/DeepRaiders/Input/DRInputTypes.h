@@ -8,4 +8,5 @@ enum class EDRAbilityInputId : uint8
 	Interaction = 2,
 	MatchData = 3,
 	Inventory = 4,
+	Drop = 5,
 };

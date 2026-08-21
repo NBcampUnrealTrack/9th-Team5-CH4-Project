@@ -1,6 +1,7 @@
 #include "DRHUDUIComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
@@ -34,12 +35,12 @@ void UDRHUDUIComponent::BeginPlay()
 	}
 
 	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
-	if (!IsValid(UIConfig) || !UIConfig->HUDWidgetClass)
+	if (!IsValid(UIConfig))
 	{
 		return;
 	}
 
-	HUDWidget = UIManager->CreateManagedWidget(UIConfig->HUDWidgetClass, UIConfig->HUDLayer);
+	HUDWidget = UIManager->PushScreen(DRGameplayTags::UI_Screen_HUD);
 	if (!IsValid(HUDWidget))
 	{
 		return;
@@ -70,7 +71,7 @@ void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	if (IsValid(UIManager))
 	{
-		UIManager->ReleaseManagedWidget(HUDWidget);
+		UIManager->PopScreen(DRGameplayTags::UI_Screen_HUD);
 	}
 	else if (IsValid(HUDWidget))
 	{

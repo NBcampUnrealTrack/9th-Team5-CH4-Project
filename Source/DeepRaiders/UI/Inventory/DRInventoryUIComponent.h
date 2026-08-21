@@ -9,6 +9,7 @@
 class ADRPlayerController;
 class ADRStorage;
 class UDRInventoryWidget;
+class UDRInventoryScreenWidget;
 class UDRUIManagerSubsystem;
 class APlayerState;
 
@@ -35,6 +36,10 @@ public:
 	// 키 입력으로 Player Inventory 표시 상태 전환
 	void TogglePlayerInventory();
 
+	/** 열린 인벤토리 화면을 BP에서 안전하게 닫는다. */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|UI")
+	void CloseInventory();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -42,6 +47,7 @@ protected:
 private:
 	void ShowPlayerInventory();
 	void HidePlayerInventory();
+	void SetInventoryOpenTag(bool bIsOpen) const;
 	
 	void ShowStorageInventory(ADRStorage* Storage);
 	void HideStorageInventory();
@@ -77,7 +83,7 @@ private:
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 	
 	UPROPERTY(Transient)
-	TObjectPtr<UDRInventoryWidget> PlayerInventoryWidget;
+	TObjectPtr<UDRInventoryScreenWidget> PlayerInventoryWidget;
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInventoryWidget> StorageInventoryWidget;

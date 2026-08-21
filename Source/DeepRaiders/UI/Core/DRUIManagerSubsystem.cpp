@@ -16,9 +16,60 @@ void UDRUIManagerSubsystem::Deinitialize()
 
 	ManagedWidgets.Reset();
 	WidgetLayers.Reset();
+	ActiveScreens.Reset();
 	PlayerController = nullptr;
 	UIConfig = nullptr;
 	Super::Deinitialize();
+}
+
+UUserWidget* UDRUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
+{
+	if (!ScreenTag.IsValid() || !IsValid(UIConfig))
+	{
+		return nullptr;
+	}
+
+	if (UUserWidget* ExistingWidget = GetScreen(ScreenTag))
+	{
+		SetManagedWidgetVisible(ExistingWidget, true);
+		return ExistingWidget;
+	}
+
+	const FDRUIScreenDefinition* Definition = UIConfig->FindScreen(ScreenTag);
+	if (!Definition || !Definition->WidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("UI screen is not configured: %s"),
+			*ScreenTag.ToString());
+		return nullptr;
+	}
+
+	UUserWidget* Widget = CreateManagedWidget(Definition->WidgetClass, Definition->Layer);
+	if (IsValid(Widget))
+	{
+		ActiveScreens.Add(ScreenTag, Widget);
+	}
+
+	return Widget;
+}
+
+void UDRUIManagerSubsystem::PopScreen(FGameplayTag ScreenTag)
+{
+	if (UUserWidget* Widget = GetScreen(ScreenTag))
+	{
+		ReleaseManagedWidget(Widget);
+	}
+}
+
+bool UDRUIManagerSubsystem::IsScreenOpen(FGameplayTag ScreenTag) const
+{
+	const UUserWidget* Widget = GetScreen(ScreenTag);
+	return IsValid(Widget) && Widget->GetVisibility() != ESlateVisibility::Collapsed;
+}
+
+UUserWidget* UDRUIManagerSubsystem::GetScreen(FGameplayTag ScreenTag) const
+{
+	const TObjectPtr<UUserWidget>* Widget = ActiveScreens.Find(ScreenTag);
+	return Widget && IsValid(Widget->Get()) ? Widget->Get() : nullptr;
 }
 
 void UDRUIManagerSubsystem::Configure(
@@ -71,6 +122,15 @@ void UDRUIManagerSubsystem::ReleaseManagedWidget(UUserWidget* Widget)
 
 	ManagedWidgets.Remove(Widget);
 	WidgetLayers.Remove(TWeakObjectPtr<UUserWidget>(Widget));
+
+	for (auto It = ActiveScreens.CreateIterator(); It; ++It)
+	{
+		if (It.Value() == Widget)
+		{
+			It.RemoveCurrent();
+		}
+	}
+
 	RefreshInputMode();
 }
 
@@ -82,7 +142,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 	}
 
 	UUserWidget* ActiveModal = nullptr;
-	bool bHasActiveMenu = false;
+	UUserWidget* ActiveMenu = nullptr;
 
 	for (UUserWidget* Widget : ManagedWidgets)
 	{
@@ -103,7 +163,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 		}
 		else if (*Layer == EDRUILayer::Menu)
 		{
-			bHasActiveMenu = true;
+			ActiveMenu = Widget;
 		}
 	}
 
@@ -117,10 +177,10 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 		return;
 	}
 
-	if (bHasActiveMenu)
+	if (IsValid(ActiveMenu))
 	{
-		FInputModeGameAndUI InputMode;
-		InputMode.SetHideCursorDuringCapture(false);
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(ActiveMenu->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->bShowMouseCursor = true;
@@ -137,6 +197,8 @@ int32 UDRUIManagerSubsystem::GetLayerZOrder(EDRUILayer Layer)
 	{
 	case EDRUILayer::HUD:
 		return 0;
+	case EDRUILayer::VFX:
+		return 50;
 	case EDRUILayer::Menu:
 		return 100;
 	case EDRUILayer::Modal:

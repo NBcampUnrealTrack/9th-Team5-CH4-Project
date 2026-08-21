@@ -13,7 +13,23 @@ class UDRPlayerAttributeSet;
 class UDRPerkComponent;
 class UGameplayAbility;
 class UGameplayEffect;
+class UDRQuickSlotComponent;
+class UDRItemDefinition;
 struct FOnAttributeChangeData;
+
+USTRUCT(BlueprintType)
+struct FDRPublicQuickSlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UDRItemDefinition> ItemDefinition;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 Quantity = 0;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -41,6 +57,17 @@ public:
 	{
 		return PerkComponent;
 	}
+
+	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
+	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
+
+	const TArray<FDRPublicQuickSlot>& GetPublicQuickSlots() const
+	{
+		return PublicQuickSlots;
+	}
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Quick Slot")
+	FDRPublicQuickSlotsChanged OnPublicQuickSlotsChanged;
 	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -203,6 +230,12 @@ protected:
 	int32 Coins = 1000;
 
 private:
+	UFUNCTION()
+	void OnRep_PublicQuickSlots();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PublicQuickSlots)
+	TArray<FDRPublicQuickSlot> PublicQuickSlots;
+
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
 

@@ -56,16 +56,7 @@ bool UDRInventoryComponent::TryAddItem(UDRItemDefinition* Definition, int32 Quan
 bool UDRInventoryComponent::TryAddItemInstance(const FDRItemInstance& ItemInstance)
 {
 	if (!HasInventoryAuthority()
-		|| !ItemInstance.IsValid()
-		|| ItemInstance.Quantity > GetMaxStackSize(ItemInstance.Definition)
-		|| GetAddableQuantity(ItemInstance.Definition) < ItemInstance.Quantity)
-	{
-		return false;
-	}
-	
-	// 
-	if (ItemInstance.RuntimeState.IsValid()
-		&& GetMaxStackSize(ItemInstance.Definition) > 1)
+		|| !CanAddItemInstance(ItemInstance))
 	{
 		return false;
 	}
@@ -368,6 +359,26 @@ bool UDRInventoryComponent::CanAddItem(UDRItemDefinition* Definition, int32 Quan
 	&& Quantity > 0 
 	&& GetAddableQuantity(Definition) >= Quantity;
 }
+
+PRAGMA_DISABLE_OPTIMIZATION
+bool UDRInventoryComponent::CanAddItemInstance(const FDRItemInstance& ItemInstance) const
+{
+	if (!ItemInstance.IsValid()
+		|| ItemInstance.Quantity > GetMaxStackSize(ItemInstance.Definition)
+		|| FindItemInstance(ItemInstance.InstanceId) != nullptr
+		|| GetAddableQuantity(ItemInstance.Definition) < ItemInstance.Quantity)
+	{
+		return false;
+	}
+	
+	/* RuntimeState는 개별 인스턴스 상태
+	* 여러 개가 하나의 스택을 공유하면 각 아이템의 상태를 구분할 수 없으므로,
+	* RuntimeState가 있는 아이템은 MaxStackSize가 1이어야 한다.
+	*/
+	return !ItemInstance.RuntimeState.IsValid() 
+		|| GetMaxStackSize(ItemInstance.Definition) == 1;
+}
+PRAGMA_ENABLE_OPTIMIZATION
 
 int32 UDRInventoryComponent::GetAddableQuantity(UDRItemDefinition* Definition) const
 {
