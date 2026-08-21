@@ -39,6 +39,7 @@
 #include "GameplayAbilitySpec.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -54,6 +55,7 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+	ScoreboardUIComponent = CreateDefaultSubobject<UDRScoreboardUIComponent>(TEXT("ScoreboardUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -184,6 +186,13 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(ShopAction.Get()))
 	{
 		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
+	}
+	
+	if (IsValid(ScoreboardAction))
+	{
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Started, this, &ThisClass::HandleScoreboardStarted);
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Completed, this, &ThisClass::HandleScoreboardCompleted);
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Canceled, this, &ThisClass::HandleScoreboardCompleted);
 	}
 	
 	SetupGASInputComponent();
@@ -382,6 +391,22 @@ void ADRPlayerController::ApplyViewPitchLimits()
 
 	PlayerCameraManager->ViewPitchMin = PlayerCharacter->GetAimPitchMinDegrees();
 	PlayerCameraManager->ViewPitchMax = PlayerCharacter->GetAimPitchMaxDegrees();
+}
+
+void ADRPlayerController::HandleScoreboardStarted(const FInputActionValue&)
+{
+	if (IsValid(ScoreboardUIComponent))
+	{
+		ScoreboardUIComponent->ShowScoreboard();
+	}
+}
+
+void ADRPlayerController::HandleScoreboardCompleted(const FInputActionValue&)
+{
+	if (IsValid(ScoreboardUIComponent))
+	{
+		ScoreboardUIComponent->HideScoreboard();
+	}
 }
 
 void ADRPlayerController::HandleGASInputPressed(int32 InputId)

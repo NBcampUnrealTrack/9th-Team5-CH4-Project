@@ -26,6 +26,7 @@ class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
+class UDRScoreboardUIComponent;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -82,6 +83,9 @@ private:
 	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
+
+	void HandleScoreboardStarted(const FInputActionValue& Value);
+	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
@@ -113,6 +117,9 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> DropAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> ScoreboardAction;
 	
 #pragma region QuickSlot
 
@@ -187,6 +194,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
+	
 #pragma endregion
 
 #pragma region Teleport

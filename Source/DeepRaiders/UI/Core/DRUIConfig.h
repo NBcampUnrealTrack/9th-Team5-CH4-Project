@@ -62,4 +62,7 @@ public:
 	{
 		return Screens.Find(ScreenTag);
 	}
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Scoreboard|MVVM")
+	FName ScoreboardViewModelName = TEXT("DRScoreboardViewModel");
 };
