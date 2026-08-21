@@ -276,6 +276,8 @@ void UDRGA_FireProjectile::ApplyCost(
 		CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
 
 		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CostSpec);
+		
+		return;
 	}
 
 	case EDRProjectileWeaponResourceType::InstanceAmmo:

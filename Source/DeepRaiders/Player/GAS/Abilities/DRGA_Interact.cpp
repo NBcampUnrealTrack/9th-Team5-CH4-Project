@@ -77,8 +77,6 @@ AActor* UDRGA_Interact::FindBestInteractionTarget(APawn* Interactor) const
 	World->OverlapMultiByChannel(OverlapResults, PawnLocation, FQuat::Identity, DRCollisionChannels::Interaction,
 		FCollisionShape::MakeSphere(MaxInteractionDistance), QueryParams);
 	
-	DrawDebugSphere(GetWorld(), PawnLocation, 300.0f, 16, FColor::Red, false, 3.0f);
-	
 	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(MaxInteractionAngleDegrees));
 	const float MaximumDistanceSquared = FMath::Square(MaxInteractionDistance);
 	
