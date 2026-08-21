@@ -77,6 +77,9 @@ private:
 	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
+
+	UFUNCTION()
+	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
 	

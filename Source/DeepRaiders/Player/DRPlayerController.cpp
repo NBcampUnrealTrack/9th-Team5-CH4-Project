@@ -101,6 +101,10 @@ void ADRPlayerController::BeginPlay()
 	if (HasAuthority())
 	{
 		InitializeStartingQuickSlot();
+		QuickSlotComponent->OnQuickSlotsChangedDelegate.AddDynamic(
+			this,
+			&ThisClass::RefreshPublicQuickSlotSnapshot);
+		RefreshPublicQuickSlotSnapshot();
 	}
 
 	// 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
@@ -127,6 +131,14 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
+}
+
+void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
+{
+	if (ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>())
+	{
+		DRPlayerState->UpdatePublicQuickSlots(QuickSlotComponent);
+	}
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -226,6 +238,11 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 	ApplyViewPitchLimits();
 	
+	if (HasAuthority())
+	{
+		RefreshPublicQuickSlotSnapshot();
+	}
+
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->RefreshSelectedItem();

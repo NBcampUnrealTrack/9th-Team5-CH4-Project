@@ -9,6 +9,7 @@
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -46,6 +47,33 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, Coins);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
+	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
+}
+
+void ADRPlayerState::UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent)
+{
+	if (!HasAuthority() || !IsValid(QuickSlotComponent))
+	{
+		return;
+	}
+
+	PublicQuickSlots.SetNum(QuickSlotComponent->GetSlotCount());
+	for (int32 SlotIndex = 0; SlotIndex < PublicQuickSlots.Num(); ++SlotIndex)
+	{
+		FDRItemInstance ItemInstance;
+		const bool bHasItem = QuickSlotComponent->GetQuickSlot(SlotIndex, ItemInstance);
+		FDRPublicQuickSlot& SnapshotSlot = PublicQuickSlots[SlotIndex];
+		SnapshotSlot.ItemDefinition = bHasItem ? ItemInstance.Definition.Get() : nullptr;
+		SnapshotSlot.Quantity = bHasItem ? ItemInstance.Quantity : 0;
+	}
+
+	OnPublicQuickSlotsChanged.Broadcast();
+	ForceNetUpdate();
+}
+
+void ADRPlayerState::OnRep_PublicQuickSlots()
+{
+	OnPublicQuickSlotsChanged.Broadcast();
 }
 
 bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)
