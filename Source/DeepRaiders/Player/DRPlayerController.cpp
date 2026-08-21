@@ -364,6 +364,20 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(1, StartingProjectileWeaponDefinition, 1);
 	}
 	
+#ifdef UE_BUILD_DEBUG
+	
+	if (!InventoryComponent->GetItemAtSlot(2))
+	{
+		InventoryComponent->TryAddItemToSlot(2, TestItemDefinition1, TestItemQuantity1);
+	}
+	
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, TestItemDefinition2, TestItemQuantity2);
+	}
+	
+#endif
+	
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
