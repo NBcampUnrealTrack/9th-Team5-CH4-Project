@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/DeepRaiders.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
 ADRWorldItemActor::ADRWorldItemActor()
 {
@@ -306,6 +307,8 @@ void ADRWorldItemActor::ApplyWorldItemCollision()
 		StaticMeshComponent->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 		StaticMeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
+	
+	StaticMeshComponent->SetCollisionResponseToChannel(DRCollisionChannels::Interaction, ECR_Overlap);
 
 	if (IsValid(ThrowingPawn))
 	{

@@ -7,7 +7,8 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
-#include"GameFramework/Pawn.h"
+#include "GameFramework/Pawn.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
 UDRGA_Interact::UDRGA_Interact()
 {
@@ -68,17 +69,12 @@ AActor* UDRGA_Interact::FindBestInteractionTarget(APawn* Interactor) const
 	{
 		return nullptr;
 	}
-	
-	FCollisionObjectQueryParams ObjectQueryParams;
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_PhysicsBody);
-	
+		
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRInteractOverlap), false, Interactor);
 	
 	// 상호작용 반경 내의 오브젝트 오버랩 검사
 	TArray<FOverlapResult> OverlapResults;
-	World->OverlapMultiByObjectType(OverlapResults, PawnLocation, FQuat::Identity, ObjectQueryParams,
+	World->OverlapMultiByChannel(OverlapResults, PawnLocation, FQuat::Identity, DRCollisionChannels::Interaction,
 		FCollisionShape::MakeSphere(MaxInteractionDistance), QueryParams);
 	
 	DrawDebugSphere(GetWorld(), PawnLocation, 300.0f, 16, FColor::Red, false, 3.0f);
