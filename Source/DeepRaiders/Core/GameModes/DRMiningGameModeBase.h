@@ -14,9 +14,11 @@ class DEEPRAIDERS_API ADRMiningGameModeBase : public AGameModeBase
 public:
 	ADRMiningGameModeBase();
 
+	/** 서버 경기 시간을 기준으로 패시브 코인 지급을 시작한다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
 	void StartTimer();
 
+	/** 진행 중인 패시브 코인 지급을 종료한다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
 	void EndTimer();
 
@@ -39,10 +41,17 @@ protected:
 	int32 PassiveCoinIncreaseAmount = 0;
 
 private:
+	/** 마지막 처리 회차 이후의 지급액을 합산해 각 플레이어에게 지급한다. */
 	void GrantPassiveCoins();
+
+	/** 지정된 지급 회차에서 적용할 코인 지급량을 반환한다. */
 	int64 GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) const;
 
 	FTimerHandle PassiveCoinTimerHandle;
+
+	/** 패시브 코인 지급을 시작한 서버 경기 시간이다. */
 	double PassiveCoinStartTime = 0.0;
+
+	/** 중복 지급을 방지하기 위해 마지막으로 처리한 지급 회차를 저장한다. */
 	int64 LastProcessedGrantIndex = 0;
 };

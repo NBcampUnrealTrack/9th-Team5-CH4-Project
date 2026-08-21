@@ -14,6 +14,8 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 void ADRMiningGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 현재는 맵 시작과 동시에 지급하며, 추후 실제 경기 시작 지점으로 이동할 수 있다.
 	StartTimer();
 }
 
@@ -34,6 +36,8 @@ void ADRMiningGameModeBase::StartTimer()
 
 	FTimerManagerTimerParameters TimerParameters;
 	TimerParameters.bLoop = true;
+
+	// 서버 지연 시 같은 프레임에서 타이머 콜백이 반복 실행되는 것을 방지한다.
 	TimerParameters.bMaxOncePerFrame = true;
 
 	GetWorldTimerManager().SetTimer(
@@ -64,6 +68,8 @@ void ADRMiningGameModeBase::GrantPassiveCoins()
 	}
 
 	const double ElapsedTime = GetWorld()->GetTimeSeconds() - PassiveCoinStartTime;
+
+	// 타이머 호출 횟수가 아닌 서버 경기 시간으로 지급 회차를 결정한다.
 	const int64 CurrentGrantIndex = FMath::FloorToInt64(ElapsedTime / PassiveCoinInterval);
 
 	if (CurrentGrantIndex <= LastProcessedGrantIndex)
@@ -73,6 +79,7 @@ void ADRMiningGameModeBase::GrantPassiveCoins()
 
 	int64 TotalGrantAmount = 0;
 
+	// 서버 지연 중 누락된 회차는 당시 지급량으로 계산한 뒤 한 번에 지급한다.
 	for (int64 GrantIndex = LastProcessedGrantIndex + 1; GrantIndex <= CurrentGrantIndex; ++GrantIndex)
 	{
 		TotalGrantAmount = FMath::Min<int64>(
@@ -85,6 +92,7 @@ void ADRMiningGameModeBase::GrantPassiveCoins()
 		}
 	}
 
+	// 다음 호출에서 같은 회차가 다시 지급되지 않도록 먼저 처리 위치를 갱신한다.
 	LastProcessedGrantIndex = CurrentGrantIndex;
 	const int32 GrantAmount = static_cast<int32>(TotalGrantAmount);
 
@@ -107,6 +115,8 @@ int64 ADRMiningGameModeBase::GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) 
 	}
 
 	const double GrantElapsedTime = GrantIndex * static_cast<double>(PassiveCoinInterval);
+
+	// 해당 지급 회차가 몇 번째 지급량 증가 구간에 속하는지 계산한다.
 	const int64 IncreaseStep = FMath::FloorToInt64(GrantElapsedTime / PassiveCoinIncreaseInterval);
 	const int64 MaxIncreaseStep = (MAX_int32 - PassiveCoinAmount) / PassiveCoinIncreaseAmount;
 

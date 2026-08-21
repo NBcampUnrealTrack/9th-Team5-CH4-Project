@@ -45,6 +45,8 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, DeepestDigLocation);
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
+
+	// 실제 코인 값은 서버와 해당 PlayerState의 소유 클라이언트만 공유한다.
 	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
@@ -163,6 +165,7 @@ void ADRPlayerState::AddCoins(int32 Amount)
 		return;
 	}
 
+	// int32 덧셈 전에 int64로 확장해 오버플로를 방지한다.
 	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
 	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
 }
