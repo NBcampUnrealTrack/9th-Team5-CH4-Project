@@ -11,20 +11,12 @@ UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDRSnowRemoveComponent::ApplyRemovalSettings(const FDRSnowRemovalSettings& NewSettings)
-{
-	RemovalSettings = NewSettings;
-	RemovalSettings.AbsorbRadius = FMath::Max(0.f, RemovalSettings.AbsorbRadius);
-	RemovalSettings.AbsorbStrength = FMath::Max(0.f, RemovalSettings.AbsorbStrength);
-	RemovalSettings.AbsorbInterval = FMath::Max(0.f, RemovalSettings.AbsorbInterval);
-}
-
-float UDRSnowRemoveComponent::TryRemoveSnowFromHit(const FHitResult& HitResult)
+float UDRSnowRemoveComponent::TryRemoveSnowFromHit(const FHitResult& HitResult, const FDRSnowRemovalSpec& RemovalSpec)
 {
 	AActor* Owner = GetOwner();
 	if (IsValid(Owner) && !Owner->HasAuthority())
 	{
-		ServerTryRemoveSnowFromHit(HitResult);
+		ServerTryRemoveSnowFromHit(HitResult, RemovalSpec);
 		return 0.f;
 	}
 
@@ -33,35 +25,39 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(const FHitResult& HitResult)
 		return 0.f;
 	}
 
-	if (!CanRemoveNow())
+	if (!CanRemoveNow(RemovalSpec))
 	{
 		return 0.f;
 	}
 	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
 	FDRSnowSurfaceRemoveRequest Request =
-		MakeRemoveRequest(HitResult.ImpactPoint, HitResult.ImpactNormal,HitResult.TraceStart);
+		MakeRemoveRequest(HitResult.ImpactPoint, HitResult.ImpactNormal, HitResult.TraceStart, RemovalSpec);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
 	return ExecuteRemoveRequest(Request, GetInteractableActorFromHit(HitResult));
 }
 
-float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(FVector WorldLocation, FVector SurfaceNormal)
+float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
+	FVector WorldLocation,
+	FVector SurfaceNormal,
+	const FDRSnowRemovalSpec& RemovalSpec)
 {
 	AActor* Owner = GetOwner();
 	if (IsValid(Owner) && !Owner->HasAuthority())
 	{
-		ServerTryRemoveSnowAtLocation(WorldLocation, SurfaceNormal.GetSafeNormal());
+		ServerTryRemoveSnowAtLocation(WorldLocation, SurfaceNormal.GetSafeNormal(), RemovalSpec);
 		return 0.f;
 	}
 
-	if (!CanRemoveNow())
+	if (!CanRemoveNow(RemovalSpec))
 	{
 		return 0.f;
 	}
 	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
 	const FVector BrushOrigin = IsValid(Owner) ? Owner->GetActorLocation() : WorldLocation;
-	const FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(WorldLocation, SurfaceNormal, BrushOrigin);
+	const FDRSnowSurfaceRemoveRequest Request =
+		MakeRemoveRequest(WorldLocation, SurfaceNormal, BrushOrigin, RemovalSpec);
 
 	return ExecuteRemoveRequest(Request);
 }
@@ -69,16 +65,17 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(FVector WorldLocation, FVe
 FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	FVector WorldLocation,
 	FVector SurfaceNormal,
-	FVector BrushOrigin)
+	FVector BrushOrigin,
+	const FDRSnowRemovalSpec& RemovalSpec)
 {
 	FDRSnowSurfaceRemoveRequest Request;
 	Request.WorldLocation = WorldLocation;
 	Request.SurfaceNormal = SurfaceNormal.IsNearlyZero() ? FVector::UpVector : SurfaceNormal.GetSafeNormal();
 	Request.BrushOrigin = BrushOrigin;
-	Request.Radius = RemovalSettings.AbsorbRadius;
-	Request.RequestedAmount = RemovalSettings.AbsorbStrength;
-	Request.RemovalBrushShape = RemovalSettings.RemovalBrushShape;
-	Request.RemovalMode = RemovalSettings.RemovalMode;
+	Request.Radius = FMath::Max(0.f, RemovalSpec.SnowAbsorbRadius);
+	Request.RequestedAmount = FMath::Max(0.f, RemovalSpec.SnowAbsorbPower);
+	Request.RemovalBrushShape = RemovalSpec.RemovalBrushShape;
+	Request.RemovalMode = RemovalSpec.RemovalMode;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }
@@ -127,7 +124,7 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(const FDRSnowSurfaceRemoveReq
 	return FMath::Max(0.f, RemovedAmount);
 }
 
-bool UDRSnowRemoveComponent::CanRemoveNow() const
+bool UDRSnowRemoveComponent::CanRemoveNow(const FDRSnowRemovalSpec& RemovalSpec) const
 {
 	const UWorld* World = GetWorld();
 	if (!IsValid(World))
@@ -135,19 +132,28 @@ bool UDRSnowRemoveComponent::CanRemoveNow() const
 		return false;
 	}
 
-	return World->GetTimeSeconds() - LastRemoveTime >= RemovalSettings.AbsorbInterval;
+	const float AbsorbSpeed = FMath::Max(0.f, RemovalSpec.SnowAbsorbSpeed);
+	if (AbsorbSpeed <= UE_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	return World->GetTimeSeconds() - LastRemoveTime >= 1.f / AbsorbSpeed;
 }
 
-void UDRSnowRemoveComponent::ServerTryRemoveSnowFromHit_Implementation(const FHitResult& HitResult)
+void UDRSnowRemoveComponent::ServerTryRemoveSnowFromHit_Implementation(
+	const FHitResult& HitResult,
+	const FDRSnowRemovalSpec& RemovalSpec)
 {
-	TryRemoveSnowFromHit(HitResult);
+	TryRemoveSnowFromHit(HitResult, RemovalSpec);
 }
 
 void UDRSnowRemoveComponent::ServerTryRemoveSnowAtLocation_Implementation(
 	FVector_NetQuantize WorldLocation,
-	FVector_NetQuantizeNormal SurfaceNormal)
+	FVector_NetQuantizeNormal SurfaceNormal,
+	const FDRSnowRemovalSpec& RemovalSpec)
 {
-	TryRemoveSnowAtLocation(WorldLocation, SurfaceNormal);
+	TryRemoveSnowAtLocation(WorldLocation, SurfaceNormal, RemovalSpec);
 }
 
 AVoxelWorld* UDRSnowRemoveComponent::GetVoxelWorldFromHit(const FHitResult& HitResult) const

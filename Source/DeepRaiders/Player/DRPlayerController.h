@@ -73,7 +73,8 @@ private:
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
 	
-	void HandleGASInputPressed(int32 InputId);
+	void HandleGASInputStarted(int32 InputId);
+	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
 
 	void InitializeStartingQuickSlot();
