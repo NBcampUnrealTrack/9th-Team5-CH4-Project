@@ -6,6 +6,7 @@
 
 class ADRPlayerCharacter;
 class UAbilitySystemComponent;
+class UDRItemDefinition;
 class UDRQuickSlotComponent;
 struct FOnAttributeChangeData;
 
@@ -64,6 +65,10 @@ private:
 
 	UFUNCTION()
 	void HandleQuickSlotsChanged();
+
+	UFUNCTION()
+	void HandleSelectedQuickSlotItemChanged(UDRItemDefinition* ItemDefinition);
+
 	void RefreshHealth();
 	void RefreshSnowGauge();
 	void RefreshFreezeGauge();

@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -51,6 +52,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		QuickSlotComponent->OnQuickSlotsChangedDelegate.AddDynamic(
 			this,
 			&ThisClass::HandleQuickSlotsChanged);
+		QuickSlotComponent->OnSelectedQuickSlotItemChangedDelegate.AddDynamic(
+			this,
+			&ThisClass::HandleSelectedQuickSlotItemChanged);
 	}
 
 	// 최초 리프레쉬
@@ -67,6 +71,9 @@ void UDRHUDViewModel::Deinitialize()
 		QuickSlotComponent->OnQuickSlotsChangedDelegate.RemoveDynamic(
 			this,
 			&ThisClass::HandleQuickSlotsChanged);
+		QuickSlotComponent->OnSelectedQuickSlotItemChangedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleSelectedQuickSlotItemChanged);
 	}
 
 	if (AbilitySystemComponent.IsValid())
@@ -130,6 +137,11 @@ void UDRHUDViewModel::HandleQuickSlotsChanged()
 	RefreshAmmoVisibility();
 }
 
+void UDRHUDViewModel::HandleSelectedQuickSlotItemChanged(UDRItemDefinition*)
+{
+	RefreshAmmoVisibility();
+}
+
 void UDRHUDViewModel::RefreshHealth()
 {
 	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
@@ -186,11 +198,11 @@ void UDRHUDViewModel::RefreshAmmoVisibility()
 		: INDEX_NONE;
 	const bool bHasSelectedItem = QuickSlotComponent.IsValid()
 		&& QuickSlotComponent->GetQuickSlot(SelectedSlotIndex, SelectedItem);
-	const FDRProjectileWeaponRuntimeState* WeaponState = bHasSelectedItem
-		? SelectedItem.RuntimeState.GetPtr<FDRProjectileWeaponRuntimeState>()
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = bHasSelectedItem
+		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem.Definition)
 		: nullptr;
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAmmoVisible,
-		WeaponState && WeaponState->CurrentAmmo > 0);
+		IsValid(WeaponDefinition));
 }
