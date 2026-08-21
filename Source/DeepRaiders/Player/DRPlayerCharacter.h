@@ -153,23 +153,8 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
-	
-	UFUNCTION(BlueprintPure, Category = "Player|Combat")
-	bool IsCombatAiming() const
-	{
-		return bCombatAiming;
-	}
-
-	/**
-	 * 사격 시 조준 방향 회전을 일정 시간 유지한다.
-	 * LocalPredicted 클라이언트와 서버 양쪽에서 호출 가능.
-	 */
-	void RefreshCombatAim(float HoldDuration);
-
-	void StopCombatAim();
 
 	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
-
 	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
 	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
@@ -179,9 +164,21 @@ public:
 		return bAbilitySystemReady;
 	}
 	
+	UFUNCTION(BlueprintPure, Category = "Player|Aim")
+	float GetNormalizedAimPitch() const;
+
+	float GetAimPitchMinDegrees() const
+	{
+		return AimPitchMinDegrees;
+	}
+
+	float GetAimPitchMaxDegrees() const
+	{
+		return AimPitchMaxDegrees;
+	}
+	
 protected:
 	virtual void BeginPlay() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void InitializeAbilitySystem();
 	
@@ -231,14 +228,15 @@ private:
 	
 	void ApplySpawnAttributeReset();
 	
-	UPROPERTY(Replicated)
-	bool bCombatAiming = false;
-
-	FTimerHandle CombatAimTimerHandle;
-	
 	bool bAbilitySystemReady = false;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMinDegrees = -55.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMaxDegrees = 45.f;
 	
 #pragma region QuickSlot
 

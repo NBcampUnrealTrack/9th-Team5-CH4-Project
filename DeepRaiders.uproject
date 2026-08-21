@@ -15,9 +15,9 @@
 			]
 		},
 		{
-			  "Name": "DeepRaidersEditor",
-			  "Type": "Editor",
-			  "LoadingPhase": "PostEngineInit"
+			"Name": "DeepRaidersEditor",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
 		}
 	],
 	"Plugins": [
@@ -43,6 +43,14 @@
 		},
 		{
 			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
+			"Name": "AnimationWarping",
+			"Enabled": true
+		},
+		{
+			"Name": "AnimationLocomotionLibrary",
 			"Enabled": true
 		},
 		{
