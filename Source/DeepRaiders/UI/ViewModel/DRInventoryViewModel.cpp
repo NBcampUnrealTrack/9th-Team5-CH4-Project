@@ -4,7 +4,19 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "GameFramework/GameStateBase.h"
+
+TArray<UDRInventorySlotEntryViewModel*> UDRInventoryViewModel::GetQuickSlotEntries() const
+{
+	TArray<UDRInventorySlotEntryViewModel*> Entries;
+	Entries.Reserve(QuickSlotEntries.Num());
+	for (UDRInventorySlotEntryViewModel* Entry : QuickSlotEntries)
+	{
+		Entries.Add(Entry);
+	}
+	return Entries;
+}
 
 void UDRInventorySlotEntryViewModel::Initialize(
 	UDRInventoryComponent* InInventoryComponent,
@@ -17,7 +29,17 @@ void UDRInventorySlotEntryViewModel::Initialize(
 }
 
 void UDRInventorySlotEntryViewModel::Initialize(
-	const FDRPublicInventorySlot& InSlot,
+	UDRQuickSlotComponent* InQuickSlotComponent,
+	int32 InSlotIndex)
+{
+	QuickSlotComponent = InQuickSlotComponent;
+	UE_MVVM_SET_PROPERTY_VALUE(SlotIndex, InSlotIndex);
+	UE_MVVM_SET_PROPERTY_VALUE(SlotNumberText, FText::AsNumber(InSlotIndex + 1));
+	Refresh();
+}
+
+void UDRInventorySlotEntryViewModel::Initialize(
+	const FDRPublicQuickSlot& InSlot,
 	int32 InSlotIndex)
 {
 	InventoryComponent.Reset();
@@ -33,11 +55,30 @@ void UDRInventorySlotEntryViewModel::Initialize(
 		QuantityText,
 		InSlot.Quantity > 1 ? FText::AsNumber(InSlot.Quantity) : FText::GetEmpty());
 	UE_MVVM_SET_PROPERTY_VALUE(bHasItem, IsValid(InSlot.ItemDefinition) && InSlot.Quantity > 0);
-	UE_MVVM_SET_PROPERTY_VALUE(bIsLocked, InSlot.bIsLocked);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsLocked, false);
 }
 
 void UDRInventorySlotEntryViewModel::Refresh()
 {
+	if (QuickSlotComponent.IsValid())
+	{
+		FDRItemInstance ItemInstance;
+		const bool bNewHasItem = QuickSlotComponent->GetQuickSlot(SlotIndex, ItemInstance);
+		UDRItemDefinition* NewDefinition = bNewHasItem ? ItemInstance.Definition.Get() : nullptr;
+		const int32 NewQuantity = bNewHasItem ? ItemInstance.Quantity : 0;
+
+		UE_MVVM_SET_PROPERTY_VALUE(InstanceId, bNewHasItem ? ItemInstance.InstanceId : FGuid());
+		UE_MVVM_SET_PROPERTY_VALUE(ItemDefinition, NewDefinition);
+		UE_MVVM_SET_PROPERTY_VALUE(ItemIcon, IsValid(NewDefinition) ? NewDefinition->Icon.Get() : nullptr);
+		UE_MVVM_SET_PROPERTY_VALUE(Quantity, NewQuantity);
+		UE_MVVM_SET_PROPERTY_VALUE(
+			QuantityText,
+			NewQuantity > 1 ? FText::AsNumber(NewQuantity) : FText::GetEmpty());
+		UE_MVVM_SET_PROPERTY_VALUE(bHasItem, bNewHasItem);
+		UE_MVVM_SET_PROPERTY_VALUE(bIsLocked, false);
+		return;
+	}
+
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	const FDRItemInstance* Item = IsValid(Inventory)
 		? Inventory->GetItemAtSlot(SlotIndex)
@@ -57,6 +98,37 @@ void UDRInventorySlotEntryViewModel::Refresh()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsLocked,
 		IsValid(Inventory) && Inventory->IsSlotLocked(SlotIndex));
+}
+
+void UDRInventoryViewModel::Initialize(UDRQuickSlotComponent* InQuickSlotComponent)
+{
+	Deinitialize();
+	QuickSlotComponent = InQuickSlotComponent;
+	ADRPlayerController* OwnerController = IsValid(InQuickSlotComponent)
+		? Cast<ADRPlayerController>(InQuickSlotComponent->GetOwner())
+		: nullptr;
+	InventoryComponent = IsValid(OwnerController) ? OwnerController->GetInventoryComponent() : nullptr;
+	UE_MVVM_SET_PROPERTY_VALUE(bIsLocalPlayer, true);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsOccupied, QuickSlotComponent.IsValid());
+
+	const APlayerState* OwnerPlayerState = IsValid(OwnerController)
+		? OwnerController->GetPlayerState<APlayerState>()
+		: nullptr;
+	UE_MVVM_SET_PROPERTY_VALUE(
+		PlayerName,
+		IsValid(OwnerPlayerState)
+			? FText::FromString(OwnerPlayerState->GetPlayerName())
+			: FText::GetEmpty());
+
+	if (!QuickSlotComponent.IsValid())
+	{
+		return;
+	}
+
+	QuickSlotComponent->OnQuickSlotsChangedDelegate.AddDynamic(
+		this,
+		&ThisClass::HandleInventoryChanged);
+	RebuildQuickSlotEntries();
 }
 
 void UDRInventoryViewModel::Initialize(UDRInventoryComponent* InInventoryComponent)
@@ -85,7 +157,7 @@ void UDRInventoryViewModel::Initialize(UDRInventoryComponent* InInventoryCompone
 	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
 		this,
 		&ThisClass::HandleInventoryChanged);
-	RebuildSlotEntries();
+	RebuildQuickSlotEntries();
 }
 
 void UDRInventoryViewModel::Initialize(ADRPlayerState* InPlayerState, bool bInIsLocalPlayer)
@@ -100,14 +172,22 @@ void UDRInventoryViewModel::Initialize(ADRPlayerState* InPlayerState, bool bInIs
 
 	if (IsValid(InPlayerState))
 	{
-		InPlayerState->OnPublicInventoryChanged.AddDynamic(this, &ThisClass::HandleInventoryChanged);
+		InPlayerState->OnPublicQuickSlotsChanged.AddDynamic(this, &ThisClass::HandleInventoryChanged);
 	}
 
-	RebuildSlotEntries();
+	RebuildQuickSlotEntries();
 }
 
 void UDRInventoryViewModel::Deinitialize()
 {
+	if (QuickSlotComponent.IsValid())
+	{
+		QuickSlotComponent->OnQuickSlotsChangedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleInventoryChanged);
+	}
+	QuickSlotComponent.Reset();
+
 	if (InventoryComponent.IsValid())
 	{
 		InventoryComponent->OnInventoryChangedDelegate.RemoveDynamic(
@@ -118,12 +198,9 @@ void UDRInventoryViewModel::Deinitialize()
 	InventoryComponent.Reset();
 	if (PlayerState.IsValid())
 	{
-		PlayerState->OnPublicInventoryChanged.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
+		PlayerState->OnPublicQuickSlotsChanged.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
 	}
 	PlayerState.Reset();
-	UE_MVVM_SET_PROPERTY_VALUE(
-		SlotEntries,
-		TArray<TObjectPtr<UDRInventorySlotEntryViewModel>>());
 	UE_MVVM_SET_PROPERTY_VALUE(
 		QuickSlotEntries,
 		TArray<TObjectPtr<UDRInventorySlotEntryViewModel>>());
@@ -131,14 +208,24 @@ void UDRInventoryViewModel::Deinitialize()
 
 void UDRInventoryViewModel::HandleInventoryChanged()
 {
-	RefreshSlotEntries();
+	RebuildQuickSlotEntries();
 }
 
-void UDRInventoryViewModel::RebuildSlotEntries()
+void UDRInventoryViewModel::RebuildQuickSlotEntries()
 {
 	TArray<TObjectPtr<UDRInventorySlotEntryViewModel>> NewEntries;
 
-	if (InventoryComponent.IsValid())
+	if (QuickSlotComponent.IsValid())
+	{
+		NewEntries.Reserve(QuickSlotComponent->GetSlotCount());
+		for (int32 SlotIndex = 0; SlotIndex < QuickSlotComponent->GetSlotCount(); ++SlotIndex)
+		{
+			UDRInventorySlotEntryViewModel* Entry = NewObject<UDRInventorySlotEntryViewModel>(this);
+			Entry->Initialize(QuickSlotComponent.Get(), SlotIndex);
+			NewEntries.Add(Entry);
+		}
+	}
+	else if (InventoryComponent.IsValid())
 	{
 		NewEntries.Reserve(InventoryComponent->GetMaxSlots());
 
@@ -152,7 +239,7 @@ void UDRInventoryViewModel::RebuildSlotEntries()
 	}
 	else if (PlayerState.IsValid())
 	{
-		const TArray<FDRPublicInventorySlot>& Snapshot = PlayerState->GetPublicInventorySlots();
+		const TArray<FDRPublicQuickSlot>& Snapshot = PlayerState->GetPublicQuickSlots();
 		NewEntries.Reserve(Snapshot.Num());
 		for (int32 SlotIndex = 0; SlotIndex < Snapshot.Num(); ++SlotIndex)
 		{
@@ -162,25 +249,7 @@ void UDRInventoryViewModel::RebuildSlotEntries()
 		}
 	}
 
-	UE_MVVM_SET_PROPERTY_VALUE(QuickSlotEntries, NewEntries);
-	UE_MVVM_SET_PROPERTY_VALUE(SlotEntries, MoveTemp(NewEntries));
-}
-
-void UDRInventoryViewModel::RefreshSlotEntries()
-{
-	if (PlayerState.IsValid())
-	{
-		RebuildSlotEntries();
-		return;
-	}
-
-	for (UDRInventorySlotEntryViewModel* Entry : SlotEntries)
-	{
-		if (IsValid(Entry))
-		{
-			Entry->Refresh();
-		}
-	}
+	UE_MVVM_SET_PROPERTY_VALUE(QuickSlotEntries, MoveTemp(NewEntries));
 }
 
 void UDRInventoryScreenViewModel::Initialize(APlayerController* InPlayerController)
@@ -195,7 +264,7 @@ void UDRInventoryScreenViewModel::Initialize(APlayerController* InPlayerControll
 		: nullptr;
 	if (IsValid(DRPlayerController) && IsValid(LocalPlayerState))
 	{
-		NewCenterPanel->Initialize(DRPlayerController->GetInventoryComponent());
+		NewCenterPanel->Initialize(DRPlayerController->GetQuickSlotComponent());
 		TArray<ADRPlayerState*> Teammates;
 		if (AGameStateBase* GameState = InPlayerController->GetWorld()->GetGameState())
 		{

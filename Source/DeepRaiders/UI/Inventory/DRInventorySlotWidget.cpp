@@ -61,9 +61,9 @@ void UDRInventorySlotWidget::SetItemInstance(int32 InSlotIndex, const FDRItemIns
 	
 	UTexture2D* Icon = IsValid(ItemInstance.Definition) ? ItemInstance.Definition->Icon : nullptr;
 	
-	ItemIcon->SetBrushFromTexture(Icon);
+	Image->SetBrushFromTexture(Icon);
 	
-	ItemIcon->SetVisibility(IsValid(Icon) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
+	Image->SetVisibility(IsValid(Icon) ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Hidden);
 	
 	QuantityText->SetText(FText::AsNumber(ItemInstance.Quantity));
 	QuantityText->SetVisibility(ItemInstance.Quantity > 1 
@@ -76,8 +76,8 @@ void UDRInventorySlotWidget::ClearSlot(int32 InSlotIndex, bool bInLocked)
 	bLocked = bInLocked;
 	InstanceId.Invalidate();
 	
-	ItemIcon->SetBrushFromTexture(nullptr);
-	ItemIcon->SetVisibility(ESlateVisibility::Hidden);
+	Image->SetBrushFromTexture(nullptr);
+	Image->SetVisibility(ESlateVisibility::Hidden);
 	
 	QuantityText->SetText(FText::GetEmpty());
 	QuantityText->SetVisibility(ESlateVisibility::Hidden);	
@@ -158,21 +158,21 @@ void UDRInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, c
 	Operation->SourceInstanceId = CurrentInstanceId;
 	Operation->Pivot = EDragPivot::CenterCenter;
 	
-	if (IsValid(ItemIcon))
+	if (IsValid(Image))
 	{
 		UImage* DragVisual = NewObject<UImage>(Operation);
 		
 		if (IsValid(DragVisual))
 		{
-			DragVisual->SetBrush(ItemIcon->GetBrush());
+			DragVisual->SetBrush(Image->GetBrush());
 			
-			FLinearColor DragVisualColor = ItemIcon->GetColorAndOpacity();
+			FLinearColor DragVisualColor = Image->GetColorAndOpacity();
 			DragVisualColor.A *= DragVisualOpacity;
 			
 			DragVisual->SetColorAndOpacity(DragVisualColor);
 			DragVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
 			
-			const FVector2D IconSize = ItemIcon->GetCachedGeometry().GetLocalSize();
+			const FVector2D IconSize = Image->GetCachedGeometry().GetLocalSize();
 			
 			if (!IconSize.IsNearlyZero())
 			{

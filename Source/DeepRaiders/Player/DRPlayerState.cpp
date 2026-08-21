@@ -9,7 +9,7 @@
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -47,33 +47,33 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, Coins);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
-	DOREPLIFETIME(ADRPlayerState, PublicInventorySlots);
+	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
 }
 
-void ADRPlayerState::UpdatePublicInventory(const UDRInventoryComponent* InventoryComponent)
+void ADRPlayerState::UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent)
 {
-	if (!HasAuthority() || !IsValid(InventoryComponent))
+	if (!HasAuthority() || !IsValid(QuickSlotComponent))
 	{
 		return;
 	}
 
-	PublicInventorySlots.SetNum(InventoryComponent->GetMaxSlots());
-	for (int32 SlotIndex = 0; SlotIndex < PublicInventorySlots.Num(); ++SlotIndex)
+	PublicQuickSlots.SetNum(QuickSlotComponent->GetSlotCount());
+	for (int32 SlotIndex = 0; SlotIndex < PublicQuickSlots.Num(); ++SlotIndex)
 	{
-		FDRPublicInventorySlot& SnapshotSlot = PublicInventorySlots[SlotIndex];
-		const FDRItemInstance* Item = InventoryComponent->GetItemAtSlot(SlotIndex);
-		SnapshotSlot.ItemDefinition = Item && Item->IsValid() ? Item->Definition.Get() : nullptr;
-		SnapshotSlot.Quantity = Item && Item->IsValid() ? Item->Quantity : 0;
-		SnapshotSlot.bIsLocked = InventoryComponent->IsSlotLocked(SlotIndex);
+		FDRItemInstance ItemInstance;
+		const bool bHasItem = QuickSlotComponent->GetQuickSlot(SlotIndex, ItemInstance);
+		FDRPublicQuickSlot& SnapshotSlot = PublicQuickSlots[SlotIndex];
+		SnapshotSlot.ItemDefinition = bHasItem ? ItemInstance.Definition.Get() : nullptr;
+		SnapshotSlot.Quantity = bHasItem ? ItemInstance.Quantity : 0;
 	}
 
-	OnPublicInventoryChanged.Broadcast();
+	OnPublicQuickSlotsChanged.Broadcast();
 	ForceNetUpdate();
 }
 
-void ADRPlayerState::OnRep_PublicInventorySlots()
+void ADRPlayerState::OnRep_PublicQuickSlots()
 {
-	OnPublicInventoryChanged.Broadcast();
+	OnPublicQuickSlotsChanged.Broadcast();
 }
 
 bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)

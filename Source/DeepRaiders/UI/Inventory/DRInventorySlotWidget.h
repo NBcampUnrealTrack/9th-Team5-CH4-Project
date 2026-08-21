@@ -49,13 +49,13 @@ private:
 	bool IsCurrentLocked() const;
 	
 protected:
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
 	TObjectPtr<UButton> SlotButton;
 	
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UImage> ItemIcon;
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
+	TObjectPtr<UImage> Image;
 	
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
 	TObjectPtr<UTextBlock> QuantityText;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory|Drag", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -63,7 +63,7 @@ protected:
 	
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Inventory|MVVM")
-	FName EntryViewModelName = TEXT("InventorySlotEntryViewModel");
+	FName EntryViewModelName = TEXT("DRInventorySlotEntryViewModel");
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRInventorySlotEntryViewModel> EntryViewModel;

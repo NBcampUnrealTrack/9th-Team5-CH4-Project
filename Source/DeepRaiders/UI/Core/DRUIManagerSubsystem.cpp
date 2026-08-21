@@ -142,7 +142,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 	}
 
 	UUserWidget* ActiveModal = nullptr;
-	bool bHasActiveMenu = false;
+	UUserWidget* ActiveMenu = nullptr;
 
 	for (UUserWidget* Widget : ManagedWidgets)
 	{
@@ -163,7 +163,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 		}
 		else if (*Layer == EDRUILayer::Menu)
 		{
-			bHasActiveMenu = true;
+			ActiveMenu = Widget;
 		}
 	}
 
@@ -177,10 +177,10 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 		return;
 	}
 
-	if (bHasActiveMenu)
+	if (IsValid(ActiveMenu))
 	{
-		FInputModeGameAndUI InputMode;
-		InputMode.SetHideCursorDuringCapture(false);
+		FInputModeUIOnly InputMode;
+		InputMode.SetWidgetToFocus(ActiveMenu->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->bShowMouseCursor = true;

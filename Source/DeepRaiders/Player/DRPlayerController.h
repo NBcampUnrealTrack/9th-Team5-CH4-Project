@@ -78,7 +78,7 @@ private:
 	void InitializeStartingQuickSlot();
 
 	UFUNCTION()
-	void RefreshPublicInventorySnapshot();
+	void RefreshPublicQuickSlotSnapshot();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")

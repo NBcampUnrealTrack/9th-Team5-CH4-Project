@@ -147,6 +147,7 @@ void UDRHUDViewModel::RefreshHealth()
 	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
 		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
 		: nullptr;
+	
 	const float NewCurrentHealth = IsValid(AttributeSet) ? AttributeSet->GetHealth() : 0.f;
 	const float NewMaxHealth = IsValid(AttributeSet) ? AttributeSet->GetMaxHealth() : 0.f;
 	const float NewHealthRatio = NewMaxHealth > KINDA_SMALL_NUMBER

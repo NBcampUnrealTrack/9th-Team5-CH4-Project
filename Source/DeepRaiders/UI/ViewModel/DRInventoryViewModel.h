@@ -5,11 +5,12 @@
 #include "DRInventoryViewModel.generated.h"
 
 class UDRInventoryComponent;
+class UDRQuickSlotComponent;
 class UDRItemDefinition;
 class UTexture2D;
 class ADRPlayerState;
 class APlayerController;
-struct FDRPublicInventorySlot;
+struct FDRPublicQuickSlot;
 
 /** 인벤토리 슬롯 한 칸의 표시 상태다. */
 UCLASS(BlueprintType)
@@ -65,10 +66,12 @@ private:
 	friend class UDRInventoryViewModel;
 
 	void Initialize(UDRInventoryComponent* InInventoryComponent, int32 InSlotIndex);
-	void Initialize(const FDRPublicInventorySlot& InSlot, int32 InSlotIndex);
+	void Initialize(UDRQuickSlotComponent* InQuickSlotComponent, int32 InSlotIndex);
+	void Initialize(const FDRPublicQuickSlot& InSlot, int32 InSlotIndex);
 	void Refresh();
 
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
+	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 };
 
 /** InventoryComponent를 슬롯 ViewModel 목록으로 변환한다. */
@@ -83,8 +86,12 @@ public:
 		return InventoryComponent.Get();
 	}
 
+	TArray<UDRInventorySlotEntryViewModel*> GetQuickSlotEntries() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void Initialize(UDRInventoryComponent* InInventoryComponent);
+
+	void Initialize(UDRQuickSlotComponent* InQuickSlotComponent);
 
 	/** 팀원 PlayerState의 공개 스냅샷을 표시한다. */
 	void Initialize(ADRPlayerState* InPlayerState, bool bInIsLocalPlayer);
@@ -102,10 +109,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Inventory")
 	bool bIsOccupied = false;
 
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Inventory")
-	TArray<TObjectPtr<UDRInventorySlotEntryViewModel>> SlotEntries;
-
-	/** 현재 인벤토리와 1:1로 매칭되는 퀵슬롯 표시 목록이다. */
+	/** 장착 상태를 제외한 퀵슬롯 표시 목록이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
 	TArray<TObjectPtr<UDRInventorySlotEntryViewModel>> QuickSlotEntries;
 
@@ -113,10 +117,10 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
-	void RebuildSlotEntries();
-	void RefreshSlotEntries();
+	void RebuildQuickSlotEntries();
 
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
+	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 	TWeakObjectPtr<ADRPlayerState> PlayerState;
 };
 
