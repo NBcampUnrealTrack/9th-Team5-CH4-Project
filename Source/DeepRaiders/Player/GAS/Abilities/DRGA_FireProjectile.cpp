@@ -19,6 +19,51 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+
+bool ResolveSelectedWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo
+	, const UDRProjectileWeaponItemDefinition* ExpectedDefinition
+	,UDRInventoryComponent*& OutInventory, const FDRItemInstance*& OutItemInstance)
+{
+	OutInventory = nullptr;
+	OutItemInstance = nullptr;
+	
+	if (ActorInfo == nullptr || !IsValid(ExpectedDefinition))
+	{
+		return false;
+	}
+	
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
+	
+	if (!IsValid(PlayerController))
+	{
+		return false;
+	}
+	
+	UDRInventoryComponent* Inventory = PlayerController->GetInventoryComponent();
+	UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
+	
+	if (!IsValid(Inventory) || !IsValid(QuickSlot))
+	{
+		return false;
+	}
+	
+	// 현재 선택된 아이템의 Definition과 ExpectedDefinition이 동일한지 검사	
+	const FGuid SelectedInstanceId = QuickSlot->GetSelectedInstanceId();
+	const FDRItemInstance* SelectedItem = Inventory->FindItemInstance(SelectedInstanceId);
+	
+	if (!SelectedItem || SelectedItem->Definition.Get() != ExpectedDefinition)
+	{
+		return false;
+	}
+	
+	OutInventory = Inventory;
+	OutItemInstance = SelectedItem;
+	return true;
+}
 
 UDRGA_FireProjectile::UDRGA_FireProjectile()
 {
@@ -35,7 +80,9 @@ void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	
 	UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 
-	if (!IsValid(WeaponDefinition) || !WeaponDefinition->ProjectileClass)
+	if (!IsValid(WeaponDefinition)
+		|| WeaponDefinition->AttackType != EDRRangedWeaponAttackType::Projectile
+		|| !WeaponDefinition->ProjectileClass)
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -136,26 +183,56 @@ bool UDRGA_FireProjectile::CheckCost(
 
 	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-
-	if (!IsValid(WeaponDefinition) || !IsValid(ASC))
+	if (!IsValid(WeaponDefinition))
 	{
 		return false;
 	}
 
-	if (WeaponDefinition->SnowCostPerShot <= 0.f)
+	// ProjectileWeapon의 ResourceType에 따른 Cost 처리
+	switch (WeaponDefinition->ResourceType)
 	{
-		return true;
+	case EDRProjectileWeaponResourceType::SnowGauge:
+	{
+		if (WeaponDefinition->SnowCostPerShot <= 0.f)
+		{
+			return true;
+		}
+
+		if (!WeaponDefinition->SnowCostEffectClass)
+		{
+			return false;
+		}
+
+		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+
+		if (!IsValid(ASC))
+		{
+			return false;
+		}
+
+		const float CurrentSnow = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
+
+		return CurrentSnow + KINDA_SMALL_NUMBER >= WeaponDefinition->SnowCostPerShot;
+	}
+	case EDRProjectileWeaponResourceType::InstanceAmmo:
+	{
+		UDRInventoryComponent* Inventory = nullptr;
+		const FDRItemInstance* ItemInstance = nullptr;
+		if (!ResolveSelectedWeaponInstance(ActorInfo, WeaponDefinition, Inventory, ItemInstance))
+		{
+			return false;
+		}
+
+		const FDRProjectileWeaponRuntimeState* WeaponState = ItemInstance->RuntimeState.GetPtr<
+			FDRProjectileWeaponRuntimeState>();
+
+		return WeaponState && WeaponState->CurrentAmmo > 0;
 	}
 
-	if (!WeaponDefinition->SnowCostEffectClass)
-	{
+	default:
+		DR_ERROR(TEXT("[%s] Invalid projectile Weapon resource type"), *GetName());
 		return false;
 	}
-
-	const float CurrentSnow = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
-
-	return CurrentSnow + KINDA_SMALL_NUMBER >= WeaponDefinition->SnowCostPerShot;
 }
 
 void UDRGA_FireProjectile::ApplyCost(
@@ -172,22 +249,78 @@ void UDRGA_FireProjectile::ApplyCost(
 
 	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 
-	if (!IsValid(WeaponDefinition) || WeaponDefinition->SnowCostPerShot <= 0.f || !WeaponDefinition->SnowCostEffectClass)
+	if (!IsValid(WeaponDefinition))
 	{
 		return;
 	}
 
-	FGameplayEffectSpecHandle CostSpec = 
-		MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo, WeaponDefinition->SnowCostEffectClass, GetAbilityLevel(Handle, ActorInfo));
-
-	if (!CostSpec.IsValid())
+	switch (WeaponDefinition->ResourceType)
 	{
+	case EDRProjectileWeaponResourceType::SnowGauge:
+	{
+		if (WeaponDefinition->SnowCostPerShot <= 0.f
+			|| !WeaponDefinition->SnowCostEffectClass)
+		{
+			return;
+		}
+
+		FGameplayEffectSpecHandle CostSpec = MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo
+		                                                                    , WeaponDefinition->SnowCostEffectClass,
+		                                                                    GetAbilityLevel(Handle, ActorInfo));
+
+		if (!CostSpec.IsValid())
+		{
+			return;
+		}
+
+		CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
+
+		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CostSpec);
+		
 		return;
 	}
 
-	CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
+	case EDRProjectileWeaponResourceType::InstanceAmmo:
+	{
+		if (!ActorInfo->IsNetAuthority())
+		{
+			return;
+		}
+		
+		UDRInventoryComponent* Inventory = nullptr;
+		const FDRItemInstance* ItemInstance = nullptr;
+		
+		if (!ResolveSelectedWeaponInstance(ActorInfo, WeaponDefinition, Inventory, ItemInstance))
+		{
+			return;
+		}
+		
+		const FGuid SelectedInstanceId = ItemInstance->InstanceId;
+		
+		const bool bConsumed = Inventory->ModifyItemInstance(SelectedInstanceId, 
+			[](FDRItemInstance& Candidate)
+			{
+				FDRProjectileWeaponRuntimeState* WeaponState = Candidate.RuntimeState.GetMutablePtr<FDRProjectileWeaponRuntimeState>();
+				
+				if (!WeaponState
+					|| WeaponState->CurrentAmmo <= 0)
+				{
+					return false;
+				}
+				
+				--WeaponState->CurrentAmmo;
+				return true;
+			});
 
-	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CostSpec);
+		ensureMsgf(bConsumed, TEXT("Failed to consume ammo from item instance %s"), *SelectedInstanceId.ToString());
+		
+		return;		
+	}
+
+	default:
+		DR_ERROR(TEXT("[%s] Invalid projectile Weapon resource type"), *GetName());
+		return;
+	}
 }
 
 void UDRGA_FireProjectile::BuildImpactEffectSpecs(UAbilitySystemComponent* AbilitySystemComponent,

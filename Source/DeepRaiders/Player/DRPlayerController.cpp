@@ -101,6 +101,10 @@ void ADRPlayerController::BeginPlay()
 	if (HasAuthority())
 	{
 		InitializeStartingQuickSlot();
+		QuickSlotComponent->OnQuickSlotsChangedDelegate.AddDynamic(
+			this,
+			&ThisClass::RefreshPublicQuickSlotSnapshot);
+		RefreshPublicQuickSlotSnapshot();
 	}
 
 	// 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
@@ -127,6 +131,14 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
+}
+
+void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
+{
+	if (ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>())
+	{
+		DRPlayerState->UpdatePublicQuickSlots(QuickSlotComponent);
+	}
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -218,6 +230,16 @@ void ADRPlayerController::SetupGASInputComponent()
 	{
 		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Inventory));
 	}
+	
+	if (IsValid(InteractionAction))
+	{
+		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Interaction));
+	}
+	
+	if (IsValid(DropAction))
+	{
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Drop));
+	}
 
 	bGASInputBound = true;
 }
@@ -228,6 +250,11 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 	ApplyViewPitchLimits();
 	
+	if (HasAuthority())
+	{
+		RefreshPublicQuickSlotSnapshot();
+	}
+
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->RefreshSelectedItem();
@@ -338,6 +365,20 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	{
 		InventoryComponent->TryAddItemToSlot(1, StartingProjectileWeaponDefinition, 1);
 	}
+	
+#if WITH_EDITOR
+	
+	if (!InventoryComponent->GetItemAtSlot(2))
+	{
+		InventoryComponent->TryAddItemToSlot(2, TestItemDefinition1, TestItemQuantity1);
+	}
+	
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, TestItemDefinition2, TestItemQuantity2);
+	}
+	
+#endif
 	
 	QuickSlotComponent->RequestSelectSlot(0);	
 }

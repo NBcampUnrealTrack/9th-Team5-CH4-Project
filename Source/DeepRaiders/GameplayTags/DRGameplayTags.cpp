@@ -18,6 +18,21 @@ namespace DRGameplayTags
 		"Player is absorbing snow.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_InventoryOpen,
+		"State.UI.InventoryOpen",
+		"Local player's inventory UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_ShopOpen,
+		"State.UI.ShopOpen",
+		"Local player's shop UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_TeleportOpen,
+		"State.UI.TeleportOpen",
+		"Local player's teleport UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");
@@ -51,6 +66,36 @@ namespace DRGameplayTags
 		Data_Damage,
 		"Data.Damage",
 		"Damage amount passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_HUD,
+		"UI.Screen.HUD",
+		"Main HUD screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_QuickSlot,
+		"UI.Screen.QuickSlot",
+		"Quick slot screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Inventory_Player,
+		"UI.Screen.Inventory.Player",
+		"Player inventory screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Inventory_Storage,
+		"UI.Screen.Inventory.Storage",
+		"Storage inventory screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Teleport,
+		"UI.Screen.Teleport",
+		"Teleport selection screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Shop,
+		"UI.Screen.Shop",
+		"Shop screen.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Attack_Miss,

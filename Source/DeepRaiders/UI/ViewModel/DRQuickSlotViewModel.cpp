@@ -96,7 +96,8 @@ void UDRQuickSlotViewModel::Deinitialize()
 
 void UDRQuickSlotViewModel::HandleQuickSlotsChanged()
 {
-	RefreshSlotEntries();
+	// 슬롯 이동 시 엔트리를 다시 생성해 아이콘과 수량을 새 위치로 초기화한다.
+	RebuildSlotEntries();
 }
 
 void UDRQuickSlotViewModel::HandleQuickSlotCountChanged(int32)

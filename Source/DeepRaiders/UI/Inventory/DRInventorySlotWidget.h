@@ -8,6 +8,7 @@
 #include "DRInventorySlotWidget.generated.h"
 
 class UButton;
+class UDRInventorySlotEntryViewModel;
 class UImage;
 class UTextBlock;
 
@@ -20,6 +21,8 @@ class DEEPRAIDERS_API UDRInventorySlotWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
+	void InitializeViewModel(UDRInventorySlotEntryViewModel* NewViewModel);
+
 	void SetItemInstance(int32 InSlotIndex, const FDRItemInstance& ItemInstance, bool bInLocked);
 	
 	void ClearSlot(int32 InSlotIndex, bool bInLocked);
@@ -42,21 +45,29 @@ protected:
 private:
 	UFUNCTION()
 	void HandleSlotClicked();
+	FGuid GetCurrentInstanceId() const;
+	bool IsCurrentLocked() const;
 	
 protected:
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
 	TObjectPtr<UButton> SlotButton;
 	
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UImage> ItemIcon;
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
+	TObjectPtr<UImage> Image;
 	
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Widget", meta = (BindWidget))
 	TObjectPtr<UTextBlock> QuantityText;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory|Drag", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DragVisualOpacity = 0.85f;
 	
 private:
+	UPROPERTY(EditDefaultsOnly, Category = "Inventory|MVVM")
+	FName EntryViewModelName = TEXT("DRInventorySlotEntryViewModel");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRInventorySlotEntryViewModel> EntryViewModel;
+
 	int32 SlotIndex = INDEX_NONE;
 	FGuid InstanceId;	
 	uint8 bLocked:1 = false;
