@@ -82,10 +82,12 @@ void UDRGA_DropSelectedItem::ActivateAbility(const FGameplayAbilitySpecHandle Ha
 	const FRotator DropRotation(0.f, ControlRotaion.Yaw, 0.f);
 	const FVector DropForward = DropRotation.Vector().GetSafeNormal();
 	
-	const FVector DropLocation = AvatarPawn->GetActorLocation() + DropForward * DropForwardDistance
-				+ FVector::UpVector * DropHeightOffset;
+	const FVector DropTraceStart = AvatarPawn->GetActorLocation() + FVector::UpVector * DropHeightOffset;
+	const FVector DesiredBaseLocation = DropTraceStart + DropForward * DropForwardDistance;
 	
-	const FTransform DropTransform(DropRotation, DropLocation);
+	// 아이템이 벽 너머에 드랍되지 않도록 검사
+	FTransform DropTransform = ResolveDropTransform(World, DroppedItem.Definition, AvatarPawn
+		, DropRotation, DesiredBaseLocation);
 	
 	ADRWorldItemActor* WorldItem = WorldItemSubsystem->SpawnWorldItem(DroppedItem, DropTransform);
 	if (!IsValid(WorldItem))
@@ -111,4 +113,44 @@ void UDRGA_DropSelectedItem::ActivateAbility(const FGameplayAbilitySpecHandle Ha
 	WorldItem->ApplyDropImpulse(DropImpulse);
 	
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);	
+}
+
+FTransform UDRGA_DropSelectedItem::ResolveDropTransform(UWorld* World, UDRItemDefinition* Definition, AActor* AvatarPawn
+	, FRotator DropRotation, FVector DesiredBaseLocation)
+{
+	if (!IsValid(World)
+		|| !IsValid(Definition)
+		|| !IsValid(AvatarPawn))
+	{
+		return FTransform(DropRotation, DesiredBaseLocation);
+	}
+	
+	FTransform DropTransform(DropRotation, DesiredBaseLocation);
+	const FVector DropTraceStart = AvatarPawn->GetActorLocation() + FVector::UpVector * DropHeightOffset;
+	
+	/* 
+	 * WorldItemSubsystem이 SpawnOffsetTransform을 적용하므로,
+	 * 실제 월드 아이템 원점이 이동할 경로를 검사한다.
+	 */
+	const FTransform StartBaseTransform(DropRotation, DropTraceStart);
+	const FTransform StartWorldTransform = Definition->SpawnOffsetTransform * StartBaseTransform;
+	
+	const FTransform DesiredWorldTransform = Definition->SpawnOffsetTransform * DropTransform;
+	
+	const FVector TraceStartLocation = StartWorldTransform.GetLocation();
+	const FVector DesiredWorldLocation = DesiredWorldTransform.GetLocation();
+	
+	FCollisionQueryParams DropQueryParams(SCENE_QUERY_STAT(DRDropLocation), false, AvatarPawn);
+	
+	FHitResult DropHit;
+	const bool bDropPathBlocked = World->SweepSingleByChannel(DropHit, TraceStartLocation, DesiredWorldLocation,
+		FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(DropSweepRadius), DropQueryParams);
+	
+	if (bDropPathBlocked)
+	{
+		const FVector LocationCorrection = DropHit.Location - DesiredWorldLocation;
+		DropTransform.AddToTranslation(LocationCorrection);
+	}
+	
+	return DropTransform;	
 }
