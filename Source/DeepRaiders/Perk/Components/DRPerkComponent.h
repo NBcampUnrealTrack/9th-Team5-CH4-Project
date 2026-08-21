@@ -1,10 +1,11 @@
 #pragma once
 
+#include "ActiveGameplayEffectHandle.h"
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPerkComponent.generated.h"
 
+class UAbilitySystemComponent;
 class UDRPerkDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPerksChangedSignature);
@@ -19,8 +20,8 @@ struct DEEPRAIDERS_API FDRPerkEntry
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
 
-	/** 초기화 시 Ability와 Effect를 회수하기 위한 서버 전용 핸들이다. */
-	FDRAbilitySet_GrantedHandles GrantedHandles;
+	/** 초기화 시 퍽 GameplayEffect를 회수하기 위한 서버 전용 핸들이다. */
+	FActiveGameplayEffectHandle EffectHandle;
 };
 
 UCLASS(ClassGroup = (DeepRaiders))
@@ -55,10 +56,10 @@ public:
 	/** 전체 퍽 슬롯 제한 안에서 퍽을 추가할 수 있는지 확인한다. */
 	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition) const;
 
-	/** 서버에서 퍽을 추가하고 AbilitySet을 즉시 적용한다. */
+	/** 서버에서 퍽을 추가하고 GameplayEffect를 즉시 적용한다. */
 	bool AddPerk(UDRPerkDefinition* PerkDefinition);
 
-	/** 서버에서 모든 퍽 슬롯과 적용된 AbilitySet을 초기화한다. */
+	/** 서버에서 모든 퍽 슬롯과 적용된 GameplayEffect를 초기화한다. */
 	bool ResetPerks();
 
 	/** 소유 클라이언트에서 서버에 퍽 초기화를 요청한다. */
@@ -68,6 +69,11 @@ public:
 	FDRPerksChangedSignature OnPerksChanged;
 
 private:
+	/** 퍽 정의로 GameplayEffectSpec을 생성하고 서버 ASC에 적용한다. */
+	FActiveGameplayEffectHandle ApplyPerkEffect(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UDRPerkDefinition* PerkDefinition) const;
+
 	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)
 	void ServerResetPerks();
@@ -76,7 +82,7 @@ private:
 	UFUNCTION()
 	void OnRep_PerkEntries();
 
-	/** 플레이어가 보유한 퍽과 서버에서 적용한 AbilitySet 핸들을 관리한다. */
+	/** 플레이어가 보유한 퍽과 서버에서 적용한 Effect 핸들을 관리한다. */
 	UPROPERTY(
 		VisibleAnywhere,
 		BlueprintReadOnly,

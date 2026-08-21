@@ -17,6 +17,7 @@ public class DeepRaidersEditor : ModuleRules
 		{
 			"CoreUObject",
 			"Engine",
+			"GameplayTags",
 			"UnrealEd"
 		});
 	}
