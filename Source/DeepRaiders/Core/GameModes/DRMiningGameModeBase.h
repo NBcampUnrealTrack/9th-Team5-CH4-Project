@@ -17,6 +17,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
 	void StartTimer();
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
+	void EndTimer();
+
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
 protected:

@@ -46,9 +46,14 @@ void ADRMiningGameModeBase::StartTimer()
 
 void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	GetWorldTimerManager().ClearTimer(PassiveCoinTimerHandle);
+	EndTimer();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRMiningGameModeBase::EndTimer()
+{
+	GetWorldTimerManager().ClearTimer(PassiveCoinTimerHandle);
 }
 
 void ADRMiningGameModeBase::GrantPassiveCoins()
