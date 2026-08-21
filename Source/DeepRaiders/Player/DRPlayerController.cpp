@@ -228,6 +228,16 @@ void ADRPlayerController::SetupGASInputComponent()
 	{
 		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Inventory));
 	}
+	
+	if (IsValid(InteractionAction))
+	{
+		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Interaction));
+	}
+	
+	if (IsValid(DropAction))
+	{
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Drop));
+	}
 
 	bGASInputBound = true;
 }

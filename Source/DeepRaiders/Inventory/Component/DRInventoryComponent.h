@@ -83,6 +83,9 @@ public:
 	bool CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool CanAddItemInstance(const FDRItemInstance& ItemInstance) const;
+	
+	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetAddableQuantity(UDRItemDefinition* Definition) const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
