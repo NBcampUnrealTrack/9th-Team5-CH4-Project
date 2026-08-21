@@ -140,7 +140,21 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+
+#pragma endregion
 	
+#pragma region DEBUG BUILD
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity1 = 1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition2;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity2 = 1;
 #pragma endregion
 
 #pragma region UI
