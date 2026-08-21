@@ -517,9 +517,11 @@ void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("Coins changed: Previous=%d New=%d"),
+		TEXT("[Coin] Player=%s Previous=%d New=%d Delta=%d"),
+		*GetNameSafe(this),
 		PreviousCoins,
-		Coins);
+		Coins,
+		Coins - PreviousCoins);
 
 	OnCoinsChanged.Broadcast(Coins);
 }
