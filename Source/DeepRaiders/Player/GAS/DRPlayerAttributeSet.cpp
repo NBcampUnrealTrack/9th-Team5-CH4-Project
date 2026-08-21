@@ -2,6 +2,7 @@
 
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 {
@@ -150,22 +151,47 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
+	if (Data.EvaluatedData.Attribute != GetIncomingDamageAttribute())
 	{
-		const float Damage = GetIncomingDamage();
-
-		SetIncomingDamage(0.f);
-
-		if (Damage > 0.f)
-		{
-			SetHealth(FMath::Clamp(GetHealth() - Damage, 0.f, GetMaxHealth()));
-		}
-	
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[GAS][Damage] Damage=%.1f Health=%.1f"),
-			Damage,
-			GetHealth());
+		return;
 	}
+
+	const float RawDamage = GetIncomingDamage();
+	// 처리 직후 바로 비움
+	SetIncomingDamage(0.f);
+	if (RawDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float HealthBefore = GetHealth();
+	// 이미 죽은 대상에게 들어온 후속 Effect는 통계에 포함하지 않는다.
+	if (HealthBefore <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float HealthAfter = FMath::Clamp(HealthBefore - RawDamage, 0.f, GetMaxHealth());
+	const float AppliedDamage = HealthBefore - HealthAfter;
+	if (AppliedDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
+	ADRPlayerState* TargetPlayerState = IsValid(TargetASC) ? Cast<ADRPlayerState>(TargetASC->GetOwnerActor()) : nullptr;
+	ADRPlayerState* SourcePlayerState = IsValid(SourceASC) ? Cast<ADRPlayerState>(SourceASC->GetOwnerActor()) : nullptr;
+
+	const bool bFatal = HealthBefore > KINDA_SMALL_NUMBER && HealthAfter <= KINDA_SMALL_NUMBER;
+	// 먼저 Combat Result를 기록
+	if (IsValid(TargetPlayerState) && TargetPlayerState->HasAuthority())
+	{
+		TargetPlayerState->HandleDamageResolved(SourcePlayerState, AppliedDamage, bFatal);
+	}
+
+	SetHealth(HealthAfter);
+
+	UE_LOG(LogTemp, Log, TEXT( "[GAS][Damage] " "Raw=%.1f Applied=%.1f " "Health=%.1f->%.1f Fatal=%d " "Source=%s Target=%s"), 
+		RawDamage, AppliedDamage, HealthBefore, HealthAfter, bFatal, *GetNameSafe(SourcePlayerState), *GetNameSafe(TargetPlayerState));
 }

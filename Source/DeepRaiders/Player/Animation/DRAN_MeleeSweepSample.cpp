@@ -13,15 +13,6 @@ void UDRAN_MeleeSweepSample::Notify(
 	UAnimSequenceBase* Animation,
 	const FAnimNotifyEventReference& EventReference)
 {
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Notify] Normal Notify ENTER "
-			"Mesh=%s Animation=%s"),
-		*GetNameSafe(MeshComp),
-		*GetNameSafe(Animation));
-
 	Super::Notify(
 		MeshComp,
 		Animation,
@@ -45,22 +36,6 @@ void UDRAN_MeleeSweepSample::BranchingPointNotify(
 	 * Super가 일반 Notify 경로를 다시 호출할 가능성을
 	 * 없애 중복 Sample을 방지한다.
 	 */
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Notify] BRANCHING POINT ENTER "
-			"Mesh=%s Animation=%s "
-			"NotifyEvent=%s"),
-		*GetNameSafe(
-			BranchingPointPayload.SkelMeshComponent),
-		*GetNameSafe(
-			BranchingPointPayload.SequenceAsset),
-		BranchingPointPayload.NotifyEvent
-			? TEXT("VALID")
-			: TEXT("NULL"));
-
 	HandleSweepSample(
 		BranchingPointPayload.SkelMeshComponent,
 		BranchingPointPayload.SequenceAsset,
@@ -75,12 +50,6 @@ void UDRAN_MeleeSweepSample::HandleSweepSample(
 	if (!IsValid(MeshComp) ||
 		!IsValid(Animation))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Notify] Invalid Mesh/Animation"));
-
 		return;
 	}
 
@@ -88,57 +57,18 @@ void UDRAN_MeleeSweepSample::HandleSweepSample(
 		Cast<ADRPlayerCharacter>(
 			MeshComp->GetOwner());
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Notify] Owner=%s "
-			"Authority=%d "
-			"Local=%d "
-			"NetMode=%d"),
-		*GetNameSafe(Character),
-		IsValid(Character)
-			? Character->HasAuthority()
-			: false,
-		IsValid(Character)
-			? Character->IsLocallyControlled()
-			: false,
-		MeshComp->GetWorld()
-			? static_cast<int32>(
-				MeshComp->GetWorld()->GetNetMode())
-			: -1);
-
 	if (!IsValid(Character))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Notify] Owner is not "
-				"ADRPlayerCharacter"));
-
 		return;
 	}
 
 	if (!Character->HasAuthority())
 	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT(
-				"[V4][Notify] Skip CLIENT instance"));
-
 		return;
 	}
 
 	if (NotifyEvent == nullptr)
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Notify] NotifyEvent NULL"));
-
 		return;
 	}
 
@@ -147,26 +77,11 @@ void UDRAN_MeleeSweepSample::HandleSweepSample(
 
 	if (!IsValid(Melee))
 	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT(
-				"[V4][Notify] MeleeComponent INVALID"));
-
 		return;
 	}
 
 	const float SampleTime =
 		NotifyEvent->GetTriggerTime();
-
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT(
-			"[V4][Notify] CALL SAMPLE "
-			"Time=%.4f Animation=%s"),
-		SampleTime,
-		*GetNameSafe(Animation));
 
 	Melee->SampleWeaponSweep(
 		Animation,
