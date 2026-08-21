@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 
 void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
@@ -14,6 +15,12 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	}
 
 	AbilitySystemComponent = InPlayerCharacter->GetAbilitySystemComponent();
+	PlayerState = InPlayerCharacter->GetPlayerState<ADRPlayerState>();
+
+	if (PlayerState.IsValid())
+	{
+		PlayerState->OnCoinsChanged.AddDynamic(this, &ThisClass::HandleCoinsChanged);
+	}
 
 	// GAS 속성 변경 델리게이트 연결
 	if (AbilitySystemComponent.IsValid())
@@ -35,6 +42,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	// 최초 리프레쉬
 	RefreshHealth();
 	RefreshSnowGauge();
+	HandleCoinsChanged(PlayerState.IsValid() ? PlayerState->GetCoins() : 0);
 }
 
 void UDRHUDViewModel::Deinitialize()
@@ -51,7 +59,13 @@ void UDRHUDViewModel::Deinitialize()
 			UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()).Remove(MaxSnowGaugeChangedHandle);
 	}
 
+	if (PlayerState.IsValid())
+	{
+		PlayerState->OnCoinsChanged.RemoveDynamic(this, &ThisClass::HandleCoinsChanged);
+	}
+
 	AbilitySystemComponent.Reset();
+	PlayerState.Reset();
 	HealthChangedHandle.Reset();
 	MaxHealthChangedHandle.Reset();
 	SnowGaugeChangedHandle.Reset();
@@ -108,4 +122,9 @@ void UDRHUDViewModel::RefreshSnowGauge()
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, NewSnowGauge);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxSnowGauge, NewMaxSnowGauge);
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, NewSnowGaugeRatio);
+}
+
+void UDRHUDViewModel::HandleCoinsChanged(int32 NewCoins)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(CoinsText, FText::AsNumber(NewCoins));
 }

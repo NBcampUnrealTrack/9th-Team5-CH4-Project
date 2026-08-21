@@ -5,6 +5,7 @@
 #include "DRHUDViewModel.generated.h"
 
 class ADRPlayerCharacter;
+class ADRPlayerState;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
@@ -41,6 +42,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	float SnowGaugeRatio = 0.f;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Coin")
+	FText CoinsText;
+
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
@@ -49,7 +53,11 @@ private:
 	void RefreshHealth();
 	void RefreshSnowGauge();
 
+	UFUNCTION()
+	void HandleCoinsChanged(int32 NewCoins);
+
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	TWeakObjectPtr<ADRPlayerState> PlayerState;
 	FDelegateHandle HealthChangedHandle;
 	FDelegateHandle MaxHealthChangedHandle;
 	FDelegateHandle SnowGaugeChangedHandle;

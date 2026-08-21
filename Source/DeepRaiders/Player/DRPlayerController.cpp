@@ -257,6 +257,7 @@ void ADRPlayerController::OnRep_PlayerState()
 
 	if (IsValid(HUDUIComponent))
 	{
+		HUDUIComponent->RefreshPlayerCharacter();
 		HUDUIComponent->RefreshPerks();
 	}
 }
