@@ -14,6 +14,9 @@ class DEEPRAIDERS_API ADRMiningGameModeBase : public AGameModeBase
 public:
 	ADRMiningGameModeBase();
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
+	void StartTimer();
+
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
 protected:

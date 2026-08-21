@@ -14,6 +14,16 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 void ADRMiningGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
+	StartTimer();
+}
+
+void ADRMiningGameModeBase::StartTimer()
+{
+	if (GetWorldTimerManager().IsTimerActive(PassiveCoinTimerHandle))
+	{
+		return;
+	}
+
 	PassiveCoinStartTime = GetWorld()->GetTimeSeconds();
 	LastProcessedGrantIndex = 0;
 
