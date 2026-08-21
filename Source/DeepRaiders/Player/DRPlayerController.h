@@ -5,6 +5,7 @@
 #include "InputActionValue.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "AbilitySystemInterface.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
@@ -103,7 +104,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
-	
+
 #pragma region QuickSlot
 
 public:
@@ -193,4 +194,54 @@ private:
 
 	uint8 bCanTeleportInteract : 1;
 #pragma endregion
+	
+#pragma region Snow Join Snapshot
+public:
+	UFUNCTION(Client, Reliable)
+	void Client_BeginSnowJoinSnapshot(
+		int32 SnapshotId,
+		int32 CheckpointSequence,
+		FName VoxelWorldName,
+		int32 VoxelSaveByteCount,
+		int32 SnowVolumeByteCount,
+		int32 OwnershipByteCount);
+
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveSnowJoinSnapshotChunk(
+		int32 SnapshotId,
+		uint8 PayloadType,
+		int32 ByteOffset,
+		const TArray<uint8>& ChunkData);
+
+	UFUNCTION(Client, Reliable)
+	void Client_FinishSnowJoinSnapshot(
+		int32 SnapshotId,
+		const TArray<FDRSnowOperationRecord>& RecentHistory);
+
+	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
+	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
+
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
+
+	bool TryApplyPendingSnowJoinSnapshot();
+	void RetryPendingSnowJoinSnapshot();
+	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
+
+	int32 PendingSnowSnapshotId = INDEX_NONE;
+	int32 PendingSnowCheckpointSequence = 0;
+	FName PendingSnowVoxelWorldName = NAME_None;
+	int32 PendingSnowVoxelSaveByteCount = 0;
+	int32 PendingSnowVolumeByteCount = 0;
+	int32 PendingSnowOwnershipByteCount = 0;
+	bool bPendingSnowSnapshotFinished = false;
+	TArray<uint8> PendingSnowVoxelSaveData;
+	TArray<uint8> PendingSnowVolumeData;
+	TArray<uint8> PendingSnowOwnershipData;
+	TArray<FDRSnowOperationRecord> PendingSnowHistory;
+	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
+	FTimerHandle SnowJoinSnapshotRetryTimer;
+#pragma endregion
+	
 };
