@@ -6,11 +6,14 @@
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
@@ -475,5 +478,244 @@ void ADRPlayerController::ServerRequestInteractCurrentTeleport_Implementation()
 	}
 
 	IDRInteractableInterface::Execute_Interact(Target, CachedPawn);
+}
+#pragma endregion
+
+#pragma region Snow Join Snapshot
+void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
+	int32 SnapshotId,
+	int32 CheckpointSequence,
+	FName VoxelWorldName,
+	int32 VoxelSaveByteCount,
+	int32 SnowVolumeByteCount,
+	int32 OwnershipByteCount)
+{
+	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0 || OwnershipByteCount <= 0)
+	{
+		return;
+	}
+
+	PendingSnowSnapshotId = SnapshotId;
+	PendingSnowCheckpointSequence = CheckpointSequence;
+	PendingSnowVoxelWorldName = VoxelWorldName;
+	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
+	PendingSnowVolumeByteCount = SnowVolumeByteCount;
+	PendingSnowOwnershipByteCount = OwnershipByteCount;
+	bPendingSnowSnapshotFinished = false;
+	PendingSnowVoxelSaveData.Reset();
+	PendingSnowVolumeData.Reset();
+	PendingSnowOwnershipData.Reset();
+	PendingSnowHistory.Reset();
+	BufferedSnowOperations.Reset();
+
+	ServerRequestSnowJoinSnapshotData(SnapshotId);
+}
+
+void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32 SnapshotId)
+{
+	UWorld* World = GetWorld();
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	ADRMiningGameStateBase* MiningGameState = IsValid(World) ? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (!IsValid(SnowSubsystem) || !IsValid(MiningGameState))
+	{
+		return;
+	}
+
+	FDRSnowJoinCheckpoint Checkpoint;
+	if (!SnowSubsystem->GetCheckpoint(SnapshotId, Checkpoint))
+	{
+		return;
+	}
+
+	constexpr int32 ChunkByteSize = 48 * 1024;
+	auto SendData = [this, SnapshotId](uint8 PayloadType, const TArray<uint8>& Data)
+	{
+		for (int32 Offset = 0; Offset < Data.Num(); Offset += ChunkByteSize)
+		{
+			const int32 Size = FMath::Min(ChunkByteSize, Data.Num() - Offset);
+			TArray<uint8> ChunkData;
+			ChunkData.Append(Data.GetData() + Offset, Size);
+			Client_ReceiveSnowJoinSnapshotChunk(
+				SnapshotId,
+				PayloadType,
+				Offset,
+				ChunkData);
+		}
+	};
+
+	SendData(0, Checkpoint.VoxelSaveData);
+	SendData(1, Checkpoint.SnowVolumeData);
+	SendData(2, Checkpoint.OwnershipData);
+
+	TArray<FDRSnowOperationRecord> RecentHistory;
+	MiningGameState->GetSnowOperationsAfter(Checkpoint.OperationSequence, RecentHistory);
+	Client_FinishSnowJoinSnapshot(SnapshotId, RecentHistory);
+}
+
+void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
+	int32 SnapshotId,
+	uint8 PayloadType,
+	int32 ByteOffset,
+	const TArray<uint8>& ChunkData)
+{
+	if (SnapshotId != PendingSnowSnapshotId || ByteOffset < 0 || ChunkData.IsEmpty())
+	{
+		return;
+	}
+
+	TArray<uint8>* TargetData = nullptr;
+	int32 ExpectedByteCount = 0;
+	switch (PayloadType)
+	{
+	case 0:
+		TargetData = &PendingSnowVoxelSaveData;
+		ExpectedByteCount = PendingSnowVoxelSaveByteCount;
+		break;
+	case 1:
+		TargetData = &PendingSnowVolumeData;
+		ExpectedByteCount = PendingSnowVolumeByteCount;
+		break;
+	case 2:
+		TargetData = &PendingSnowOwnershipData;
+		ExpectedByteCount = PendingSnowOwnershipByteCount;
+		break;
+	default:
+		return;
+	}
+	if (ByteOffset + ChunkData.Num() > ExpectedByteCount)
+	{ 
+		return;
+	}
+
+	if (TargetData->Num() < ByteOffset + ChunkData.Num())
+	{
+		TargetData->SetNumZeroed(ByteOffset + ChunkData.Num());
+	}
+
+	FMemory::Memcpy(TargetData->GetData() + ByteOffset, ChunkData.GetData(), ChunkData.Num());
+	TryApplyPendingSnowJoinSnapshot();
+}
+
+void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(
+	int32 SnapshotId,
+	const TArray<FDRSnowOperationRecord>& RecentHistory)
+{
+	if (SnapshotId != PendingSnowSnapshotId)
+	{
+		return;
+	}
+
+	bPendingSnowSnapshotFinished = true;
+	PendingSnowHistory = RecentHistory;
+	TryApplyPendingSnowJoinSnapshot();
+}
+
+bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& Record)
+{
+	if (PendingSnowSnapshotId == INDEX_NONE || Record.Sequence <= PendingSnowCheckpointSequence)
+	{
+		return false;
+	}
+
+	BufferedSnowOperations.Add(Record);
+	return true;
+}
+
+bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
+{
+	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
+		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
+		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount ||
+		PendingSnowOwnershipData.Num() != PendingSnowOwnershipByteCount)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
+		PendingSnowVoxelWorldName,
+		PendingSnowVoxelSaveData,
+		PendingSnowVolumeData,
+		PendingSnowOwnershipData))
+	{
+		if (IsValid(World))
+		{
+			World->GetTimerManager().SetTimer(
+				SnowJoinSnapshotRetryTimer,
+				this,
+				&ADRPlayerController::RetryPendingSnowJoinSnapshot,
+				0.25f,
+				false);
+		}
+		return false;
+	}
+
+	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
+	for (const FDRSnowOperationRecord& Record : PendingSnowHistory)
+	{
+		if (Record.Sequence > PendingSnowCheckpointSequence)
+		{
+			OperationsBySequence.Add(Record.Sequence, Record);
+		}
+	}
+	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
+	{
+		if (Record.Sequence > PendingSnowCheckpointSequence)
+		{
+			OperationsBySequence.Add(Record.Sequence, Record);
+		}
+	}
+
+	TArray<FDRSnowOperationRecord> Operations;
+	OperationsBySequence.GenerateValueArray(Operations);
+	Operations.Sort([](const FDRSnowOperationRecord& A, const FDRSnowOperationRecord& B)
+	{
+		return A.Sequence < B.Sequence;
+	});
+
+	const int32 AppliedSnapshotId = PendingSnowSnapshotId;
+	const int32 AppliedVoxelSaveByteCount = PendingSnowVoxelSaveByteCount;
+	const int32 AppliedSnowVolumeByteCount = PendingSnowVolumeByteCount;
+	const int32 AppliedOwnershipByteCount = PendingSnowOwnershipByteCount;
+	PendingSnowSnapshotId = INDEX_NONE;
+	PendingSnowCheckpointSequence = 0;
+	PendingSnowVoxelSaveData.Reset();
+	PendingSnowVolumeData.Reset();
+	PendingSnowOwnershipData.Reset();
+	PendingSnowHistory.Reset();
+	BufferedSnowOperations.Reset();
+	ApplySnowJoinOperations(Operations);
+	
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=%d bytes RecentOperations=%d"),
+		AppliedSnapshotId,
+		AppliedVoxelSaveByteCount,
+		AppliedSnowVolumeByteCount,
+		AppliedOwnershipByteCount,
+		Operations.Num());
+	
+	return true;
+}
+
+void ADRPlayerController::RetryPendingSnowJoinSnapshot()
+{
+	TryApplyPendingSnowJoinSnapshot();
+}
+
+void ADRPlayerController::ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations)
+{
+	ADRMiningGameStateBase* MiningGameState = GetWorld() ? GetWorld()->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (!IsValid(MiningGameState))
+	{
+		return;
+	}
+
+	for (const FDRSnowOperationRecord& Record : Operations)
+	{
+		MiningGameState->ApplySnowOperationRecord(Record);
+	}
 }
 #pragma endregion
