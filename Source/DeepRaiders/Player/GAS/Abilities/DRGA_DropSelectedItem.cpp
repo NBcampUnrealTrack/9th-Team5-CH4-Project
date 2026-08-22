@@ -100,7 +100,7 @@ void UDRGA_DropSelectedItem::ActivateAbility(const FGameplayAbilitySpecHandle Ha
 	 * 월드 생성 후 인벤토리에서 아이템 제거
 	 * 제거 실패 시 월드 액터 제거하여 롤백 
 	 */
-	if (!Inventory->TryRemoveFromItemInstance(DroppedItem.InstanceId, DroppedItem.Quantity))
+	if (!Inventory->TryRemoveItemInstance(DroppedItem.InstanceId, DroppedItem.Quantity))
 	{
 		WorldItem->Destroy();
 		

@@ -519,7 +519,7 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 		return;
 	}
 	
-	for (const FDRRangedWeaponImpactEffect& EffectData : ImpactEffects)
+	for (const FDRGameplayEffectData& EffectData : ImpactEffects)
 	{
 		if (!EffectData.EffectClass)
 		{

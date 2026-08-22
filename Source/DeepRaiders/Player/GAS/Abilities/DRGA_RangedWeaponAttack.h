@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
-#include "DeepRaiders/Combat/RangedWeapon/DRRangedWeaponTypes.h"
+#include "DeepRaiders/GAS/DRGameplayEffectData.h"
 #include "DRGA_RangedWeaponAttack.generated.h"
 
 class UAbilitySystemComponent;
@@ -115,7 +115,7 @@ protected:
 	float MuzzleHeightOffset = 60.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
-	TArray<FDRRangedWeaponImpactEffect> ImpactEffects;
+	TArray<FDRGameplayEffectData> ImpactEffects;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category = "Ranged Weapon|Presentation",meta = (
 		GameplayTagFilter = "GameplayCue"))
