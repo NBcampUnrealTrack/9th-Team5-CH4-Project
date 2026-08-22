@@ -1,0 +1,85 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Blueprint/UserWidget.h"
+#include "DeepRaiders/Shop/DRShopItemTable.h"
+#include "DRShopBuyPanelWidget.generated.h"
+
+class UButton;
+class UDRShopItemWidget;
+class UDRShopOfferEntryViewModel;
+class UDRShopViewModel;
+class UScrollBox;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRShopBuyPanelOfferRequestedSignature,
+	FDRShopOfferRequest,
+	Request);
+
+/** 구매 탭과 상품 목록을 관리한다. */
+UCLASS()
+class DEEPRAIDERS_API UDRShopBuyPanelWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetOffers(
+		EDRShopOfferType OfferType,
+		const TArray<FDRShopOfferView>& NewOffers);
+
+	/** ViewModel 상품 목록을 실제 Entry 위젯으로 변환한다. */
+	UFUNCTION(BlueprintCallable, Category = "Shop|MVVM")
+	void SetOfferEntries(const TArray<UDRShopOfferEntryViewModel*>& NewOfferEntries);
+
+	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
+	FDRShopBuyPanelOfferRequestedSignature OnOfferRequested;
+
+protected:
+	virtual void NativeOnInitialized() override;
+	virtual void NativeDestruct() override;
+
+private:
+	void SelectSection(EDRShopOfferSection Section);
+
+	UFUNCTION()
+	void HandleEquipmentButtonClicked();
+
+	UFUNCTION()
+	void HandleConsumableButtonClicked();
+
+	UFUNCTION()
+	void HandleUpgradeButtonClicked();
+
+	UFUNCTION()
+	void HandlePerkButtonClicked();
+
+	UFUNCTION()
+	void HandleOfferRequested(FDRShopOfferRequest Request);
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> EquipmentButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> ConsumableButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> UpgradeButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> PerkButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UScrollBox> ItemScrollBox;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
+	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
+
+	/** Widget Blueprint에 등록한 Manual ViewModel 이름이다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|MVVM")
+	FName ShopViewModelName = TEXT("DRShopViewModel");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopViewModel> ShopViewModel;
+
+	EDRShopOfferSection SelectedSection = EDRShopOfferSection::Equipment;
+};

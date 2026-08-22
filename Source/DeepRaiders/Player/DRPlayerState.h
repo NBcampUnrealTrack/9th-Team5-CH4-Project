@@ -16,6 +16,7 @@ class UGameplayEffect;
 class UDRQuickSlotComponent;
 class UDRItemDefinition;
 struct FOnAttributeChangeData;
+class UDRCombatStatsComponent;
 
 USTRUCT(BlueprintType)
 struct FDRPublicQuickSlot
@@ -57,7 +58,23 @@ public:
 	{
 		return PerkComponent;
 	}
-
+	
+	UDRCombatStatsComponent* GetCombatStatsComponent() const
+	{
+		return CombatStatsComponent;
+	}
+	
+	/*
+	 * 서버에서 실제 Damage가 확정됐을 때 호출.
+	 * SourcePlayerState == nullptr -> 환경 Damage 등
+	 * SourcePlayerState == this -> 낙사 / 자해 등
+	 * SourcePlayerState != this -> 다른 Player가 가한 Damage
+	 */
+	void HandleDamageResolved(
+		ADRPlayerState* SourcePlayerState,
+		float AppliedDamage,
+		bool bFatal);
+	
 	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
 	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
 
@@ -128,6 +145,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
 	void SetCoins(int32 NewCoins);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
+	void AddCoins(int32 Amount);
+
 	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
 	FDRCoinsChangedSignature OnCoinsChanged;
 
@@ -170,6 +190,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
 	TObjectPtr<UDRPerkComponent> PerkComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat Stats")
+	TObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;
+	
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();
 

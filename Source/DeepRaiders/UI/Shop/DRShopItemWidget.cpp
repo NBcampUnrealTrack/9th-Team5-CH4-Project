@@ -3,6 +3,29 @@
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "DeepRaiders/UI/ViewModel/DRShopViewModel.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
+
+void UDRShopItemWidget::InitializeViewModel(UDRShopOfferEntryViewModel* NewViewModel)
+{
+	EntryViewModel = NewViewModel;
+
+	if (!IsValid(EntryViewModel))
+	{
+		return;
+	}
+
+	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+
+	if (!IsValid(View) || !View->SetViewModel(EntryViewModelName, EntryViewModel))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Shop Entry ViewModel '%s' is not registered on %s"),
+			*EntryViewModelName.ToString(), *GetName());
+	}
+
+	SetOffer(EntryViewModel->GetOffer());
+}
 
 void UDRShopItemWidget::SetOffer(
 	const FDRShopOfferView& NewOffer)

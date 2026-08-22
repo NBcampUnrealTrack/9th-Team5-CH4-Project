@@ -26,12 +26,19 @@ public:
 		AActor* ShopActor,
 		const FDRShopOfferRequest& Request);
 
+	/** 선택한 인벤토리 아이템 한 개의 판매를 서버에 요청한다. */
+	void RequestSell(AActor* ShopActor, FGuid InstanceId);
+
 protected:
 	/** 상점 접근과 Row 데이터를 재검증한 뒤 구매 또는 업그레이드를 실행한다. */
 	UFUNCTION(Server, Reliable)
 	void ServerRequestOffer(
 		AActor* ShopActor,
 		FDRShopOfferRequest Request);
+
+	/** 소유권과 판매 가능 상태를 재검증한 뒤 아이템 한 개를 판매한다. */
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSell(AActor* ShopActor, FGuid InstanceId);
 
 	/** 거래 결과 사운드를 요청한 클라이언트에서 재생한다. */
 	UFUNCTION(Client, Reliable)
