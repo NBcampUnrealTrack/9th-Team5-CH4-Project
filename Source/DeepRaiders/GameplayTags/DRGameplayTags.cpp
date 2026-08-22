@@ -96,7 +96,12 @@ namespace DRGameplayTags
 		UI_Screen_Shop,
 		"UI.Screen.Shop",
 		"Shop screen.");
-
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Scoreboard,
+		"UI.Screen.Scoreboard",
+		"Match scoreboard screen.");
+	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Attack_Miss,
 		"GameplayCue.Sound.Attack.Miss",

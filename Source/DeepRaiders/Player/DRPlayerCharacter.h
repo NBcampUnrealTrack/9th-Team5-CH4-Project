@@ -22,6 +22,7 @@ class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
+class UDRSnowRemoveComponent;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class USpringArmComponent;
@@ -181,9 +182,6 @@ protected:
 	virtual void BeginPlay() override;
 
 	void InitializeAbilitySystem();
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
-	TObjectPtr<UDRMiningComponent> MiningComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
 	TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
@@ -202,6 +200,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Snow", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")

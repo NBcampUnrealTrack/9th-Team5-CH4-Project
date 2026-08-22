@@ -26,6 +26,9 @@ class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
+class UDRScoreboardUIComponent;
+struct FGameplayAbilitySpec;
+struct FPredictionKey;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -73,8 +76,10 @@ private:
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
 	
-	void HandleGASInputPressed(int32 InputId);
+	void HandleGASInputStarted(int32 InputId);
+	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
+	FPredictionKey GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const;
 
 	void InitializeStartingQuickSlot();
 
@@ -82,6 +87,9 @@ private:
 	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
+
+	void HandleScoreboardStarted(const FInputActionValue& Value);
+	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
@@ -107,7 +115,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InteractionAction;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> DropAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> ScoreboardAction;
+	
 #pragma region QuickSlot
 
 public:
@@ -134,7 +151,21 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+
+#pragma endregion
 	
+#pragma region DEBUG BUILD
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity1 = 1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition2;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity2 = 1;
 #pragma endregion
 
 #pragma region UI
@@ -181,6 +212,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
+	
 #pragma endregion
 
 #pragma region Teleport
