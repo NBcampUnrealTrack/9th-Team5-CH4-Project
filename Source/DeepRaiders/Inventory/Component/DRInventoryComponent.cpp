@@ -339,20 +339,6 @@ void UDRInventoryComponent::ServerRequestSwapSlots_Implementation(int32 SourceSl
 	SwapSlotsInternal(SourceSlotIndex, TargetSlotIndex);
 }
 
-bool UDRInventoryComponent::FindItemInstance(FGuid InstanceId, FDRItemInstance& OutItemInstance) const
-{
-	const FDRItemInstance* ItemInstance = FindItemInstance(InstanceId);
-	
-	if (!ItemInstance)
-	{
-		OutItemInstance = FDRItemInstance();
-		return false;
-	}
-	
-	OutItemInstance = *ItemInstance;
-	return true;	
-}
-
 bool UDRInventoryComponent::CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const
 {
 	return IsValid(Definition) 

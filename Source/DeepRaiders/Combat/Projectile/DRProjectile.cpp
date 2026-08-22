@@ -5,11 +5,10 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
-#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "GameFramework/ProjectileMovementComponent.h"
 #include "GameFramework/Pawn.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 
 ADRProjectile::ADRProjectile()
 {
@@ -43,6 +42,15 @@ void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	if (!HasAuthority())
+	{
+		// 클라에서의 충돌을 무시
+		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+		
+		return;
+	}
+	
 	if (IsValid(GetOwner()))
 	{
 		CollisionComponent->IgnoreActorWhenMoving(GetOwner(), true);
@@ -53,6 +61,8 @@ void ADRProjectile::BeginPlay()
 		CollisionComponent->IgnoreActorWhenMoving(GetInstigator(), true);
 	}
 	
+	RefreshFriendlyCollisionIgnores();
+	
 	ProjectileMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleProjectileStop);
 	
 	ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
@@ -60,7 +70,7 @@ void ADRProjectile::BeginPlay()
 
 void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem,
 	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs, const FDRProjectileWorldImpactData& InWorldImpactData,
-	int32 InSourceTeamId)
+	FGameplayTag InImpactGameplayCueTag, int32 InSourceTeamId)
 {
 	if (!HasAuthority())
 	{
@@ -70,6 +80,7 @@ void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilit
 	SourceAbilitySystem = InSourceAbilitySystem;
 	ImpactEffectSpecs = InImpactEffectSpecs;
 	WorldImpactData = InWorldImpactData;
+	ImpactGameplayCueTag = InImpactGameplayCueTag;
 	SourceTeamId = InSourceTeamId;	
 }
 
@@ -80,9 +91,21 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 		return;
 	}
 	
-	bImpactHandled = true;
-	
 	AActor* HitActor = ImpactResult.GetActor();
+	
+	// 아군과 충돌 시 무시하고 다시 전진시킨다.
+	if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
+	{
+		CollisionComponent->IgnoreActorWhenMoving(HitActor, true);
+		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+		
+		ProjectileMovement->Activate(true);
+		ProjectileMovement->UpdateComponentVelocity();
+		
+		return;
+	}
+	
+	bImpactHandled = true;
 	
 	if (IsValid(HitActor)
 		&& HitActor != GetOwner()
@@ -93,16 +116,15 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 		// ASC가 있는 Actor와 충돌
 		if (IsValid(TargetAbilitySystem))
 		{
-			if (!IsFriendlyTarget(HitActor))
-			{
-				ApplyImpactEffect(TargetAbilitySystem, ImpactResult);
-			}
+			ApplyImpactEffect(TargetAbilitySystem, ImpactResult);
 			
+			ExecuteImpactGameplayCue(ImpactResult);
 			Destroy();
 			return;
 		}
 	}
 	
+	ExecuteImpactGameplayCue(ImpactResult);
 	HandleWorldImpact(ImpactResult);
 	Destroy();
 }
@@ -133,35 +155,12 @@ void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySyst
 
 bool ADRProjectile::IsFriendlyTarget(const AActor* TargetActor) const
 {
-	const APawn* TargetPawn = Cast<APawn>(TargetActor);
-	
-	if (!IsValid(TargetPawn))
-	{
-		return false;
-	}
-	
-	const ADRPlayerState* TargetPlayerState = TargetPawn->GetPlayerState<ADRPlayerState>();
-	
-	if (!IsValid(TargetPlayerState))
-	{
-		return false;
-	}
-	
-	// 발사자 팀이 지정되지 않은 경우, Effect 적용 거부
-	// if (SourceTeamId == INDEX_NONE)
-	// {
-	// 	return true;
-	// }
-	
 	// 테스트 신다인
-	// 팀 지정 기능이 없으므로 항상 적용되도록 하여 테스트
+	// 팀 지정 기능이 없으므로 INDEX_NONE에 대하여 항상 적군
 	if (SourceTeamId == INDEX_NONE)
-	{
 		return false;
-	}
-	// ======================================
 	
-	return TargetPlayerState->GetTeamId() == SourceTeamId;
+	return DRCombatTeam::IsFriendlyTarget(SourceTeamId, TargetActor);
 }
 
 void ADRProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
@@ -173,3 +172,63 @@ void ADRProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 	
 	// World 지형 변동 관련 코드 추가 위치
 }
+
+void ADRProjectile::RefreshFriendlyCollisionIgnores()
+{
+	if (!HasAuthority()
+		|| !IsValid(CollisionComponent)
+		|| SourceTeamId == INDEX_NONE)
+	{
+		return;
+	}
+	
+	TArray<APawn*> FriendlyPawns;
+	
+	DRCombatTeam::GetFriendlyPawns(GetWorld(), SourceTeamId, FriendlyPawns);
+	
+	for (APawn* FriendlyPawn : FriendlyPawns)
+	{
+		if (IsValid(FriendlyPawn)
+			&& FriendlyPawn !=  GetInstigator())
+		{
+			CollisionComponent->IgnoreActorWhenMoving(FriendlyPawn, true);
+		}
+	}
+}
+
+void ADRProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
+{
+	UAbilitySystemComponent* SourceASC = SourceAbilitySystem.Get();
+	
+	if (!HasAuthority()
+		|| !IsValid(SourceASC)
+		|| !ImpactGameplayCueTag.IsValid())
+	{
+		return;
+	}
+	
+	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+	EffectContext.AddHitResult(ImpactResult, true);
+	
+	FGameplayCueParameters CueParameters(EffectContext);
+	CueParameters.Location = ImpactResult.Location;
+	CueParameters.Normal = ImpactResult.ImpactNormal;
+	CueParameters.Instigator = GetInstigator();
+	CueParameters.EffectCauser = this;
+	
+	SourceASC->ExecuteGameplayCue(ImpactGameplayCueTag, CueParameters);	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

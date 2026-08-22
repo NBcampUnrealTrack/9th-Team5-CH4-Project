@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Item/DRItemActionTypes.h"
+#include "GameplayTagContainer.h"
 #include "DRItemActionPresentationComponent.generated.h"
 
 class ADRPlayerCharacter;
@@ -37,10 +38,12 @@ public:
 	void PlayDamagedFeedbackLocal();
 
 	/** 소유 클라이언트의 예측 사격 연출 */
-	void PlayWeaponFireLocal(UAnimMontage* FireMontage);
+	void PlayWeaponFireLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+		const FVector& MuzzleLocation, const FVector& TargetLocation);
 
 	/** 서버에서 확정한 사격 연출을 다른 인스턴스에 전파 */
-	void PlayWeaponFireFromServer(UAnimMontage* FireMontage);
+	void PlayWeaponFireFromServer(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+		const FVector& MuzzleLocation, const FVector& TargetLocation);
 
 private:
 	ADRPlayerCharacter*
@@ -71,8 +74,11 @@ private:
 	void MulticastPlayMeleeImpactSound(bool bKilled, FVector_NetQuantize ImpactLocation);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastPlayWeaponFire(UAnimMontage* FireMontage);
+	void MulticastPlayWeaponFire(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+		const FVector& MuzzleLocation, const FVector& TargetLocation);
 
+	void ExecuteWeaponFireCue(const FGameplayTag& FireGameplayCueTag, const FVector& MuzzleLocation, const FVector& TargetLocation);
+	
 protected:
 	// ==============================
 	// World Presentation

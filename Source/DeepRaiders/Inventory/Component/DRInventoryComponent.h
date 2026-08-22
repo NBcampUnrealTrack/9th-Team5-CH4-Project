@@ -77,9 +77,6 @@ public:
 	void RequestSwapSlots(int32 SourceSlotIndex, int32 TargetSlotIndex);
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
-	bool FindItemInstance(FGuid InstanceId, FDRItemInstance& OutItemInstance) const;
-	
-	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
