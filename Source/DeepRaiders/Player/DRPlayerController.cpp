@@ -37,6 +37,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
+#include "GameplayPrediction.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
@@ -214,29 +215,31 @@ void ADRPlayerController::SetupGASInputComponent()
 
 	if (IsValid(PrimaryAction))
 	{
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Primary));
 		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Primary));
 	}
 
 	if (IsValid(SecondaryAction))
 	{
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Secondary));
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
 	}
 	
 	if (IsValid(InventoryAction))
 	{
-		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Inventory));
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Inventory));
 	}
 	
 	if (IsValid(InteractionAction))
 	{
-		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Interaction));
+		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Interaction));
 	}
 	
 	if (IsValid(DropAction))
 	{
-		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Drop));
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Drop));
 	}
 
 	bGASInputBound = true;
@@ -399,40 +402,128 @@ void ADRPlayerController::ApplyViewPitchLimits()
 	PlayerCameraManager->ViewPitchMax = PlayerCharacter->GetAimPitchMaxDegrees();
 }
 
-void ADRPlayerController::HandleGASInputPressed(int32 InputId)
+void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
 	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
-		if (Spec)
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId)
 		{
-			Spec->InputPressed = true;
-			if (Spec->IsActive())
-			{
-				ASC->AbilitySpecInputPressed(*Spec);
-			}
-			else
-			{
-				ASC->TryActivateAbility(Spec->Handle);
-			}
+			MatchingHandles.Add(Spec.Handle);
 		}
+	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+
+		Spec->InputPressed = true;
+		if (Spec->IsActive())
+		{
+			ASC->AbilitySpecInputPressed(*Spec);
+			ASC->InvokeReplicatedEvent(
+				EAbilityGenericReplicatedEvent::InputPressed,
+				Spec->Handle,
+				GetAbilityActivationPredictionKey(*Spec));
+		}
+		else
+		{
+			ASC->TryActivateAbility(Spec->Handle);
+		}
+	}
+}
+
+void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId && Spec.IsActive())
+		{
+			MatchingHandles.Add(Spec.Handle);
+		}
+	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec || !Spec->IsActive())
+		{
+			continue;
+		}
+
+		Spec->InputPressed = true;
+		ASC->AbilitySpecInputPressed(*Spec);
+		ASC->InvokeReplicatedEvent(
+			EAbilityGenericReplicatedEvent::InputPressed,
+			Spec->Handle,
+			GetAbilityActivationPredictionKey(*Spec));
 	}
 }
 
 void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
 	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
-		if (Spec)
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId)
 		{
-			Spec->InputPressed = false;
-			if (Spec->IsActive())
-			{
-				ASC->AbilitySpecInputReleased(*Spec);
-			}
+			MatchingHandles.Add(Spec.Handle);
 		}
 	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+
+		const bool bWasActive = Spec->IsActive();
+		Spec->InputPressed = false;
+		if (bWasActive)
+		{
+			ASC->AbilitySpecInputReleased(*Spec);
+			ASC->InvokeReplicatedEvent(
+				EAbilityGenericReplicatedEvent::InputReleased,
+				Spec->Handle,
+				GetAbilityActivationPredictionKey(*Spec));
+		}
+	}
+}
+
+FPredictionKey ADRPlayerController::GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const
+{
+	UGameplayAbility* AbilityInstance = Spec.GetPrimaryInstance();
+	if (!AbilityInstance)
+	{
+		return FPredictionKey();
+	}
+
+	return AbilityInstance->GetCurrentActivationInfo().GetActivationPredictionKey();
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
