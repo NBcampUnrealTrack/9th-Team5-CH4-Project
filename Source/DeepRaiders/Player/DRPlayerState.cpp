@@ -10,25 +10,17 @@
 #include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+#include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
-	AbilitySystemComponent =
-		CreateDefaultSubobject<UAbilitySystemComponent>(
-			TEXT("AbilitySystemComponent"));
-
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
-	AbilitySystemComponent->SetReplicationMode(
-		EGameplayEffectReplicationMode::Mixed);
-	
-	PlayerAttributeSet =
-		CreateDefaultSubobject<UDRPlayerAttributeSet>(
-			TEXT("PlayerAttributeSet"));
-
-	PerkComponent =
-		CreateDefaultSubobject<UDRPerkComponent>(
-			TEXT("PerkComponent"));
+	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
+	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
+	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
@@ -50,6 +42,37 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
+}
+
+void ADRPlayerState::HandleDamageResolved(
+	ADRPlayerState* SourcePlayerState,
+	float AppliedDamage,
+	bool bFatal)
+{
+	if (!HasAuthority() || !IsValid(CombatStatsComponent) || AppliedDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// 피해자는 DamageTaken을 항상 기록. - 낙뎀도 포함
+	CombatStatsComponent->RecordDamageTaken(AppliedDamage, bFatal);
+
+	// Source가 없거나 자기 자신이면 DamageDealt / Kill로 인정하지 않는다. -> Fall Damage 걸러짐
+	if (!IsValid(SourcePlayerState) || SourcePlayerState == this)
+	{
+		return;
+	}
+
+	UDRCombatStatsComponent* SourceStats = SourcePlayerState->GetCombatStatsComponent();
+	if (!IsValid(SourceStats))
+	{
+		return;
+	}
+
+	SourceStats->RecordDamageDealt(AppliedDamage, bFatal);
+
+	UE_LOG(LogTemp, Log, TEXT( "[CombatStats] Source=%s Target=%s " "AppliedDamage=%.1f Fatal=%d"), 
+		*GetNameSafe(SourcePlayerState), *GetNameSafe(this), AppliedDamage, bFatal);
 }
 
 void ADRPlayerState::UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent)

@@ -26,6 +26,7 @@ class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
+class UDRScoreboardUIComponent;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
@@ -86,6 +87,9 @@ private:
 	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
+
+	void HandleScoreboardStarted(const FInputActionValue& Value);
+	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
@@ -117,6 +121,9 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> DropAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> ScoreboardAction;
 	
 #pragma region QuickSlot
 
@@ -205,6 +212,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
+	
 #pragma endregion
 
 #pragma region Teleport
