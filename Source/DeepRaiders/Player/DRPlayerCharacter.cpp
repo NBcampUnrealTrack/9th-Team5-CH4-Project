@@ -25,6 +25,7 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
+#include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -40,8 +41,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	GetMesh()->SetHiddenInGame(false);
 	GetMesh()->SetVisibility(true);
 
-	MiningComponent = CreateDefaultSubobject<UDRMiningComponent>(TEXT("MiningComponent"));
-
 	VoxelNoClippingComponent = CreateDefaultSubobject<UVoxelNoClippingComponent>(TEXT("VoxelNoClippingComponent"));
 	VoxelNoClippingComponent->SetupAttachment(GetCapsuleComponent());
 	VoxelNoClippingComponent->TickRate = 0.03f;
@@ -55,6 +54,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
+	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;

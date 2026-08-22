@@ -89,7 +89,7 @@ bool UDRInventoryComponent::TryAddItemToSlot(int32 SlotIndex, UDRItemDefinition*
 	Slots[SlotIndex] = MoveTemp(NewItemInstance);
 	HandleInventoryChangedOnServer();
 	
-	return false;
+	return true;
 }
 
 bool UDRInventoryComponent::TryReplaceItemDefinition(
@@ -360,7 +360,6 @@ bool UDRInventoryComponent::CanAddItem(UDRItemDefinition* Definition, int32 Quan
 	&& GetAddableQuantity(Definition) >= Quantity;
 }
 
-PRAGMA_DISABLE_OPTIMIZATION
 bool UDRInventoryComponent::CanAddItemInstance(const FDRItemInstance& ItemInstance) const
 {
 	if (!ItemInstance.IsValid()
@@ -378,7 +377,6 @@ bool UDRInventoryComponent::CanAddItemInstance(const FDRItemInstance& ItemInstan
 	return !ItemInstance.RuntimeState.IsValid() 
 		|| GetMaxStackSize(ItemInstance.Definition) == 1;
 }
-PRAGMA_ENABLE_OPTIMIZATION
 
 int32 UDRInventoryComponent::GetAddableQuantity(UDRItemDefinition* Definition) const
 {
@@ -489,10 +487,15 @@ bool UDRInventoryComponent::ModifyItemInstance(FGuid InstanceId, TFunctionRef<bo
 	}
 	
 	FDRItemInstance Candidate = Slots[SlotIndex];
+	const UDRItemDefinition* CachedDefinition = Candidate.Definition;
+	int32 CachedQuantity = Candidate.Quantity;
 	
+	// RuntimeState의 수정만을 허용한다.
 	if (!Modifier(Candidate)
 		|| !Candidate.IsValid()
-		|| Candidate.InstanceId != InstanceId)
+		|| Candidate.InstanceId != InstanceId
+		|| Candidate.Definition != CachedDefinition
+		|| Candidate.Quantity != CachedQuantity)
 	{
 		return false;
 	}

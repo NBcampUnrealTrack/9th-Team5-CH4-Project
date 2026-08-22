@@ -145,6 +145,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
 	void SetCoins(int32 NewCoins);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
+	void AddCoins(int32 Amount);
+
 	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
 	FDRCoinsChangedSignature OnCoinsChanged;
 

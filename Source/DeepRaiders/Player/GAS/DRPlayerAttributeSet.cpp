@@ -14,6 +14,9 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 
 	InitMaxSnowGauge(100.f);
 	InitSnowGauge(100.f);
+	InitSnowAbsorbPower(1.f);
+	InitSnowAbsorbRadius(100.f);
+	InitSnowAbsorbSpeed(10.f);
 
 	InitMoveSpeedMultiplier(1.f);
 }
@@ -28,6 +31,9 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxFreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbRadius, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
 }
 
@@ -59,6 +65,21 @@ void UDRPlayerAttributeSet::OnRep_SnowGauge(const FGameplayAttributeData& OldSno
 void UDRPlayerAttributeSet::OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, OldMaxSnowGauge);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbPower(const FGameplayAttributeData& OldSnowAbsorbPower)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbPower, OldSnowAbsorbPower);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbRadius(const FGameplayAttributeData& OldSnowAbsorbRadius)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbRadius, OldSnowAbsorbRadius);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbSpeed(const FGameplayAttributeData& OldSnowAbsorbSpeed)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbSpeed, OldSnowAbsorbSpeed);
 }
 
 void UDRPlayerAttributeSet::OnRep_MoveSpeedMultiplier(
@@ -136,6 +157,18 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	else if (Attribute == GetSnowGaugeAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxSnowGauge());
+	}
+	else if (Attribute == GetSnowAbsorbPowerAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
+	else if (Attribute == GetSnowAbsorbRadiusAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
+	else if (Attribute == GetSnowAbsorbSpeedAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
 	}
 	else if (Attribute == GetIncomingDamageAttribute())
 	{
