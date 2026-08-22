@@ -17,7 +17,8 @@ void UDRGA_FireProjectile::OnRangedWeaponActivated()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	
-	if (ActorInfo == nullptr
+	// 서버에서
+	if (ActorInfo != nullptr
 		&& ActorInfo->IsNetAuthority()
 		&& !ActorInfo->IsLocallyControlled())
 	{
@@ -205,7 +206,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	
 	if (!IsValid(AvatarActor)
 		|| !IsValid(AbilitySystem)
-		|| IsValid(World))
+		|| !IsValid(World))
 	{
 		return false;
 	}

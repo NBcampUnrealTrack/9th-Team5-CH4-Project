@@ -331,21 +331,15 @@ bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
 		return false;
 	}
 	
-	if (!CheckCost(GetCurrentAbilitySpecHandle(), ActorInfo, nullptr))
-	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
-		
-		return false;
-	}
-	
-	// 연사중인 경우 CoolDown에 의해 실행이 막히더라도 EndAbility가 되어선 안된다.
-	if (!CheckCooldown(GetCurrentAbilitySpecHandle(), ActorInfo, nullptr))
-	{
-		return false;
-	}
-	
 	if (!CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), nullptr))
 	{
+		if (!CheckCost(GetCurrentAbilitySpecHandle(), ActorInfo, nullptr))
+		{
+			// 연발 도중 Commit 실패 시 실패 사유 확인을 위한 코드
+			EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(),
+				true, false);
+		}
+
 		return false;
 	}
 	
