@@ -3,13 +3,14 @@
 #include "DRShopComponent.h"
 #include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
+#include "AbilitySystemComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
-#include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
 #include "Engine/LocalPlayer.h"
@@ -80,12 +81,9 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 
 	ShopComponent = ShopActor->FindComponentByClass<UDRShopComponent>();
 	UpgradeComponent = ShopActor->FindComponentByClass<UDRUpgradeComponent>();
-	const UDRUIConfig* UIConfig = UIManager->GetUIConfig();
 
 	if (!IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent)
-		|| !IsValid(UIConfig)
-		|| !UIConfig->ShopWidgetClass)
+		|| !IsValid(UpgradeComponent))
 	{
 		return;
 	}
@@ -105,9 +103,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 		return;
 	}
 
-	ShopWidget = Cast<UDRShopWidget>(UIManager->CreateManagedWidget(
-		UIConfig->ShopWidgetClass,
-		UIConfig->ShopLayer));
+	ShopWidget = Cast<UDRShopWidget>(UIManager->PushScreen(DRGameplayTags::UI_Screen_Shop));
 
 	if (!IsValid(ShopWidget))
 	{
@@ -122,6 +118,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 		MakeOfferViews(
 			ShopComponent->GetItemOffers(),
 			EDRShopOfferType::Purchase));
+	ShopWidget->InitializeSellPanel(InventoryComponent);
 	RefreshUpgradeOffers();
 	RefreshPerkOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(
@@ -130,6 +127,9 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	ShopWidget->OnOfferRequested.AddDynamic(
 		this,
 		&ThisClass::HandleOfferRequested);
+	ShopWidget->OnSellRequested.AddDynamic(
+		this,
+		&ThisClass::HandleSellRequested);
 	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
 		this,
 		&ThisClass::HandleInventoryChanged);
@@ -148,10 +148,13 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 		IsMoveInputBlocked = true;
 	}
 
+	SetShopOpenTag(true);
 }
 
 void UDRShopUIComponent::HideShopWidget()
 {
+	SetShopOpenTag(false);
+
 	if (IsValid(InventoryComponent))
 	{
 		InventoryComponent->OnInventoryChangedDelegate.RemoveDynamic(
@@ -181,10 +184,13 @@ void UDRShopUIComponent::HideShopWidget()
 		ShopWidget->OnOfferRequested.RemoveDynamic(
 			this,
 			&ThisClass::HandleOfferRequested);
+		ShopWidget->OnSellRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleSellRequested);
 
 		if (IsValid(UIManager))
 		{
-			UIManager->ReleaseManagedWidget(ShopWidget);
+			UIManager->PopScreen(DRGameplayTags::UI_Screen_Shop);
 		}
 		else
 		{
@@ -217,11 +223,34 @@ void UDRShopUIComponent::HideShopWidget()
 	IsMoveInputBlocked = false;
 }
 
+void UDRShopUIComponent::SetShopOpenTag(bool bIsOpen) const
+{
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = PlayerController->GetAbilitySystemComponent())
+	{
+		ASC->SetLooseGameplayTagCount(
+			DRGameplayTags::State_UI_ShopOpen,
+			bIsOpen ? 1 : 0);
+	}
+}
+
 void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 {
 	if (IsValid(ShopTransactionComponent))
 	{
 		ShopTransactionComponent->RequestOffer(ActiveShop.Get(), Request);
+	}
+}
+
+void UDRShopUIComponent::HandleSellRequested(FGuid InstanceId)
+{
+	if (IsValid(ShopTransactionComponent))
+	{
+		ShopTransactionComponent->RequestSell(ActiveShop.Get(), InstanceId);
 	}
 }
 

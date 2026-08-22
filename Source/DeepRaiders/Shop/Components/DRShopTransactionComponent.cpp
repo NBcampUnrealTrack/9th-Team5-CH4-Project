@@ -33,6 +33,14 @@ void UDRShopTransactionComponent::RequestOffer(
 	ServerRequestOffer(ShopActor, Request);
 }
 
+void UDRShopTransactionComponent::RequestSell(AActor* ShopActor, FGuid InstanceId)
+{
+	if (IsValid(ShopActor) && InstanceId.IsValid())
+	{
+		ServerRequestSell(ShopActor, InstanceId);
+	}
+}
+
 void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	AActor* ShopActor,
 	FDRShopOfferRequest Request)
@@ -88,6 +96,42 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 			PlayPurchaseSound(ShopActor);
 		}
 		break;
+	}
+}
+
+void UDRShopTransactionComponent::ServerRequestSell_Implementation(
+	AActor* ShopActor,
+	FGuid InstanceId)
+{
+	ADRPlayerState* PlayerState = GetPlayerState();
+	const UDRShopComponent* ShopComponent = IsValid(ShopActor)
+		? ShopActor->FindComponentByClass<UDRShopComponent>()
+		: nullptr;
+	UDRInventoryComponent* Inventory = GetInventoryComponent();
+	const FDRItemInstance* ItemInstance = IsValid(Inventory)
+		? Inventory->FindItemInstance(InstanceId)
+		: nullptr;
+	const UDRItemDefinition* Definition = ItemInstance
+		? ItemInstance->Definition
+		: nullptr;
+
+	// 클라이언트가 보낸 가격은 사용하지 않고 서버의 ItemDefinition만 신뢰한다.
+	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(Inventory)
+		|| !IsValid(Definition)
+		|| !Definition->bCanBeSold
+		|| Definition->Price < 2
+		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
+	{
+		return;
+	}
+
+	const int32 SellPrice = Definition->Price / 2;
+
+	if (Inventory->TryRemoveFromItemInstance(InstanceId, 1))
+	{
+		PlayerState->SetCoins(PlayerState->GetCoins() + SellPrice);
 	}
 }
 
