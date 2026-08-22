@@ -26,9 +26,11 @@ public:
 	UDRShopUIComponent();
 
 	/** 지정한 상점의 UI를 열거나 닫는다. */
+	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void ToggleShopWidget(AActor* ShopActor);
 
 	/** 지정한 상점이 현재 열려 있으면 UI를 닫는다. */
+	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void CloseShop(const AActor* ShopActor);
 
 protected:
@@ -46,9 +48,16 @@ private:
 	UFUNCTION()
 	void HideShopWidget();
 
+	/** 로컬 ASC에 상점 UI 표시 상태를 기록한다. */
+	void SetShopOpenTag(bool bIsOpen) const;
+
 	/** UI에서 선택한 Offer를 서버 거래 컴포넌트로 전달한다. */
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
+
+	/** UI에서 선택한 인벤토리 아이템을 서버 판매 요청으로 전달한다. */
+	UFUNCTION()
+	void HandleSellRequested(FGuid InstanceId);
 
 	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
 	UFUNCTION()

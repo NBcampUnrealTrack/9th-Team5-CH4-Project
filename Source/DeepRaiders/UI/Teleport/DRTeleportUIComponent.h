@@ -26,6 +26,7 @@ protected:
 private:
 	void BindTeleportComponent(UDRTeleportComponent* NewTeleportComponent);
 	void CloseTeleportSelectWidget();
+	void SetTeleportOpenTag(bool bIsOpen) const;
 
 	UFUNCTION()
 	void HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint);

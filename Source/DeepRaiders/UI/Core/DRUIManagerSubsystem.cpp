@@ -179,9 +179,10 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 
 	if (IsValid(ActiveMenu))
 	{
-		FInputModeUIOnly InputMode;
+		FInputModeGameAndUI InputMode;
 		InputMode.SetWidgetToFocus(ActiveMenu->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->bShowMouseCursor = true;
 		return;

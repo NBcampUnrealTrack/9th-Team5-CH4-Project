@@ -8,6 +8,7 @@
 class UButton;
 class UTextBlock;
 class UImage;
+class UDRShopOfferEntryViewModel;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopItemOfferRequestedSignature,
@@ -20,6 +21,8 @@ class DEEPRAIDERS_API UDRShopItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	void InitializeViewModel(UDRShopOfferEntryViewModel* NewViewModel);
+
 	/** 위젯에 표시할 상점 Offer 데이터를 설정한다. */
 	void SetOffer(const FDRShopOfferView& NewOffer);
 
@@ -58,6 +61,12 @@ private:
 
 	UPROPERTY(Transient)
 	FDRShopOfferView Offer;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|MVVM")
+	FName EntryViewModelName = TEXT("ShopOfferEntryViewModel");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRShopOfferEntryViewModel> EntryViewModel;
 
 	bool IsWidgetConstructed = false;
 };

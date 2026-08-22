@@ -6,24 +6,32 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
-class UDRShopItemWidget;
-class UScrollBox;
+class UDRInventoryComponent;
+class UDRShopBuyPanelWidget;
+class UDRShopSellPanelWidget;
+class UWidgetSwitcher;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopOfferRequestedSignature,
 	FDRShopOfferRequest,
 	Request);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRShopWidgetSellRequestedSignature, FGuid, InstanceId);
 
+/** 구매·판매 패널 전환과 상점 종료를 관리하는 최상위 화면이다. */
 UCLASS()
 class DEEPRAIDERS_API UDRShopWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
+	/** 구매 패널에 갱신된 상품 목록을 전달한다. */
 	void SetOffers(
 		EDRShopOfferType OfferType,
 		const TArray<FDRShopOfferView>& NewOffers);
+
+	/** 판매 패널에 로컬 플레이어 인벤토리를 연결한다. */
+	void InitializeSellPanel(UDRInventoryComponent* InventoryComponent);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -31,56 +39,44 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopOfferRequestedSignature OnOfferRequested;
 
+	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
+	FDRShopWidgetSellRequestedSignature OnSellRequested;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeDestruct() override;
 
 private:
-	void SelectSection(EDRShopOfferSection Section);
-	void RefreshSelectedSection();
-	void CreateItemWidget(const FDRShopOfferView& Offer);
+	UFUNCTION()
+	void HandleBuyPanelButtonClicked();
+
+	UFUNCTION()
+	void HandleSellPanelButtonClicked();
 
 	UFUNCTION()
 	void HandleCloseButtonClicked();
 
 	UFUNCTION()
-	void HandleEquipmentButtonClicked();
-
-	UFUNCTION()
-	void HandleConsumableButtonClicked();
-
-	UFUNCTION()
-	void HandleUpgradeButtonClicked();
-
-	UFUNCTION()
-	void HandlePerkButtonClicked();
-
-	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
+
+	UFUNCTION()
+	void HandleSellRequested(FGuid InstanceId);
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> BuyPanelButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> SellPanelButton;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> EquipmentButton;
+	TObjectPtr<UWidgetSwitcher> PanelSwitcher;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> ConsumableButton;
+	TObjectPtr<UDRShopBuyPanelWidget> BuyPanel;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> UpgradeButton;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> PerkButton;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UScrollBox> ItemScrollBox;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
-	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
-
-	UPROPERTY(Transient)
-	TArray<FDRShopOfferView> Offers;
-
-	EDRShopOfferSection SelectedSection = EDRShopOfferSection::Equipment;
+	TObjectPtr<UDRShopSellPanelWidget> SellPanel;
 };
