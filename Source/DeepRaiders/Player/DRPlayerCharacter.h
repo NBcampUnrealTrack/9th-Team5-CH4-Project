@@ -28,7 +28,7 @@ class UGameplayEffect;
 class USpringArmComponent;
 class UDRPlayerAttributeSet;
 class UDRItemAnimationSet;
-class UAnimMontage;
+class UDRFreezeVisualComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -204,6 +204,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Snow", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;
+	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
