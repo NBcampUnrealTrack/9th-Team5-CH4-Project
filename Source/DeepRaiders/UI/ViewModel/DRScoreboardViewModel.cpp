@@ -61,7 +61,9 @@ void UDRScoreboardPlayerEntryViewModel::Refresh()
 		return;
 	}
 
-	UE_MVVM_SET_PROPERTY_VALUE(PlayerName, FText::FromString( PlayerState->GetPlayerName()));
+	const FString DisplayName = FString::Printf(TEXT("Player %d"), PlayerState->GetPlayerId());
+
+	UE_MVVM_SET_PROPERTY_VALUE(PlayerName, FText::FromString(DisplayName));
 
 	if (CombatStatsComponent.IsValid())
 	{
@@ -76,11 +78,8 @@ void UDRScoreboardPlayerEntryViewModel::Refresh()
 void UDRScoreboardPlayerEntryViewModel::ApplyStats(const FDRMatchCombatStats& Stats)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(Kills, Stats.Kills);
-
 	UE_MVVM_SET_PROPERTY_VALUE(Deaths, Stats.Deaths);
-
 	UE_MVVM_SET_PROPERTY_VALUE(DamageDealt, Stats.DamageDealt);
-
 	UE_MVVM_SET_PROPERTY_VALUE(DamageTaken, Stats.DamageTaken);
 }
 
@@ -120,19 +119,16 @@ void UDRScoreboardViewModel::RefreshPlayers()
 
 	AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
 
-	if (!IsValid(LocalPlayerState) || !IsValid(GameState))
+	if (!IsValid(GameState))
 	{
 		return;
 	}
 
-	const int32 LocalTeamId = LocalPlayerState->GetTeamId();
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> NewBlueTeamEntries;
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> NewRedTeamEntries;
 
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> NewFriendlyEntries;
-
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> NewEnemyEntries;
-
-	NewFriendlyEntries.Reserve(3);
-	NewEnemyEntries.Reserve(3);
+	NewBlueTeamEntries.Reserve(3);
+	NewRedTeamEntries.Reserve(3);
 
 	for (APlayerState* PlayerStateBase : GameState->PlayerArray)
 	{
@@ -149,24 +145,30 @@ void UDRScoreboardViewModel::RefreshPlayers()
 
 		EntryViewModel->Initialize(DRPlayerState, bLocalPlayer);
 
-		if (DRPlayerState->GetTeamId() == LocalTeamId)
+		switch (DRPlayerState->GetTeamId())
 		{
-			NewFriendlyEntries.Add(EntryViewModel);
-		}
-		else
-		{
-			NewEnemyEntries.Add(EntryViewModel);
+		case 0:
+			NewBlueTeamEntries.Add(EntryViewModel);
+			break;
+
+		case 1:
+			NewRedTeamEntries.Add(EntryViewModel);
+			break;
+
+		default: UE_LOG(LogTemp, Warning, TEXT( "[Scoreboard] Invalid TeamId. " "Player=%s TeamId=%d"), *GetNameSafe(DRPlayerState), DRPlayerState->GetTeamId());
+
+			EntryViewModel->Deinitialize();
+			break;
 		}
 	}
 
-	UE_MVVM_SET_PROPERTY_VALUE(FriendlyEntries, MoveTemp(NewFriendlyEntries));
-
-	UE_MVVM_SET_PROPERTY_VALUE(EnemyEntries, MoveTemp(NewEnemyEntries));
+	UE_MVVM_SET_PROPERTY_VALUE(BlueTeamEntries, MoveTemp(NewBlueTeamEntries));
+	UE_MVVM_SET_PROPERTY_VALUE(RedTeamEntries, MoveTemp(NewRedTeamEntries));
 }
 
 void UDRScoreboardViewModel::ClearEntries()
 {
-	for (UDRScoreboardPlayerEntryViewModel* Entry : FriendlyEntries)
+	for (UDRScoreboardPlayerEntryViewModel* Entry : BlueTeamEntries)
 	{
 		if (IsValid(Entry))
 		{
@@ -174,7 +176,7 @@ void UDRScoreboardViewModel::ClearEntries()
 		}
 	}
 
-	for (UDRScoreboardPlayerEntryViewModel* Entry : EnemyEntries)
+	for (UDRScoreboardPlayerEntryViewModel* Entry : RedTeamEntries)
 	{
 		if (IsValid(Entry))
 		{
@@ -182,13 +184,11 @@ void UDRScoreboardViewModel::ClearEntries()
 		}
 	}
 
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> EmptyFriendlyEntries;
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> EmptyBlueEntries;
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> EmptyRedEntries;
 
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> EmptyEnemyEntries;
-
-	UE_MVVM_SET_PROPERTY_VALUE(FriendlyEntries, MoveTemp(EmptyFriendlyEntries));
-
-	UE_MVVM_SET_PROPERTY_VALUE(EnemyEntries, MoveTemp(EmptyEnemyEntries));
+	UE_MVVM_SET_PROPERTY_VALUE(BlueTeamEntries, MoveTemp(EmptyBlueEntries));
+	UE_MVVM_SET_PROPERTY_VALUE(RedTeamEntries, MoveTemp(EmptyRedEntries));
 }
 
 #pragma endregion

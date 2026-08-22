@@ -91,10 +91,10 @@ public:
 
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> FriendlyEntries;
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> BlueTeamEntries;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
-	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> EnemyEntries;
+	TArray<TObjectPtr<UDRScoreboardPlayerEntryViewModel>> RedTeamEntries;
 
 private:
 	void ClearEntries();
