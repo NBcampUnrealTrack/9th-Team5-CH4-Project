@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayTagContainer.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -155,8 +156,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
 
-	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
-	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
+	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation);
+	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation);
 	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
 
