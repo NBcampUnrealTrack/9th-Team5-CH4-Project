@@ -9,9 +9,8 @@ class UStaticMeshComponent;
 class UDRFreezeVisualProfile;
 class UMaterialInstanceDynamic;
 class UNiagaraComponent;
-
+struct FGameplayTag;
 struct FOnAttributeChangeData;
-
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRFreezeVisualComponent : public UActorComponent
@@ -29,9 +28,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
@@ -40,11 +37,8 @@ private:
 	// -------------------------------------------------
 
 	void UnbindAbilitySystem();
-
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
-
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
-
 	void RefreshTargetFreezeAmount(bool bSnapImmediately);
 
 
@@ -53,7 +47,6 @@ private:
 	// -------------------------------------------------
 
 	bool ShouldCreateVisuals() const;
-
 	void ApplyVisualFreezeAmount(float FreezeAmount);
 
 
@@ -62,9 +55,7 @@ private:
 	// -------------------------------------------------
 
 	void CreateAttachmentVisuals();
-
 	void DestroyAttachmentVisuals();
-
 	void ApplyAttachmentVisuals(float FreezeAmount);
 
 
@@ -73,9 +64,7 @@ private:
 	// -------------------------------------------------
 
 	void CreateSurfaceFrostVisual();
-
 	void ClearSurfaceFrostVisual();
-
 	void ApplySurfaceFrostVisual(float FreezeAmount);
 
 
@@ -84,11 +73,18 @@ private:
 	// -------------------------------------------------
 
 	void CreateNiagaraVisual();
-
 	void ClearNiagaraVisual();
-
 	void ApplyNiagaraVisual(float FreezeAmount);
 
+	// -------------------------------------------------
+	// Frozen Shell
+	// -------------------------------------------------
+
+	void CreateFrozenShellVisual();
+	void DestroyFrozenShellVisual();
+	void SetFrozenShellVisible(bool bVisible);
+	void HandleFrozenTagChanged(const FGameplayTag Tag, int32 NewCount);
+	
 private:
 	// -------------------------------------------------
 	// Configuration
@@ -96,7 +92,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Freeze|Visual", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRFreezeVisualProfile> VisualProfile;
-
 
 	// -------------------------------------------------
 	// Runtime Visuals
@@ -111,6 +106,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> FreezeNiagaraComponent;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> FrozenShellComponent;
+
+	FDelegateHandle FrozenTagChangedHandle;
 
 	// -------------------------------------------------
 	// Ability System

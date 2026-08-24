@@ -10,6 +10,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Data/DRFreezeVisualProfile.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 namespace
 {
@@ -34,7 +35,6 @@ namespace
 	}
 }
 
-
 UDRFreezeVisualComponent::UDRFreezeVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -57,22 +57,27 @@ void UDRFreezeVisualComponent::BeginPlay()
 	CreateAttachmentVisuals();
 	CreateSurfaceFrostVisual();
 	CreateNiagaraVisual();
+	CreateFrozenShellVisual();
 
 	ApplyVisualFreezeAmount(VisualFreezeAmount);
-}
 
+	if (UAbilitySystemComponent* ASC = BoundAbilitySystem.Get())
+	{
+		SetFrozenShellVisible(ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
+	}
+}
 
 void UDRFreezeVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindAbilitySystem();
 
+	DestroyFrozenShellVisual();
 	ClearNiagaraVisual();
 	ClearSurfaceFrostVisual();
 	DestroyAttachmentVisuals();
 
 	Super::EndPlay(EndPlayReason);
 }
-
 
 // =====================================================
 // Ability System
@@ -89,7 +94,10 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	 * 같은 ASC로 Character 초기화 함수가
 	 * 다시 호출되는 경우 Delegate 중복 등록 방지.
 	 */
-	if (BoundAbilitySystem.Get() == InASC && FreezeGaugeChangedHandle.IsValid() && MaxFreezeGaugeChangedHandle.IsValid())
+	if (BoundAbilitySystem.Get() == InASC
+		&& FreezeGaugeChangedHandle.IsValid()
+		&& MaxFreezeGaugeChangedHandle.IsValid()
+		&& FrozenTagChangedHandle.IsValid())
 	{
 		RefreshTargetFreezeAmount(true);
 		return;
@@ -105,13 +113,17 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	MaxFreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(
 		UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleMaxFreezeGaugeChanged);
 
+	FrozenTagChangedHandle = InASC->RegisterGameplayTagEvent(
+		DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::HandleFrozenTagChanged);
+	
+	SetFrozenShellVisible(InASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
+	
 	/*
 	 * Delegate 등록 전에 이미 Gauge 값이 존재할 수 있으므로
 	 * 현재 값을 한 번 즉시 읽는다.
 	 */
 	RefreshTargetFreezeAmount(true);
 }
-
 
 void UDRFreezeVisualComponent::UnbindAbilitySystem()
 {
@@ -121,33 +133,39 @@ void UDRFreezeVisualComponent::UnbindAbilitySystem()
 	{
 		if (FreezeGaugeChangedHandle.IsValid())
 		{
-			ASC->GetGameplayAttributeValueChangeDelegate(UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
+			ASC->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
 		}
 
 		if (MaxFreezeGaugeChangedHandle.IsValid())
 		{
-			ASC->GetGameplayAttributeValueChangeDelegate(UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).Remove(MaxFreezeGaugeChangedHandle);
+			ASC->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).Remove(MaxFreezeGaugeChangedHandle);
+		}
+
+		if (FrozenTagChangedHandle.IsValid())
+		{
+			ASC->RegisterGameplayTagEvent(
+				DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).Remove(FrozenTagChangedHandle);
 		}
 	}
 
 	FreezeGaugeChangedHandle.Reset();
 	MaxFreezeGaugeChangedHandle.Reset();
+	FrozenTagChangedHandle.Reset();
 
 	BoundAbilitySystem.Reset();
 }
-
 
 void UDRFreezeVisualComponent::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data)
 {
 	RefreshTargetFreezeAmount(false);
 }
 
-
 void UDRFreezeVisualComponent::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data)
 {
 	RefreshTargetFreezeAmount(false);
 }
-
 
 void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 {
@@ -177,7 +195,6 @@ void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 	}
 }
 
-
 // =====================================================
 // Tick
 // =====================================================
@@ -206,7 +223,6 @@ void UDRFreezeVisualComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	VisualFreezeAmount = FMath::FInterpTo(VisualFreezeAmount, TargetFreezeAmount, DeltaTime, FMath::Max(InterpSpeed, 0.01f));
 	ApplyVisualFreezeAmount(VisualFreezeAmount);
 }
-
 
 // =====================================================
 // Visual Root
@@ -244,7 +260,6 @@ void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
 		ApplyNiagaraVisual(Amount);
 	}
 }
-
 
 // =====================================================
 // Attachments
@@ -311,7 +326,6 @@ void UDRFreezeVisualComponent::CreateAttachmentVisuals()
 	}
 }
 
-
 void UDRFreezeVisualComponent::DestroyAttachmentVisuals()
 {
 	for (UStaticMeshComponent* MeshComponent : RuntimePartComponents)
@@ -324,7 +338,6 @@ void UDRFreezeVisualComponent::DestroyAttachmentVisuals()
 
 	RuntimePartComponents.Empty();
 }
-
 
 void UDRFreezeVisualComponent::ApplyAttachmentVisuals(float FreezeAmount)
 {
@@ -383,7 +396,6 @@ void UDRFreezeVisualComponent::ApplyAttachmentVisuals(float FreezeAmount)
 	}
 }
 
-
 // =====================================================
 // Surface Frost
 // =====================================================
@@ -409,7 +421,7 @@ void UDRFreezeVisualComponent::CreateSurfaceFrostVisual()
 		return;
 	}
 
-	SurfaceFrostMID->SetScalarParameterValue(TEXT("FreezeAmount"), 1.f);
+	SurfaceFrostMID->SetScalarParameterValue(TEXT("FreezeAmount"), 0.f);
 
 	Character->GetMesh()->SetOverlayMaterial(SurfaceFrostMID);
 }
@@ -427,7 +439,6 @@ void UDRFreezeVisualComponent::ClearSurfaceFrostVisual()
 	SurfaceFrostMID = nullptr;
 }
 
-
 void UDRFreezeVisualComponent::ApplySurfaceFrostVisual(float FreezeAmount)
 {
 	if (!IsValid(VisualProfile) || !IsValid(SurfaceFrostMID))
@@ -439,7 +450,6 @@ void UDRFreezeVisualComponent::ApplySurfaceFrostVisual(float FreezeAmount)
 
 	SurfaceFrostMID->SetScalarParameterValue(TEXT("FreezeAmount"), FrostAlpha);
 }
-
 
 // =====================================================
 // Niagara
@@ -476,7 +486,6 @@ void UDRFreezeVisualComponent::CreateNiagaraVisual()
 	FreezeNiagaraComponent->SetVariableFloat(TEXT("User.FreezeAmount"), 0.f);
 }
 
-
 void UDRFreezeVisualComponent::ClearNiagaraVisual()
 {
 	if (!IsValid(FreezeNiagaraComponent))
@@ -489,7 +498,6 @@ void UDRFreezeVisualComponent::ClearNiagaraVisual()
 
 	FreezeNiagaraComponent = nullptr;
 }
-
 
 void UDRFreezeVisualComponent::ApplyNiagaraVisual(float FreezeAmount)
 {
@@ -516,4 +524,67 @@ void UDRFreezeVisualComponent::ApplyNiagaraVisual(float FreezeAmount)
 	{
 		FreezeNiagaraComponent->Activate(true);
 	}
+}
+
+void UDRFreezeVisualComponent::CreateFrozenShellVisual()
+{
+	if (!IsValid(VisualProfile) || !VisualProfile->bEnableFrozenShell || !IsValid(VisualProfile->FrozenShellMesh))
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (!IsValid(Character) || !IsValid(Character->GetMesh()))
+	{
+		return;
+	}
+
+	FrozenShellComponent = NewObject<UStaticMeshComponent>(Character, TEXT("FrozenShellComponent"));
+
+	if (!IsValid(FrozenShellComponent))
+	{
+		return;
+	}
+
+	Character->AddInstanceComponent(FrozenShellComponent);
+
+	FrozenShellComponent->SetupAttachment(Character->GetMesh());
+	FrozenShellComponent->SetStaticMesh(VisualProfile->FrozenShellMesh);
+	FrozenShellComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FrozenShellComponent->SetGenerateOverlapEvents(false);
+	FrozenShellComponent->SetCanEverAffectNavigation(false);
+	FrozenShellComponent->SetIsReplicated(false);
+	FrozenShellComponent->SetRelativeTransform(VisualProfile->FrozenShellTransform);
+	FrozenShellComponent->SetVisibility(false, true);
+	FrozenShellComponent->RegisterComponent();
+}
+
+void UDRFreezeVisualComponent::DestroyFrozenShellVisual()
+{
+	if (!IsValid(FrozenShellComponent))
+	{
+		return;
+	}
+
+	FrozenShellComponent->DestroyComponent();
+	FrozenShellComponent = nullptr;
+}
+
+void UDRFreezeVisualComponent::SetFrozenShellVisible(bool bVisible)
+{
+	if (!IsValid(FrozenShellComponent))
+	{
+		return;
+	}
+
+	FrozenShellComponent->SetVisibility(bVisible, true);
+}
+
+void UDRFreezeVisualComponent::HandleFrozenTagChanged(
+	const FGameplayTag Tag,
+	int32 NewCount)
+{
+	SetFrozenShellVisible(
+		NewCount > 0);
 }

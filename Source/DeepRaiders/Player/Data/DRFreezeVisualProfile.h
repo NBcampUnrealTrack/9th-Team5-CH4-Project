@@ -101,6 +101,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Freeze|Niagara", meta = ( ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableNiagara"))
 	float NiagaraFullThreshold = 0.90f;
 
+	// -------------------------------------------------
+	// Frozen Shell
+	// -------------------------------------------------
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Freeze|Frozen Shell")
+	bool bEnableFrozenShell = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Freeze|Frozen Shell", meta = (EditCondition = "bEnableFrozenShell"))
+	TObjectPtr<UStaticMesh> FrozenShellMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Freeze|Frozen Shell", meta = (EditCondition = "bEnableFrozenShell"))
+	FTransform FrozenShellTransform = FTransform::Identity;
 
 	// -------------------------------------------------
 	// Smoothing
