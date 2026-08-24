@@ -79,11 +79,11 @@ protected:
 
 	void PlayLocalFirePresentation(
 		const FVector& MuzzleLocation,
-		const FVector& TargetLocation) const;
+		const FVector& TargetLocation);
 
 	void PlayServerFirePresentation(
 		const FVector& MuzzleLocation,
-		const FVector& TargetLocation) const;
+		const FVector& TargetLocation);
 
 	float GetMaxAttackDistance() const
 	{
@@ -139,4 +139,7 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
+	void ExecuteFireSoundCue(const FVector& MuzzleLocation) const;
+
+	void PlayFireMontage();
 };

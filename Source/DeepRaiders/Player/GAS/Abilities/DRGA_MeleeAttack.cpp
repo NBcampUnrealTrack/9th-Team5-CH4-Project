@@ -2,9 +2,9 @@
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
-#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Item/DRMeleeWeaponDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
@@ -16,7 +16,11 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 }
 
-void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+void UDRGA_MeleeAttack::ActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
@@ -29,6 +33,7 @@ void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 	UDRMeleeWeaponItemDefinition* WeaponDefinition = Cast<UDRMeleeWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+
 	if (!IsValid(WeaponDefinition) || !IsValid(Character) || !WeaponDefinition->DamageEffectClass || !IsValid(WeaponDefinition->ItemAnimationSet) || !IsValid(WeaponDefinition->ItemAnimationSet->PrimaryActionMontage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -44,10 +49,6 @@ void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		return;
 	}
 
-	/*
-	 * 서버는 실제 판정 가능 여부를
-	 * Commit 전에 검증.
-	 */
 	if (ActorInfo->IsNetAuthority() && !Melee->CanStartAttackFromAbility(WeaponDefinition))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -65,6 +66,14 @@ void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	ActiveWeaponDefinition = WeaponDefinition;
 
 	/*
+	 * Swing Sound.
+	 *
+	 * LocalPredicted GA의 GameplayCue 경로를 사용.
+	 * 별도 PresentationComponent / Multicast 없음.
+	 */
+	ExecuteSoundCue(DRGameplayTags::GameplayCue_Sound_Attack_Swing, Character, Character->GetActorLocation());
+
+	/*
 	 * 실제 Hit 판정은 서버에서만.
 	 */
 	if (ActorInfo->IsNetAuthority())
@@ -80,6 +89,7 @@ void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 			return;
 		}
 	}
+
 	UAnimMontage* AttackMontage = WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
 
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(this, NAME_None, AttackMontage, 1.f, NAME_None, true);
@@ -92,11 +102,9 @@ void UDRGA_MeleeAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
-
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
-
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
-
+	
 	MontageTask->ReadyForActivation();
 }
 
@@ -140,8 +148,12 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 
 		// Frozen Ally = Rescue
 		TargetPS->ClearFrozenState();
-
-		Attacker->PlayMeleeHitPresentationFromServer(Target, false, HitResult.ImpactPoint);
+		
+		ExecuteSoundCue(
+			DRGameplayTags::
+				GameplayCue_Sound_Attack_Hit,
+			Attacker,
+			HitResult.ImpactPoint);
 
 		return;
 	}
@@ -188,7 +200,17 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	}
 
 	const bool bKilled = Target->IsDead();
-	Attacker->PlayMeleeHitPresentationFromServer(Target, bKilled, HitResult.ImpactPoint);
+	const FGameplayTag ImpactSoundTag =
+		bKilled
+			? DRGameplayTags::
+				GameplayCue_Sound_Attack_Kill
+			: DRGameplayTags::
+				GameplayCue_Sound_Attack_Hit;
+
+	ExecuteSoundCue(
+		ImpactSoundTag,
+		Attacker,
+		HitResult.ImpactPoint);
 }
 
 void UDRGA_MeleeAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
@@ -232,4 +254,30 @@ void UDRGA_MeleeAttack::HandleMontageInterrupted()
 	}
 
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+}
+
+void UDRGA_MeleeAttack::ExecuteSoundCue(
+	const FGameplayTag& SoundCueTag,
+	AActor* SourceActor,
+	const FVector& Location) const
+{
+	UAbilitySystemComponent* ASC =
+		GetAbilitySystemComponentFromActorInfo();
+
+	if (!IsValid(ASC)
+		|| !IsValid(SourceActor)
+		|| !SoundCueTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+
+	Parameters.Location = Location;
+	Parameters.Instigator = SourceActor;
+	Parameters.EffectCauser = SourceActor;
+
+	ASC->ExecuteGameplayCue(
+		SoundCueTag,
+		Parameters);
 }
