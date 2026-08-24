@@ -141,7 +141,7 @@ bool ADRStorage::CanInteract_Implementation(APawn* Interactor) const
 
 bool ADRStorage::Interact_Implementation(APawn* Interactor)
 {
-	if (!CanInteract(Interactor))
+	if (!Execute_CanInteract(this, Interactor))
 	{
 		return false;
 	}

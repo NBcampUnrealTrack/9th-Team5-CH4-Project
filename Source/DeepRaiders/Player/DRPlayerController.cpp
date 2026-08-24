@@ -24,6 +24,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
+#include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
@@ -51,6 +52,9 @@ ADRPlayerController::ADRPlayerController()
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
 
+	// Interaction Initialize
+	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
+	
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));

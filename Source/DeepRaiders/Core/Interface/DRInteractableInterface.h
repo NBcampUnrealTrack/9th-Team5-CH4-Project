@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
+#include "DeepRaiders/Core/Interaction/DRInteractionTypes.h"
 #include "DRInteractableInterface.generated.h"
 
 class APawn;
@@ -27,4 +28,8 @@ public:
 	
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	bool Interact(APawn* Interactor);
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	bool GetInteractionPromptData(APawn* Interactor, FDRInteractionPromptData& OutPromptData) const;
+	virtual bool GetInteractionPromptData_Implementation(APawn* Interactor, FDRInteractionPromptData& OutPromptData) const;
 };

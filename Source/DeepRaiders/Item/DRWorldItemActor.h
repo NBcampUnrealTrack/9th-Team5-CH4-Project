@@ -103,7 +103,8 @@ private:
 public:
 	bool CanInteract_Implementation(APawn* Interactor) const override;
 	bool Interact_Implementation(APawn* Interactor) override;
-   
+	bool GetInteractionPromptData_Implementation(APawn* Interactor, FDRInteractionPromptData& OutPromptData) const override;
+	
 protected:
 	uint8 bInteractionInProgress:1 = false;
 #pragma endregion

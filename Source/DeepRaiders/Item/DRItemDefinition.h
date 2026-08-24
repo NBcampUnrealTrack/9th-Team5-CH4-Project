@@ -56,6 +56,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Interaction")
+	FText WorldInteractionText = NSLOCTEXT("DRInteraction", "DefaultItemInteractionAction", "상호작용");
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|UI")
 	TObjectPtr<UTexture2D> Icon;
 	
