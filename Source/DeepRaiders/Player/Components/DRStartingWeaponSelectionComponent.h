@@ -66,7 +66,7 @@ private:
 
 	void SetSelectionState(EDRStartingWeaponSelectionState NewState);
 
-	/** 기본 총이 들어 있는 슬롯을 유지하면서 Definition만 교체한다. */
+	/** 기본 총은 같은 슬롯에서 교체하고, 없으면 가장 앞의 빈 슬롯에 지급한다. */
 	bool TryApplySelection(UDRItemDefinition* SelectedWeapon);
 
 	UPROPERTY(Transient)

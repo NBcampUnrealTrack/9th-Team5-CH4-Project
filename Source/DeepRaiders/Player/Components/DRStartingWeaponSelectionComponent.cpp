@@ -118,6 +118,24 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 
 	if (WeaponSlotIndex == INDEX_NONE || !CurrentWeapon)
 	{
+		for (int32 SlotIndex = 0; SlotIndex < InventoryComponent->GetMaxSlots(); ++SlotIndex)
+		{
+			if (!InventoryComponent->GetItemAtSlot(SlotIndex))
+			{
+				const bool IsAdded = InventoryComponent->TryAddItemToSlot(
+					SlotIndex,
+					SelectedWeapon,
+					1);
+
+				if (IsAdded)
+				{
+					QuickSlotComponent->RequestSelectSlot(SlotIndex);
+				}
+
+				return IsAdded;
+			}
+		}
+
 		return false;
 	}
 
