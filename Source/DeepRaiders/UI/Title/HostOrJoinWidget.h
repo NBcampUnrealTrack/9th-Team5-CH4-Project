@@ -96,7 +96,7 @@ protected:
 	TObjectPtr<UTextBlock> MouseYAxis;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
-	FString DedicatedServerAddress = TEXT("127.0.0.1:7777");
+	FString DedicatedServerAddress = TEXT("shees95.myddns.me:7777");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
 	TSoftObjectPtr<UWorld> PlayMap;

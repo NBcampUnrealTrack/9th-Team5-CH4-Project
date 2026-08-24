@@ -7,12 +7,7 @@ UDRGameUserSettings* UDRGameUserSettings::Get()
 	return GEngine ? Cast<UDRGameUserSettings>(GEngine->GetGameUserSettings()) : nullptr;
 }
 
-void UDRGameUserSettings::SetTitleSettings(
-	float Master,
-	float Music,
-	float SFX,
-	float MouseX,
-	float MouseY)
+void UDRGameUserSettings::SetTitleSettings(float Master, float Music, float SFX, float MouseX, float MouseY)
 {
 	MasterVolume = FMath::Clamp(Master, 0.f, 1.f);
 	MusicVolume = FMath::Clamp(Music, 0.f, 1.f);

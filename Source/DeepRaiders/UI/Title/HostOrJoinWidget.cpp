@@ -87,7 +87,7 @@ void UHostOrJoinWidget::JoinPrivateMatch(const FString& Address)
 
 	if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
 	{
-		SessionSubsystem->JoinServer(Address);
+		SessionSubsystem->JoinListenServer(Address);
 	}
 }
 
@@ -98,7 +98,7 @@ void UHostOrJoinWidget::HandlePublicMatchClicked()
 	{
 		if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
 		{
-			SessionSubsystem->JoinServer(DedicatedServerAddress);
+			SessionSubsystem->JoinDedicatedServer(DedicatedServerAddress);
 			return;
 		}
 	}
@@ -130,8 +130,7 @@ void UHostOrJoinWidget::HandleJoinClicked()
 	{
 		return;
 	}
-
-	Btn_Join->SetIsEnabled(false);
+	
 	JoinPrivateMatch(Address);
 }
 

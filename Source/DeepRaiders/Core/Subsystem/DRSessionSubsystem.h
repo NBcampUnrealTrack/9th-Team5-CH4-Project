@@ -26,9 +26,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
 	void CreateServerSession();
 
-	// IP:Port 또는 Domain:Port 주소로 서버에 직접 접속합니다.
+	// IP:Port 또는 Domain:Port 주소로 리슨 서버에 직접 접속합니다.
 	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
-	void JoinServer(const FString& Address);
+	void JoinListenServer(const FString& Address);
+
+	// IP:Port 또는 Domain:Port 주소로 데디케이티드 서버에 직접 접속합니다.
+	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
+	void JoinDedicatedServer(const FString& Address);
 
 	// 서버에서 지정한 맵으로 이동합니다. 접속 중인 클라이언트는 서버를 따라 이동합니다.
 	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
@@ -51,6 +55,7 @@ private:
 	void ClearSessionDelegateHandles();
 
 	bool RefreshOnlineSubsystem();
+	void JoinServerInternal(const FString& Address, const TCHAR* ServerType);
 
 	static bool TryResolveConnectAddress(const FString& Address, FString& OutResolvedAddress);
 };
