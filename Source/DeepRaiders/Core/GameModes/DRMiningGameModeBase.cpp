@@ -5,6 +5,8 @@
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/DRTeamPlayerStart.h"
+#include "EngineUtils.h"
 
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
@@ -130,26 +132,32 @@ int64 ADRMiningGameModeBase::GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) 
 
 void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
-	Super::PostLogin(NewPlayer);
-
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(NewPlayer);
+
+	// 첫 스폰 위치를 선택하기 전에 서버에서 팀을 확정한다.
+	if (IsValid(PlayerController))
+	{
+		if (ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>())
+		{
+			const int32 AssignedTeamId = PlayerState->GetPlayerId() % 2;
+
+			PlayerState->SetTeamId(AssignedTeamId);
+
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[Team] Player=%s PlayerId=%d TeamId=%d"),
+				*GetNameSafe(PlayerState),
+				PlayerState->GetPlayerId(),
+				AssignedTeamId);
+		}
+	}
+
+	Super::PostLogin(NewPlayer);
 
 	if (!IsValid(PlayerController))
 	{
 		return;
-	}
-
-	// =============================
-	// TEMP: Team assignment
-	// =============================
-
-	if (ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>())
-	{
-		const int32 AssignedTeamId = PlayerState->GetPlayerId() % 2;
-
-		PlayerState->SetTeamId(AssignedTeamId);
-
-		UE_LOG(LogTemp, Warning, TEXT( "[Team] Player=%s " "PlayerId=%d TeamId=%d"), *GetNameSafe(PlayerState), PlayerState->GetPlayerId(), AssignedTeamId);
 	}
 
 	// =============================
@@ -202,4 +210,35 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 
 	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
 	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
+}
+
+AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Player)
+{
+	const ADRPlayerState* PlayerState =
+		IsValid(Player) ? Player->GetPlayerState<ADRPlayerState>() : nullptr;
+	if (!IsValid(PlayerState))
+	{
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	TArray<ADRTeamPlayerStart*> TeamStarts;
+	for (TActorIterator<ADRTeamPlayerStart> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		if (Iterator->TeamId == PlayerState->GetTeamId())
+		{
+			TeamStarts.Add(*Iterator);
+		}
+	}
+
+	if (TeamStarts.IsEmpty())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[TeamSpawn] TeamId=%d 시작점이 없어 일반 PlayerStart를 사용합니다."),
+			PlayerState->GetTeamId());
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	return TeamStarts[FMath::RandHelper(TeamStarts.Num())];
 }
