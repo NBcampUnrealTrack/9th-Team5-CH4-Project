@@ -28,25 +28,16 @@ public:
 	 */
 	void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
 
-	UDRItemDefinition*
-	GetHeldItemDefinition() const
+	UDRItemDefinition* GetHeldItemDefinition() const
 	{
 		return HeldItemDefinition;
 	}
-
-	bool HasAction(EDRItemActionType ActionType) const;
-	void RequestPrimaryAction(EDRItemActionTriggerEvent TriggerEvent);
-	void RequestSecondaryAction(EDRItemActionTriggerEvent TriggerEvent);
 
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
 	TWeakObjectPtr<UDRMiningComponent> MiningComponent;
 	TWeakObjectPtr<UDRItemActionPresentationComponent> PresentationComponent;
-
-	void ExecuteAction(EDRItemActionType ActionType);
-	bool CanStartLocalAction() const;
-	float GetActionCooldown(EDRItemActionType ActionType) const;
 
 	void RefreshHeldItemState();
 	void RefreshVisual();

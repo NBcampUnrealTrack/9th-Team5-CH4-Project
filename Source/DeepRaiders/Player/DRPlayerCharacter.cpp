@@ -26,6 +26,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
+#include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -55,7 +56,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
-
+	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
+	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
@@ -239,21 +241,6 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	StopJumping();
 }
 
-void ADRPlayerCharacter::RequestThrowHeldItem()
-{
-	if (!IsLocallyControlled() || IsDead() || IsFrozen() || !HasHeldItemAction(EDRItemActionType::Throw))
-	{
-		return;
-	}
-
-	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
-	{
-		// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
-		ensure(false);
-		//PlayerController->RequestThrowHeldItem();
-	}
-}
-
 void ADRPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -358,32 +345,6 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 {
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);
-}
-
-void ADRPlayerCharacter::RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
-{
-	if (IsDead() || IsFrozen())
-	{
-		return;
-	}
-
-	if (IsValid(HeldItemComponent))
-	{
-		HeldItemComponent->RequestPrimaryAction(TriggerEvent);
-	}
-}
-
-void ADRPlayerCharacter::RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
-{
-	if (IsValid(HeldItemComponent))
-	{
-		HeldItemComponent->RequestSecondaryAction(TriggerEvent);
-	}
-}
-
-bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
-{
-	return IsValid(HeldItemComponent) && HeldItemComponent->HasAction(ActionType);
 }
 
 void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
@@ -530,13 +491,18 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 	}
 
 	const UDRPlayerAttributeSet* RegisteredAttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();
-
 	if (!IsValid(RegisteredAttributeSet))
 	{
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT( "[GAS][AttributeSet] " "Direct=%s Registered=%s Same=%d"), *GetNameSafe(DRPlayerState->GetPlayerAttributeSet()), *GetNameSafe(RegisteredAttributeSet), DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
+	if (IsValid(FreezeVisualComponent))
+	{
+		FreezeVisualComponent->BindAbilitySystem(ASC);
+	}
+	
+	UE_LOG(LogTemp, Warning, TEXT( "[GAS][AttributeSet] " "Direct=%s Registered=%s Same=%d"), 
+		*GetNameSafe(DRPlayerState->GetPlayerAttributeSet()), *GetNameSafe(RegisteredAttributeSet), DRPlayerState->GetPlayerAttributeSet() == RegisteredAttributeSet);
 
 	/*
 	 * 이 Character에서 PlayerState / ASC /
