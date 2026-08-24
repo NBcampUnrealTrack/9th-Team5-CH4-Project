@@ -32,6 +32,10 @@ struct FDRUIScreenDefinition
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	EDRUILayer Layer = EDRUILayer::Menu;
+
+	/** 레이어 기준 ZOrder에 더할 표시 순서 오프셋이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	int32 Order = 0;
 };
 
 /** 로컬 플레이어 UI에서 사용하는 위젯 클래스와 공통 설정이다. */

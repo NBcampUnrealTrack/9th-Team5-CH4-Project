@@ -68,6 +68,11 @@ namespace DRGameplayTags
 		"Damage amount passed through GAS.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Health_Heal,
+		"Data.Health.Heal",
+		"Health Heal amount passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
 		"UI.Screen.HUD",
 		"Main HUD screen.");

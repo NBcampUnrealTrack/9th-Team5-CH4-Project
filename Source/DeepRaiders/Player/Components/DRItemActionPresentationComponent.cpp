@@ -10,6 +10,9 @@
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
+#include "AbilitySystemGlobals.h"
+#include "GameplayCueManager.h"
+#include "GameplayEffectTypes.h"
 
 UDRItemActionPresentationComponent::UDRItemActionPresentationComponent()
 {
@@ -87,19 +90,26 @@ void UDRItemActionPresentationComponent::PlayDamagedFeedbackLocal()
 		1.f);
 }
 
-void UDRItemActionPresentationComponent::PlayWeaponFireLocal(UAnimMontage* FireMontage)
+void UDRItemActionPresentationComponent::PlayWeaponFireLocal(UAnimMontage* FireMontage,
+	const FGameplayTag& FireGameplayCueTag,	const FVector& MuzzleLocation, const FVector& TargetLocation)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) || !Character->IsLocallyControlled() || !IsValid(FireMontage))
+	if (!IsValid(Character) || !Character->IsLocallyControlled())
 	{
 		return;
 	}
 
-	Character->PlayAnimMontage(FireMontage);
+	if (IsValid(FireMontage))
+	{
+		Character->PlayAnimMontage(FireMontage);
+	}
+	
+	ExecuteWeaponFireCue(FireGameplayCueTag, MuzzleLocation, TargetLocation);
 }
 
-void UDRItemActionPresentationComponent::PlayWeaponFireFromServer(UAnimMontage* FireMontage)
+void UDRItemActionPresentationComponent::PlayWeaponFireFromServer(UAnimMontage* FireMontage,
+	const FGameplayTag& FireGameplayCueTag,	const FVector& MuzzleLocation, const FVector& TargetLocation)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
@@ -108,7 +118,7 @@ void UDRItemActionPresentationComponent::PlayWeaponFireFromServer(UAnimMontage* 
 		return;
 	}
 
-	MulticastPlayWeaponFire(FireMontage);
+	MulticastPlayWeaponFire(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
 }
 
 void UDRItemActionPresentationComponent::PlayWorldAction(
@@ -212,7 +222,13 @@ void UDRItemActionPresentationComponent::PlayLocalCameraShake(
 			FRotator::ZeroRotator);
 }
 
-void UDRItemActionPresentationComponent::MulticastPlayWeaponFire_Implementation(UAnimMontage* FireMontage)
+void UDRItemActionPresentationComponent::ExecuteWeaponFireCue(const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation)
+{
+}
+
+void UDRItemActionPresentationComponent::MulticastPlayWeaponFire_Implementation(UAnimMontage* FireMontage,
+	const FGameplayTag& FireGameplayCueTag,	const FVector& MuzzleLocation, const FVector& TargetLocation)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
@@ -238,6 +254,8 @@ void UDRItemActionPresentationComponent::MulticastPlayWeaponFire_Implementation(
 	}
 
 	Character->PlayAnimMontage(FireMontage);
+	
+	ExecuteWeaponFireCue(FireGameplayCueTag, MuzzleLocation, TargetLocation);
 }
 
 void UDRItemActionPresentationComponent::MulticastPlayMeleeImpactSound_Implementation(

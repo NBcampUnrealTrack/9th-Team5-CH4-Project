@@ -87,22 +87,15 @@ void UDRInventoryUIComponent::TogglePlayerInventory()
 		return;
 	}
 
-	switch (UIState)
+	// 내부 상태가 아닌 실제 화면 표시 상태를 기준으로 토글한다.
+	if (IsValid(UIManager) && UIManager->IsScreenOpen(DRGameplayTags::UI_Screen_Inventory_Player))
 	{
-	case EDRInventoryUIState::Closed:
-		UIState = EDRInventoryUIState::PlayerOnly;
-		ShowPlayerInventory();
-		break;
-		
-	case EDRInventoryUIState::PlayerOnly:
 		CloseInventoryScreen();
-		break;
-		
-	case EDRInventoryUIState::PlayerAndStorage:
-		CloseInventoryScreen();
-		//PlayerController->RequestCloseStorage();
-		break;
+		return;
 	}
+
+	UIState = EDRInventoryUIState::PlayerOnly;
+	ShowPlayerInventory();
 }
 
 void UDRInventoryUIComponent::CloseInventory()

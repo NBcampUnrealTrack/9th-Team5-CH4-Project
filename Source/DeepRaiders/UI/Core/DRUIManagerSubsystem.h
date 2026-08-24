@@ -35,7 +35,8 @@ public:
 
 	UUserWidget* CreateManagedWidget(
 		TSubclassOf<UUserWidget> WidgetClass,
-		EDRUILayer Layer);
+		EDRUILayer Layer,
+		int32 Order = 0);
 	void SetManagedWidgetVisible(UUserWidget* Widget, bool bVisible);
 	void ReleaseManagedWidget(UUserWidget* Widget);
 

@@ -43,7 +43,10 @@ UUserWidget* UDRUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
 		return nullptr;
 	}
 
-	UUserWidget* Widget = CreateManagedWidget(Definition->WidgetClass, Definition->Layer);
+	UUserWidget* Widget = CreateManagedWidget(
+		Definition->WidgetClass,
+		Definition->Layer,
+		Definition->Order);
 	if (IsValid(Widget))
 	{
 		ActiveScreens.Add(ScreenTag, Widget);
@@ -82,7 +85,8 @@ void UDRUIManagerSubsystem::Configure(
 
 UUserWidget* UDRUIManagerSubsystem::CreateManagedWidget(
 	TSubclassOf<UUserWidget> WidgetClass,
-	EDRUILayer Layer)
+	EDRUILayer Layer,
+	int32 Order)
 {
 	if (!IsValid(PlayerController) || !WidgetClass)
 	{
@@ -94,7 +98,7 @@ UUserWidget* UDRUIManagerSubsystem::CreateManagedWidget(
 	{
 		ManagedWidgets.AddUnique(Widget);
 		WidgetLayers.Add(TWeakObjectPtr<UUserWidget>(Widget), Layer);
-		Widget->AddToViewport(GetLayerZOrder(Layer));
+		Widget->AddToViewport(GetLayerZOrder(Layer) + Order);
 		RefreshInputMode();
 	}
 
@@ -179,9 +183,10 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 
 	if (IsValid(ActiveMenu))
 	{
-		FInputModeUIOnly InputMode;
+		FInputModeGameAndUI InputMode;
 		InputMode.SetWidgetToFocus(ActiveMenu->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
 		PlayerController->SetInputMode(InputMode);
 		PlayerController->bShowMouseCursor = true;
 		return;

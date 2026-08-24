@@ -450,19 +450,21 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage)
+void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation)
 {
 	if (IsValid(ItemActionPresentationComponent))
 	{
-		ItemActionPresentationComponent->PlayWeaponFireLocal(FireMontage);
+		ItemActionPresentationComponent->PlayWeaponFireLocal(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
 	}
 }
 
-void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage)
+void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation)
 {
 	if (IsValid(ItemActionPresentationComponent))
 	{
-		ItemActionPresentationComponent->PlayWeaponFireFromServer(FireMontage);
+		ItemActionPresentationComponent->PlayWeaponFireFromServer(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
 	}
 }
 

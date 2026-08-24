@@ -24,6 +24,7 @@ public:
 	void InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem
 		, const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs
 		, const FDRProjectileWorldImpactData& InWorldImpactData
+		, FGameplayTag InImpactGameplayCueTag
 		, int32 InSourceTeamId);
 	
 protected:
@@ -41,6 +42,10 @@ protected:
 	
 	// 월드 충돌 처리
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult);
+	
+	// 아군 충돌 무시 설정
+	void RefreshFriendlyCollisionIgnores();
+	void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
 	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
@@ -62,4 +67,7 @@ private:
 	int32 SourceTeamId = INDEX_NONE;
 	
 	bool bImpactHandled = false;	
+	
+	// 충돌 지점에 적용될 GameplayCue Tag
+	FGameplayTag ImpactGameplayCueTag;
 };
