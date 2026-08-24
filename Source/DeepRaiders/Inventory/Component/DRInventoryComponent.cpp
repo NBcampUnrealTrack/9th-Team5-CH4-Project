@@ -137,7 +137,7 @@ bool UDRInventoryComponent::TryReplaceItemDefinition(
 	return true;
 }
 
-bool UDRInventoryComponent::TryRemoveFromItemInstance(FGuid InstanceId, int32 Quantity)
+bool UDRInventoryComponent::TryRemoveItemInstance(FGuid InstanceId, int32 Quantity)
 {
 	if (!HasInventoryAuthority()
 		|| !InstanceId.IsValid()
@@ -194,7 +194,7 @@ bool UDRInventoryComponent::TryRemoveItemByDefinition(UDRItemDefinition* Definit
 	return true;
 }
 
-bool UDRInventoryComponent::TryRemoveItemInstances(const TArray<FGuid>& InstanceIds)
+bool UDRInventoryComponent::TryRemoveItemInstanceArray(const TArray<FGuid>& InstanceIds)
 {
 	if (!HasInventoryAuthority()
 		|| InstanceIds.IsEmpty())

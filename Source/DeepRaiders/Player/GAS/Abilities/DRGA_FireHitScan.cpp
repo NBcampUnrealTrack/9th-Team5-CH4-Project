@@ -93,10 +93,9 @@ bool UDRGA_FireHitScan::SendLocalShotRequest()
 		return false;
 	}
 	
-	FScopedPredictionWindow PredictionWindow(AbilitySystem, true);
-	
-	// 서버로 로컬에서 찾은 TargetData를 전달
-	AbilitySystem->CallServerSetReplicatedTargetData(GetCurrentAbilitySpecHandle(), GetCurrentActivationInfo(). GetActivationPredictionKey(),
+	// 부모 GA가 생성한 Prediction Key로 TargetData와 예측 Cooldown을 연결
+	AbilitySystem->CallServerSetReplicatedTargetData(GetCurrentAbilitySpecHandle(),
+		GetCurrentActivationInfo().GetActivationPredictionKey(),
 		TargetData, FGameplayTag(), AbilitySystem->ScopedPredictionKey);
 	
 	return true;

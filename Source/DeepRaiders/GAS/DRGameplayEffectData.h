@@ -2,12 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
-#include "DRRangedWeaponTypes.generated.h"
+#include "DRGameplayEffectData.generated.h"
 
 class UGameplayEffect;
 
 USTRUCT(BlueprintType)
-struct DEEPRAIDERS_API FDRRangedWeaponImpactEffect
+struct DEEPRAIDERS_API FDRGameplayEffectData
 {
 	GENERATED_BODY()
 
