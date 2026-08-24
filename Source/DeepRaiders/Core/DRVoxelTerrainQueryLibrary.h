@@ -9,9 +9,9 @@ class AVoxelWorld;
 UENUM(BlueprintType)
 enum class EDRVoxelDepositRequestPhase : uint8
 {
-	// X/Y 샘플 열을 순회하면서 지표면 위의 퇴적 후보를 수집하는 단계다.
+	// 청크의 모든 X/Y 샘플 열을 순회하면서 지표면 위의 퇴적 후보를 수집하는 단계다.
 	BuildCandidates,
-	// 수집된 후보에 원형 풋프린트를 펼쳐 실제 복셀 값과 머터리얼을 기록하는 단계다.
+	// 전체 후보 중 커버리지 퍼센트만 선택한 뒤 원형 풋프린트를 펼쳐 복셀 값과 머터리얼을 기록하는 단계다.
 	ApplyVoxels,
 	// 모든 샘플 열과 남은 후보를 처리해 요청 배열에서 제거해도 되는 상태다.
 	Finished
@@ -80,68 +80,44 @@ struct FDRVoxelDigDeltaRecord
 	float Radius = 0.f;
 };
 
-// 한 번의 퇴적 요청에서 사용하는 입력 설정이다.
-// 스캔 간격/지터는 후보 위치의 분포를, 패치/풋프린트는 한 후보가 실제로 덮는 면적을 결정한다.
+// 한 청크의 퇴적 요청에서 실제로 조절할 필요가 있는 값만 모은 설정이다.
+// 지터, 가장자리 감쇠, 최상단 표면 전용 처리 같은 구현 세부값은 내부 기본값으로 고정한다.
 USTRUCT(BlueprintType)
 struct FDRVoxelDepositInBoxSettings
 {
 	GENERATED_BODY()
 
-	// 월드 단위의 X/Y 샘플 간격이다. 작을수록 촘촘하고 자연스럽지만 스캔할 열이 급격히 늘어난다.
+	// 월드 단위의 X/Y 표면 샘플 간격이다. 작을수록 촘촘하지만 청크당 조사할 열이 증가한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
-	float SampleStep = 50.f;
+	float SurfaceSampleSpacing = 50.f;
 
-	// 선택된 복셀의 밀도 값에서 한 번에 뺄 양이다. Voxel Plugin에서는 값이 작아질수록 고체가 늘어난다.
+	// 이번 청크 패스에서 선택된 위치의 밀도값에서 뺄 양이다. 값이 클수록 한 번에 두껍게 쌓인다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
-	float DepositAmount = 0.05f;
+	float DepositAmountPerPass = 0.05f;
 
 	// 새로 쌓인 복셀에 기록할 단일 머터리얼 인덱스다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit")
 	uint8 DepositMaterialIndex = 0;
 
-	// 지터, 열 순서, 후보 순서를 결정한다. 같은 값이면 동일한 요청 결과를 재현할 수 있다.
-	UPROPERTY(BlueprintReadWrite, Category="Voxel|Deposit")
+	// 청크에서 발견된 유효 표면 중 이번 패스에 실제로 선택할 비율이다.
+	// 독립 확률이 아니라 정확한 목표 개수를 계산하므로 청크마다 누적 면적이 일정하다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="100.0"))
+	float SurfaceCoveragePercentPerPass = 10.f;
+
+	// 선택된 표면 하나가 주변으로 퍼지는 월드 단위 반경이다. 요청 생성 시 VoxelSize 기준 정수 반경으로 변환된다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
+	float DepositSpreadRadius = 100.f;
+
+	// 0이면 모든 높이를 동일하게 선택하고, 1이면 낮은 표면이 가중 랜덤 선택에서 훨씬 유리해진다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float LowAreaPreference = 0.75f;
+
+	// 에디터 옵션이 아니라 요청마다 액터가 내부적으로 정하는 결정적 난수 Seed다.
 	int32 RandomSeed = 0;
-
-	// true면 각 X/Y 열의 가장 높은 표면 주변만 조사한다. false면 같은 열 안의 모든 표면 경계를 후보로 본다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit")
-	bool bOnlyTopSurface = true;
-
-	// 정규 격자 샘플 좌표를 무작위로 흔들어 격자무늬가 드러나는 현상을 줄인다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit")
-	bool bUseJitteredSamples = true;
-
-	// VoxelSampleStep에 곱해 지터 최대 반경을 계산한다. 0은 격자 중앙, 1은 샘플 간격 전체 범위다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float JitterRatio = 0.4f;
-
-	// 한 샘플 주변에서 높이를 비교하고 후보를 뽑는 정사각형 반경이다. 낮은 지형 선호 확률 계산 범위이기도 하다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0"))
-	int32 DepositPatchRadius = 1;
-
-	// 선택된 후보 하나가 실제로 값을 변경하려고 시도하는 원형 면적의 복셀 반경이다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0"))
-	int32 DepositFootprintRadius = 1;
-
-	// 풋프린트 가장자리의 DepositAmount 배율이다. 1이면 평평하고, 0에 가까울수록 가장자리가 얇아진다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float FootprintEdgeStrength = 0.55f;
-
-	// 패치에서 가장 높은 표면이 후보로 선택될 확률이다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MinSurfaceDepositChance = 0.15f;
-
-	// 패치에서 가장 낮은 표면이 후보로 선택될 확률이다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="1.0"))
-	float MaxSurfaceDepositChance = 0.85f;
-
-	// 높이 차이를 선택 확률로 바꿀 때 사용하는 지수다. 1은 선형, 클수록 아주 낮은 칸에 선택이 집중된다.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Voxel|Deposit", meta=(ClampMin="0.01"))
-	float LowerSurfaceSelectionBias = 1.5f;
 };
 
 // 여러 틱에 걸쳐 처리되는 퇴적 작업의 진행 상태다.
-// 요청 생성 후 BuildCandidates와 ApplyVoxels 단계를 오가며 예산만큼 처리되고 완료되면 배열에서 제거된다.
+// 요청 생성 후 전체 후보 스캔과 선택 후보 쓰기를 각각 틱 예산만큼 처리하고 완료되면 배열에서 제거된다.
 USTRUCT(BlueprintType)
 struct FDRVoxelDepositInBoxRequest
 {
@@ -151,14 +127,23 @@ struct FDRVoxelDepositInBoxRequest
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	TObjectPtr<AVoxelWorld> VoxelWorld = nullptr;
 
-	// 월드 박스를 VoxelWorld 로컬 정수 좌표로 바꾼 포함 범위다.
+	// 이 청크가 후보 중심을 소유하는 Core 범위다. 표면 스캔과 커버리지 퍼센트 계산은 이 범위만 사용한다.
+	// 인접 청크와 겹치지 않으므로 같은 표면 중심이 여러 청크의 후보로 중복 선택되지 않는다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	FIntVector VoxelMin = FIntVector::ZeroValue;
 
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	FIntVector VoxelMax = FIntVector::ZeroValue;
 
-	// 현재 스캔 배치에서 발견해 ApplyVoxels 단계가 처리해야 하는 후보 중심 목록이다.
+	// 선택된 중심의 원형 풋프린트가 실제로 값을 기록할 수 있는 확장 범위다.
+	// 기본 요청에서는 Core와 같고, 청크 액터는 퍼짐 반경만큼 확장한 뒤 전체 관리 영역에서 잘라 사용한다.
+	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
+	FIntVector WriteVoxelMin = FIntVector::ZeroValue;
+
+	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
+	FIntVector WriteVoxelMax = FIntVector::ZeroValue;
+
+	// Build 단계에서는 청크 전체에서 발견한 후보를, Apply 단계에서는 퍼센트 선택을 통과한 후보만 담는다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	TArray<FIntVector> PendingVoxels;
 
@@ -187,9 +172,20 @@ struct FDRVoxelDepositInBoxRequest
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	int32 NextScanColumnIndex = 0;
 
-	// SampleStep을 VoxelSize로 나눈 정수 복셀 간격이며 최소값은 1이다.
+	// SurfaceSampleSpacing을 VoxelSize로 나눈 정수 복셀 간격이며 최소값은 1이다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	int32 VoxelSampleStep = 1;
+
+	// DepositSpreadRadius를 VoxelSize로 나눈 실제 원형 풋프린트 반경이다.
+	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
+	int32 DepositFootprintRadius = 0;
+
+	// 청크에서 발견한 전체 유효 표면 수와 퍼센트 선택 후 실제 적용 대상으로 남긴 수다.
+	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
+	int32 DetectedSurfaceCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
+	int32 SelectedSurfaceCount = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	FDRVoxelDepositInBoxSettings DepositSettings;
@@ -209,9 +205,18 @@ struct FDRVoxelDepositInBoxRequest
 	// X/Y 열의 선형 인덱스를 요청 생성 시 한 번 섞어 둔다.
 	// 틱마다 앞에서부터 처리해도 한쪽 방향으로 줄무늬처럼 쌓이는 현상을 피할 수 있다.
 	TArray<int32> ScanColumnOrder;
-	// 후보 중복과 이미 기록한 쓰기 중복을 빠르게 제거하기 위한 서버 전용 집합이다.
+	// 후보 중복과 현재 요청 안에서 이미 기록한 쓰기 중복을 빠르게 제거하기 위한 서버 전용 집합이다.
 	TSet<FIntVector> PendingVoxelPositions;
 	TSet<FIntVector> WrittenVoxelPositions;
+	// 청크 액터가 한 패스 동안 공유하는 중복 방지 집합을 가리킨다. nullptr이면 요청 내부 집합만 사용한다.
+	// 액터 멤버를 가리키는 비소유 포인터이며 요청보다 액터가 오래 살고, 패스 취소 시 요청을 먼저 제거한다.
+	TSet<FIntVector>* SharedWrittenVoxelPositions = nullptr;
+	// 앞서 처리한 청크의 확장 풋프린트가 건드린 XY 열이다. 그 결과 높아진 표면을 다음 청크가
+	// 같은 패스에서 새 후보로 다시 잡지 않도록 후보 생성 단계에서만 확인한다.
+	TSet<FIntPoint>* SharedWrittenColumns = nullptr;
+	// 외부 지지 높이를 가진 후보 중심만 따로 기억해 퍼센트 선택에서 제외된 메시 후보의 지지 정보가
+	// 일반 복셀 후보에 잘못 적용되지 않도록 선택 완료 시 맵을 정리한다.
+	TSet<FIntVector> ExternalCandidatePositions;
 	// 고정 메시 표면은 복셀 밀도장에 고체로 존재하지 않는다. 키는 메시 바로 위에 쓸 복셀이고,
 	// 값은 복셀 로컬 좌표계에서 측정한 실제 메시 표면 Z다. 쓰기 단계는 이 높이로 메시 안쪽의
 	// 얇은 지지층과 첫 퇴적층의 밀도값을 계산해 첫 누적부터 등가면이 메시 표면에 붙도록 만든다.
@@ -252,6 +257,13 @@ public:
 		const FVector& BoxExtent,
 		const FDRVoxelDepositInBoxSettings& Settings,
 		FDRVoxelDepositInBoxRequest& OutRequest);
+
+	// 청크 요청의 쓰기 범위를 퍼짐 반경만큼 확장하되 전체 관리 박스 밖으로는 나가지 않게 제한한다.
+	// Blueprint 옵션이 아니라 청크 스케줄러가 요청 생성 직후 호출하는 C++용 경계 구성 함수다.
+	static bool ConfigureDepositRequestWriteBounds(
+		FDRVoxelDepositInBoxRequest& Request,
+		const FVector& AreaCenter,
+		const FVector& AreaExtent);
 
 	// 비동기 물리 트레이스로 찾은 고정 메시 표면을 기존 복셀 퇴적 요청에 합친다.
 	// 각 표면은 복셀 좌표로 변환되고 풋프린트 범위까지 외부 지지 높이가 기록되며,

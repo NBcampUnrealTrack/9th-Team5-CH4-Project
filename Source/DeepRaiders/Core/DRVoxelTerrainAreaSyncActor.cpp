@@ -10,44 +10,40 @@
 
 namespace
 {
-	void GetLocalVoxelBoundsForWorldBox(
-		AVoxelWorld* VoxelWorld,
-		const FVector& BoxCenter,
-		const FVector& AbsExtent,
-		FIntVector& OutVoxelMin,
-		FIntVector& OutVoxelMax)
+	// 에디터에는 세부 반복 횟수 대신 세 가지 성능 단계만 노출한다. 실제 수치는 한 곳에서 관리해
+	// 복셀 스캔, 복셀 쓰기, 고정 메시 트레이스의 부하 수준이 함께 움직이도록 한다.
+	struct FDRDepositTickBudgets
 	{
-		bool bHasBounds = false;
-		for (int32 SignX = -1; SignX <= 1; SignX += 2)
+		FDRDepositTickBudgets(
+			int32 InScanColumns,
+			int32 InVoxelWriteAttempts,
+			int32 InStaticMeshTraces)
+			: ScanColumns(InScanColumns)
+			, VoxelWriteAttempts(InVoxelWriteAttempts)
+			, StaticMeshTraces(InStaticMeshTraces)
 		{
-			for (int32 SignY = -1; SignY <= 1; SignY += 2)
-			{
-				for (int32 SignZ = -1; SignZ <= 1; SignZ += 2)
-				{
-					const FVector WorldCorner = BoxCenter + FVector(
-						AbsExtent.X * SignX,
-						AbsExtent.Y * SignY,
-						AbsExtent.Z * SignZ);
-					const FIntVector LocalCorner = VoxelWorld->GlobalToLocal(WorldCorner);
+		}
 
-					if (!bHasBounds)
-					{
-						OutVoxelMin = LocalCorner;
-						OutVoxelMax = LocalCorner;
-						bHasBounds = true;
-						continue;
-					}
+		int32 ScanColumns;
+		int32 VoxelWriteAttempts;
+		int32 StaticMeshTraces;
+	};
 
-					OutVoxelMin.X = FMath::Min(OutVoxelMin.X, LocalCorner.X);
-					OutVoxelMin.Y = FMath::Min(OutVoxelMin.Y, LocalCorner.Y);
-					OutVoxelMin.Z = FMath::Min(OutVoxelMin.Z, LocalCorner.Z);
-					OutVoxelMax.X = FMath::Max(OutVoxelMax.X, LocalCorner.X);
-					OutVoxelMax.Y = FMath::Max(OutVoxelMax.Y, LocalCorner.Y);
-					OutVoxelMax.Z = FMath::Max(OutVoxelMax.Z, LocalCorner.Z);
-				}
-			}
+	FDRDepositTickBudgets GetDepositTickBudgets(EDRDepositPerformancePreset Preset)
+	{
+		switch (Preset)
+		{
+		case EDRDepositPerformancePreset::Low:
+			return FDRDepositTickBudgets(8, 32, 8);
+		case EDRDepositPerformancePreset::High:
+			return FDRDepositTickBudgets(64, 256, 64);
+		case EDRDepositPerformancePreset::Balanced:
+		default:
+			return FDRDepositTickBudgets(32, 128, 32);
 		}
 	}
+
+	constexpr float DRStaticMeshSampleJitterRatio = 0.4f;
 
 	// 서버가 Revision 오름차순으로 추가한 배열에서 주어진 Revision보다 큰 첫 항목을 찾는다.
 	// 전체 히스토리를 매 Tick 선형 순회하지 않기 위한 upper-bound 이진 탐색이다.
@@ -105,74 +101,43 @@ bool ADRVoxelTerrainAreaSyncActor::ShouldTickIfViewportsOnly() const
 
 void ADRVoxelTerrainAreaSyncActor::RebuildTerrainChunks()
 {
-	// 청크는 영역의 로컬 복셀 경계를 보관한다. 마지막 청크는 전체 크기보다 작을 수 있으므로
-	// VoxelMaxExclusive를 동기화 박스의 끝에 맞춰 잘라 낸다.
+	// 레이아웃이 바뀌는 동안 이전 청크 요청을 계속 처리하면 서로 다른 경계의 결과가 한 패스에 섞인다.
+	// 런타임 변경도 안전하게 반영할 수 있도록 진행 상태를 먼저 취소한 뒤 새 XY 청크 배열을 만든다.
+	CancelDepositPass();
 	TerrainChunks.Reset();
 	bHasCachedChunkLayout = true;
-	CachedChunkVoxelWorld = VoxelWorld;
 	CachedChunkCenter = GetActorLocation();
 	CachedChunkExtent = BoxExtent;
-	CachedChunkSizeInVoxels = TerrainChunkSizeInVoxels;
-	CachedChunkVoxelWorldTransform = FTransform::Identity;
-	CachedChunkVoxelSize = 0.f;
+	CachedDepositChunkWorldSize = DepositChunkWorldSize;
 
-	if (!IsValid(VoxelWorld) || TerrainChunkSizeInVoxels <= 0)
+	if (!FMath::IsFinite(DepositChunkWorldSize) || DepositChunkWorldSize <= 0.f ||
+		CachedChunkCenter.ContainsNaN() || CachedChunkExtent.ContainsNaN())
 	{
 		return;
 	}
-
-	CachedChunkVoxelWorldTransform = VoxelWorld->GetActorTransform();
-	CachedChunkVoxelSize = VoxelWorld->VoxelSize;
 
 	const FVector AbsExtent(
 		FMath::Abs(BoxExtent.X),
 		FMath::Abs(BoxExtent.Y),
 		FMath::Abs(BoxExtent.Z));
 
-	if (AbsExtent.IsNearlyZero())
+	if (AbsExtent.X <= KINDA_SMALL_NUMBER ||
+		AbsExtent.Y <= KINDA_SMALL_NUMBER ||
+		AbsExtent.Z <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	// 관리 박스를 VoxelWorld 로컬 복셀 좌표로 변환한다. MaxExclusive를 사용하면
-	// 영역 크기, 청크 개수, 마지막 청크 자르기를 모두 뺄셈 기반으로 계산할 수 있다.
 	const FVector Center = GetActorLocation();
-	FIntVector RegionVoxelMin = FIntVector::ZeroValue;
-	FIntVector RegionVoxelMaxInclusive = FIntVector::ZeroValue;
-	GetLocalVoxelBoundsForWorldBox(
-		VoxelWorld,
-		Center,
-		AbsExtent,
-		RegionVoxelMin,
-		RegionVoxelMaxInclusive);
-	if (RegionVoxelMaxInclusive.X == MAX_int32 ||
-		RegionVoxelMaxInclusive.Y == MAX_int32 ||
-		RegionVoxelMaxInclusive.Z == MAX_int32)
-	{
-		return;
-	}
-	const FIntVector RegionVoxelMaxExclusive = RegionVoxelMaxInclusive + FIntVector(1);
-	const int64 RegionSizeX = static_cast<int64>(RegionVoxelMaxExclusive.X) - RegionVoxelMin.X;
-	const int64 RegionSizeY = static_cast<int64>(RegionVoxelMaxExclusive.Y) - RegionVoxelMin.Y;
-	const int64 RegionSizeZ = static_cast<int64>(RegionVoxelMaxExclusive.Z) - RegionVoxelMin.Z;
-	if (RegionSizeX <= 0 || RegionSizeY <= 0 || RegionSizeZ <= 0 ||
-		RegionSizeX > MAX_int32 || RegionSizeY > MAX_int32 || RegionSizeZ > MAX_int32)
-	{
-		return;
-	}
-	const FIntVector RegionSize(
-		static_cast<int32>(RegionSizeX),
-		static_cast<int32>(RegionSizeY),
-		static_cast<int32>(RegionSizeZ));
-	// 영역 크기가 청크 크기의 배수가 아니면 마지막 청크가 하나 더 필요하므로 올림 나눗셈을 사용한다.
-	const FIntVector ChunkCounts(
-		FMath::DivideAndRoundUp(RegionSize.X, TerrainChunkSizeInVoxels),
-		FMath::DivideAndRoundUp(RegionSize.Y, TerrainChunkSizeInVoxels),
-		FMath::DivideAndRoundUp(RegionSize.Z, TerrainChunkSizeInVoxels));
-	const int64 ChunkCountXY = static_cast<int64>(ChunkCounts.X) * ChunkCounts.Y;
-
-	if (ChunkCountXY <= 0 || ChunkCountXY > MAX_int32 ||
-		ChunkCounts.Z <= 0 || ChunkCountXY > MAX_int32 / ChunkCounts.Z)
+	const FVector RegionMin = Center - AbsExtent;
+	const FVector RegionMax = Center + AbsExtent;
+	const int64 ChunkCountX = FMath::CeilToInt64(
+		static_cast<double>(AbsExtent.X) * 2.0 / DepositChunkWorldSize);
+	const int64 ChunkCountY = FMath::CeilToInt64(
+		static_cast<double>(AbsExtent.Y) * 2.0 / DepositChunkWorldSize);
+	if (ChunkCountX <= 0 || ChunkCountY <= 0 ||
+		ChunkCountX > MAX_int32 || ChunkCountY > MAX_int32 ||
+		ChunkCountX > MAX_int32 / ChunkCountY)
 	{
 		UE_LOG(
 			LogTemp,
@@ -180,61 +145,45 @@ void ADRVoxelTerrainAreaSyncActor::RebuildTerrainChunks()
 			TEXT("Terrain chunk count exceeds the supported range."));
 		return;
 	}
-	const int32 TotalChunkCount = static_cast<int32>(ChunkCountXY * ChunkCounts.Z);
+	const int32 TotalChunkCount = static_cast<int32>(ChunkCountX * ChunkCountY);
 
 	TerrainChunks.Reserve(TotalChunkCount);
 
-	// 각 청크는 정규 크기로 시작하지만 영역 끝을 넘는 축은 RegionVoxelMaxExclusive에서 잘라 낸다.
-	for (int32 ChunkX = 0; ChunkX < ChunkCounts.X; ++ChunkX)
+	// 각 청크는 월드 XY 평면에서만 나뉘며 Z 중심과 반크기는 전체 관리 박스와 같다.
+	// 가장자리 청크는 영역 끝에서 잘라 실제 BoxCenter/BoxExtent를 저장하므로 별도 복셀 경계 변환이 필요 없다.
+	for (int32 ChunkX = 0; ChunkX < static_cast<int32>(ChunkCountX); ++ChunkX)
 	{
-		for (int32 ChunkY = 0; ChunkY < ChunkCounts.Y; ++ChunkY)
-		{
-			for (int32 ChunkZ = 0; ChunkZ < ChunkCounts.Z; ++ChunkZ)
-			{
-				FDRVoxelTerrainChunkBounds Chunk;
-				Chunk.ChunkCoordinate = FIntVector(ChunkX, ChunkY, ChunkZ);
-				Chunk.VoxelMin = RegionVoxelMin + FIntVector(
-					ChunkX * TerrainChunkSizeInVoxels,
-					ChunkY * TerrainChunkSizeInVoxels,
-					ChunkZ * TerrainChunkSizeInVoxels);
-				Chunk.VoxelMaxExclusive = FIntVector(
-					static_cast<int32>(FMath::Min(
-						static_cast<int64>(Chunk.VoxelMin.X) + TerrainChunkSizeInVoxels,
-						static_cast<int64>(RegionVoxelMaxExclusive.X))),
-					static_cast<int32>(FMath::Min(
-						static_cast<int64>(Chunk.VoxelMin.Y) + TerrainChunkSizeInVoxels,
-						static_cast<int64>(RegionVoxelMaxExclusive.Y))),
-					static_cast<int32>(FMath::Min(
-						static_cast<int64>(Chunk.VoxelMin.Z) + TerrainChunkSizeInVoxels,
-						static_cast<int64>(RegionVoxelMaxExclusive.Z))));
+		const float ChunkMinX = RegionMin.X + ChunkX * DepositChunkWorldSize;
+		const float ChunkMaxX = FMath::Min(ChunkMinX + DepositChunkWorldSize, RegionMax.X);
 
-				TerrainChunks.Add(Chunk);
-			}
+		for (int32 ChunkY = 0; ChunkY < static_cast<int32>(ChunkCountY); ++ChunkY)
+		{
+			const float ChunkMinY = RegionMin.Y + ChunkY * DepositChunkWorldSize;
+			const float ChunkMaxY = FMath::Min(ChunkMinY + DepositChunkWorldSize, RegionMax.Y);
+
+			FDRVoxelTerrainChunkBounds& Chunk = TerrainChunks.AddDefaulted_GetRef();
+			Chunk.ChunkCoordinate = FIntPoint(ChunkX, ChunkY);
+			Chunk.BoxCenter = FVector(
+				(ChunkMinX + ChunkMaxX) * 0.5f,
+				(ChunkMinY + ChunkMaxY) * 0.5f,
+				Center.Z);
+			Chunk.BoxExtent = FVector(
+				(ChunkMaxX - ChunkMinX) * 0.5f,
+				(ChunkMaxY - ChunkMinY) * 0.5f,
+				AbsExtent.Z);
 		}
 	}
 }
 
 void ADRVoxelTerrainAreaSyncActor::EnsureTerrainChunksCurrent()
 {
-	if (!IsValid(VoxelWorld))
-	{
-		if (!bHasCachedChunkLayout || TerrainChunks.Num() > 0 || CachedChunkVoxelWorld.IsValid())
-		{
-			RebuildTerrainChunks();
-		}
-		return;
-	}
-
-	// 액터 위치뿐 아니라 VoxelWorld의 변환, VoxelSize, 참조 교체까지 비교한다.
-	// 어느 하나라도 달라지면 로컬 복셀 좌표와 월드 디버그 박스가 달라질 수 있다.
+	// 청크는 월드 공간 XY 경계만 저장하므로 VoxelWorld의 변환이나 VoxelSize는 레이아웃 입력이 아니다.
+	// 액터 박스나 월드 청크 크기가 바뀐 경우에만 재계산한다.
 	const bool bLayoutIsCurrent =
 		bHasCachedChunkLayout &&
-		CachedChunkVoxelWorld.Get() == VoxelWorld &&
 		CachedChunkCenter.Equals(GetActorLocation()) &&
 		CachedChunkExtent.Equals(BoxExtent) &&
-		CachedChunkSizeInVoxels == TerrainChunkSizeInVoxels &&
-		FMath::IsNearlyEqual(CachedChunkVoxelSize, VoxelWorld->VoxelSize) &&
-		CachedChunkVoxelWorldTransform.Equals(VoxelWorld->GetActorTransform());
+		FMath::IsNearlyEqual(CachedDepositChunkWorldSize, DepositChunkWorldSize);
 
 	if (!bLayoutIsCurrent)
 	{
@@ -284,7 +233,7 @@ void ADRVoxelTerrainAreaSyncActor::BeginPlay()
 
 void ADRVoxelTerrainAreaSyncActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	CancelStaticMeshSurfaceScan();
+	CancelDepositPass();
 	UnbindTerrainDugDelegate();
 	Super::EndPlay(EndPlayReason);
 }
@@ -313,8 +262,17 @@ void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
 	// 서버는 원본 데이터를 변경하고 델타를 만들며, 클라이언트는 복제된 결과만 적용한다.
 	if (HasAuthority())
 	{
+		if (!bEnableDepositAccumulation &&
+			(bDepositPassActive || DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive))
+		{
+			CancelDepositPass();
+		}
+
 		ProcessStaticMeshSurfaceScan();
 		ProcessServerDepositRequests();
+		// 이전 청크가 이번 틱에 끝났다면 즉시 다음 청크 요청을 준비한다.
+		// 실제 스캔/쓰기는 다음 Tick부터 시작되므로 한 프레임 예산은 여전히 한 청크에만 사용된다.
+		StartNextDepositChunk();
 	}
 	else
 	{
@@ -374,7 +332,7 @@ void ADRVoxelTerrainAreaSyncActor::ScanVoxelArea()
 		VoxelWorld,
 		GetActorLocation(),
 		BoxExtent,
-		DepositSettings.SampleStep,
+		DepositSettings.SurfaceSampleSpacing,
 		TeamMaterialIndices,
 		MaterialCounts,
 		TotalCount);
@@ -419,54 +377,149 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 
 	if (!bEnableDepositAccumulation)
 	{
-		// 기능을 끄는 즉시 이전 표면을 기준으로 만들어진 진행 중 요청도 폐기한다.
-		DepositRequests.Reset();
-		CancelStaticMeshSurfaceScan();
+		// 기능을 끄는 즉시 이전 표면을 기준으로 만들어진 진행 중 패스 전체를 폐기한다.
+		CancelDepositPass();
 		return;
 	}
 
-	if (DepositRequests.Num() > 0)
+	if (bDepositPassActive || DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive)
 	{
-		// 여러 전체 스캔이 겹치면 같은 표면을 중복 후보로 만들 수 있다.
-		// 현재 요청이 끝난 뒤에만 다음 주기 요청을 받아 순차 처리한다.
+		// 타이머 주기보다 전체 청크 패스가 오래 걸려도 패스를 중첩하지 않는다.
+		// 진행 중 패스가 모든 청크를 끝낸 다음 타이머 호출에서만 새 패스를 시작한다.
 		return;
 	}
 
-	if (!IsValid(VoxelWorld))
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld is not valid."));
-		DepositRequests.Reset();
-		CancelStaticMeshSurfaceScan();
+		CancelDepositPass();
 		return;
 	}
 
-	// 에디터 설정은 유지하면서 요청마다 Seed만 바꾼다. 매 주기 분포는 달라지지만
-	// 생성된 요청 내부에서는 고정 Seed를 사용해 틱 수와 관계없이 결정적인 순서를 유지한다.
-	FDRVoxelDepositInBoxSettings RequestSettings = DepositSettings;
-	RequestSettings.RandomSeed = FMath::Rand();
-
-	FDRVoxelDepositInBoxRequest Request;
-	const bool bRequestCreated = UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
-		VoxelWorld,
-		GetActorLocation(),
-		BoxExtent,
-		RequestSettings,
-		Request);
-
-	if (!bRequestCreated)
+	EnsureTerrainChunksCurrent();
+	if (TerrainChunks.Num() == 0)
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("Failed to create deposit request."));
+		UE_LOG(LogTemp, Verbose, TEXT("No valid deposit chunks were generated."));
 		return;
 	}
 
-	DepositRequests.Add(MoveTemp(Request));
-
-	// 고정 메시 표면을 사용하는 경우에는 복셀 스캔을 바로 시작하지 않는다. 먼저 같은 요청 범위에
-	// 비동기 하향 트레이스를 발행하고, 모든 히트를 후보로 합친 뒤 기존 상태 머신을 진행한다.
-	if (bDepositOnStaticMeshes)
+	// 한 패스에서 모든 청크를 정확히 한 번씩 처리하되 순서를 매번 섞는다.
+	// 큰 맵의 한쪽이 항상 먼저 쌓여 보이는 현상을 줄이고, 패스 중간 상태도 공간적으로 분산시킨다.
+	DepositPassNumber = DepositPassNumber == MAX_int32 ? 1 : DepositPassNumber + 1;
+	DepositChunkOrder.SetNumUninitialized(TerrainChunks.Num());
+	for (int32 ChunkIndex = 0; ChunkIndex < DepositChunkOrder.Num(); ++ChunkIndex)
 	{
-		BeginStaticMeshSurfaceScan(RequestSettings);
+		DepositChunkOrder[ChunkIndex] = ChunkIndex;
 	}
+
+	FRandomStream ChunkOrderRandomStream(FMath::Rand());
+	for (int32 OrderIndex = DepositChunkOrder.Num() - 1; OrderIndex > 0; --OrderIndex)
+	{
+		DepositChunkOrder.Swap(
+			OrderIndex,
+			ChunkOrderRandomStream.RandRange(0, OrderIndex));
+	}
+
+	NextDepositChunkOrderIndex = 0;
+	ActiveDepositChunkIndex = INDEX_NONE;
+	DepositPassWrittenVoxelPositions.Reset();
+	DepositPassWrittenColumns.Reset();
+	bDepositPassActive = true;
+	StartNextDepositChunk();
+}
+
+void ADRVoxelTerrainAreaSyncActor::StartNextDepositChunk()
+{
+	if (!HasAuthority() || !bEnableDepositAccumulation || !bDepositPassActive ||
+		DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive)
+	{
+		return;
+	}
+
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		CancelDepositPass();
+		return;
+	}
+
+	while (NextDepositChunkOrderIndex < DepositChunkOrder.Num())
+	{
+		const int32 ChunkIndex = DepositChunkOrder[NextDepositChunkOrderIndex++];
+		if (!TerrainChunks.IsValidIndex(ChunkIndex))
+		{
+			continue;
+		}
+
+		FDRVoxelTerrainChunkBounds& Chunk = TerrainChunks[ChunkIndex];
+		FDRVoxelDepositInBoxSettings RequestSettings = DepositSettings;
+		// 요청 내부의 모든 랜덤 연산은 이 Seed에서 파생된다. 요청이 여러 틱에 걸쳐 처리돼도
+		// 프레임 타이밍과 무관하게 같은 후보 순서와 선택 결과를 유지한다.
+		RequestSettings.RandomSeed = FMath::Rand();
+
+		FDRVoxelDepositInBoxRequest Request;
+		bool bRequestCreated = UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
+			VoxelWorld,
+			Chunk.BoxCenter,
+			Chunk.BoxExtent,
+			RequestSettings,
+			Request);
+		if (bRequestCreated)
+		{
+			// 후보 중심은 Chunk.Box 범위가 소유하지만 실제 풋프린트는 퍼짐 반경만큼 이웃 청크로 넘어간다.
+			// 전체 관리 BoxExtent에서 다시 잘라 외곽 경계 밖에는 퇴적 데이터가 생성되지 않게 한다.
+			bRequestCreated = UDRVoxelTerrainQueryLibrary::ConfigureDepositRequestWriteBounds(
+				Request,
+				GetActorLocation(),
+				BoxExtent);
+		}
+		if (!bRequestCreated)
+		{
+			// 잘못된 한 청크 때문에 전체 패스가 멈추지 않게 완료 처리하고 다음 청크를 시도한다.
+			Chunk.LastProcessedPass = DepositPassNumber;
+			UE_LOG(
+				LogTemp,
+				Verbose,
+				TEXT("Failed to create deposit request for chunk (%d, %d)."),
+				Chunk.ChunkCoordinate.X,
+				Chunk.ChunkCoordinate.Y);
+			continue;
+		}
+
+		ActiveDepositChunkIndex = ChunkIndex;
+		// 이 포인터는 액터가 소유하는 패스 집합을 가리킨다. 라이브러리가 실제로 기록한 중심/지지 복셀을
+		// 즉시 집합에 추가하므로 다음 청크는 경계 중첩 위치를 다시 누적하지 않는다.
+		Request.SharedWrittenVoxelPositions = &DepositPassWrittenVoxelPositions;
+		Request.SharedWrittenColumns = &DepositPassWrittenColumns;
+		DepositRequests.Add(MoveTemp(Request));
+
+		// 고정 메시 표면을 사용하는 경우 같은 청크 범위의 비동기 트레이스를 먼저 완료한다.
+		// 수집한 히트를 요청 후보에 합친 뒤 복셀 표면 스캔이 이어서 전체 퍼센트를 함께 계산한다.
+		if (bDepositOnStaticMeshes)
+		{
+			BeginStaticMeshSurfaceScan(RequestSettings, Chunk.BoxCenter, Chunk.BoxExtent);
+		}
+		return;
+	}
+
+	// 섞인 청크 배열의 끝까지 도달하면 한 번의 전체 맵 패스가 끝난다.
+	bDepositPassActive = false;
+	ActiveDepositChunkIndex = INDEX_NONE;
+	NextDepositChunkOrderIndex = 0;
+	DepositChunkOrder.Reset();
+	DepositPassWrittenVoxelPositions.Reset();
+	DepositPassWrittenColumns.Reset();
+}
+
+void ADRVoxelTerrainAreaSyncActor::CancelDepositPass()
+{
+	DepositRequests.Reset();
+	CancelStaticMeshSurfaceScan();
+	DepositChunkOrder.Reset();
+	DepositPassWrittenVoxelPositions.Reset();
+	DepositPassWrittenColumns.Reset();
+	NextDepositChunkOrderIndex = 0;
+	ActiveDepositChunkIndex = INDEX_NONE;
+	bDepositPassActive = false;
 }
 
 void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
@@ -479,11 +532,11 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 	const FDRVoxelDepositInBoxRequest& ActiveRequest = DepositRequests[0];
 	if (!bEnableDepositAccumulation ||
 		!IsValid(VoxelWorld) ||
+		!VoxelWorld->IsCreated() ||
 		ActiveRequest.VoxelWorld.Get() != VoxelWorld)
 	{
 		// 기능이 꺼졌거나 대상 월드가 교체되면 이전 표면/월드를 기준으로 한 요청을 즉시 폐기한다.
-		DepositRequests.Reset();
-		CancelStaticMeshSurfaceScan();
+		CancelDepositPass();
 		return;
 	}
 
@@ -498,17 +551,30 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 	int32 ScannedColumnCount = 0;
 	int32 RemainingRequestCount = 0;
 	FDRVoxelDepositDeltaRecord DeltaRecord;
+	const int32 ProcessedChunkIndex = ActiveDepositChunkIndex;
+	const FDRDepositTickBudgets TickBudgets = GetDepositTickBudgets(PerformancePreset);
 
 	// 라이브러리는 읽기 또는 쓰기 단계 중 하나를 지정 예산만큼만 수행한다.
 	// 반환 bool 대신 출력 카운트와 DeltaRecord로 이번 틱에 실제 복제할 변경이 있는지 판단한다.
 	UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
 		DepositRequests,
-		MaxDepositScanColumnsPerTick,
-		MaxDepositVoxelWriteAttemptsPerTick,
+		TickBudgets.ScanColumns,
+		TickBudgets.VoxelWriteAttempts,
 		ModifiedVoxelCount,
 		ScannedColumnCount,
 		DeltaRecord,
 		RemainingRequestCount);
+
+	// 요청이 배열에서 제거됐다는 것은 선택된 후보의 쓰기 시도까지 모두 끝났다는 뜻이다.
+	// 실제 변경 수가 0이어도 해당 청크의 이번 패스 처리는 완료됐으므로 다음 청크로 넘어갈 수 있다.
+	if (DepositRequests.Num() == 0)
+	{
+		if (TerrainChunks.IsValidIndex(ProcessedChunkIndex))
+		{
+			TerrainChunks[ProcessedChunkIndex].LastProcessedPass = DepositPassNumber;
+		}
+		ActiveDepositChunkIndex = INDEX_NONE;
+	}
 
 	if (ModifiedVoxelCount <= 0 || DeltaRecord.Deltas.Num() == 0)
 	{
@@ -535,22 +601,26 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 }
 
 bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshSurfaceScan(
-	const FDRVoxelDepositInBoxSettings& RequestSettings)
+	const FDRVoxelDepositInBoxSettings& RequestSettings,
+	const FVector& ScanCenter,
+	const FVector& ScanExtent)
 {
 	CancelStaticMeshSurfaceScan();
 
 	UWorld* World = GetWorld();
 	if (!HasAuthority() || !bDepositOnStaticMeshes ||
 		!IsValid(World) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		!FMath::IsFinite(RequestSettings.SampleStep) || RequestSettings.SampleStep <= 0.f)
+		!FMath::IsFinite(RequestSettings.SurfaceSampleSpacing) ||
+		RequestSettings.SurfaceSampleSpacing <= 0.f ||
+		ScanCenter.ContainsNaN() || ScanExtent.ContainsNaN())
 	{
 		return false;
 	}
 
 	const FVector AbsExtent(
-		FMath::Abs(BoxExtent.X),
-		FMath::Abs(BoxExtent.Y),
-		FMath::Abs(BoxExtent.Z));
+		FMath::Abs(ScanExtent.X),
+		FMath::Abs(ScanExtent.Y),
+		FMath::Abs(ScanExtent.Z));
 	if (AbsExtent.Z <= KINDA_SMALL_NUMBER ||
 		!FMath::IsFinite(AbsExtent.X) ||
 		!FMath::IsFinite(AbsExtent.Y) ||
@@ -562,9 +632,9 @@ bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshSurfaceScan(
 	// 월드 공간 박스의 X/Y 격자를 사용한다. 개수 계산은 int64로 검증한 뒤에만 int32 배열을 만든다.
 	const double SpanX = static_cast<double>(AbsExtent.X) * 2.0;
 	const double SpanY = static_cast<double>(AbsExtent.Y) * 2.0;
-	const double SampleStep = static_cast<double>(RequestSettings.SampleStep);
-	const int64 ColumnCountX = FMath::FloorToInt64(SpanX / SampleStep) + 1;
-	const int64 ColumnCountY = FMath::FloorToInt64(SpanY / SampleStep) + 1;
+	const double SampleSpacing = static_cast<double>(RequestSettings.SurfaceSampleSpacing);
+	const int64 ColumnCountX = FMath::FloorToInt64(SpanX / SampleSpacing) + 1;
+	const int64 ColumnCountY = FMath::FloorToInt64(SpanY / SampleSpacing) + 1;
 	if (ColumnCountX <= 0 || ColumnCountY <= 0 ||
 		ColumnCountX > MAX_int32 || ColumnCountY > MAX_int32 ||
 		ColumnCountX > MAX_int32 / ColumnCountY)
@@ -590,7 +660,7 @@ bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshSurfaceScan(
 	}
 
 	StaticMeshScanVoxelWorld = VoxelWorld;
-	StaticMeshScanCenter = GetActorLocation();
+	StaticMeshScanCenter = ScanCenter;
 	StaticMeshScanExtent = AbsExtent;
 	StaticMeshTraceColumnCountY = static_cast<int32>(ColumnCountY);
 	NextStaticMeshTraceColumnIndex = 0;
@@ -622,6 +692,10 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 		return;
 	}
 
+	const FDRDepositTickBudgets TickBudgets = GetDepositTickBudgets(PerformancePreset);
+	const float MinimumSurfaceNormalZ = FMath::Cos(FMath::DegreesToRadians(
+		FMath::Clamp(MaxStaticMeshSlopeAngle, 0.f, 90.f)));
+
 	// 결과는 요청 다음 프레임부터 유효하다. 완료되지 않은 핸들은 유지하고, 만료된 핸들은 버려
 	// 오래된 비동기 결과가 다음 퇴적 요청에 섞이지 않게 한다.
 	for (int32 HandleIndex = PendingStaticMeshTraceHandles.Num() - 1; HandleIndex >= 0; --HandleIndex)
@@ -639,7 +713,7 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 				if (!IsValid(StaticMeshComponent) ||
 					StaticMeshComponent->GetMobility() != EComponentMobility::Static ||
 					Hit.ImpactPoint.ContainsNaN() || Hit.ImpactNormal.ContainsNaN() ||
-					Hit.ImpactNormal.Z < FMath::Clamp(MinStaticMeshSurfaceNormalZ, -1.f, 1.f))
+					Hit.ImpactNormal.Z < MinimumSurfaceNormalZ)
 				{
 					continue;
 				}
@@ -664,8 +738,9 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 		}
 	}
 
-	const int32 TraceBudget = FMath::Max(1, MaxStaticMeshTraceRequestsPerTick);
-	const int32 PendingTraceLimit = FMath::Max(1, MaxPendingStaticMeshTraces);
+	const int32 TraceBudget = FMath::Max(1, TickBudgets.StaticMeshTraces);
+	// 발행 예산의 두 프레임분만 비행 중 상태로 허용해 물리 쿼리가 밀릴 때 핸들이 끝없이 늘지 않게 한다.
+	const int32 PendingTraceLimit = FMath::Max(1, TickBudgets.StaticMeshTraces * 2);
 	int32 IssuedTraceCount = 0;
 
 	FCollisionObjectQueryParams ObjectQueryParams;
@@ -679,10 +754,8 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 	const FVector BoxMax = StaticMeshScanCenter + StaticMeshScanExtent;
 	const FDRVoxelDepositInBoxSettings& ActiveDepositSettings =
 		DepositRequests[0].DepositSettings;
-	const float JitterRadius = ActiveDepositSettings.bUseJitteredSamples
-		? ActiveDepositSettings.SampleStep *
-			FMath::Clamp(ActiveDepositSettings.JitterRatio, 0.f, 1.f)
-		: 0.f;
+	const float JitterRadius =
+		ActiveDepositSettings.SurfaceSampleSpacing * DRStaticMeshSampleJitterRatio;
 
 	while (IssuedTraceCount < TraceBudget &&
 		PendingStaticMeshTraceHandles.Num() < PendingTraceLimit &&
@@ -691,16 +764,15 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 		const int32 LinearIndex = StaticMeshTraceColumnOrder[NextStaticMeshTraceColumnIndex++];
 		const int32 ColumnX = LinearIndex / StaticMeshTraceColumnCountY;
 		const int32 ColumnY = LinearIndex % StaticMeshTraceColumnCountY;
-		const float BaseX = BoxMin.X + ColumnX * ActiveDepositSettings.SampleStep;
-		const float BaseY = BoxMin.Y + ColumnY * ActiveDepositSettings.SampleStep;
-		const float SampleX = FMath::Clamp(
-			BaseX + StaticMeshTraceRandomStream.FRandRange(-JitterRadius, JitterRadius),
-			BoxMin.X,
-			BoxMax.X);
-		const float SampleY = FMath::Clamp(
-			BaseY + StaticMeshTraceRandomStream.FRandRange(-JitterRadius, JitterRadius),
-			BoxMin.Y,
-			BoxMax.Y);
+		const float BaseX = BoxMin.X + ColumnX * ActiveDepositSettings.SurfaceSampleSpacing;
+		const float BaseY = BoxMin.Y + ColumnY * ActiveDepositSettings.SurfaceSampleSpacing;
+		// Clamp로 경계선에 트레이스가 몰리지 않도록 현재 기준점에서 박스 안으로 허용되는 지터만 뽑는다.
+		const float MinJitterX = FMath::Max(-JitterRadius, BoxMin.X - BaseX);
+		const float MaxJitterX = FMath::Min(JitterRadius, BoxMax.X - BaseX);
+		const float MinJitterY = FMath::Max(-JitterRadius, BoxMin.Y - BaseY);
+		const float MaxJitterY = FMath::Min(JitterRadius, BoxMax.Y - BaseY);
+		const float SampleX = BaseX + StaticMeshTraceRandomStream.FRandRange(MinJitterX, MaxJitterX);
+		const float SampleY = BaseY + StaticMeshTraceRandomStream.FRandRange(MinJitterY, MaxJitterY);
 
 		const FTraceHandle TraceHandle = World->AsyncLineTraceByObjectType(
 			EAsyncTraceType::Single,
@@ -737,11 +809,10 @@ void ADRVoxelTerrainAreaSyncActor::FinishStaticMeshSurfaceScan()
 		return;
 	}
 
-	TArray<FVector> SelectedSurfacePositions;
 	if (StaticMeshSurfaceHitPositions.Num() > 0)
 	{
-		// 비동기 완료 순서는 물리 작업 스케줄에 따라 달라질 수 있다. 좌표 순서로 정렬한 뒤 별도 Seed를
-		// 사용해야 같은 입력에서 낮은 표면 선택 확률이 프레임 타이밍에 영향을 받지 않는다.
+		// 비동기 완료 순서는 물리 작업 스케줄에 따라 달라질 수 있다. 좌표 순서로 정렬해 요청에 넣으면
+		// 라이브러리의 Seed 기반 가중 선택 결과가 트레이스 완료 프레임 순서에 영향을 받지 않는다.
 		StaticMeshSurfaceHitPositions.Sort([](const FVector& A, const FVector& B)
 		{
 			if (A.X != B.X)
@@ -754,57 +825,19 @@ void ADRVoxelTerrainAreaSyncActor::FinishStaticMeshSurfaceScan()
 			}
 			return A.Z < B.Z;
 		});
-
-		float MinSurfaceZ = StaticMeshSurfaceHitPositions[0].Z;
-		float MaxSurfaceZ = StaticMeshSurfaceHitPositions[0].Z;
-		for (const FVector& HitPosition : StaticMeshSurfaceHitPositions)
-		{
-			MinSurfaceZ = FMath::Min(MinSurfaceZ, HitPosition.Z);
-			MaxSurfaceZ = FMath::Max(MaxSurfaceZ, HitPosition.Z);
-		}
-
-		const float MinChance = FMath::Min(
-			Request.DepositSettings.MinSurfaceDepositChance,
-			Request.DepositSettings.MaxSurfaceDepositChance);
-		const float MaxChance = FMath::Max(
-			Request.DepositSettings.MinSurfaceDepositChance,
-			Request.DepositSettings.MaxSurfaceDepositChance);
-		const float HeightRange = MaxSurfaceZ - MinSurfaceZ;
-		FRandomStream SelectionStream(Request.DepositSettings.RandomSeed ^ 0x234F19A7);
-
-		SelectedSurfacePositions.Reserve(StaticMeshSurfaceHitPositions.Num());
-		for (const FVector& HitPosition : StaticMeshSurfaceHitPositions)
-		{
-			const float LowerSurfaceAlpha = HeightRange > KINDA_SMALL_NUMBER
-				? (MaxSurfaceZ - HitPosition.Z) / HeightRange
-				: 1.f;
-			const float BiasedLowerSurfaceAlpha = FMath::Pow(
-				FMath::Clamp(LowerSurfaceAlpha, 0.f, 1.f),
-				FMath::Max(0.01f, Request.DepositSettings.LowerSurfaceSelectionBias));
-			const float DepositChance = FMath::Lerp(
-				MinChance,
-				MaxChance,
-				BiasedLowerSurfaceAlpha);
-
-			if (SelectionStream.FRand() <= DepositChance)
-			{
-				SelectedSurfacePositions.Add(HitPosition);
-			}
-		}
 	}
 
 	int32 AddedCandidateCount = 0;
 	UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 		Request,
-		SelectedSurfacePositions,
+		StaticMeshSurfaceHitPositions,
 		AddedCandidateCount);
 
 	UE_LOG(
 		LogTemp,
 		Verbose,
-		TEXT("Static mesh deposit scan completed. HitCount=%d SelectedCount=%d AddedCandidateCount=%d"),
+		TEXT("Static mesh deposit scan completed. HitCount=%d AddedCandidateCount=%d"),
 		StaticMeshSurfaceHitPositions.Num(),
-		SelectedSurfacePositions.Num(),
 		AddedCandidateCount);
 
 	CancelStaticMeshSurfaceScan();
@@ -1009,8 +1042,9 @@ void ADRVoxelTerrainAreaSyncActor::HandleTerrainDug(const FVector& Location, flo
 	}
 
 	// 진행 중인 요청의 후보 표면은 굴착 이전 높이를 기준으로 계산됐을 수 있다.
-	// 그대로 쓰면 파낸 공간 위에 오래된 후보가 쌓일 수 있으므로 요청을 폐기하고 다음 주기에 다시 스캔한다.
-	DepositRequests.Reset();
+	// 그대로 쓰면 파낸 공간 위에 오래된 후보가 쌓일 수 있으므로 현재 청크뿐 아니라 남은 패스 순서와
+	// 비동기 메시 트레이스까지 함께 폐기한다. 다음 타이머 주기에는 변경된 지형을 기준으로 새 패스를 만든다.
+	CancelDepositPass();
 
 	// 이 델리게이트는 서버의 실제 굴착이 끝난 뒤 호출된다. 여기서 서버 지형을 다시 수정하지 않고
 	// 클라이언트 재생에 필요한 위치, 반지름, Revision만 기록해 중복 굴착을 방지한다.
@@ -1046,7 +1080,7 @@ void ADRVoxelTerrainAreaSyncActor::DrawScanDebugBox() const
 void ADRVoxelTerrainAreaSyncActor::DrawDepositGridPoints() const
 {
 	UWorld* World = GetWorld();
-	const float GridStep = DepositSettings.SampleStep;
+	const float GridStep = DepositSettings.SurfaceSampleSpacing;
 	if (!IsValid(World) || GridStep <= 0.f || MaxDebugDepositGridPoints <= 0)
 	{
 		return;
@@ -1068,7 +1102,7 @@ void ADRVoxelTerrainAreaSyncActor::DrawDepositGridPoints() const
 
 	int32 DrawnPointCount = 0;
 
-	// 이 표시는 SampleStep의 기준 3D 격자다. 실제 후보 스캔은 로컬 복셀 정수 간격과 X/Y 지터를 사용하므로
+	// 이 표시는 SurfaceSampleSpacing의 기준 3D 격자다. 실제 후보 스캔은 로컬 복셀 정수 간격과 X/Y 지터를 사용하므로
 	// 점은 처리 밀도를 이해하기 위한 참고용이며 실제 퇴적 위치를 정확히 나타내지는 않는다.
 	for (float X = Min.X; X <= Max.X && DrawnPointCount < MaxDebugDepositGridPoints; X += GridStep)
 	{
@@ -1093,33 +1127,23 @@ void ADRVoxelTerrainAreaSyncActor::DrawDepositGridPoints() const
 void ADRVoxelTerrainAreaSyncActor::DrawTerrainChunkBoxes() const
 {
 	UWorld* World = GetWorld();
-	if (!IsValid(World) || !IsValid(VoxelWorld) || MaxDebugTerrainChunkBoxes <= 0)
+	if (!IsValid(World) || MaxDebugTerrainChunkBoxes <= 0)
 	{
 		return;
 	}
 
-	// 청크 경계는 VoxelWorld 로컬 좌표로 저장된다. 중심은 LocalToGlobal로 변환하고,
-	// 크기는 복셀 개수 * VoxelSize * 월드 스케일의 절반으로 계산해 회전된 VoxelWorld도 맞게 표시한다.
-	const FVector VoxelWorldScale = VoxelWorld->GetActorScale3D().GetAbs();
-	const FQuat VoxelWorldRotation = VoxelWorld->GetActorQuat();
+	// 청크는 처음부터 월드 공간 XY 박스로 저장된다. 모든 청크가 전체 Z 반크기를 공유하므로
+	// 디버그 박스 하나가 실제 표면 스캔 요청 범위와 정확히 일치한다.
 	const int32 ChunkBoxesToDraw = FMath::Min(TerrainChunks.Num(), MaxDebugTerrainChunkBoxes);
 
 	for (int32 ChunkIndex = 0; ChunkIndex < ChunkBoxesToDraw; ++ChunkIndex)
 	{
 		const FDRVoxelTerrainChunkBounds& Chunk = TerrainChunks[ChunkIndex];
-		const FIntVector ChunkVoxelSize = Chunk.VoxelMaxExclusive - Chunk.VoxelMin;
-		// VoxelMaxExclusive는 포함되지 않으므로 실제 첫/마지막 복셀 중심의 평균을 구할 때 OneVector를 뺀다.
-		const FVector ChunkCenterInVoxelSpace =
-			(FVector(Chunk.VoxelMin) + FVector(Chunk.VoxelMaxExclusive) - FVector::OneVector) * 0.5f;
-		const FVector ChunkWorldCenter = VoxelWorld->LocalToGlobalFloatBP(ChunkCenterInVoxelSpace);
-		const FVector ChunkWorldExtent =
-			FVector(ChunkVoxelSize) * VoxelWorld->VoxelSize * 0.5f * VoxelWorldScale;
 
 		DrawDebugBox(
 			World,
-			ChunkWorldCenter,
-			ChunkWorldExtent,
-			VoxelWorldRotation,
+			Chunk.BoxCenter,
+			Chunk.BoxExtent,
 			TerrainChunkBoxColor,
 			false,
 			0.f,

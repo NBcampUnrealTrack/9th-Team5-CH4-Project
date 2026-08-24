@@ -9,24 +9,38 @@
 class AVoxelWorld;
 class UDRVoxelTerrainSubsystem;
 
-// 동기화 대상 박스를 고정 크기 복셀 청크로 나눈 결과다.
-// 현재는 네트워크 패킷 분할이 아니라 영역 확인과 디버그 표시를 위한 경계 정보로 사용한다.
+UENUM(BlueprintType)
+enum class EDRDepositPerformancePreset : uint8
+{
+	// 프레임 부하를 가장 낮게 유지하고 전체 패스 완료 시간을 길게 잡는다.
+	Low,
+	// 일반적인 서버 플레이를 위한 기본 균형값이다.
+	Balanced,
+	// 여유 있는 서버에서 청크 처리 시간을 단축한다.
+	High
+};
+
+// 관리 박스를 XY로 나눈 표면 처리 청크다. 표면 탐색은 각 XY 영역에서 전체 Z 범위를 한 번 내려가므로
+// 기존 3D 청크처럼 같은 XY 열을 Z 청크마다 반복해서 조사하지 않는다.
 USTRUCT(BlueprintType)
 struct FDRVoxelTerrainChunkBounds
 {
 	GENERATED_BODY()
 
-	// 동기화 박스의 VoxelMin을 원점으로 한 청크 X/Y/Z 번호다.
+	// 관리 박스의 좌하단을 원점으로 한 XY 청크 번호다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
-	FIntVector ChunkCoordinate = FIntVector::ZeroValue;
+	FIntPoint ChunkCoordinate = FIntPoint::ZeroValue;
 
-	// 이 청크가 포함하는 첫 로컬 복셀 좌표다.
+	// 가장자리 청크는 ChunkWorldSize보다 작을 수 있으므로 실제 월드 중심과 반크기를 저장한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
-	FIntVector VoxelMin = FIntVector::ZeroValue;
+	FVector BoxCenter = FVector::ZeroVector;
 
-	// 반복문과 크기 계산을 단순하게 하기 위한 미포함 최댓값이다. 유효 범위는 [VoxelMin, VoxelMaxExclusive)다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
-	FIntVector VoxelMaxExclusive = FIntVector::ZeroValue;
+	FVector BoxExtent = FVector::ZeroVector;
+
+	// 이 청크가 마지막으로 완료된 전체 퇴적 패스 번호다. 디버그 및 진행 상태 확인용이다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
+	int32 LastProcessedPass = INDEX_NONE;
 };
 
 // 지정 영역의 퇴적 요청 처리, 편집 델타 복제, 클라이언트 재생을 한 곳에서 관리한다.
@@ -51,7 +65,7 @@ public:
 	virtual bool ShouldTickIfViewportsOnly() const override;
 #endif
 
-	// 현재 박스와 VoxelWorld 설정을 기준으로 디버그용 청크 경계를 다시 계산한다.
+	// 현재 월드 박스와 청크 크기를 기준으로 XY 표면 처리 경계를 다시 계산한다.
 	UFUNCTION(BlueprintCallable, CallInEditor, Category="Voxel Terrain|Sync|Chunks")
 	void RebuildTerrainChunks();
 
@@ -98,7 +112,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Debug")
 	FColor DepositGridPointColor = FColor::White;
 
-	// RebuildTerrainChunks가 만든 복셀 청크 경계를 월드 공간 박스로 표시한다.
+	// RebuildTerrainChunks가 만든 XY 표면 청크 경계를 월드 공간 박스로 표시한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Debug")
 	bool bDrawTerrainChunkBoxes = false;
 
@@ -124,39 +138,30 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit")
 	FDRVoxelDepositInBoxSettings DepositSettings;
 
-	// 한 Tick의 읽기 단계에서 조사할 X/Y 열 상한이다. 낮추면 프레임 부하는 줄지만 한 요청 완료가 느려진다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="1"))
-	int32 MaxDepositScanColumnsPerTick = 32;
+	// 관리 박스를 XY로 나누는 한 청크의 월드 단위 한 변 길이다. 각 청크는 BoxExtent의 전체 Z를 공유한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="1.0"))
+	float DepositChunkWorldSize = 2000.f;
 
-	// 한 Tick의 쓰기 단계에서 검사할 풋프린트 칸 상한이다. 실제 수정 수가 아니라 실패 검사를 포함한 시도 횟수다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="1"))
-	int32 MaxDepositVoxelWriteAttemptsPerTick = 128;
+	// 스캔 열, 복셀 쓰기 시도, 비동기 트레이스 예산을 하나의 프리셋으로 묶어 세부 옵션 노출을 줄인다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit")
+	EDRDepositPerformancePreset PerformancePreset = EDRDepositPerformancePreset::Balanced;
 
 	// true면 복셀 지형뿐 아니라 관리 박스 안의 고정 StaticMesh 표면도 퇴적 지지면으로 사용한다.
 	// 메시 위에 별도 오브젝트를 생성하지 않고, 서버가 찾은 표면 높이를 기존 복셀 퇴적 요청에 합친다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
 	bool bDepositOnStaticMeshes = false;
 
-	// 한 Tick에 새로 발행할 비동기 하향 트레이스 수다. 낮추면 표면 스캔 시간이 늘어나는 대신
-	// Chaos 쿼리 제출 비용이 여러 프레임으로 더 고르게 분산된다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh", meta=(ClampMin="1"))
-	int32 MaxStaticMeshTraceRequestsPerTick = 32;
-
-	// 완료를 기다리는 비동기 트레이스의 최대 개수다. 물리 스레드가 늦어져도 요청이 무제한 누적되지 않게 한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh", meta=(ClampMin="1"))
-	int32 MaxPendingStaticMeshTraces = 64;
-
-	// 월드 위쪽을 향하는 노멀의 최소 Z다. 값이 클수록 수직 벽과 급경사면에는 쌓이지 않는다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh", meta=(ClampMin="-1.0", ClampMax="1.0"))
-	float MinStaticMeshSurfaceNormalZ = 0.65f;
+	// 이 각도보다 가파른 고정 메시 표면은 퇴적 지지면에서 제외한다. 내부에서는 노멀 Z 기준으로 변환한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category="Voxel Terrain|Deposit|Static Mesh", meta=(ClampMin="0.0", ClampMax="90.0"))
+	float MaxStaticMeshSlopeAngle = 50.f;
 
 	// None이면 모든 고정 StaticMesh를 허용한다. 이름을 지정하면 컴포넌트 또는 소유 액터에
 	// 같은 태그가 있는 메시만 지지면으로 인정해 장식 메시 등을 간단히 제외할 수 있다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category="Voxel Terrain|Deposit|Static Mesh")
 	FName RequiredStaticMeshSurfaceTag = NAME_None;
 
 	// true면 렌더 삼각형을 기준으로 정밀하게 표면을 찾는다. 단순 충돌보다 정확하지만 트레이스 비용이 커질 수 있다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category="Voxel Terrain|Deposit|Static Mesh")
 	bool bTraceComplexStaticMeshSurfaces = false;
 
 	// 0이면 체크포인트가 없는 현재 구조에서 중도 난입 플레이어가 처음부터 재생할 수 있도록 전체 기록을 유지한다.
@@ -164,11 +169,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync")
 	int32 MaxReplicatedDeltaRecords = 0;
 
-	// 디버그/향후 공간 분할 기준이 되는 한 청크의 축별 복셀 크기다. 현재 델타 배열 자체를 청크별 복제하지는 않는다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks", meta=(ClampMin="1"))
-	int32 TerrainChunkSizeInVoxels = 16;
-
-	// 현재 액터 설정으로 계산된 청크 경계 캐시다. 런타임 저장이나 네트워크 복제 대상은 아니다.
+	// 현재 액터 설정으로 계산된 2D 표면 청크다. 런타임 저장이나 네트워크 복제 대상은 아니다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="Voxel Terrain|Sync|Chunks")
 	TArray<FDRVoxelTerrainChunkBounds> TerrainChunks;
 
@@ -211,6 +212,18 @@ private:
 	int32 NextStaticMeshTraceColumnIndex = 0;
 	bool bStaticMeshSurfaceScanActive = false;
 
+	// 한 번의 전체 패스에서 모든 청크를 정확히 한 번씩 처리한다. 순서를 Seed로 섞어 맵 한쪽부터
+	// 누적되는 모습을 막고, 진행 중 패스가 끝나기 전에는 타이머가 새 패스를 중첩하지 않는다.
+	TArray<int32> DepositChunkOrder;
+	int32 NextDepositChunkOrderIndex = 0;
+	int32 ActiveDepositChunkIndex = INDEX_NONE;
+	int32 DepositPassNumber = 0;
+	bool bDepositPassActive = false;
+	// 서로 다른 청크의 확장 풋프린트가 같은 복셀에서 겹쳐도 한 패스에서는 한 번만 기록하도록 공유한다.
+	// 패스가 끝나거나 취소되면 비워지므로 장기 동기화 히스토리와는 무관한 서버 런타임 상태다.
+	TSet<FIntVector> DepositPassWrittenVoxelPositions;
+	TSet<FIntPoint> DepositPassWrittenColumns;
+
 	// 클라이언트가 마지막으로 성공적으로 적용한 Revision과 중복 경고 방지용 누락 Revision이다.
 	int32 LastAppliedTerrainRevision = 0;
 	int32 LastReportedMissingRevision = 0;
@@ -222,26 +235,30 @@ private:
 	FDelegateHandle TerrainDugDelegateHandle;
 
 	// 매 Tick 전체 청크 배열을 다시 만들지 않도록 마지막 계산 입력을 저장한 캐시다.
-	TWeakObjectPtr<AVoxelWorld> CachedChunkVoxelWorld;
-	FTransform CachedChunkVoxelWorldTransform = FTransform::Identity;
 	FVector CachedChunkCenter = FVector::ZeroVector;
 	FVector CachedChunkExtent = FVector::ZeroVector;
-	float CachedChunkVoxelSize = 0.f;
-	int32 CachedChunkSizeInVoxels = 0;
+	float CachedDepositChunkWorldSize = 0.f;
 	bool bHasCachedChunkLayout = false;
 
 	// 위치, 크기, 월드 변환 등 청크 입력이 바뀐 경우에만 경계를 다시 계산한다.
 	void EnsureTerrainChunksCurrent();
 	// 선택적 재료 통계를 계산하고 로그로 출력한다.
 	void ScanVoxelArea();
-	// 진행 중 요청이 없을 때 새 서버 퇴적 요청 하나를 생성한다.
+	// 진행 중 패스가 없을 때 전체 청크 순환을 시작한다.
 	void RequestDepositArea();
+	// 현재 패스의 다음 청크 요청을 생성한다. 요청/메시 스캔이 남아 있으면 아무 작업도 하지 않는다.
+	void StartNextDepositChunk();
+	// 기능 비활성화, 월드 교체, 청크 레이아웃 변경 시 현재 패스와 요청 상태를 함께 폐기한다.
+	void CancelDepositPass();
 	// 요청의 현재 단계를 Tick 예산만큼 처리하고 변경 델타를 복제 기록에 추가한다.
 	void ProcessServerDepositRequests();
 	// 고정 메시용 비동기 트레이스 스캔을 시작하고, 매 Tick 결과 회수와 새 트레이스 발행을 진행한다.
-	bool BeginStaticMeshSurfaceScan(const FDRVoxelDepositInBoxSettings& RequestSettings);
+	bool BeginStaticMeshSurfaceScan(
+		const FDRVoxelDepositInBoxSettings& RequestSettings,
+		const FVector& ScanCenter,
+		const FVector& ScanExtent);
 	void ProcessStaticMeshSurfaceScan();
-	// 유효 히트에 낮은 표면 선호 확률을 적용한 뒤 현재 복셀 요청에 후보로 주입한다.
+	// 유효 히트를 정렬해 현재 복셀 요청에 주입한다. 최종 퍼센트/낮은 지형 선택은 라이브러리가 통합 수행한다.
 	void FinishStaticMeshSurfaceScan();
 	// 기능 비활성화, 월드 교체, 액터 종료 시 아직 완료되지 않은 핸들과 임시 결과를 폐기한다.
 	void CancelStaticMeshSurfaceScan();

@@ -12,6 +12,11 @@ namespace
 	// 네트워크 델타에서는 float 밀도 값을 int32로 양자화한다.
 	// 32767을 사용하면 [-1, 1] 범위를 충분한 정밀도로 보존하면서 플랫폼 간 직렬화 결과도 일정하게 유지할 수 있다.
 	constexpr float DRVoxelValueScale = 32767.f;
+	// 아래 값들은 결과 형태를 안정적으로 유지하면서 에디터 옵션 수를 줄이기 위한 내부 기본값이다.
+	constexpr float DRDepositJitterRatio = 0.4f;
+	constexpr float DRDepositFootprintEdgeStrength = 0.55f;
+	constexpr float DRDepositLowAreaExponent = 1.5f;
+	constexpr float DRDepositMaximumLowAreaWeight = 8.f;
 
 	// LocalIndex가 int32이므로 서버와 클라이언트 모두 이 구조체 생성에 성공한 박스만 압축 델타로 사용한다.
 	struct FDRVoxelBoxDimensions
@@ -115,13 +120,11 @@ namespace
 	bool AreDepositSettingsFinite(const FDRVoxelDepositInBoxSettings& Settings)
 	{
 		return
-			FMath::IsFinite(Settings.SampleStep) &&
-			FMath::IsFinite(Settings.DepositAmount) &&
-			FMath::IsFinite(Settings.JitterRatio) &&
-			FMath::IsFinite(Settings.FootprintEdgeStrength) &&
-			FMath::IsFinite(Settings.MinSurfaceDepositChance) &&
-			FMath::IsFinite(Settings.MaxSurfaceDepositChance) &&
-			FMath::IsFinite(Settings.LowerSurfaceSelectionBias);
+			FMath::IsFinite(Settings.SurfaceSampleSpacing) &&
+			FMath::IsFinite(Settings.DepositAmountPerPass) &&
+			FMath::IsFinite(Settings.SurfaceCoveragePercentPerPass) &&
+			FMath::IsFinite(Settings.DepositSpreadRadius) &&
+			FMath::IsFinite(Settings.LowAreaPreference);
 	}
 
 	int32 QuantizeVoxelValue(float Value)
@@ -143,15 +146,14 @@ namespace
 		const FDRVoxelDepositInBoxSettings& Settings)
 	{
 		// Blueprint 메타의 Clamp는 에디터 입력을 돕는 기능일 뿐 C++ 호출까지 보장하지 않는다.
-		// 실제 알고리즘이 음수 반경이나 0 이하 지수를 받지 않도록 요청 생성 시 한 번 정규화한다.
+		// 실제 알고리즘이 범위를 벗어난 퍼센트나 음수 퍼짐 반경을 받지 않도록 요청 생성 시 한 번 정규화한다.
 		FDRVoxelDepositInBoxSettings Result = Settings;
-		Result.JitterRatio = FMath::Clamp(Result.JitterRatio, 0.f, 1.f);
-		Result.DepositPatchRadius = FMath::Max(0, Result.DepositPatchRadius);
-		Result.DepositFootprintRadius = FMath::Max(0, Result.DepositFootprintRadius);
-		Result.FootprintEdgeStrength = FMath::Clamp(Result.FootprintEdgeStrength, 0.f, 1.f);
-		Result.MinSurfaceDepositChance = FMath::Clamp(Result.MinSurfaceDepositChance, 0.f, 1.f);
-		Result.MaxSurfaceDepositChance = FMath::Clamp(Result.MaxSurfaceDepositChance, 0.f, 1.f);
-		Result.LowerSurfaceSelectionBias = FMath::Max(0.01f, Result.LowerSurfaceSelectionBias);
+		Result.SurfaceCoveragePercentPerPass = FMath::Clamp(
+			Result.SurfaceCoveragePercentPerPass,
+			0.f,
+			100.f);
+		Result.DepositSpreadRadius = FMath::Max(0.f, Result.DepositSpreadRadius);
+		Result.LowAreaPreference = FMath::Clamp(Result.LowAreaPreference, 0.f, 1.f);
 		return Result;
 	}
 
@@ -211,12 +213,39 @@ namespace
 		ModifiedMax.Z = FMath::Max(ModifiedMax.Z, Position.Z);
 	}
 
-	bool IsInsideBounds(const FDRVoxelDepositInBoxRequest& Request, const FIntVector& Position)
+	bool IsInsideCoreBounds(const FDRVoxelDepositInBoxRequest& Request, const FIntVector& Position)
 	{
 		return
 			Position.X >= Request.VoxelMin.X && Position.X <= Request.VoxelMax.X &&
 			Position.Y >= Request.VoxelMin.Y && Position.Y <= Request.VoxelMax.Y &&
 			Position.Z >= Request.VoxelMin.Z && Position.Z <= Request.VoxelMax.Z;
+	}
+
+	bool IsInsideWriteBounds(const FDRVoxelDepositInBoxRequest& Request, const FIntVector& Position)
+	{
+		return
+			Position.X >= Request.WriteVoxelMin.X && Position.X <= Request.WriteVoxelMax.X &&
+			Position.Y >= Request.WriteVoxelMin.Y && Position.Y <= Request.WriteVoxelMax.Y &&
+			Position.Z >= Request.WriteVoxelMin.Z && Position.Z <= Request.WriteVoxelMax.Z;
+	}
+
+	bool WasWrittenInCurrentDepositPass(
+		const FDRVoxelDepositInBoxRequest& Request,
+		const FIntVector& Position)
+	{
+		// 요청 내부 집합은 단독 라이브러리 호출을 보호하고, 공유 집합은 서로 다른 청크의
+		// 확장 풋프린트가 같은 복셀을 다시 누적하는 것을 막는다.
+		return Request.WrittenVoxelPositions.Contains(Position) ||
+			(Request.SharedWrittenVoxelPositions != nullptr &&
+				Request.SharedWrittenVoxelPositions->Contains(Position));
+	}
+
+	bool WasColumnWrittenByPreviousChunk(
+		const FDRVoxelDepositInBoxRequest& Request,
+		const FIntVector& Position)
+	{
+		return Request.SharedWrittenColumns != nullptr &&
+			Request.SharedWrittenColumns->Contains(FIntPoint(Position.X, Position.Y));
 	}
 
 	int32 GetLocalIndex(const FIntVector& Position, const FIntVector& VoxelMin, const FIntVector& VoxelMax)
@@ -257,15 +286,16 @@ namespace
 	{
 		// 후보는 박스 내부의 비어 있는 복셀이어야 한다. Voxel Plugin 밀도 기준으로
 		// Value <= 0은 고체, Value > 0은 빈 공간이므로 퇴적할 위치는 현재 값이 양수여야 한다.
-		if (!IsInsideBounds(Request, DepositVoxelPosition))
+		if (!IsInsideCoreBounds(Request, DepositVoxelPosition))
 		{
 			return false;
 		}
 
-		// 패치가 겹치면 같은 위치가 여러 샘플에서 발견될 수 있다. 현재 배치의 후보와
-		// 이 요청에서 이미 쓴 위치를 모두 제외해 중복 퇴적과 불필요한 델타를 막는다.
+		// 지터 때문에 인접 샘플이 같은 위치를 찾을 수 있다. 현재 청크의 후보와 이번 패스에서 앞선
+		// 청크가 이미 덮은 위치/열을 제외해 경계 중복 누적과 불필요한 델타를 막는다.
 		if (Request.PendingVoxelPositions.Contains(DepositVoxelPosition) ||
-			Request.WrittenVoxelPositions.Contains(DepositVoxelPosition))
+			WasWrittenInCurrentDepositPass(Request, DepositVoxelPosition) ||
+			WasColumnWrittenByPreviousChunk(Request, DepositVoxelPosition))
 		{
 			return false;
 		}
@@ -307,103 +337,153 @@ namespace
 		return MIN_int32;
 	}
 
-	struct FDRDepositPatchSurface
+	struct FDRWeightedDepositCandidate
 	{
-		int32 X = 0;
-		int32 Y = 0;
-		int32 SurfaceZ = 0;
+		FIntVector Position = FIntVector::ZeroValue;
+		float Priority = 0.f;
 	};
 
-	void AddPatchDepositCandidates(
-		FDRVoxelDepositInBoxRequest& Request,
-		FVoxelData& Data,
-		int32 CenterX,
-		int32 CenterY)
+	void PruneUnselectedExternalSupports(FDRVoxelDepositInBoxRequest& Request)
 	{
-		// 한 샘플만 선택하면 점처럼 뾰족하게 쌓이기 쉬우므로 주변 패치의 표면 높이를 함께 조사한다.
-		// 패치 안의 최저/최고 높이를 구한 뒤 낮은 표면일수록 높은 확률로 후보에 포함한다.
-		const int32 Radius = Request.DepositSettings.DepositPatchRadius;
+		// 고정 메시 후보를 추가할 때에는 실제 쓰기 단계에서 사용할 표면 높이를 풋프린트 전체에 기록한다.
+		// 퍼센트 선택에서 탈락한 메시 후보의 지지 높이가 남아 있으면 같은 위치의 일반 복셀 후보가 메시 후보로
+		// 오인될 수 있으므로, 선택된 외부 후보가 실제로 덮는 원형 풋프린트의 키만 유지한다.
+		TSet<FIntVector> SelectedExternalSupportPositions;
+		const int32 Radius = Request.DepositFootprintRadius;
 
-		TArray<FDRDepositPatchSurface> PatchSurfaces;
-		PatchSurfaces.Reserve(FMath::Square(Radius * 2 + 1));
-
-		int32 MinSurfaceZ = MAX_int32;
-		int32 MaxSurfaceZ = MIN_int32;
-
-		for (int32 OffsetX = -Radius; OffsetX <= Radius; ++OffsetX)
+		for (const FIntVector& SelectedPosition : Request.PendingVoxels)
 		{
-			for (int32 OffsetY = -Radius; OffsetY <= Radius; ++OffsetY)
-			{
-				const int64 TargetX64 = static_cast<int64>(CenterX) + OffsetX;
-				const int64 TargetY64 = static_cast<int64>(CenterY) + OffsetY;
-
-				if (TargetX64 < Request.VoxelMin.X || TargetX64 > Request.VoxelMax.X ||
-					TargetY64 < Request.VoxelMin.Y || TargetY64 > Request.VoxelMax.Y)
-				{
-					continue;
-				}
-				const int32 TargetX = static_cast<int32>(TargetX64);
-				const int32 TargetY = static_cast<int32>(TargetY64);
-
-				const int32 TargetSurfaceZ = FindTopSurfaceZ(
-					Data,
-					TargetX,
-					TargetY,
-					Request.VoxelMin.Z,
-					Request.VoxelMax.Z);
-
-				if (TargetSurfaceZ == MIN_int32)
-				{
-					continue;
-				}
-
-				FDRDepositPatchSurface PatchSurface;
-				PatchSurface.X = TargetX;
-				PatchSurface.Y = TargetY;
-				PatchSurface.SurfaceZ = TargetSurfaceZ;
-				PatchSurfaces.Add(PatchSurface);
-
-				MinSurfaceZ = FMath::Min(MinSurfaceZ, TargetSurfaceZ);
-				MaxSurfaceZ = FMath::Max(MaxSurfaceZ, TargetSurfaceZ);
-			}
-		}
-
-		if (PatchSurfaces.Num() == 0)
-		{
-			return;
-		}
-
-		// 설정값의 입력 순서가 뒤집혀도 높은 곳에는 작은 확률, 낮은 곳에는 큰 확률이 적용되도록 정렬한다.
-		const float MinChance = FMath::Min(
-			Request.DepositSettings.MinSurfaceDepositChance,
-			Request.DepositSettings.MaxSurfaceDepositChance);
-		const float MaxChance = FMath::Max(
-			Request.DepositSettings.MinSurfaceDepositChance,
-			Request.DepositSettings.MaxSurfaceDepositChance);
-		const float HeightRange = static_cast<float>(MaxSurfaceZ - MinSurfaceZ);
-
-		for (const FDRDepositPatchSurface& PatchSurface : PatchSurfaces)
-		{
-			// LowerSurfaceAlpha: 최고점=0, 최저점=1이다. 높이 차가 없으면 모든 칸을 낮은 칸으로 취급한다.
-			// Bias가 1보다 크면 중간 높이의 Alpha가 작아져 선택이 가장 낮은 지점에 더 집중된다.
-			const float LowerSurfaceAlpha = HeightRange > 0.f
-				? static_cast<float>(MaxSurfaceZ - PatchSurface.SurfaceZ) / HeightRange
-				: 1.f;
-			const float BiasedLowerSurfaceAlpha = FMath::Pow(
-				FMath::Clamp(LowerSurfaceAlpha, 0.f, 1.f),
-				Request.DepositSettings.LowerSurfaceSelectionBias);
-			const float DepositChance = FMath::Lerp(MinChance, MaxChance, BiasedLowerSurfaceAlpha);
-
-			if (Request.RandomStream.FRand() > DepositChance)
+			if (!Request.ExternalCandidatePositions.Contains(SelectedPosition))
 			{
 				continue;
 			}
 
-			TryAddDepositCandidate(
-				Request,
-				Data,
-				FIntVector(PatchSurface.X, PatchSurface.Y, PatchSurface.SurfaceZ + 1));
+			for (int32 OffsetX = -Radius; OffsetX <= Radius; ++OffsetX)
+			{
+				for (int32 OffsetY = -Radius; OffsetY <= Radius; ++OffsetY)
+				{
+					if (OffsetX * OffsetX + OffsetY * OffsetY > Radius * Radius + Radius)
+					{
+						continue;
+					}
+
+					const int64 SupportX64 = static_cast<int64>(SelectedPosition.X) + OffsetX;
+					const int64 SupportY64 = static_cast<int64>(SelectedPosition.Y) + OffsetY;
+					if (SupportX64 < Request.WriteVoxelMin.X || SupportX64 > Request.WriteVoxelMax.X ||
+						SupportY64 < Request.WriteVoxelMin.Y || SupportY64 > Request.WriteVoxelMax.Y)
+					{
+						continue;
+					}
+
+					SelectedExternalSupportPositions.Add(FIntVector(
+						static_cast<int32>(SupportX64),
+						static_cast<int32>(SupportY64),
+						SelectedPosition.Z));
+				}
+			}
 		}
+
+		for (auto It = Request.ExternalSupportSurfaceZByVoxel.CreateIterator(); It; ++It)
+		{
+			if (!SelectedExternalSupportPositions.Contains(It.Key()))
+			{
+				It.RemoveCurrent();
+			}
+		}
+
+		Request.ExternalCandidatePositions.Reset();
+	}
+
+	void SelectDepositCandidates(FDRVoxelDepositInBoxRequest& Request)
+	{
+		// 청크의 복셀 표면과 고정 메시 표면을 모두 조사한 뒤 정확한 목표 개수를 계산한다.
+		// 각 후보를 독립 확률로 판정하지 않으므로 작은 청크에서도 설정한 커버리지 비율이 크게 흔들리지 않는다.
+		Request.DetectedSurfaceCount = Request.PendingVoxels.Num();
+		const int32 TargetSelectionCount = FMath::Clamp(
+			FMath::CeilToInt(
+				static_cast<double>(Request.DetectedSurfaceCount) *
+				static_cast<double>(Request.DepositSettings.SurfaceCoveragePercentPerPass) /
+				100.0),
+			0,
+			Request.DetectedSurfaceCount);
+
+		if (TargetSelectionCount <= 0)
+		{
+			Request.PendingVoxels.Reset();
+			Request.PendingVoxelPositions.Reset();
+			Request.ExternalCandidatePositions.Reset();
+			Request.ExternalSupportSurfaceZByVoxel.Reset();
+			Request.SelectedSurfaceCount = 0;
+			Request.Phase = EDRVoxelDepositRequestPhase::Finished;
+			return;
+		}
+
+		int32 MinCandidateZ = MAX_int32;
+		int32 MaxCandidateZ = MIN_int32;
+		for (const FIntVector& CandidatePosition : Request.PendingVoxels)
+		{
+			MinCandidateZ = FMath::Min(MinCandidateZ, CandidatePosition.Z);
+			MaxCandidateZ = FMath::Max(MaxCandidateZ, CandidatePosition.Z);
+		}
+
+		const float HeightRange = static_cast<float>(MaxCandidateZ - MinCandidateZ);
+		TArray<FDRWeightedDepositCandidate> WeightedCandidates;
+		WeightedCandidates.Reserve(Request.PendingVoxels.Num());
+
+		for (const FIntVector& CandidatePosition : Request.PendingVoxels)
+		{
+			// LowerSurfaceAlpha는 최고점에서 0, 최저점에서 1이다. LowAreaPreference가 0이면
+			// 모든 후보의 가중치가 1이 되어 순수 랜덤 선택이 되고, 1에 가까울수록 낮은 곳이 유리하다.
+			const float LowerSurfaceAlpha = HeightRange > 0.f
+				? static_cast<float>(MaxCandidateZ - CandidatePosition.Z) / HeightRange
+				: 1.f;
+			const float BiasedLowerSurfaceAlpha = FMath::Pow(
+				FMath::Clamp(LowerSurfaceAlpha, 0.f, 1.f),
+				DRDepositLowAreaExponent);
+			const float Weight = FMath::Lerp(
+				1.f,
+				DRDepositMaximumLowAreaWeight,
+				Request.DepositSettings.LowAreaPreference * BiasedLowerSurfaceAlpha);
+
+			// 지수 레이스 방식의 키를 사용하면 가중치를 반영하면서도 중복 없이 정확히 K개를 뽑을 수 있다.
+			// 작은 Priority가 먼저 선택되며, 같은 RandomSeed에서는 같은 후보 집합이 재현된다.
+			FDRWeightedDepositCandidate& WeightedCandidate = WeightedCandidates.AddDefaulted_GetRef();
+			WeightedCandidate.Position = CandidatePosition;
+			WeightedCandidate.Priority = -FMath::Loge(
+				FMath::Max(Request.RandomStream.FRand(), SMALL_NUMBER)) / Weight;
+		}
+
+		WeightedCandidates.Sort([](
+			const FDRWeightedDepositCandidate& A,
+			const FDRWeightedDepositCandidate& B)
+		{
+			if (A.Priority != B.Priority)
+			{
+				return A.Priority < B.Priority;
+			}
+			if (A.Position.Z != B.Position.Z)
+			{
+				return A.Position.Z < B.Position.Z;
+			}
+			if (A.Position.X != B.Position.X)
+			{
+				return A.Position.X < B.Position.X;
+			}
+			return A.Position.Y < B.Position.Y;
+		});
+
+		Request.PendingVoxels.Reset(TargetSelectionCount);
+		for (int32 Index = 0; Index < TargetSelectionCount; ++Index)
+		{
+			Request.PendingVoxels.Add(WeightedCandidates[Index].Position);
+		}
+
+		Request.SelectedSurfaceCount = Request.PendingVoxels.Num();
+		PruneUnselectedExternalSupports(Request);
+		Request.PendingVoxelPositions.Reset();
+		ShuffleVoxels(Request.PendingVoxels, Request.RandomStream);
+		Request.NextVoxelIndex = 0;
+		Request.Phase = EDRVoxelDepositRequestPhase::ApplyVoxels;
 	}
 
 	void RecordDepositVoxelValue(
@@ -421,11 +501,19 @@ namespace
 		// 서버가 실제로 기록한 최종값만 델타에 넣는다. 메시 지지층과 눈에 보이는 퇴적층이
 		// 같은 함수를 사용하므로 클라이언트와 중도 난입 플레이어도 동일한 밀도장을 복원한다.
 		Request.WrittenVoxelPositions.Add(Position);
+		if (Request.SharedWrittenVoxelPositions != nullptr)
+		{
+			Request.SharedWrittenVoxelPositions->Add(Position);
+		}
+		if (Request.SharedWrittenColumns != nullptr)
+		{
+			Request.SharedWrittenColumns->Add(FIntPoint(Position.X, Position.Y));
+		}
 		Data.SetValue(Position, FVoxelValue(NewValue));
 		Data.SetMaterial(Position, DepositMaterial);
 
 		FDRVoxelCompressedValueDelta Delta;
-		Delta.LocalIndex = GetLocalIndex(Position, Request.VoxelMin, Request.VoxelMax);
+		Delta.LocalIndex = GetLocalIndex(Position, Request.WriteVoxelMin, Request.WriteVoxelMax);
 		Delta.QuantizedValue = QuantizeVoxelValue(NewValue);
 		DeltaRecord.Deltas.Add(Delta);
 
@@ -447,18 +535,19 @@ namespace
 	{
 		// 풋프린트 중심에서는 AmountScale=1, 가장자리에서는 FootprintEdgeStrength에 가까워진다.
 		// 따라서 넓은 면적을 한 번에 선택해도 가장자리가 중심보다 얇게 쌓인다.
-		const float ScaledDepositAmount = Request.DepositSettings.DepositAmount * FMath::Max(0.f, AmountScale);
+		const float ScaledDepositAmount =
+			Request.DepositSettings.DepositAmountPerPass * FMath::Max(0.f, AmountScale);
 		if (ScaledDepositAmount <= SMALL_NUMBER)
 		{
 			return false;
 		}
 
-		if (!IsInsideBounds(Request, Position) || Request.WrittenVoxelPositions.Contains(Position))
+		if (!IsInsideWriteBounds(Request, Position) || WasWrittenInCurrentDepositPass(Request, Position))
 		{
 			return false;
 		}
 
-		if (Position.Z <= Request.VoxelMin.Z)
+		if (Position.Z <= Request.WriteVoxelMin.Z)
 		{
 			return false;
 		}
@@ -497,8 +586,8 @@ namespace
 			DepositStartValue = FMath::Min(DepositStartValue, BaseDepositValue);
 
 			if (BelowValue > 0.f &&
-				IsInsideBounds(Request, BelowPosition) &&
-				!Request.WrittenVoxelPositions.Contains(BelowPosition))
+				IsInsideWriteBounds(Request, BelowPosition) &&
+				!WasWrittenInCurrentDepositPass(Request, BelowPosition))
 			{
 				// StaticMesh는 VoxelWorld의 밀도장에 포함되지 않는다. 메시 바로 안쪽 한 칸을 음수로 만들어야
 				// 위쪽 퇴적값과 보간되는 등가면이 생긴다. 이 값도 델타에 넣어 굴착 및 중도 난입 재생과 일치시킨다.
@@ -558,11 +647,11 @@ namespace
 	{
 		// 정사각형을 선형 인덱스로 순회하되 원 반경 밖의 칸은 제외한다.
 		// 제외된 칸도 "쓰기 시도" 예산을 소비하므로 복잡한 풋프린트에서도 한 틱의 반복 횟수 상한이 일정하다.
-		const int32 Radius = Request.DepositSettings.DepositFootprintRadius;
+		const int32 Radius = Request.DepositFootprintRadius;
 		const int32 SideLength = Radius * 2 + 1;
 		const int32 FootprintPositionCount = SideLength * SideLength;
 		const float RadiusAsFloat = static_cast<float>(FMath::Max(1, Radius));
-		const float EdgeStrength = Request.DepositSettings.FootprintEdgeStrength;
+		const float EdgeStrength = DRDepositFootprintEdgeStrength;
 
 		while (RemainingVoxelWriteAttempts > 0 &&
 			Request.NextFootprintOffsetIndex < FootprintPositionCount)
@@ -586,9 +675,9 @@ namespace
 			const float AmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
 			const int64 FootprintX = static_cast<int64>(Request.ActiveFootprintCenter.X) + OffsetX;
 			const int64 FootprintY = static_cast<int64>(Request.ActiveFootprintCenter.Y) + OffsetY;
-			if (FootprintX < Request.VoxelMin.X || FootprintX > Request.VoxelMax.X ||
-				FootprintY < Request.VoxelMin.Y || FootprintY > Request.VoxelMax.Y ||
-				Request.ActiveFootprintCenter.Z <= Request.VoxelMin.Z)
+			if (FootprintX < Request.WriteVoxelMin.X || FootprintX > Request.WriteVoxelMax.X ||
+				FootprintY < Request.WriteVoxelMin.Y || FootprintY > Request.WriteVoxelMax.Y ||
+				Request.ActiveFootprintCenter.Z <= Request.WriteVoxelMin.Z)
 			{
 				// 예산에는 포함하되 실제로 쓸 수 없는 가장자리 칸은 쓰기 잠금 범위에서 제외한다.
 				continue;
@@ -614,79 +703,52 @@ namespace
 	void BuildDepositCandidatesForCurrentColumn(FDRVoxelDepositInBoxRequest& Request, FVoxelData& Data)
 	{
 		// 규칙적인 샘플 격자가 지형에 그대로 드러나지 않도록 현재 열 중심을 X/Y 방향으로 흔든다.
-		// Clamp로 박스 밖으로 나가는 샘플을 경계에 고정한다.
+		// 지터 비율은 내부 기본값으로 고정하며 Clamp로 박스 밖으로 나가는 샘플을 경계에 고정한다.
 		constexpr int64 MaxSafeJitterRadius = MAX_int32 / 2;
-		const int32 JitterRadius = Request.DepositSettings.bUseJitteredSamples
-			? static_cast<int32>(FMath::Min(
-				FMath::RoundToInt64(
-					static_cast<double>(Request.VoxelSampleStep) *
-					Request.DepositSettings.JitterRatio),
-				MaxSafeJitterRadius))
-			: 0;
+		const int32 JitterRadius = static_cast<int32>(FMath::Min(
+			FMath::RoundToInt64(
+				static_cast<double>(Request.VoxelSampleStep) * DRDepositJitterRatio),
+			MaxSafeJitterRadius));
+
+		// 결과 좌표를 나중에 Clamp하면 바깥쪽으로 뽑힌 여러 값이 경계 한 줄에 겹쳐 격자선이 드러난다.
+		// 대신 현재 기준점에서 Core 안으로 움직일 수 있는 오프셋 범위를 먼저 계산해 그 안에서만 뽑는다.
+		const int32 MinJitterOffsetX = FMath::Max(
+			-JitterRadius,
+			Request.VoxelMin.X - Request.ScanCursor.X);
+		const int32 MaxJitterOffsetX = FMath::Min(
+			JitterRadius,
+			Request.VoxelMax.X - Request.ScanCursor.X);
+		const int32 MinJitterOffsetY = FMath::Max(
+			-JitterRadius,
+			Request.VoxelMin.Y - Request.ScanCursor.Y);
+		const int32 MaxJitterOffsetY = FMath::Min(
+			JitterRadius,
+			Request.VoxelMax.Y - Request.ScanCursor.Y);
 
 		const int32 JitterOffsetX = JitterRadius > 0
-			? Request.RandomStream.RandRange(-JitterRadius, JitterRadius)
+			? Request.RandomStream.RandRange(MinJitterOffsetX, MaxJitterOffsetX)
 			: 0;
 		const int32 JitterOffsetY = JitterRadius > 0
-			? Request.RandomStream.RandRange(-JitterRadius, JitterRadius)
+			? Request.RandomStream.RandRange(MinJitterOffsetY, MaxJitterOffsetY)
 			: 0;
-		const int32 SampleX = static_cast<int32>(FMath::Clamp(
-			static_cast<int64>(Request.ScanCursor.X) + JitterOffsetX,
-			static_cast<int64>(Request.VoxelMin.X),
-			static_cast<int64>(Request.VoxelMax.X)));
-		const int32 SampleY = static_cast<int32>(FMath::Clamp(
-			static_cast<int64>(Request.ScanCursor.Y) + JitterOffsetY,
-			static_cast<int64>(Request.VoxelMin.Y),
-			static_cast<int64>(Request.VoxelMax.Y)));
+		const int32 SampleX = Request.ScanCursor.X + JitterOffsetX;
+		const int32 SampleY = Request.ScanCursor.Y + JitterOffsetY;
 
-		if (Request.DepositSettings.bOnlyTopSurface)
+		// 퇴적은 외부에서 보이는 최상단 표면에만 쌓는다. 한 샘플 열마다 후보 중심은 최대 하나이므로
+		// 표면 샘플 간격과 커버리지 퍼센트가 실제 처리량을 직접 설명할 수 있다.
+		const int32 SurfaceZ = FindTopSurfaceZ(
+			Data,
+			SampleX,
+			SampleY,
+			Request.VoxelMin.Z,
+			Request.VoxelMax.Z);
+		if (SurfaceZ != MIN_int32)
 		{
-			// 일반적인 눈/퇴적물은 최상단 외부 표면만 필요하므로 주변 패치의 최고 표면을 사용한다.
-			AddPatchDepositCandidates(
+			TryAddDepositCandidate(
 				Request,
 				Data,
-				SampleX,
-				SampleY);
-
-			return;
+				FIntVector(SampleX, SampleY, SurfaceZ + 1));
 		}
-
-		// 동굴 천장이나 내부 빈 공간까지 허용하는 모드에서는 한 열의 모든 고체->빈 공간 경계를 후보로 만든다.
-		for (int32 Z = Request.VoxelMax.Z - 1; Z >= Request.VoxelMin.Z; --Z)
-		{
-			const float CurrentValue = Data.GetValue(FIntVector(SampleX, SampleY, Z), 0).ToFloat();
-			const float AboveValue = Data.GetValue(FIntVector(SampleX, SampleY, Z + 1), 0).ToFloat();
-
-			if (CurrentValue <= 0.f && AboveValue > 0.f)
-			{
-				TryAddDepositCandidate(
-					Request,
-					Data,
-					FIntVector(SampleX, SampleY, Z + 1));
-			}
-		}
-	}
-
-	void FinishCandidateBatch(FDRVoxelDepositInBoxRequest& Request)
-	{
-		// PendingVoxelPositions는 후보 수집 중 중복 검사에만 필요하다.
-		// Apply 단계에서는 배열을 사용하므로 집합 메모리를 먼저 비운다.
-		Request.PendingVoxelPositions.Reset();
-
-		if (Request.PendingVoxels.Num() == 0)
-		{
-			if (IsCandidateBuildFinished(Request))
-			{
-				Request.Phase = EDRVoxelDepositRequestPhase::Finished;
-			}
-			return;
-		}
-
-		// 낮은 위치 선택 확률은 이미 후보 생성 시 반영됐다. 여기서는 선택된 후보의 적용 순서만 섞어
-		// 쓰기 예산이 작은 경우에도 배열 앞쪽 공간부터 보이는 현상을 줄인다.
-		ShuffleVoxels(Request.PendingVoxels, Request.RandomStream);
-		Request.NextVoxelIndex = 0;
-		Request.Phase = EDRVoxelDepositRequestPhase::ApplyVoxels;
 	}
 
 	void ProcessCandidateBuildTick(
@@ -698,27 +760,26 @@ namespace
 		const int32 ScanColumnsToProcess = FMath::Max(1, MaxScanColumnsToProcess);
 		FVoxelData& Data = VoxelWorld->GetData();
 		const FVoxelIntBox ReadBounds(Request.VoxelMin, Request.VoxelMax + FIntVector(1));
-		// 이번 틱에서 스캔할 열 전체를 하나의 읽기 잠금으로 묶는다.
-		// 각 샘플마다 GetValue 도구를 호출할 때 생기는 반복 잠금 비용을 줄이고 같은 스냅샷에서 표면을 판정한다.
-		FVoxelReadScopeLock Lock(Data, ReadBounds, FUNCTION_FNAME);
-
-		while (OutScannedColumnCount < ScanColumnsToProcess && !IsCandidateBuildFinished(Request))
 		{
-			SetCurrentScanCursor(Request);
-			BuildDepositCandidatesForCurrentColumn(Request, Data);
-			Request.NextScanColumnIndex++;
-			OutScannedColumnCount++;
+			// 이번 틱에서 스캔할 열 전체를 하나의 읽기 잠금으로 묶는다.
+			// 각 샘플마다 GetValue 도구를 호출할 때 생기는 반복 잠금 비용을 줄이고 같은 스냅샷에서 표면을 판정한다.
+			FVoxelReadScopeLock Lock(Data, ReadBounds, FUNCTION_FNAME);
+
+			while (OutScannedColumnCount < ScanColumnsToProcess && !IsCandidateBuildFinished(Request))
+			{
+				SetCurrentScanCursor(Request);
+				BuildDepositCandidatesForCurrentColumn(Request, Data);
+				Request.NextScanColumnIndex++;
+				OutScannedColumnCount++;
+			}
 		}
 
-		// 이번 스캔 배치에서 후보가 하나라도 생기면 즉시 Apply 단계로 전환한다.
-		// 적용이 끝난 뒤 아직 스캔할 열이 남아 있으면 다시 BuildCandidates 단계로 돌아온다.
-		if (Request.PendingVoxels.Num() > 0)
+		// 정확한 퍼센트를 계산하려면 청크 안에서 발견 가능한 표면의 전체 개수를 알아야 한다.
+		// 따라서 중간 배치에서 바로 쓰지 않고 모든 열 스캔이 끝난 시점에 한 번만 선택 단계로 넘어간다.
+		// 정렬과 외부 지지 맵 정리는 VoxelData 읽기 잠금을 해제한 뒤 수행해 다른 지형 편집을 오래 막지 않는다.
+		if (IsCandidateBuildFinished(Request))
 		{
-			FinishCandidateBatch(Request);
-		}
-		else if (IsCandidateBuildFinished(Request))
-		{
-			Request.Phase = EDRVoxelDepositRequestPhase::Finished;
+			SelectDepositCandidates(Request);
 		}
 	}
 
@@ -731,8 +792,9 @@ namespace
 	{
 		// 레코드에는 "요청 설정"이 아니라 이번 틱에 실제로 바뀐 최종 복셀만 추가된다.
 		// Revision은 이 함수 밖의 서버 액터가 변경 사실을 확인한 뒤 부여한다.
-		OutDeltaRecord.VoxelMin = Request.VoxelMin;
-		OutDeltaRecord.VoxelMax = Request.VoxelMax;
+		// LocalIndex는 청크 Core가 아니라 경계를 넘어갈 수 있는 Write 범위를 원점으로 압축한다.
+		OutDeltaRecord.VoxelMin = Request.WriteVoxelMin;
+		OutDeltaRecord.VoxelMax = Request.WriteVoxelMax;
 		OutDeltaRecord.MaterialIndex = Request.DepositSettings.DepositMaterialIndex;
 
 		FVoxelMaterial DepositMaterial;
@@ -814,14 +876,12 @@ namespace
 
 		if (!Request.bHasActiveFootprint && Request.NextVoxelIndex >= Request.PendingVoxels.Num())
 		{
-			// 현재 후보 배치를 모두 적용했다. 전체 열 스캔까지 끝났으면 Finished,
-			// 아니면 다음 틱에 남은 열을 계속 조사하도록 BuildCandidates로 되돌린다.
+			// 전체 청크 스캔 뒤 선택된 후보를 모두 적용했으므로 요청을 완료한다.
 			Request.PendingVoxels.Reset();
 			Request.PendingVoxelPositions.Reset();
 			Request.NextVoxelIndex = 0;
-			Request.Phase = IsCandidateBuildFinished(Request)
-				? EDRVoxelDepositRequestPhase::Finished
-				: EDRVoxelDepositRequestPhase::BuildCandidates;
+			Request.ExternalSupportSurfaceZByVoxel.Reset();
+			Request.Phase = EDRVoxelDepositRequestPhase::Finished;
 		}
 	}
 }
@@ -942,7 +1002,7 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 	}
 
 	if (!AreDepositSettingsFinite(Settings) ||
-		Settings.SampleStep <= 0.f || Settings.DepositAmount <= 0.f ||
+		Settings.SurfaceSampleSpacing <= 0.f || Settings.DepositAmountPerPass <= 0.f ||
 		!FMath::IsFinite(VoxelWorld->VoxelSize) || VoxelWorld->VoxelSize <= 0.f ||
 		BoxCenter.ContainsNaN() || BoxExtent.ContainsNaN())
 	{
@@ -963,6 +1023,10 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 		AbsExtent,
 		OutRequest.VoxelMin,
 		OutRequest.VoxelMax);
+	// 단독 라이브러리 요청은 기존 동작을 유지하도록 쓰기 범위를 Core와 같게 시작한다.
+	// 청크 액터만 요청 생성 직후 ConfigureDepositRequestWriteBounds로 X/Y 여유 범위를 확장한다.
+	OutRequest.WriteVoxelMin = OutRequest.VoxelMin;
+	OutRequest.WriteVoxelMax = OutRequest.VoxelMax;
 
 	if (static_cast<int64>(OutRequest.VoxelMax.Z) - OutRequest.VoxelMin.Z < 1)
 	{
@@ -978,16 +1042,29 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 	}
 
 	OutRequest.DepositSettings = SanitizeDepositSettings(Settings);
-	if (!IsSquareRadiusSupported(OutRequest.DepositSettings.DepositPatchRadius) ||
-		!IsSquareRadiusSupported(OutRequest.DepositSettings.DepositFootprintRadius))
+	// 월드 단위 퍼짐 반경을 실제 쓰기 단계가 사용할 정수 복셀 반경으로 한 번만 변환한다.
+	// 너무 큰 값은 정사각형 순회 개수와 배열 인덱스가 int32 범위를 넘을 수 있으므로 요청을 거절한다.
+	const double DepositSpreadRadiusInVoxels =
+		static_cast<double>(OutRequest.DepositSettings.DepositSpreadRadius) /
+		static_cast<double>(VoxelWorld->VoxelSize);
+	if (!FMath::IsFinite(DepositSpreadRadiusInVoxels) ||
+		DepositSpreadRadiusInVoxels > MAX_int32)
+	{
+		OutRequest = FDRVoxelDepositInBoxRequest();
+		return false;
+	}
+	OutRequest.DepositFootprintRadius = FMath::Max(
+		0,
+		static_cast<int32>(FMath::RoundToInt64(DepositSpreadRadiusInVoxels)));
+	if (!IsSquareRadiusSupported(OutRequest.DepositFootprintRadius))
 	{
 		OutRequest = FDRVoxelDepositInBoxRequest();
 		return false;
 	}
 
-	// 월드 단위 SampleStep을 복셀 단위 정수 간격으로 바꾼다. 최소 1로 제한해 무한 루프를 방지한다.
+	// 월드 단위 표면 샘플 간격을 복셀 단위 정수 간격으로 바꾼다. 최소 1로 제한해 무한 루프를 방지한다.
 	const double SampleStepInVoxels =
-		static_cast<double>(OutRequest.DepositSettings.SampleStep) /
+		static_cast<double>(OutRequest.DepositSettings.SurfaceSampleSpacing) /
 		static_cast<double>(VoxelWorld->VoxelSize);
 	if (!FMath::IsFinite(SampleStepInVoxels) || SampleStepInVoxels > MAX_int32)
 	{
@@ -1031,6 +1108,74 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 	return true;
 }
 
+bool UDRVoxelTerrainQueryLibrary::ConfigureDepositRequestWriteBounds(
+	FDRVoxelDepositInBoxRequest& Request,
+	const FVector& AreaCenter,
+	const FVector& AreaExtent)
+{
+	AVoxelWorld* RequestVoxelWorld = Request.VoxelWorld.Get();
+	if (!Request.bIsValid || Request.Phase != EDRVoxelDepositRequestPhase::BuildCandidates ||
+		Request.NextScanColumnIndex != 0 || Request.PendingVoxels.Num() > 0 ||
+		!IsValid(RequestVoxelWorld) || !RequestVoxelWorld->IsCreated() ||
+		AreaCenter.ContainsNaN() || AreaExtent.ContainsNaN())
+	{
+		return false;
+	}
+
+	const FVector AbsAreaExtent(
+		FMath::Abs(AreaExtent.X),
+		FMath::Abs(AreaExtent.Y),
+		FMath::Abs(AreaExtent.Z));
+	if (AbsAreaExtent.IsNearlyZero())
+	{
+		return false;
+	}
+
+	FIntVector AreaVoxelMin = FIntVector::ZeroValue;
+	FIntVector AreaVoxelMax = FIntVector::ZeroValue;
+	GetLocalVoxelBoundsForWorldBox(
+		RequestVoxelWorld,
+		AreaCenter,
+		AbsAreaExtent,
+		AreaVoxelMin,
+		AreaVoxelMax);
+
+	// 후보 중심은 Core에 그대로 두고 X/Y 쓰기 범위만 풋프린트 반경만큼 확장한다.
+	// int64에서 먼저 계산해 음수 방향 뺄셈과 큰 좌표의 오버플로를 막은 뒤 전체 관리 영역으로 자른다.
+	const int64 Radius = Request.DepositFootprintRadius;
+	const int64 ExpandedMinX = static_cast<int64>(Request.VoxelMin.X) - Radius;
+	const int64 ExpandedMinY = static_cast<int64>(Request.VoxelMin.Y) - Radius;
+	const int64 ExpandedMaxX = static_cast<int64>(Request.VoxelMax.X) + Radius;
+	const int64 ExpandedMaxY = static_cast<int64>(Request.VoxelMax.Y) + Radius;
+
+	const FIntVector NewWriteVoxelMin(
+		static_cast<int32>(FMath::Max(static_cast<int64>(AreaVoxelMin.X), ExpandedMinX)),
+		static_cast<int32>(FMath::Max(static_cast<int64>(AreaVoxelMin.Y), ExpandedMinY)),
+		Request.VoxelMin.Z);
+	const FIntVector NewWriteVoxelMax(
+		static_cast<int32>(FMath::Min(static_cast<int64>(AreaVoxelMax.X), ExpandedMaxX)),
+		static_cast<int32>(FMath::Min(static_cast<int64>(AreaVoxelMax.Y), ExpandedMaxY)),
+		Request.VoxelMax.Z);
+
+	// 잘못된 관리 박스 또는 회전 변환 때문에 Core가 Write 범위 밖으로 나오는 요청은 사용하지 않는다.
+	if (NewWriteVoxelMin.X > Request.VoxelMin.X || NewWriteVoxelMin.Y > Request.VoxelMin.Y ||
+		NewWriteVoxelMax.X < Request.VoxelMax.X || NewWriteVoxelMax.Y < Request.VoxelMax.Y)
+	{
+		return false;
+	}
+
+	// 델타의 LocalIndex는 확장된 Write 범위를 기준으로 계산되므로 전체 복셀 수가 int32에 들어와야 한다.
+	FDRVoxelBoxDimensions WriteBoxDimensions;
+	if (!TryGetVoxelBoxDimensions(NewWriteVoxelMin, NewWriteVoxelMax, WriteBoxDimensions))
+	{
+		return false;
+	}
+
+	Request.WriteVoxelMin = NewWriteVoxelMin;
+	Request.WriteVoxelMax = NewWriteVoxelMax;
+	return true;
+}
+
 bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 	FDRVoxelDepositInBoxRequest& Request,
 	const TArray<FVector>& SurfaceWorldPositions,
@@ -1045,7 +1190,7 @@ bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 		return false;
 	}
 
-	const int32 FootprintRadius = Request.DepositSettings.DepositFootprintRadius;
+	const int32 FootprintRadius = Request.DepositFootprintRadius;
 	if (!IsSquareRadiusSupported(FootprintRadius))
 	{
 		return false;
@@ -1084,21 +1229,23 @@ bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 			static_cast<int32>(CandidateX64),
 			static_cast<int32>(CandidateY64),
 			static_cast<int32>(CandidateZ64));
-		if (!IsInsideBounds(Request, CandidatePosition) ||
+		if (!IsInsideCoreBounds(Request, CandidatePosition) ||
 			CandidatePosition.Z <= Request.VoxelMin.Z ||
 			Request.PendingVoxelPositions.Contains(CandidatePosition) ||
-			Request.WrittenVoxelPositions.Contains(CandidatePosition))
+			WasWrittenInCurrentDepositPass(Request, CandidatePosition) ||
+			WasColumnWrittenByPreviousChunk(Request, CandidatePosition))
 		{
 			continue;
 		}
 
 		Request.PendingVoxelPositions.Add(CandidatePosition);
 		Request.PendingVoxels.Add(CandidatePosition);
+		Request.ExternalCandidatePositions.Add(CandidatePosition);
 		OutAddedCandidateCount++;
 
 		// 현재 풋프린트가 메시 가장자리 밖으로 크게 번지는 것을 완전히 판정하려면 각 칸마다 별도
 		// 트레이스가 필요하다. 여기서는 중심 히트의 수평 표면 높이를 원형 풋프린트에 공유해 쿼리 수를
-		// 제한한다. 급경사는 액터의 노멀 필터로 제외하고, 정밀한 가장자리는 SampleStep을 줄여 보완한다.
+		// 제한한다. 급경사는 액터의 노멀 필터로 제외하고, 정밀한 가장자리는 SurfaceSampleSpacing을 줄여 보완한다.
 		const float SurfaceZ = static_cast<float>(LocalZ);
 		for (int32 OffsetX = -FootprintRadius; OffsetX <= FootprintRadius; ++OffsetX)
 		{
@@ -1112,8 +1259,8 @@ bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 
 				const int64 SupportX64 = CandidateX64 + OffsetX;
 				const int64 SupportY64 = CandidateY64 + OffsetY;
-				if (SupportX64 < Request.VoxelMin.X || SupportX64 > Request.VoxelMax.X ||
-					SupportY64 < Request.VoxelMin.Y || SupportY64 > Request.VoxelMax.Y)
+				if (SupportX64 < Request.WriteVoxelMin.X || SupportX64 > Request.WriteVoxelMax.X ||
+					SupportY64 < Request.WriteVoxelMin.Y || SupportY64 > Request.WriteVoxelMax.Y)
 				{
 					continue;
 				}
