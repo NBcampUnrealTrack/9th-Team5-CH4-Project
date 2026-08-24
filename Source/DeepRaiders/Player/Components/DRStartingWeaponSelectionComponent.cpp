@@ -18,7 +18,7 @@ void UDRStartingWeaponSelectionComponent::Initialize(
 	UDRInventoryComponent* InInventoryComponent,
 	UDRQuickSlotComponent* InQuickSlotComponent)
 {
-	StartingWeaponDefinition = InStartingWeaponDefinition;
+	CurrentWeaponDefinition = InStartingWeaponDefinition;
 	InventoryComponent = InInventoryComponent;
 	QuickSlotComponent = InQuickSlotComponent;
 }
@@ -38,10 +38,13 @@ void UDRStartingWeaponSelectionComponent::RequestSelection(FName RowName)
 
 void UDRStartingWeaponSelectionComponent::ExpireSelection()
 {
-	if (IsSelectionAvailable())
+	if (IsSelectionExpired)
 	{
-		SetSelectionState(EDRStartingWeaponSelectionState::Expired);
+		return;
 	}
+
+	IsSelectionExpired = true;
+	OnSelectionAvailabilityChanged.Broadcast(false);
 }
 
 void UDRStartingWeaponSelectionComponent::ServerSelectWeapon_Implementation(FName RowName)
@@ -54,7 +57,7 @@ void UDRStartingWeaponSelectionComponent::ServerSelectWeapon_Implementation(FNam
 		|| !PlayerController->IsShopInteractionAvailable()
 		|| RowName.IsNone()
 		|| !IsValid(WeaponTable)
-		|| !IsValid(StartingWeaponDefinition)
+		|| !IsValid(CurrentWeaponDefinition)
 		|| !IsValid(InventoryComponent)
 		|| !IsValid(QuickSlotComponent))
 	{
@@ -67,31 +70,10 @@ void UDRStartingWeaponSelectionComponent::ServerSelectWeapon_Implementation(FNam
 		? Row->WeaponDefinition.LoadSynchronous()
 		: nullptr;
 
-	if (!IsValid(SelectedWeapon) || !TryApplySelection(SelectedWeapon))
+	if (IsValid(SelectedWeapon))
 	{
-		return;
+		TryApplySelection(SelectedWeapon);
 	}
-
-	SetSelectionState(EDRStartingWeaponSelectionState::Selected);
-	ClientCompleteSelection();
-}
-
-void UDRStartingWeaponSelectionComponent::ClientCompleteSelection_Implementation()
-{
-	SetSelectionState(EDRStartingWeaponSelectionState::Selected);
-}
-
-void UDRStartingWeaponSelectionComponent::SetSelectionState(
-	EDRStartingWeaponSelectionState NewState)
-{
-	if (SelectionState == NewState)
-	{
-		return;
-	}
-
-	SelectionState = NewState;
-	// UI를 직접 참조하지 않고 이벤트로 현재 열린 상점 화면만 갱신한다.
-	OnSelectionAvailabilityChanged.Broadcast(IsSelectionAvailable());
 }
 
 bool UDRStartingWeaponSelectionComponent::TryApplySelection(
@@ -104,9 +86,9 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 	{
 		const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
 
-		// 최초 지급에 사용한 Definition과 정확히 같은 아이템만 교체 대상으로 인정한다.
+		// 직전에 선택한 무기를 같은 슬롯에서 다시 교체한다.
 		if (ItemInstance
-			&& ItemInstance->Definition.Get() == StartingWeaponDefinition)
+			&& ItemInstance->Definition.Get() == CurrentWeaponDefinition)
 		{
 			WeaponSlotIndex = SlotIndex;
 			CurrentWeapon = ItemInstance;
@@ -127,6 +109,7 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 
 				if (IsAdded)
 				{
+					CurrentWeaponDefinition = SelectedWeapon;
 					QuickSlotComponent->RequestSelectSlot(SlotIndex);
 				}
 
@@ -138,16 +121,18 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 	}
 
 	// 기본 총을 그대로 선택한 경우에는 불필요한 인벤토리 변경을 생략한다.
-	const bool IsApplied = StartingWeaponDefinition == SelectedWeapon
+	const bool IsApplied = CurrentWeaponDefinition == SelectedWeapon
 		|| InventoryComponent->TryReplaceItemDefinition(
 			CurrentWeapon->InstanceId,
-			StartingWeaponDefinition,
+			CurrentWeaponDefinition,
 			SelectedWeapon);
 
 	if (!IsApplied)
 	{
 		return false;
 	}
+
+	CurrentWeaponDefinition = SelectedWeapon;
 
 	// UI상의 슬롯 위치가 바뀌지 않도록 교체가 발생한 기존 슬롯을 그대로 선택한다.
 	QuickSlotComponent->RequestSelectSlot(WeaponSlotIndex);
