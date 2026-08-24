@@ -15,8 +15,6 @@
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
-#include "DeepRaiders/Item/DRStartingWeaponTable.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
@@ -26,6 +24,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
@@ -53,6 +52,7 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
+	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
 
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
@@ -94,6 +94,13 @@ void ADRPlayerController::BeginPlay()
 	}
 
 	Super::BeginPlay();
+
+	// 기존 BP에 설정된 시작 장비 데이터를 전용 선택 컴포넌트에 전달한다.
+	StartingWeaponSelectionComponent->Initialize(
+		StartingWeaponTable,
+		StartingProjectileWeaponDefinition,
+		InventoryComponent,
+		QuickSlotComponent);
 
 	ApplyViewPitchLimits();
 	
@@ -398,105 +405,6 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
-void ADRPlayerController::ClientCompleteStartingWeaponSelection_Implementation()
-{
-	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Selected;
-
-	if (IsValid(ShopUIComponent))
-	{
-		ShopUIComponent->DisableStartingWeaponPanel();
-	}
-}
-
-void ADRPlayerController::RequestStartingWeaponSelection(FName RowName)
-{
-	if (IsLocalController() && !RowName.IsNone())
-	{
-		ServerSelectStartingWeapon(RowName);
-	}
-}
-
-void ADRPlayerController::ServerSelectStartingWeapon_Implementation(FName RowName)
-{
-	const bool IsInsideShop = AvailableShops.ContainsByPredicate(
-		[](const TWeakObjectPtr<ADRShop>& Shop)
-		{
-			return Shop.IsValid();
-		});
-
-	if (!IsStartingWeaponSelectionAvailable()
-		|| !IsInsideShop
-		|| RowName.IsNone()
-		|| !IsValid(StartingWeaponTable)
-		|| !IsValid(StartingProjectileWeaponDefinition)
-		|| !IsValid(InventoryComponent)
-		|| !IsValid(QuickSlotComponent))
-	{
-		return;
-	}
-
-	const FDRStartingWeaponTableRow* Row =
-		StartingWeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponSelection"));
-	UDRProjectileWeaponItemDefinition* SelectedWeapon = Row
-		? Row->WeaponDefinition.LoadSynchronous()
-		: nullptr;
-
-	if (!IsValid(SelectedWeapon))
-	{
-		return;
-	}
-
-	int32 WeaponSlotIndex = INDEX_NONE;
-	const FDRItemInstance* CurrentWeapon = nullptr;
-
-	for (int32 SlotIndex = 0; SlotIndex < InventoryComponent->GetMaxSlots(); ++SlotIndex)
-	{
-		const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
-		if (ItemInstance
-			&& ItemInstance->Definition.Get() == StartingProjectileWeaponDefinition)
-		{
-			WeaponSlotIndex = SlotIndex;
-			CurrentWeapon = ItemInstance;
-			break;
-		}
-	}
-
-	if (WeaponSlotIndex == INDEX_NONE || !CurrentWeapon)
-	{
-		return;
-	}
-
-	const bool IsApplied = StartingProjectileWeaponDefinition == SelectedWeapon
-		|| InventoryComponent->TryReplaceItemDefinition(
-			CurrentWeapon->InstanceId,
-			StartingProjectileWeaponDefinition,
-			SelectedWeapon);
-
-	if (!IsApplied)
-	{
-		return;
-	}
-
-	QuickSlotComponent->RequestSelectSlot(WeaponSlotIndex);
-	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Selected;
-	ClientCompleteStartingWeaponSelection();
-}
-
-void ADRPlayerController::ExpireStartingWeaponSelection()
-{
-	if (!IsStartingWeaponSelectionAvailable())
-	{
-		return;
-	}
-
-	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Expired;
-
-	if (IsLocalController() && IsValid(ShopUIComponent))
-	{
-		ShopUIComponent->DisableStartingWeaponPanel();
-	}
-}
-
 void ADRPlayerController::ApplyViewPitchLimits()
 {
 	if (!IsLocalController() || !IsValid(PlayerCameraManager))
@@ -701,16 +609,32 @@ void ADRPlayerController::ClearAvailableShop(
 	ADRShop* Shop)
 {
 	AvailableShops.Remove(Shop);
+	// 파괴된 상점의 약한 참조가 선택 기회를 잘못 유지하지 않도록 함께 정리한다.
+	AvailableShops.RemoveAll(
+		[](const TWeakObjectPtr<ADRShop>& AvailableShop)
+		{
+			return !AvailableShop.IsValid();
+		});
 
 	if (AvailableShops.IsEmpty())
 	{
-		ExpireStartingWeaponSelection();
+		// 최초 상점 영역을 완전히 벗어나면 이후에는 다시 선택할 수 없다.
+		StartingWeaponSelectionComponent->ExpireSelection();
 	}
 
 	if (IsLocalController() && IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
+}
+
+bool ADRPlayerController::IsShopInteractionAvailable() const
+{
+	return AvailableShops.ContainsByPredicate(
+		[](const TWeakObjectPtr<ADRShop>& Shop)
+		{
+			return Shop.IsValid();
+		});
 }
 
 #pragma region Teleport

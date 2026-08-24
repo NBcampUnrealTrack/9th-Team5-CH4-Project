@@ -1,6 +1,7 @@
 #include "DRStartingWeaponSelectWidget.h"
 
 #include "DeepRaiders/UI/ViewModel/DRStartingWeaponViewModel.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "Components/Button.h"
 #include "Components/ListView.h"
 #include "MVVMSubsystem.h"
@@ -14,8 +15,7 @@ UDRStartingWeaponSelectWidget::UDRStartingWeaponSelectWidget(
 }
 
 void UDRStartingWeaponSelectWidget::InitializeSelection(
-	ADRPlayerController* InPlayerController,
-	UDataTable* InWeaponTable)
+	UDRStartingWeaponSelectionComponent* InSelectionComponent)
 {
 	DeinitializeSelection();
 	ViewModel = NewObject<UDRStartingWeaponViewModel>(this);
@@ -38,7 +38,7 @@ void UDRStartingWeaponSelectWidget::InitializeSelection(
 		return;
 	}
 
-	ViewModel->Initialize(InPlayerController, InWeaponTable);
+	ViewModel->Initialize(InSelectionComponent);
 }
 
 void UDRStartingWeaponSelectWidget::DeinitializeSelection()

@@ -10,6 +10,7 @@
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
@@ -35,12 +36,30 @@ void UDRShopUIComponent::BeginPlay()
 	{
 		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
 	}
+
+	StartingWeaponSelectionComponent =
+		PlayerController->GetStartingWeaponSelectionComponent();
+
+	// 게임플레이 컴포넌트가 UI를 직접 참조하지 않도록 상태 이벤트만 구독한다.
+	if (IsValid(StartingWeaponSelectionComponent))
+	{
+		StartingWeaponSelectionComponent->OnSelectionAvailabilityChanged.AddUObject(
+			this,
+			&ThisClass::HandleStartingWeaponSelectionAvailabilityChanged);
+	}
 }
 
 void UDRShopUIComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
 	HideShopWidget();
+
+	if (IsValid(StartingWeaponSelectionComponent))
+	{
+		StartingWeaponSelectionComponent->OnSelectionAvailabilityChanged.RemoveAll(this);
+	}
+
+	StartingWeaponSelectionComponent = nullptr;
 	PlayerController = nullptr;
 	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
@@ -65,14 +84,6 @@ void UDRShopUIComponent::CloseShop(const AActor* ShopActor)
 	}
 }
 
-void UDRShopUIComponent::DisableStartingWeaponPanel()
-{
-	if (IsValid(ShopWidget))
-	{
-		ShopWidget->DisableStartingWeaponPanel();
-	}
-}
-
 void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 {
 	if (IsValid(ShopWidget) || !IsValid(ShopActor))
@@ -82,6 +93,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 
 	if (!IsValid(PlayerController)
 		|| !PlayerController->IsLocalController()
+		|| !IsValid(StartingWeaponSelectionComponent)
 		|| !IsValid(UIManager))
 	{
 		return;
@@ -127,10 +139,8 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 			ShopComponent->GetItemOffers(),
 			EDRShopOfferType::Purchase));
 	ShopWidget->InitializeSellPanel(InventoryComponent);
-	ShopWidget->InitializeStartingWeaponPanel(
-		PlayerController,
-		PlayerController->GetStartingWeaponTable(),
-		PlayerController->IsStartingWeaponSelectionAvailable());
+	// 선택 가능 상태라면 상점이 열릴 때 최초 무기 탭을 우선 표시한다.
+	ShopWidget->InitializeStartingWeaponPanel(StartingWeaponSelectionComponent);
 	RefreshUpgradeOffers();
 	RefreshPerkOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(
@@ -282,6 +292,15 @@ void UDRShopUIComponent::HandleCoinsChanged(int32)
 	RefreshItemOffers();
 	RefreshUpgradeOffers();
 	RefreshPerkOffers();
+}
+
+void UDRShopUIComponent::HandleStartingWeaponSelectionAvailabilityChanged(
+	bool IsAvailable)
+{
+	if (!IsAvailable && IsValid(ShopWidget))
+	{
+		ShopWidget->DisableStartingWeaponPanel();
+	}
 }
 
 void UDRShopUIComponent::RefreshItemOffers()

@@ -1,7 +1,7 @@
 #include "DRStartingWeaponViewModel.h"
 
 #include "DeepRaiders/Item/DRStartingWeaponTable.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "Engine/DataTable.h"
 
 void UDRStartingWeaponEntryViewModel::Select()
@@ -38,20 +38,22 @@ void UDRStartingWeaponEntryViewModel::SetSelected(bool IsNewSelected)
 }
 
 void UDRStartingWeaponViewModel::Initialize(
-	ADRPlayerController* InPlayerController,
-	UDataTable* InWeaponTable)
+	UDRStartingWeaponSelectionComponent* InSelectionComponent)
 {
 	Deinitialize();
-	PlayerController = InPlayerController;
+	SelectionComponent = InSelectionComponent;
+	UDataTable* WeaponTable = IsValid(InSelectionComponent)
+		? InSelectionComponent->GetWeaponTable()
+		: nullptr;
 
 	TArray<TObjectPtr<UDRStartingWeaponEntryViewModel>> NewEntries;
 
-	if (IsValid(InWeaponTable))
+	if (IsValid(WeaponTable))
 	{
-		for (const FName RowName : InWeaponTable->GetRowNames())
+		for (const FName RowName : WeaponTable->GetRowNames())
 		{
 			const FDRStartingWeaponTableRow* Row =
-				InWeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponViewModel"));
+				WeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponViewModel"));
 			UDRProjectileWeaponItemDefinition* WeaponDefinition = Row
 				? Row->WeaponDefinition.LoadSynchronous()
 				: nullptr;
@@ -73,7 +75,7 @@ void UDRStartingWeaponViewModel::Initialize(
 
 void UDRStartingWeaponViewModel::Deinitialize()
 {
-	PlayerController.Reset();
+	SelectionComponent.Reset();
 	UE_MVVM_SET_PROPERTY_VALUE(SelectedWeapon, nullptr);
 	UE_MVVM_SET_PROPERTY_VALUE(IsConfirmEnabled, false);
 	UE_MVVM_SET_PROPERTY_VALUE(
@@ -83,9 +85,9 @@ void UDRStartingWeaponViewModel::Deinitialize()
 
 void UDRStartingWeaponViewModel::ConfirmSelection()
 {
-	if (PlayerController.IsValid() && IsValid(SelectedWeapon))
+	if (SelectionComponent.IsValid() && IsValid(SelectedWeapon))
 	{
-		PlayerController->RequestStartingWeaponSelection(SelectedWeapon->RowName);
+		SelectionComponent->RequestSelection(SelectedWeapon->RowName);
 	}
 }
 

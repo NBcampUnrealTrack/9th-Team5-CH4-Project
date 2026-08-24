@@ -14,6 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRStartingWeaponSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
@@ -39,13 +40,6 @@ enum class EDRStorageTransferDirection : uint8
 {
 	PlayerToStorage,
 	StorageToPlayer
-};
-
-enum class EDRStartingWeaponSelectionState : uint8
-{
-	Available,
-	Selected,
-	Expired
 };
 
 UCLASS()
@@ -90,13 +84,6 @@ private:
 	FPredictionKey GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const;
 
 	void InitializeStartingQuickSlot();
-	void ExpireStartingWeaponSelection();
-
-	UFUNCTION(Client, Reliable)
-	void ClientCompleteStartingWeaponSelection();
-
-	UFUNCTION(Server, Reliable)
-	void ServerSelectStartingWeapon(FName RowName);
 
 	UFUNCTION()
 	void RefreshPublicQuickSlotSnapshot();
@@ -145,12 +132,12 @@ protected:
 public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
-	UDataTable* GetStartingWeaponTable() const { return StartingWeaponTable; }
-	bool IsStartingWeaponSelectionAvailable() const
+
+	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
+	UDRStartingWeaponSelectionComponent* GetStartingWeaponSelectionComponent() const
 	{
-		return StartingWeaponSelectionState == EDRStartingWeaponSelectionState::Available;
+		return StartingWeaponSelectionComponent;
 	}
-	void RequestStartingWeaponSelection(FName RowName);
 
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
 	{
@@ -173,16 +160,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
 
+	/** 기존 PlayerController BP의 설정값을 유지하고 선택 컴포넌트에 주입한다. */
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
 		Category = "Player|Starting Weapon",
 		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRStartingWeaponTableRow"))
 	TObjectPtr<UDataTable> StartingWeaponTable;
-
-private:
-	EDRStartingWeaponSelectionState StartingWeaponSelectionState =
-		EDRStartingWeaponSelectionState::Available;
 
 protected:
 
@@ -216,6 +200,9 @@ public:
 	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
 	void ClearAvailableShop(ADRShop* Shop);
 
+	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
+	bool IsShopInteractionAvailable() const;
+
 private:
 	/** 현재 상점의 UI를 열거나 닫는다. */
 	void HandleToggleShop(const FInputActionValue& Value);
@@ -233,6 +220,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Weapon")
+	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;

@@ -5,11 +5,11 @@
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DRStartingWeaponViewModel.generated.h"
 
-class ADRPlayerController;
-class UDataTable;
 class UTexture2D;
+class UDRStartingWeaponSelectionComponent;
 class UDRStartingWeaponViewModel;
 
+/** ListView 한 항목에 표시할 무기 정보와 선택 상태다. */
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRStartingWeaponEntryViewModel : public UMVVMViewModelBase
 {
@@ -51,13 +51,15 @@ private:
 	TWeakObjectPtr<UDRStartingWeaponViewModel> OwnerViewModel;
 };
 
+/** DT의 무기 목록과 현재 선택 항목을 UI에 제공한다. */
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRStartingWeaponViewModel : public UMVVMViewModelBase
 {
 	GENERATED_BODY()
 
 public:
-	void Initialize(ADRPlayerController* InPlayerController, UDataTable* InWeaponTable);
+	/** 선택 컴포넌트의 DT를 읽어 ListView 항목을 생성한다. */
+	void Initialize(UDRStartingWeaponSelectionComponent* InSelectionComponent);
 
 	UFUNCTION(BlueprintCallable, Category = "Starting Weapon")
 	void Deinitialize();
@@ -80,5 +82,5 @@ private:
 
 	void SelectWeapon(UDRStartingWeaponEntryViewModel* WeaponEntry);
 
-	TWeakObjectPtr<ADRPlayerController> PlayerController;
+	TWeakObjectPtr<UDRStartingWeaponSelectionComponent> SelectionComponent;
 };

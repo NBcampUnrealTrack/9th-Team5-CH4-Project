@@ -4,10 +4,9 @@
 #include "Blueprint/UserWidget.h"
 #include "DRStartingWeaponSelectWidget.generated.h"
 
-class ADRPlayerController;
 class UButton;
-class UDataTable;
 class UListView;
+class UDRStartingWeaponSelectionComponent;
 class UDRStartingWeaponViewModel;
 
 UCLASS()
@@ -18,9 +17,11 @@ class DEEPRAIDERS_API UDRStartingWeaponSelectWidget : public UUserWidget
 public:
 	UDRStartingWeaponSelectWidget(const FObjectInitializer& ObjectInitializer);
 
+	/** 선택 컴포넌트와 MVVM ViewModel을 연결하고 목록을 구성한다. */
 	void InitializeSelection(
-		ADRPlayerController* InPlayerController,
-		UDataTable* InWeaponTable);
+		UDRStartingWeaponSelectionComponent* InSelectionComponent);
+
+	/** 탭이 닫히거나 선택이 끝날 때 ViewModel 참조와 데이터를 정리한다. */
 	void DeinitializeSelection();
 
 protected:

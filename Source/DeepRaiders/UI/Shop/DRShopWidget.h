@@ -6,12 +6,11 @@
 #include "DRShopWidget.generated.h"
 
 class UButton;
-class ADRPlayerController;
-class UDataTable;
 class UDRInventoryComponent;
 class UDRShopBuyPanelWidget;
 class UDRShopSellPanelWidget;
 class UDRStartingWeaponSelectWidget;
+class UDRStartingWeaponSelectionComponent;
 class UWidgetSwitcher;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
@@ -38,9 +37,7 @@ public:
 
 	/** 최초 무기 선택 탭을 초기화하고 표시 여부를 설정한다. */
 	void InitializeStartingWeaponPanel(
-		ADRPlayerController* PlayerController,
-		UDataTable* StartingWeaponTable,
-		bool IsSelectionAvailable);
+		UDRStartingWeaponSelectionComponent* StartingWeaponSelectionComponent);
 
 	/** 최초 무기 선택 탭을 비활성화하고 구매 탭으로 전환한다. */
 	void DisableStartingWeaponPanel();

@@ -12,6 +12,7 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
+class UDRStartingWeaponSelectionComponent;
 class UDRUIManagerSubsystem;
 class UDRShopWidget;
 class UDRUpgradeComponent;
@@ -32,9 +33,6 @@ public:
 	/** 지정한 상점이 현재 열려 있으면 UI를 닫는다. */
 	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void CloseShop(const AActor* ShopActor);
-
-	/** 최초 무기 선택 탭을 더 이상 사용할 수 없게 한다. */
-	void DisableStartingWeaponPanel();
 
 protected:
 	/** 로컬 플레이어 컨트롤러와 UI 관리자를 연결한다. */
@@ -74,6 +72,9 @@ private:
 	UFUNCTION()
 	void HandleCoinsChanged(int32 NewCoins);
 
+	/** 선택 완료 또는 만료 시 열려 있는 무기 선택 탭을 비활성화한다. */
+	void HandleStartingWeaponSelectionAvailabilityChanged(bool IsAvailable);
+
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
 
@@ -111,6 +112,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;
