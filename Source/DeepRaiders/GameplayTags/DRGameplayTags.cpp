@@ -151,4 +151,19 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Ore_Discovered,
 		"GameplayCue.Sound.Ore.Discovered",
 		"Ore discovered.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+	GameplayCue_Sound_Player_Land,
+	"GameplayCue.Sound.Player.Land",
+	"Player landed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_FallDamage,
+		"GameplayCue.Sound.Player.FallDamage",
+		"Player took fall damage.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_FallDeath,
+		"GameplayCue.Sound.Player.FallDeath",
+		"Player died from fall damage.");
 }
