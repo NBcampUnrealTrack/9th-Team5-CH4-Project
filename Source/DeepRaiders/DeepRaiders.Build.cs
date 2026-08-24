@@ -23,6 +23,8 @@ public class DeepRaiders : ModuleRules
 			
 			// Struct
 			"StructUtils",
+			
+			"Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

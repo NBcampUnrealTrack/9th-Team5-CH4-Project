@@ -2,20 +2,45 @@
 
 #include "AbilitySystemComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Data/DRFreezeVisualProfile.h"
 
+namespace
+{
+	float GetNormalizedRangeAlpha(float Value, float Start, float End)
+	{
+		Start = FMath::Clamp(Start, 0.f, 1.f);
+		End = FMath::Clamp(End, 0.f, 1.f);
+
+		if (End <= Start + KINDA_SMALL_NUMBER)
+		{
+			return Value >= Start ? 1.f : 0.f;
+		}
+
+		return FMath::GetMappedRangeValueClamped(FVector2D(Start, End), FVector2D(0.f, 1.f), Value);
+	}
+
+	float Smooth01(float Alpha)
+	{
+		Alpha = FMath::Clamp(Alpha, 0.f, 1.f);
+
+		return Alpha * Alpha * (3.f - 2.f * Alpha);
+	}
+}
+
+
 UDRFreezeVisualComponent::UDRFreezeVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-
-	// 평소에는 Tick하지 않는다.
-	// TargetFreezeAmount와 차이가 생겼을 때만 켠다.
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 
-	// Presentation Component 자체는 복제하지 않는다.
+	// 이 Component는 Presentation 전용.
 	SetIsReplicatedByDefault(false);
 }
 
@@ -29,38 +54,29 @@ void UDRFreezeVisualComponent::BeginPlay()
 		return;
 	}
 
-	CreateVisualParts();
+	CreateAttachmentVisuals();
+	CreateSurfaceFrostVisual();
+	CreateNiagaraVisual();
 
-	/*
-	 * BindAbilitySystem이 BeginPlay보다 먼저 호출됐을 수도 있으므로
-	 * 현재 Visual 값을 새로 생성된 Mesh들에 한 번 적용한다.
-	 */
 	ApplyVisualFreezeAmount(VisualFreezeAmount);
 }
+
 
 void UDRFreezeVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnbindAbilitySystem();
 
-	for (UStaticMeshComponent* MeshComponent : RuntimePartComponents)
-	{
-		if (IsValid(MeshComponent))
-		{
-			MeshComponent->DestroyComponent();
-		}
-	}
-
-	RuntimePartComponents.Empty();
+	ClearNiagaraVisual();
+	ClearSurfaceFrostVisual();
+	DestroyAttachmentVisuals();
 
 	Super::EndPlay(EndPlayReason);
 }
 
-bool UDRFreezeVisualComponent::ShouldCreateVisuals() const
-{
-	const AActor* Owner = GetOwner();
 
-	return IsValid(Owner) && Owner->GetNetMode() != NM_DedicatedServer;
-}
+// =====================================================
+// Ability System
+// =====================================================
 
 void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 {
@@ -70,10 +86,10 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	}
 
 	/*
-	 * 같은 ASC로 InitializeAbilitySystem이 다시 호출될 수 있다.
-	 * 중복 Delegate 등록을 방지한다.
+	 * 같은 ASC로 Character 초기화 함수가
+	 * 다시 호출되는 경우 Delegate 중복 등록 방지.
 	 */
-	if (BoundAbilitySystem.Get() == InASC && FreezeGaugeChangedHandle.IsValid())
+	if (BoundAbilitySystem.Get() == InASC && FreezeGaugeChangedHandle.IsValid() && MaxFreezeGaugeChangedHandle.IsValid())
 	{
 		RefreshTargetFreezeAmount(true);
 		return;
@@ -82,18 +98,20 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	UnbindAbilitySystem();
 
 	BoundAbilitySystem = InASC;
-	FreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleFreezeGaugeChanged);
-	MaxFreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleMaxFreezeGaugeChanged);
+
+	FreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(
+		UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleFreezeGaugeChanged);
+
+	MaxFreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(
+		UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleMaxFreezeGaugeChanged);
 
 	/*
-	 * Delegate 등록만 하고 끝내면 안 된다.
-	 *
-	 * 이미 FreezeGauge가 50인 상태에서
-	 * 이 Pawn이 새로 Relevant해질 수도 있기 때문에
-	 * 현재 값을 즉시 한 번 읽는다.
+	 * Delegate 등록 전에 이미 Gauge 값이 존재할 수 있으므로
+	 * 현재 값을 한 번 즉시 읽는다.
 	 */
 	RefreshTargetFreezeAmount(true);
 }
+
 
 void UDRFreezeVisualComponent::UnbindAbilitySystem()
 {
@@ -118,15 +136,18 @@ void UDRFreezeVisualComponent::UnbindAbilitySystem()
 	BoundAbilitySystem.Reset();
 }
 
+
 void UDRFreezeVisualComponent::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data)
 {
 	RefreshTargetFreezeAmount(false);
 }
 
+
 void UDRFreezeVisualComponent::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data)
 {
 	RefreshTargetFreezeAmount(false);
 }
+
 
 void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 {
@@ -139,17 +160,14 @@ void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 
 	const float FreezeGauge = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetFreezeGaugeAttribute());
 	const float MaxFreezeGauge = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute());
-	const float NewTarget = MaxFreezeGauge > KINDA_SMALL_NUMBER ? FMath::Clamp(FreezeGauge / MaxFreezeGauge, 0.f, 1.f) : 0.f;
-
-	TargetFreezeAmount = NewTarget;
+	TargetFreezeAmount = MaxFreezeGauge > KINDA_SMALL_NUMBER ? FMath::Clamp(FreezeGauge / MaxFreezeGauge, 0.f, 1.f) : 0.f;
 
 	if (bSnapImmediately)
 	{
 		VisualFreezeAmount = TargetFreezeAmount;
-
 		ApplyVisualFreezeAmount(VisualFreezeAmount);
-
 		SetComponentTickEnabled(false);
+
 		return;
 	}
 
@@ -159,19 +177,14 @@ void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 	}
 }
 
+
+// =====================================================
+// Tick
+// =====================================================
+
 void UDRFreezeVisualComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (FMath::IsNearlyEqual(VisualFreezeAmount, TargetFreezeAmount, 0.001f))
-	{
-		VisualFreezeAmount = TargetFreezeAmount;
-
-		ApplyVisualFreezeAmount(VisualFreezeAmount);
-		SetComponentTickEnabled(false);
-
-		return;
-	}
 
 	if (!IsValid(VisualProfile))
 	{
@@ -179,16 +192,67 @@ void UDRFreezeVisualComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 		return;
 	}
 
-	const float InterpSpeed = TargetFreezeAmount > VisualFreezeAmount ? VisualProfile->GrowInterpSpeed : VisualProfile->DecayInterpSpeed;
+	if (FMath::IsNearlyEqual(VisualFreezeAmount, TargetFreezeAmount, 0.001f))
+	{
+		VisualFreezeAmount = TargetFreezeAmount;
+		ApplyVisualFreezeAmount(VisualFreezeAmount);
+		SetComponentTickEnabled(false);
 
-	VisualFreezeAmount = FMath::FInterpTo(VisualFreezeAmount, TargetFreezeAmount, DeltaTime, InterpSpeed);
+		return;
+	}
 
+	const bool bGrowing = TargetFreezeAmount > VisualFreezeAmount;
+	const float InterpSpeed = bGrowing ? VisualProfile->GrowInterpSpeed : VisualProfile->DecayInterpSpeed;
+	VisualFreezeAmount = FMath::FInterpTo(VisualFreezeAmount, TargetFreezeAmount, DeltaTime, FMath::Max(InterpSpeed, 0.01f));
 	ApplyVisualFreezeAmount(VisualFreezeAmount);
 }
 
-void UDRFreezeVisualComponent::CreateVisualParts()
+
+// =====================================================
+// Visual Root
+// =====================================================
+
+bool UDRFreezeVisualComponent::ShouldCreateVisuals() const
 {
-	if (bVisualPartsCreated || !IsValid(VisualProfile))
+	const AActor* Owner = GetOwner();
+
+	return IsValid(Owner) && Owner->GetNetMode() != NM_DedicatedServer;
+}
+
+
+void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
+{
+	if (!IsValid(VisualProfile))
+	{
+		return;
+	}
+
+	const float Amount = FMath::Clamp(FreezeAmount, 0.f, 1.f);
+
+	if (VisualProfile->bEnableAttachments)
+	{
+		ApplyAttachmentVisuals(Amount);
+	}
+
+	if (VisualProfile->bEnableSurfaceFrost)
+	{
+		ApplySurfaceFrostVisual(Amount);
+	}
+
+	if (VisualProfile->bEnableNiagara)
+	{
+		ApplyNiagaraVisual(Amount);
+	}
+}
+
+
+// =====================================================
+// Attachments
+// =====================================================
+
+void UDRFreezeVisualComponent::CreateAttachmentVisuals()
+{
+	if (!IsValid(VisualProfile) || !VisualProfile->bEnableAttachments)
 	{
 		return;
 	}
@@ -213,7 +277,18 @@ void UDRFreezeVisualComponent::CreateVisualParts()
 			continue;
 		}
 
-		UStaticMeshComponent* MeshComponent = NewObject<UStaticMeshComponent>(Character);
+		if (Character->GetMesh()->GetBoneIndex(Part.BoneName) == INDEX_NONE)
+		{
+			UE_LOG(LogTemp, Warning, TEXT( "[FreezeVisual] Invalid Bone. " "Character=%s Bone=%s"), *GetNameSafe(Character), *Part.BoneName.ToString());
+
+			continue;
+		}
+
+		ensureMsgf(Part.EndThreshold >= Part.StartThreshold, TEXT( "[FreezeVisual] Invalid Threshold. " "Bone=%s Start=%.2f End=%.2f"), *Part.BoneName.ToString(), Part.StartThreshold, Part.EndThreshold);
+
+		const FName ComponentName(*FString::Printf(TEXT("FreezeVisualPart_%d"), Index));
+
+		UStaticMeshComponent* MeshComponent = NewObject<UStaticMeshComponent>(Character, ComponentName);
 
 		if (!IsValid(MeshComponent))
 		{
@@ -234,24 +309,37 @@ void UDRFreezeVisualComponent::CreateVisualParts()
 
 		RuntimePartComponents[Index] = MeshComponent;
 	}
-
-	bVisualPartsCreated = true;
 }
 
-void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
+
+void UDRFreezeVisualComponent::DestroyAttachmentVisuals()
 {
-	if (!bVisualPartsCreated || !IsValid(VisualProfile))
+	for (UStaticMeshComponent* MeshComponent : RuntimePartComponents)
+	{
+		if (IsValid(MeshComponent))
+		{
+			MeshComponent->DestroyComponent();
+		}
+	}
+
+	RuntimePartComponents.Empty();
+}
+
+
+void UDRFreezeVisualComponent::ApplyAttachmentVisuals(float FreezeAmount)
+{
+	if (!IsValid(VisualProfile))
 	{
 		return;
 	}
 
-	const float ClampedAmount = FMath::Clamp(FreezeAmount, 0.f, 1.f);
+	const TArray<FDRFreezeVisualPart>& Parts = VisualProfile->Parts;
 
-	const int32 Count = FMath::Min(VisualProfile->Parts.Num(), RuntimePartComponents.Num());
+	const int32 Count = FMath::Min(Parts.Num(), RuntimePartComponents.Num());
 
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		const FDRFreezeVisualPart& Part = VisualProfile->Parts[Index];
+		const FDRFreezeVisualPart& Part = Parts[Index];
 
 		UStaticMeshComponent* MeshComponent = RuntimePartComponents[Index];
 
@@ -264,13 +352,16 @@ void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
 
 		const FVector BaseLocation = Part.AttachTransform.GetLocation();
 
-		// 아직 등장 구간 이전
-		if (ClampedAmount < Part.StartThreshold)
+		/*
+		 * 등장 Threshold 이전이면 숨기고
+		 * 초기 Transform으로 되돌린다.
+		 */
+		if (FreezeAmount < Part.StartThreshold)
 		{
 			MeshComponent->SetVisibility(false, true);
 
-			// 다음에 다시 등장할 때 확실한 초기 상태
 			MeshComponent->SetRelativeScale3D(BaseScale);
+
 			MeshComponent->SetRelativeLocation(BaseLocation);
 
 			continue;
@@ -278,14 +369,10 @@ void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
 
 		MeshComponent->SetVisibility(true, true);
 
-		float LocalAlpha = 1.f;
+		const float LocalAlpha = GetNormalizedRangeAlpha(FreezeAmount, Part.StartThreshold, Part.EndThreshold);
 
-		if (Part.EndThreshold > Part.StartThreshold + KINDA_SMALL_NUMBER)
-		{
-			LocalAlpha = FMath::GetMappedRangeValueClamped(FVector2D(Part.StartThreshold, Part.EndThreshold), FVector2D(0.f, 1.f), ClampedAmount);
-		}
+		const float SmoothAlpha = Smooth01(LocalAlpha);
 
-		const float SmoothAlpha = LocalAlpha * LocalAlpha * (3.f - 2.f * LocalAlpha);
 		const FVector TargetScale = BaseScale * Part.GrowthScale;
 
 		const FVector CurrentScale = FMath::Lerp(BaseScale, TargetScale, SmoothAlpha);
@@ -293,5 +380,140 @@ void UDRFreezeVisualComponent::ApplyVisualFreezeAmount(float FreezeAmount)
 
 		MeshComponent->SetRelativeScale3D(CurrentScale);
 		MeshComponent->SetRelativeLocation(CurrentLocation);
+	}
+}
+
+
+// =====================================================
+// Surface Frost
+// =====================================================
+
+void UDRFreezeVisualComponent::CreateSurfaceFrostVisual()
+{
+	if (!IsValid(VisualProfile) || !VisualProfile->bEnableSurfaceFrost || !IsValid(VisualProfile->FrostOverlayMaterial))
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (!IsValid(Character) || !IsValid(Character->GetMesh()))
+	{
+		return;
+	}
+
+	SurfaceFrostMID = UMaterialInstanceDynamic::Create(VisualProfile->FrostOverlayMaterial, this);
+
+	if (!IsValid(SurfaceFrostMID))
+	{
+		return;
+	}
+
+	SurfaceFrostMID->SetScalarParameterValue(TEXT("FreezeAmount"), 1.f);
+
+	Character->GetMesh()->SetOverlayMaterial(SurfaceFrostMID);
+}
+
+
+void UDRFreezeVisualComponent::ClearSurfaceFrostVisual()
+{
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (IsValid(Character) && IsValid(Character->GetMesh()))
+	{
+		Character->GetMesh()->SetOverlayMaterial(nullptr);
+	}
+
+	SurfaceFrostMID = nullptr;
+}
+
+
+void UDRFreezeVisualComponent::ApplySurfaceFrostVisual(float FreezeAmount)
+{
+	if (!IsValid(VisualProfile) || !IsValid(SurfaceFrostMID))
+	{
+		return;
+	}
+
+	const float FrostAlpha = GetNormalizedRangeAlpha(FreezeAmount, VisualProfile->SurfaceFrostStartThreshold, VisualProfile->SurfaceFrostFullThreshold);
+
+	SurfaceFrostMID->SetScalarParameterValue(TEXT("FreezeAmount"), FrostAlpha);
+}
+
+
+// =====================================================
+// Niagara
+// =====================================================
+
+void UDRFreezeVisualComponent::CreateNiagaraVisual()
+{
+	if (!IsValid(VisualProfile) || !VisualProfile->bEnableNiagara || !IsValid(VisualProfile->FreezeNiagaraSystem))
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (!IsValid(Character) || !IsValid(Character->GetMesh()))
+	{
+		return;
+	}
+
+	FreezeNiagaraComponent = NewObject<UNiagaraComponent>(Character, TEXT("FreezeNiagaraComponent"));
+
+	if (!IsValid(FreezeNiagaraComponent))
+	{
+		return;
+	}
+
+	Character->AddInstanceComponent(FreezeNiagaraComponent);
+
+	FreezeNiagaraComponent->SetupAttachment(Character->GetMesh());
+	FreezeNiagaraComponent->SetAsset(VisualProfile->FreezeNiagaraSystem);
+	FreezeNiagaraComponent->SetAutoActivate(false);
+	FreezeNiagaraComponent->SetIsReplicated(false);
+	FreezeNiagaraComponent->RegisterComponent();
+	FreezeNiagaraComponent->SetVariableFloat(TEXT("User.FreezeAmount"), 0.f);
+}
+
+
+void UDRFreezeVisualComponent::ClearNiagaraVisual()
+{
+	if (!IsValid(FreezeNiagaraComponent))
+	{
+		return;
+	}
+
+	FreezeNiagaraComponent->Deactivate();
+	FreezeNiagaraComponent->DestroyComponent();
+
+	FreezeNiagaraComponent = nullptr;
+}
+
+
+void UDRFreezeVisualComponent::ApplyNiagaraVisual(float FreezeAmount)
+{
+	if (!IsValid(VisualProfile) || !IsValid(FreezeNiagaraComponent))
+	{
+		return;
+	}
+
+	const float NiagaraAlpha = GetNormalizedRangeAlpha(FreezeAmount, VisualProfile->NiagaraStartThreshold, VisualProfile->NiagaraFullThreshold);
+
+	FreezeNiagaraComponent->SetVariableFloat(TEXT("User.FreezeAmount"), NiagaraAlpha);
+
+	if (NiagaraAlpha <= KINDA_SMALL_NUMBER)
+	{
+		if (FreezeNiagaraComponent->IsActive())
+		{
+			FreezeNiagaraComponent->Deactivate();
+		}
+
+		return;
+	}
+
+	if (!FreezeNiagaraComponent->IsActive())
+	{
+		FreezeNiagaraComponent->Activate(true);
 	}
 }
