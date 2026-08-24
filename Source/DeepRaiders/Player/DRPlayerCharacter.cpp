@@ -9,6 +9,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -258,6 +259,7 @@ void ADRPlayerCharacter::PossessedBy(AController* NewController)
 	 * 새 Character를 Avatar로 연결한다.
 	 */
 	InitializeAbilitySystem();
+	RefreshTeamColor();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][PossessedBy] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), 
 		*GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe( GetAbilitySystemComponent()));
@@ -283,8 +285,33 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	InitializeAbilitySystem();
+	RefreshTeamColor();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][OnRep_PlayerState] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), *GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe(GetAbilitySystemComponent()));
+}
+
+void ADRPlayerCharacter::RefreshTeamColor()
+{
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+	if (!IsValid(DRPlayerState) || !IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	const int32 TeamId = DRPlayerState->GetTeamId();
+	if (TeamId != 0 && TeamId != 1)
+	{
+		return;
+	}
+
+	const FLinearColor TeamColor = TeamId == 0 ? Team0Color : Team1Color;
+	for (int32 MaterialIndex = 0; MaterialIndex < GetMesh()->GetNumMaterials(); ++MaterialIndex)
+	{
+		if (UMaterialInstanceDynamic* Material = GetMesh()->CreateDynamicMaterialInstance(MaterialIndex))
+		{
+			Material->SetVectorParameterValue(TeamColorParameterName, TeamColor);
+		}
+	}
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)

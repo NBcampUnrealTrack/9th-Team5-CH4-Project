@@ -14,6 +14,7 @@
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
@@ -337,7 +338,14 @@ void ADRPlayerController::HandleLook(const FInputActionValue& Value)
 		return;
 	}
 
-	PlayerCharacter->LookInput(Value.Get<FVector2D>());
+	FVector2D LookInput = Value.Get<FVector2D>();
+	if (const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
+	{
+		LookInput.X *= UserSettings->GetMouseSensitivityX();
+		LookInput.Y *= UserSettings->GetMouseSensitivityY();
+	}
+
+	PlayerCharacter->LookInput(LookInput);
 }
 
 void ADRPlayerController::HandleJumpStarted(const FInputActionValue&)
