@@ -51,7 +51,12 @@ namespace DRGameplayTags
 		Ability_Snow_Absorb,
 		"Ability.Snow.Absorb",
 		"Snow absorption ability.");
-
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Weapon_Ranged,
+		"Cooldown.Weapon.Ranged",
+		"Shared fire interval cooldown for ranged weapons.");
+	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
@@ -71,6 +76,11 @@ namespace DRGameplayTags
 		Data_Health_Heal,
 		"Data.Health.Heal",
 		"Health Heal amount passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Cooldown_Duration,
+		"Data.Cooldown.Duration",
+		"Cooldown duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

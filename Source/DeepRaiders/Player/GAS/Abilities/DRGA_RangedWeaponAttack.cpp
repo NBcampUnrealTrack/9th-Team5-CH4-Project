@@ -57,9 +57,6 @@ void UDRGA_RangedWeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle 
 		return;
 	}
 	
-	LastLocalShotTime = -FLT_MAX;
-	LastServerShotTime = -FLT_MAX;
-	
 	// 자식 GA에서 사용할 Ability Active 시점 함수 
 	OnRangedWeaponActivated();
 	
@@ -106,7 +103,23 @@ void UDRGA_RangedWeaponAttack::EndAbility(const FGameplayAbilitySpecHandle Handl
 void UDRGA_RangedWeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-	Super::ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+	if (ActorInfo == nullptr 
+		|| !CooldownGameplayEffectClass)
+	{
+		return;
+	}
+	
+	FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(
+		Handle, ActorInfo, ActivationInfo, CooldownGameplayEffectClass, GetAbilityLevel(Handle, ActorInfo));
+	
+	if (!CooldownSpec.IsValid())
+	{
+		return;
+	}
+	
+	CooldownSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Cooldown_Duration, BaseFireInterval);
+	
+	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
 }
 
 bool UDRGA_RangedWeaponAttack::CheckCost(const FGameplayAbilitySpecHandle Handle,
@@ -248,7 +261,11 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 
 bool UDRGA_RangedWeaponAttack::IsAttackConfigurationValid() const
 {
-	return BaseFireInterval > 0.0f && MaxAttackDistance > 0.0f;
+	const FGameplayTagContainer* CooldownTags = GetCooldownTags();
+	
+	// Cooldown GE가 없으면 발사가 불가능
+	return BaseFireInterval > 0.0f && MaxAttackDistance > 0.0f && CooldownGameplayEffectClass != nullptr
+		&& CooldownTags != nullptr && CooldownTags->HasTagExact(DRGameplayTags::Cooldown_Weapon_Ranged);
 }
 
 bool UDRGA_RangedWeaponAttack::SendLocalShotRequest()
@@ -268,29 +285,37 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+	if (!IsValid(AbilitySystem))
 	{
 		return;
 	}
 	
-	const float CurrentTime = World->GetTimeSeconds();
-	
-	if (CurrentTime - LastLocalShotTime + KINDA_SMALL_NUMBER < BaseFireInterval)
+	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
+	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
+
+	if (!CheckCooldown(Handle, ActorInfo, nullptr))
 	{
 		return;
 	}
 	
-	if (!CheckCost(GetCurrentAbilitySpecHandle(), ActorInfo, nullptr))
+	if (!CheckCost(Handle, ActorInfo, nullptr))
 	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, false);
-		
+		EndAbility(Handle, ActorInfo, GetCurrentActivationInfo(), true, false);
 		return;
 	}
 	
+	if (ActorInfo->IsNetAuthority())
+	{
+		SendLocalShotRequest();
+		return;
+	}
+	
+	// 원격 클라이언트가 발사 요청을 전송하면 ScopedPredictionKey로 Cooldown GE를 예측 적용
+	FScopedPredictionWindow PredictionWindow(AbilitySystem, true);
 	if (SendLocalShotRequest())
 	{
-		LastLocalShotTime = CurrentTime;
+		ApplyCooldown(Handle, ActorInfo, ActivationInfo);
 	}
 }
 
@@ -305,45 +330,33 @@ bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
 		return false;
 	}
 	
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetWeaponDefinition(GetCurrentAbilitySpecHandle(), ActorInfo);
+	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
+	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
+
+	
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetWeaponDefinition(Handle, ActorInfo);
 	
 	UDRInventoryComponent* Inventory = nullptr;
 	const FDRItemInstance* ItemInstance = nullptr;
 	
 	if (!ResolveSelectedWeaponInstance(ActorInfo, WeaponDefinition, Inventory, ItemInstance))
 	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		
 		return false;
 	}
 	
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo, nullptr))
 	{
-		return false;
-	}
-	
-	const float CurrentTime = World->GetTimeSeconds();
-	
-	// 연사중인 경우 CoolDown에 의해 실행이 막히더라도 EndAbility가 되어선 안된다.
-	if (CurrentTime - LastServerShotTime + KINDA_SMALL_NUMBER < BaseFireInterval)
-	{
-		return false;
-	}
-	
-	if (!CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), nullptr))
-	{
-		if (!CheckCost(GetCurrentAbilitySpecHandle(), ActorInfo, nullptr))
+		if (!CheckCost(Handle, ActorInfo, nullptr))
 		{
 			// 연발 도중 Commit 실패 시 실패 사유 확인을 위한 코드
-			EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(),
-				true, false);
+			EndAbility(Handle, ActorInfo, ActivationInfo,true, false);
 		}
 
 		return false;
 	}
-	
-	LastServerShotTime = CurrentTime;
+
 	return true;
 }
 
