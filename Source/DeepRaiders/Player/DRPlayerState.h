@@ -267,7 +267,15 @@ public:
 	void SetTeamId(int32 NewTeamId);
 
 private:
-	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+	UFUNCTION()
+	void OnRep_TeamId();
+
+	UPROPERTY(
+		ReplicatedUsing = OnRep_TeamId,
+		VisibleAnywhere,
+		BlueprintReadOnly,
+		Category = "Player|Teleport",
+		meta = (AllowPrivateAccess = "true"))
 	int32 TeamId = INDEX_NONE;
 #pragma endregion
 };

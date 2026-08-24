@@ -34,36 +34,38 @@ ADRShop::ADRShop()
 	PurchaseSound = PurchaseSoundAsset.Object;
 }
 
+bool ADRShop::IsPawnInShopArea(const APawn* Pawn) const
+{
+	return IsValid(Pawn)
+		&& IsValid(ShopAreaComponent)
+		&& ShopAreaComponent->IsOverlappingActor(Pawn);
+}
+
 void ADRShop::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ShopAreaComponent->OnPawnEntered.AddDynamic(
-		this,
-		&ThisClass::HandlePawnEntered);
 	ShopAreaComponent->OnPawnExited.AddDynamic(
 		this,
-		&ThisClass::HandlePawnExited);
+		&ThisClass::HandleShopAreaExited);
 }
 
 void ADRShop::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (IsValid(ShopAreaComponent))
 	{
-		ShopAreaComponent->OnPawnEntered.RemoveDynamic(
-			this,
-			&ThisClass::HandlePawnEntered);
 		ShopAreaComponent->OnPawnExited.RemoveDynamic(
 			this,
-			&ThisClass::HandlePawnExited);
+			&ThisClass::HandleShopAreaExited);
 	}
 
 	Super::EndPlay(EndPlayReason);
 }
 
-void ADRShop::HandlePawnEntered(APawn* Pawn)
+void ADRShop::HandleShopAreaExited(APawn* Pawn)
 {
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
+	if (!IsValid(Pawn)
+		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
 		return;
 	}
@@ -71,20 +73,6 @@ void ADRShop::HandlePawnEntered(APawn* Pawn)
 	if (ADRPlayerController* PlayerController =
 		Cast<ADRPlayerController>(Pawn->GetController()))
 	{
-		PlayerController->SetAvailableShop(this);
-	}
-}
-
-void ADRShop::HandlePawnExited(APawn* Pawn)
-{
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
-	{
-		return;
-	}
-
-	if (ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(Pawn->GetController()))
-	{
-		PlayerController->ClearAvailableShop(this);
+		PlayerController->NotifyShopAreaExited(this);
 	}
 }

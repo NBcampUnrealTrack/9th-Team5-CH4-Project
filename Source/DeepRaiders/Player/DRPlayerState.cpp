@@ -587,6 +587,18 @@ void ADRPlayerState::SetTeamId(int32 NewTeamId)
 	}
 
 	TeamId = NewTeamId;
+	if (ADRPlayerCharacter* PlayerCharacter = GetPawn<ADRPlayerCharacter>())
+	{
+		PlayerCharacter->RefreshTeamColor();
+	}
 	ForceNetUpdate();
+}
+
+void ADRPlayerState::OnRep_TeamId()
+{
+	if (ADRPlayerCharacter* PlayerCharacter = GetPawn<ADRPlayerCharacter>())
+	{
+		PlayerCharacter->RefreshTeamColor();
+	}
 }
 #pragma endregion

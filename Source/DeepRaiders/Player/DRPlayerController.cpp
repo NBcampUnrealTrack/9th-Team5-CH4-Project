@@ -4,6 +4,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "EngineUtils.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -13,6 +14,7 @@
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
@@ -24,6 +26,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
@@ -51,6 +54,7 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
+	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
 
 	// Interaction Initialize
 	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
@@ -95,6 +99,12 @@ void ADRPlayerController::BeginPlay()
 	}
 
 	Super::BeginPlay();
+
+	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
+	StartingWeaponSelectionComponent->Initialize(
+		StartingProjectileWeaponDefinition,
+		InventoryComponent,
+		QuickSlotComponent);
 
 	ApplyViewPitchLimits();
 	
@@ -290,6 +300,7 @@ void ADRPlayerController::OnRep_Pawn()
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
 	}
+
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -331,7 +342,14 @@ void ADRPlayerController::HandleLook(const FInputActionValue& Value)
 		return;
 	}
 
-	PlayerCharacter->LookInput(Value.Get<FVector2D>());
+	FVector2D LookInput = Value.Get<FVector2D>();
+	if (const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
+	{
+		LookInput.X *= UserSettings->GetMouseSensitivityX();
+		LookInput.Y *= UserSettings->GetMouseSensitivityY();
+	}
+
+	PlayerCharacter->LookInput(LookInput);
 }
 
 void ADRPlayerController::HandleJumpStarted(const FInputActionValue&)
@@ -574,39 +592,67 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
 {
-	AvailableShops.RemoveAll(
-		[](const TWeakObjectPtr<ADRShop>& Shop)
+	if (ADRShop* Shop = FindInteractableShop())
+	{
+		ShopUIComponent->ToggleShopWidget(Shop);
+	}
+}
+
+ADRShop* ADRPlayerController::FindInteractableShop() const
+{
+	APawn* ControlledPawn = GetPawn();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(ControlledPawn) || !IsValid(World))
+	{
+		return nullptr;
+	}
+
+	ADRShop* ClosestShop = nullptr;
+	float ClosestDistanceSquared = TNumericLimits<float>::Max();
+
+	for (TActorIterator<ADRShop> ShopIterator(World); ShopIterator; ++ShopIterator)
+	{
+		ADRShop* Shop = *ShopIterator;
+
+		if (!IsValid(Shop) || !Shop->IsPawnInShopArea(ControlledPawn))
 		{
-			return !Shop.IsValid();
-		});
+			continue;
+		}
 
-	if (!AvailableShops.IsEmpty())
-	{
-		ShopUIComponent->ToggleShopWidget(AvailableShops.Last().Get());
-	}
-}
+		const float DistanceSquared = FVector::DistSquared(
+			ControlledPawn->GetActorLocation(),
+			Shop->GetActorLocation());
 
-void ADRPlayerController::SetAvailableShop(
-	ADRShop* Shop)
-{
-	if (!IsValid(Shop))
-	{
-		return;
+		if (DistanceSquared < ClosestDistanceSquared)
+		{
+			ClosestShop = Shop;
+			ClosestDistanceSquared = DistanceSquared;
+		}
 	}
 
-	AvailableShops.Remove(Shop);
-	AvailableShops.Add(Shop);
+	return ClosestShop;
 }
 
-void ADRPlayerController::ClearAvailableShop(
+void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
-	AvailableShops.Remove(Shop);
+	if (!IsShopInteractionAvailable()
+		&& IsValid(StartingWeaponSelectionComponent))
+	{
+		StartingWeaponSelectionComponent->ExpireSelection();
+	}
 
-	if (IsValid(ShopUIComponent))
+	if (IsLocalController()
+		&& IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
+}
+
+bool ADRPlayerController::IsShopInteractionAvailable() const
+{
+	return IsValid(FindInteractableShop());
 }
 
 #pragma region Teleport
