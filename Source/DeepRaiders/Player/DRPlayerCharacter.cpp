@@ -241,21 +241,6 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	StopJumping();
 }
 
-void ADRPlayerCharacter::RequestThrowHeldItem()
-{
-	if (!IsLocallyControlled() || IsDead() || IsFrozen() || !HasHeldItemAction(EDRItemActionType::Throw))
-	{
-		return;
-	}
-
-	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetController()))
-	{
-		// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
-		ensure(false);
-		//PlayerController->RequestThrowHeldItem();
-	}
-}
-
 void ADRPlayerCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -360,32 +345,6 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 {
 	AddControllerYawInput(LookInput.X);
 	AddControllerPitchInput(LookInput.Y);
-}
-
-void ADRPlayerCharacter::RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
-{
-	if (IsDead() || IsFrozen())
-	{
-		return;
-	}
-
-	if (IsValid(HeldItemComponent))
-	{
-		HeldItemComponent->RequestPrimaryAction(TriggerEvent);
-	}
-}
-
-void ADRPlayerCharacter::RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent)
-{
-	if (IsValid(HeldItemComponent))
-	{
-		HeldItemComponent->RequestSecondaryAction(TriggerEvent);
-	}
-}
-
-bool ADRPlayerCharacter::HasHeldItemAction(EDRItemActionType ActionType) const
-{
-	return IsValid(HeldItemComponent) && HeldItemComponent->HasAction(ActionType);
 }
 
 void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
