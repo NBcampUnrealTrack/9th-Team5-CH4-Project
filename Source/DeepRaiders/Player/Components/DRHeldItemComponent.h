@@ -9,7 +9,6 @@ class ADRPlayerCharacter;
 class UDRItemDefinition;
 class USoundBase;
 class UDRMiningComponent;
-class UDRItemActionPresentationComponent;
 class UAnimInstance;
 
 UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
@@ -37,7 +36,6 @@ private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
 	TWeakObjectPtr<UDRMiningComponent> MiningComponent;
-	TWeakObjectPtr<UDRItemActionPresentationComponent> PresentationComponent;
 
 	void RefreshHeldItemState();
 	void RefreshVisual();

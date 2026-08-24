@@ -41,8 +41,13 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Miss);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Hit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Kill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Attack_Swing);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_PickedUp);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Dropped);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Discovered);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Land);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Rifle_Fire);
 }

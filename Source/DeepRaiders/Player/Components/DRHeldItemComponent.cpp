@@ -4,7 +4,6 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
-#include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -116,16 +115,10 @@ void UDRHeldItemComponent::BeginPlay()
 	}
 
 	MiningComponent = Character->FindComponentByClass<UDRMiningComponent>();
-	PresentationComponent = Character->FindComponentByClass<UDRItemActionPresentationComponent>();
 	
 	if (!MiningComponent.IsValid())
 	{
 		UE_LOG(LogTemp, Error, TEXT( "[HeldItem] MiningComponent missing. " "Character=%s"), *GetNameSafe(Character));
-	}
-
-	if (!PresentationComponent.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT( "[HeldItem] PresentationComponent missing. " "Character=%s"), *GetNameSafe(Character));
 	}
 }
 

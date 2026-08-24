@@ -53,8 +53,11 @@ void UDRPlayerLifecycleComponent::HandleLanded(float LandingSpeed)
 
 	ApplyFallDamage(LandingSpeed);
 
+	const bool bTookFallDamage = CalculatedFallDamage > KINDA_SMALL_NUMBER;
 	const bool bDied = Character->IsDead();
-	ClientPlayFallFeedback(CalculatedFallDamage > KINDA_SMALL_NUMBER, bDied);
+
+	ExecuteFallSoundCueFromServer(bTookFallDamage, bDied);
+	ClientPlayFallFeedback(bTookFallDamage, bDied);
 }
 
 float UDRPlayerLifecycleComponent::CalculateFallDamage(float LandingSpeed) const
@@ -111,38 +114,13 @@ void UDRPlayerLifecycleComponent::ApplyFallDamage(float LandingSpeed)
 		*GetNameSafe(Character), LandingSpeed, AppliedDamage, HealthBeforeDamage, Character->GetCurrentHealth());
 }
 
-void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(bool bTookFallDamage, bool bDied)
+void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(
+		bool bTookFallDamage,
+		bool bDied)
 {
-	USoundBase* SoundToPlay = nullptr;
-
-	if (bDied)
-	{
-		SoundToPlay = FallDeadSound;
-	}
-	else if (bTookFallDamage)
-	{
-		SoundToPlay = FallDamageSound;
-	}
-	else
-	{
-		SoundToPlay = FallSound;
-	}
-
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	if (!IsValid(Character))
-	{
-		return;
-	}
-
-	if (IsValid(SoundToPlay))
-	{
-		UGameplayStatics::PlaySound2D(Character, SoundToPlay);
-	}
-
 	if (bTookFallDamage || bDied)
 	{
-		PlayLocalCameraShake(FallDamageCameraShakeClass, bDied ? 1.4f : 1.f);
+		// 카메라 쉐이크 이후에 따로 분리해서 구현
 	}
 }
 
@@ -548,6 +526,44 @@ void UDRPlayerLifecycleComponent::UnbindAbilitySystem()
 
 	DeadTagChangedHandle.Reset();
 	BoundASC.Reset();
+}
+
+void UDRPlayerLifecycleComponent::ExecuteFallSoundCueFromServer(bool bTookFallDamage, bool bDied)
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	if (!IsValid(Character) || !Character->HasAuthority())
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	FGameplayTag SoundTag;
+
+	if (bDied)
+	{
+		SoundTag = DRGameplayTags::GameplayCue_Sound_Player_FallDeath;
+	}
+	else if (bTookFallDamage)
+	{
+		SoundTag = DRGameplayTags::GameplayCue_Sound_Player_FallDamage;
+	}
+	else
+	{
+		SoundTag = DRGameplayTags::GameplayCue_Sound_Player_Land;
+	}
+
+	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	Context.AddInstigator(Character, Character);
+
+	FGameplayCueParameters Parameters(Context);
+	Parameters.Location = Character->GetActorLocation();
+
+	ASC->ExecuteGameplayCue(SoundTag, Parameters);
 }
 
 void UDRPlayerLifecycleComponent::HandleDeadTagChanged(const FGameplayTag CallbackTag, int32 NewCount)

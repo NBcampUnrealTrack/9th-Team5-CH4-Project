@@ -20,7 +20,6 @@ class UDRMiningComponent;
 class UDRTeleportComponent;
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
-class UDRItemActionPresentationComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
 class UDRSnowRemoveComponent;
@@ -100,8 +99,6 @@ public:
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
 
-	void NotifyMineConfirmedFromServer();
-
 	UDRMeleeCombatComponent* GetMeleeCombatComponent() const
 	{
 		return MeleeCombatComponent;
@@ -111,18 +108,6 @@ public:
 	{
 		return WorldHandEquipmentMesh;
 	}
-
-	/**
-	 * CombatComponent가 서버에서 공격을 승인했을 때
-	 * 기존 Character Presentation을 실행한다.
-	 */
-	void PlayMeleeWorldPresentationFromServer();
-
-	/**
-	 * 서버에서 Melee Hit가 확정됐을 때
-	 * 기존 Sound / CameraShake 표현을 실행한다.
-	 */
-	void PlayMeleeHitPresentationFromServer(ADRPlayerCharacter* HitPlayer, bool bKilled, const FVector& ImpactLocation);
 
 	UDRJetpackComponent* GetJetpackComponent() const
 	{
@@ -147,11 +132,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
 
-	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation);
-	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation);
-	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
 
 	bool IsAbilitySystemReady() const
@@ -185,9 +165,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRJetpackComponent> JetpackComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Item Action", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRItemActionPresentationComponent> ItemActionPresentationComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;

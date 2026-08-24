@@ -20,7 +20,6 @@
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
-#include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
@@ -53,7 +52,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
-	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
@@ -374,36 +372,6 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 	AddControllerPitchInput(LookInput.Y);
 }
 
-void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
-{
-	if (!HasAuthority() || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
-}
-
-void ADRPlayerCharacter::PlayMeleeWorldPresentationFromServer()
-{
-	if (!HasAuthority() || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::MeleeAttack);
-}
-
-void ADRPlayerCharacter::PlayMeleeHitPresentationFromServer(ADRPlayerCharacter* HitPlayer, bool bKilled, const FVector& ImpactLocation)
-{
-	if (!HasAuthority() || !IsValid(HitPlayer) || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayMeleeHitFeedbackFromServer(HitPlayer, bKilled, ImpactLocation);
-}
-
 float ADRPlayerCharacter::GetDisplayedJetpackFuelRatio() const
 {
 	return IsValid(JetpackComponent) ? JetpackComponent->GetDisplayedFuelRatio() : 0.f;
@@ -434,24 +402,6 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	const UDRItemDefinition* ItemDefinition = HeldItemComponent->GetHeldItemDefinition();
 
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
-}
-
-void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation)
-{
-	if (IsValid(ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->PlayWeaponFireLocal(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
-	}
-}
-
-void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation)
-{
-	if (IsValid(ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->PlayWeaponFireFromServer(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
-	}
 }
 
 float ADRPlayerCharacter::GetNormalizedAimPitch() const

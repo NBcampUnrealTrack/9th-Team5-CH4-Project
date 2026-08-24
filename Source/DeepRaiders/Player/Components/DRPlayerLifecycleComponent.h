@@ -5,7 +5,6 @@
 #include "DRPlayerLifecycleComponent.generated.h"
 
 class ADRPlayerCharacter;
-class USoundBase;
 class UCameraShakeBase;
 class UAbilitySystemComponent;
 struct FGameplayTag;
@@ -56,6 +55,9 @@ private:
 	void UnbindAbilitySystem();
 	TWeakObjectPtr<UAbilitySystemComponent> BoundASC;
 	
+	// Sound
+	void ExecuteFallSoundCueFromServer(bool bTookFallDamage, bool bDied);
+	
 protected:
 	// Respawn Settings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn", meta = (ClampMin = "0.0", Units = "s"))
@@ -91,17 +93,4 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Fall Damage", meta = (ClampMin = "0.01"))
 	float FallDamageExponent = 2.f;
-
-	// Fall Presentation
-	UPROPERTY(EditDefaultsOnly, Category = "Lifecycle|Fall|Sound")
-	TObjectPtr<USoundBase> FallSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Lifecycle|Fall|Sound")
-	TObjectPtr<USoundBase> FallDamageSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Lifecycle|Fall|Sound")
-	TObjectPtr<USoundBase> FallDeadSound;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Fall|Camera Shake")
-	TSubclassOf<UCameraShakeBase> FallDamageCameraShakeClass;
 };
