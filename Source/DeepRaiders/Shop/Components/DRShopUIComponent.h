@@ -33,8 +33,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void CloseShop(const AActor* ShopActor);
 
-	/** 최초 무기 선택이 끝나면 상점의 해당 탭을 닫는다. */
-	void CompleteStartingWeaponSelection();
+	/** 최초 무기 선택 탭을 더 이상 사용할 수 없게 한다. */
+	void DisableStartingWeaponPanel();
 
 protected:
 	/** 로컬 플레이어 컨트롤러와 UI 관리자를 연결한다. */

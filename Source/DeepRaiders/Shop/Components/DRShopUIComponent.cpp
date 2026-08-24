@@ -65,11 +65,11 @@ void UDRShopUIComponent::CloseShop(const AActor* ShopActor)
 	}
 }
 
-void UDRShopUIComponent::CompleteStartingWeaponSelection()
+void UDRShopUIComponent::DisableStartingWeaponPanel()
 {
 	if (IsValid(ShopWidget))
 	{
-		ShopWidget->CompleteStartingWeaponSelection();
+		ShopWidget->DisableStartingWeaponPanel();
 	}
 }
 

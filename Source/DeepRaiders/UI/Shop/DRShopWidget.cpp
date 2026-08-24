@@ -30,16 +30,12 @@ void UDRShopWidget::InitializeStartingWeaponPanel(
 	UDataTable* StartingWeaponTable,
 	bool IsSelectionAvailable)
 {
-	if (!IsValid(StartingWeaponPanelButton) || !IsValid(StartingWeaponPanel))
-	{
-		return;
-	}
-
 	StartingWeaponPanelButton->SetVisibility(
 		IsSelectionAvailable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
 	if (!IsSelectionAvailable)
 	{
+		StartingWeaponPanel->DeinitializeSelection();
 		HandleBuyPanelButtonClicked();
 		return;
 	}
@@ -48,13 +44,10 @@ void UDRShopWidget::InitializeStartingWeaponPanel(
 	HandleStartingWeaponPanelButtonClicked();
 }
 
-void UDRShopWidget::CompleteStartingWeaponSelection()
+void UDRShopWidget::DisableStartingWeaponPanel()
 {
-	if (IsValid(StartingWeaponPanelButton))
-	{
-		StartingWeaponPanelButton->SetVisibility(ESlateVisibility::Collapsed);
-	}
-
+	StartingWeaponPanel->DeinitializeSelection();
+	StartingWeaponPanelButton->SetVisibility(ESlateVisibility::Collapsed);
 	HandleBuyPanelButtonClicked();
 }
 
@@ -72,12 +65,9 @@ void UDRShopWidget::NativeOnInitialized()
 		SellPanelButton->OnClicked.AddDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
 	}
 
-	if (IsValid(StartingWeaponPanelButton))
-	{
-		StartingWeaponPanelButton->OnClicked.AddDynamic(
-			this,
-			&ThisClass::HandleStartingWeaponPanelButtonClicked);
-	}
+	StartingWeaponPanelButton->OnClicked.AddDynamic(
+		this,
+		&ThisClass::HandleStartingWeaponPanelButtonClicked);
 
 	if (IsValid(CloseButton))
 	{
@@ -109,12 +99,9 @@ void UDRShopWidget::NativeDestruct()
 		SellPanelButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
 	}
 
-	if (IsValid(StartingWeaponPanelButton))
-	{
-		StartingWeaponPanelButton->OnClicked.RemoveDynamic(
-			this,
-			&ThisClass::HandleStartingWeaponPanelButtonClicked);
-	}
+	StartingWeaponPanelButton->OnClicked.RemoveDynamic(
+		this,
+		&ThisClass::HandleStartingWeaponPanelButtonClicked);
 
 	if (IsValid(CloseButton))
 	{

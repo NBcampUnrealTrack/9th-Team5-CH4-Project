@@ -17,6 +17,7 @@ void UDRStartingWeaponSelectWidget::InitializeSelection(
 	ADRPlayerController* InPlayerController,
 	UDataTable* InWeaponTable)
 {
+	DeinitializeSelection();
 	ViewModel = NewObject<UDRStartingWeaponViewModel>(this);
 
 	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
@@ -40,6 +41,16 @@ void UDRStartingWeaponSelectWidget::InitializeSelection(
 	ViewModel->Initialize(InPlayerController, InWeaponTable);
 }
 
+void UDRStartingWeaponSelectWidget::DeinitializeSelection()
+{
+	if (IsValid(ViewModel))
+	{
+		ViewModel->Deinitialize();
+	}
+
+	ViewModel = nullptr;
+}
+
 void UDRStartingWeaponSelectWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -54,12 +65,7 @@ void UDRStartingWeaponSelectWidget::NativeDestruct()
 	WeaponListView->OnItemClicked().RemoveAll(this);
 	ConfirmButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmClicked);
 
-	if (IsValid(ViewModel))
-	{
-		ViewModel->Deinitialize();
-	}
-
-	ViewModel = nullptr;
+	DeinitializeSelection();
 	Super::NativeDestruct();
 }
 

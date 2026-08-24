@@ -42,8 +42,8 @@ public:
 		UDataTable* StartingWeaponTable,
 		bool IsSelectionAvailable);
 
-	/** 무기 선택이 종료되면 해당 탭을 숨기고 구매 탭으로 전환한다. */
-	void CompleteStartingWeaponSelection();
+	/** 최초 무기 선택 탭을 비활성화하고 구매 탭으로 전환한다. */
+	void DisableStartingWeaponPanel();
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
@@ -83,7 +83,7 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> SellPanelButton;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> StartingWeaponPanelButton;
 
 	UPROPERTY(meta = (BindWidget))
@@ -98,6 +98,6 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRShopSellPanelWidget> SellPanel;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRStartingWeaponSelectWidget> StartingWeaponPanel;
 };

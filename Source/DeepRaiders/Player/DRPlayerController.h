@@ -23,7 +23,6 @@ class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
-class UDRStartingWeaponUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
@@ -42,6 +41,13 @@ enum class EDRStorageTransferDirection : uint8
 	StorageToPlayer
 };
 
+enum class EDRStartingWeaponSelectionState : uint8
+{
+	Available,
+	Selected,
+	Expired
+};
+
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController : public APlayerController, public IAbilitySystemInterface
 {
@@ -56,7 +62,6 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-	virtual void BeginPlayingState() override;
 	virtual void SetupInputComponent() override;
 	
 	void SetupGASInputComponent();
@@ -143,7 +148,7 @@ public:
 	UDataTable* GetStartingWeaponTable() const { return StartingWeaponTable; }
 	bool IsStartingWeaponSelectionAvailable() const
 	{
-		return !IsStartingWeaponSelected && !IsStartingWeaponSelectionExpired;
+		return StartingWeaponSelectionState == EDRStartingWeaponSelectionState::Available;
 	}
 	void RequestStartingWeaponSelection(FName RowName);
 
@@ -176,8 +181,8 @@ protected:
 	TObjectPtr<UDataTable> StartingWeaponTable;
 
 private:
-	bool IsStartingWeaponSelected = false;
-	bool IsStartingWeaponSelectionExpired = false;
+	EDRStartingWeaponSelectionState StartingWeaponSelectionState =
+		EDRStartingWeaponSelectionState::Available;
 
 protected:
 
@@ -223,7 +228,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
+	/** 현재 플레이어가 상호작용할 수 있는 상점 목록이다. */
 	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
@@ -244,9 +249,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
-	TObjectPtr<UDRStartingWeaponUIComponent> StartingWeaponUIComponent;
-	
 #pragma endregion
 
 #pragma region Teleport

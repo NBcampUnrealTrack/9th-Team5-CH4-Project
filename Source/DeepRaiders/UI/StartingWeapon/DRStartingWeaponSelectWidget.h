@@ -21,6 +21,7 @@ public:
 	void InitializeSelection(
 		ADRPlayerController* InPlayerController,
 		UDataTable* InWeaponTable);
+	void DeinitializeSelection();
 
 protected:
 	virtual void NativeConstruct() override;

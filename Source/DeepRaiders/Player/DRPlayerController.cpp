@@ -33,7 +33,6 @@
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
-#include "DeepRaiders/UI/StartingWeapon/DRStartingWeaponUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -61,7 +60,6 @@ ADRPlayerController::ADRPlayerController()
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
 	ScoreboardUIComponent = CreateDefaultSubobject<UDRScoreboardUIComponent>(TEXT("ScoreboardUIComponent"));
-	StartingWeaponUIComponent = CreateDefaultSubobject<UDRStartingWeaponUIComponent>(TEXT("StartingWeaponUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -139,11 +137,6 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
-}
-
-void ADRPlayerController::BeginPlayingState()
-{
-	Super::BeginPlayingState();
 }
 
 void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
@@ -407,16 +400,11 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 
 void ADRPlayerController::ClientCompleteStartingWeaponSelection_Implementation()
 {
-	IsStartingWeaponSelected = true;
+	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Selected;
 
 	if (IsValid(ShopUIComponent))
 	{
-		ShopUIComponent->CompleteStartingWeaponSelection();
-	}
-
-	if (IsValid(StartingWeaponUIComponent))
-	{
-		StartingWeaponUIComponent->CloseSelection();
+		ShopUIComponent->DisableStartingWeaponPanel();
 	}
 }
 
@@ -430,7 +418,14 @@ void ADRPlayerController::RequestStartingWeaponSelection(FName RowName)
 
 void ADRPlayerController::ServerSelectStartingWeapon_Implementation(FName RowName)
 {
+	const bool IsInsideShop = AvailableShops.ContainsByPredicate(
+		[](const TWeakObjectPtr<ADRShop>& Shop)
+		{
+			return Shop.IsValid();
+		});
+
 	if (!IsStartingWeaponSelectionAvailable()
+		|| !IsInsideShop
 		|| RowName.IsNone()
 		|| !IsValid(StartingWeaponTable)
 		|| !IsValid(StartingProjectileWeaponDefinition)
@@ -483,7 +478,7 @@ void ADRPlayerController::ServerSelectStartingWeapon_Implementation(FName RowNam
 	}
 
 	QuickSlotComponent->RequestSelectSlot(WeaponSlotIndex);
-	IsStartingWeaponSelected = true;
+	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Selected;
 	ClientCompleteStartingWeaponSelection();
 }
 
@@ -494,11 +489,11 @@ void ADRPlayerController::ExpireStartingWeaponSelection()
 		return;
 	}
 
-	IsStartingWeaponSelectionExpired = true;
+	StartingWeaponSelectionState = EDRStartingWeaponSelectionState::Expired;
 
-	if (IsValid(ShopUIComponent))
+	if (IsLocalController() && IsValid(ShopUIComponent))
 	{
-		ShopUIComponent->CompleteStartingWeaponSelection();
+		ShopUIComponent->DisableStartingWeaponPanel();
 	}
 }
 
@@ -712,7 +707,7 @@ void ADRPlayerController::ClearAvailableShop(
 		ExpireStartingWeaponSelection();
 	}
 
-	if (IsValid(ShopUIComponent))
+	if (IsLocalController() && IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
