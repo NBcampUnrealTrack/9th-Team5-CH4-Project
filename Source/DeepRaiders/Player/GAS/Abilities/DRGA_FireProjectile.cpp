@@ -5,7 +5,6 @@
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
-#include "GameplayPrediction.h"
 #include "Kismet/GameplayStatics.h"
 
 bool UDRGA_FireProjectile::IsAttackConfigurationValid() const
@@ -82,9 +81,8 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	{
 		return false;
 	}
-
-	FScopedPredictionWindow PredictionWindow(AbilitySystem,true);
-
+	
+	// 부모 GA에서 TryRequestLocalShot() 함수가 호출되고 내부에서 생성한 PredictionKey가 공유됨
 	AbilitySystem->ServerSetReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
 		GetCurrentAbilitySpecHandle(),GetCurrentActivationInfo().GetActivationPredictionKey(),
 		AbilitySystem->ScopedPredictionKey);

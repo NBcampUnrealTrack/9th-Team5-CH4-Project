@@ -46,12 +46,12 @@ protected:
 	 */
 	virtual bool SendLocalShotRequest();
 	
-	// 로컬 발사 간격 및 Cost를 검사한 뒤 자식 GA에 요청
-	// 로컬에서의 애니메이션 등이 재생된다.
+	// 로컬 Cooldown과 Cost를 검사한 뒤 자식 GA에 발사를 요청
+	// 원격 클라이언트는 성공한 요청과 같은 Prediction Key로 Cooldown GE를 예측 적용
 	void TryRequestLocalShot();
 	
 	/*
-	 * 서버의 발사 간격, 선택 아이템, Cost와 쿨다운을 검사하고 Commit한다.
+	 * 서버에서 선택 아이템을 검증하고 CommitAbility로 Cooldown과 Cost를 확정한다.
 	 * TargetData 검증처럼 공격 방식별 검사는 호출 전에 자식 GA가 수행
 	 */
 	bool TryCommitServerShot();
@@ -139,6 +139,4 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
-	float LastLocalShotTime = -FLT_MAX;
-	float LastServerShotTime = -FLT_MAX;
 };
