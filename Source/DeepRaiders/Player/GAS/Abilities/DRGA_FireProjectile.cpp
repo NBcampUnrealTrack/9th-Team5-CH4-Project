@@ -1,260 +1,169 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 
 #include "DRGA_FireProjectile.h"
 
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
-#include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
-#include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
-#include "GameplayEffect.h"
 
-#include "DeepRaiders/DeepRaiders.h"
-#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
-#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
-
-UDRGA_FireProjectile::UDRGA_FireProjectile()
+bool UDRGA_FireProjectile::IsAttackConfigurationValid() const
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;	
+	return Super::IsAttackConfigurationValid() && ProjectileClass != nullptr;
 }
 
-void UDRGA_FireProjectile::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo,
-	const FGameplayEventData* TriggerEventData)
+void UDRGA_FireProjectile::OnRangedWeaponActivated()
 {
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	
-	UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
-
-	if (!IsValid(WeaponDefinition) || !WeaponDefinition->ProjectileClass)
+	// 서버에서
+	if (ActorInfo != nullptr
+		&& ActorInfo->IsNetAuthority()
+		&& !ActorInfo->IsLocallyControlled())
 	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
+		// GA를 활성화하며 InputPressed 이벤트 Delegate 연결
+		RegisterServerShotDelegate();
 	}
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+}
+
+void UDRGA_FireProjectile::OnRangedWeaponEnded()
+{
+	// GA를 종료하며 InputPressed 이벤트 Delegate 해제
+	UnregisterServerShotDelegate();
+}
+
+// 로컬 플레이어의 발사 요청 처리
+bool UDRGA_FireProjectile::SendLocalShotRequest()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr
+		|| !ActorInfo->IsLocallyControlled())
 	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-
-		return;
+		return false;
 	}
-
-	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
-
-	UAnimMontage* PrimaryActionMontage = nullptr;
-
-	if (IsValid(WeaponDefinition->ItemAnimationSet))
+	
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	if (!GetViewPoint(ViewLocation, ViewRotation))
 	{
-		PrimaryActionMontage = WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
+		return false;
 	}
-
-	if (IsValid(Character))
+	
+	FHitResult CameraHit;
+	
+	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(),CameraHit))
 	{
-		const float AimHoldDuration = WeaponDefinition->BaseFireInterval + 0.15f;
-
-		// Remote owning client 예측 재생
-		if (!ActorInfo->IsNetAuthority() && Character->IsLocallyControlled() && IsValid(PrimaryActionMontage))
-		{
-			Character->PlayWeaponFirePresentationLocal(PrimaryActionMontage);
-		}
+		return false;
 	}
 
-	// 실제 게임 결과는 서버
+	FVector MuzzleLocation;
+
+	if (!ResolveMuzzleLocation(ViewRotation.Vector(),MuzzleLocation))
+	{
+		return false;
+	}
+	
+	const FVector AimPoint = CameraHit.bBlockingHit	? CameraHit.ImpactPoint	: CameraHit.TraceEnd;
+	if (!ActorInfo->IsNetAuthority())
+	{
+		PlayLocalFirePresentation(MuzzleLocation,AimPoint);
+	}
+
 	if (ActorInfo->IsNetAuthority())
 	{
-		if (IsValid(Character) && IsValid(PrimaryActionMontage))
-		{
-			Character->PlayWeaponFirePresentationFromServer(PrimaryActionMontage);
-		}
-
-		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-
-		TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
-
-		BuildImpactEffectSpecs(ASC, WeaponDefinition, ImpactEffectSpecs);
-
-		SpawnProjectile(ActorInfo, WeaponDefinition, ImpactEffectSpecs);
-	}
-
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
-}
-
-void UDRGA_FireProjectile::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo) const
-{
-	// 부모 클래스의 ApplyCooldown 함수를 완전히 대체한다.
-	//Super::ApplyCooldown(Handle, ActorInfo, ActivationInfo);
-	
-	const UGameplayEffect* CooldownEffect = GetCooldownGameplayEffect();
-	
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(
-		GetSourceObject(Handle, ActorInfo));
-	
-	if (!IsValid(CooldownEffect)
-		|| !IsValid(WeaponDefinition))
-	{
-		return;
-	}
-	
-	FGameplayEffectSpecHandle CoolDownSpec = MakeOutgoingGameplayEffectSpec(Handle, ActorInfo
-		, ActivationInfo, CooldownEffect->GetClass(), GetAbilityLevel(Handle, ActorInfo));
-	
-	if (!CoolDownSpec.IsValid())
-	{
-		return;
-	}
-	
-	CoolDownSpec.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.Cooldown.Duration"))
-		, WeaponDefinition->BaseFireInterval);
-	
-	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CoolDownSpec);
-}
-
-bool UDRGA_FireProjectile::CheckCost(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	FGameplayTagContainer* OptionalRelevantTags) const
-{
-	if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
-	{
-		return false;
-	}
-
-	if (ActorInfo == nullptr)
-	{
-		return false;
-	}
-
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
-
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-
-	if (!IsValid(WeaponDefinition) || !IsValid(ASC))
-	{
-		return false;
-	}
-
-	if (WeaponDefinition->SnowCostPerShot <= 0.f)
-	{
+		HandleServerShotRequest();
 		return true;
 	}
 
-	if (!WeaponDefinition->SnowCostEffectClass)
-	{
-		return false;
-	}
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 
-	const float CurrentSnow = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
-
-	return CurrentSnow + KINDA_SMALL_NUMBER >= WeaponDefinition->SnowCostPerShot;
-}
-
-void UDRGA_FireProjectile::ApplyCost(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo) const
-{
-	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
-
-	if (ActorInfo == nullptr)
-	{
-		return;
-	}
-
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
-
-	if (!IsValid(WeaponDefinition) || WeaponDefinition->SnowCostPerShot <= 0.f || !WeaponDefinition->SnowCostEffectClass)
-	{
-		return;
-	}
-
-	FGameplayEffectSpecHandle CostSpec = 
-		MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo, WeaponDefinition->SnowCostEffectClass, GetAbilityLevel(Handle, ActorInfo));
-
-	if (!CostSpec.IsValid())
-	{
-		return;
-	}
-
-	CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
-
-	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CostSpec);
-}
-
-void UDRGA_FireProjectile::BuildImpactEffectSpecs(UAbilitySystemComponent* AbilitySystemComponent,
-                                                  UDRProjectileWeaponItemDefinition* WeaponDefinition, TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
-{
-	OutEffectSpecs.Reset();
-	
-	if (!IsValid(AbilitySystemComponent)
-		|| !IsValid(WeaponDefinition))
-	{
-		return;
-	}
-	
-	for (const FDRProjectileImpactEffect& EffectData : WeaponDefinition->ImpactEffects)
-	{
-		if (!EffectData.EffectClass)
-		{
-			continue;
-		}
-		
-		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-		EffectContext.AddSourceObject(WeaponDefinition);
-		
-		FGameplayEffectSpecHandle EffectSpec = AbilitySystemComponent->MakeOutgoingSpec(
-			EffectData.EffectClass,
-			EffectData.EffectLevel,
-			EffectContext);
-		
-		if (!EffectSpec.IsValid())
-		{
-			continue;
-		}
-		
-		for (const TPair<FGameplayTag, float>& Pair : EffectData.SetByCallerMagnitudes)
-		{
-			if (Pair.Key.IsValid())
-			{
-				EffectSpec.Data->SetSetByCallerMagnitude(Pair.Key, Pair.Value);
-			}
-		}
-		
-		OutEffectSpecs.Add(EffectSpec);
-	}
-}
-
-bool UDRGA_FireProjectile::SpawnProjectile(const FGameplayAbilityActorInfo* ActorInfo,
-	UDRProjectileWeaponItemDefinition* WeaponDefinition,
-	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const
-{
-	if (ActorInfo == nullptr 
-		|| !IsValid(WeaponDefinition))
+	if (!IsValid(AbilitySystem))
 	{
 		return false;
 	}
 	
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	
-	UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get();
-	
-	if (!IsValid(AvatarActor)
-		|| !IsValid(AbilitySystemComponent))
+	// 부모 GA에서 TryRequestLocalShot() 함수가 호출되고 내부에서 생성한 PredictionKey가 공유됨
+	AbilitySystem->ServerSetReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
+		GetCurrentAbilitySpecHandle(),GetCurrentActivationInfo().GetActivationPredictionKey(),
+		AbilitySystem->ScopedPredictionKey);
+
+	return true;
+}
+
+void UDRGA_FireProjectile::RegisterServerShotDelegate()
+{
+	if (ServerShotDelegateHandle.IsValid())
 	{
-		return false;
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+
+	if (!IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	const FGameplayAbilitySpecHandle SpecHandle = GetCurrentAbilitySpecHandle();
+
+	const FPredictionKey PredictionKey = GetCurrentActivationInfo().GetActivationPredictionKey();
+
+	ServerShotDelegateHandle = AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,
+			SpecHandle,PredictionKey).AddUObject(this,&ThisClass::HandleServerShotRequest);
+
+	AbilitySystem->CallReplicatedEventDelegateIfSet(EAbilityGenericReplicatedEvent::InputPressed,SpecHandle,PredictionKey);
+}
+
+void UDRGA_FireProjectile::UnregisterServerShotDelegate()
+{
+	if (!ServerShotDelegateHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
+	{
+		AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,	GetCurrentAbilitySpecHandle(),
+			GetCurrentActivationInfo().GetActivationPredictionKey()).Remove(ServerShotDelegateHandle);
+	}
+
+	ServerShotDelegateHandle.Reset();
+}
+
+void UDRGA_FireProjectile::HandleServerShotRequest()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	
+	if (ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority())
+	{
+		return;
 	}
 	
-	UWorld* World = AvatarActor->GetWorld();
-	if (!IsValid(World))
+	if (!ActorInfo->IsLocallyControlled())
+	{
+		if (UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get())
+		{
+			AbilitySystemComponent->ConsumeGenericReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
+				GetCurrentAbilitySpecHandle(), GetCurrentActivationInfo().GetActivationPredictionKey());
+		}
+	}
+	
+	// CommitAbility 시도
+	if (!TryCommitServerShot())
+	{
+		return;
+	}
+	
+	// 투사체 발사
+	ExecuteServerProjectileShot();	
+}
+
+bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
 	{
 		return false;
 	}
@@ -262,40 +171,81 @@ bool UDRGA_FireProjectile::SpawnProjectile(const FGameplayAbilityActorInfo* Acto
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	
-	if (AController* Controller = ActorInfo->PlayerController.Get())
-	{
-		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
-	}
-	else
-	{	
-		AvatarActor->GetActorEyesViewPoint(ViewLocation, ViewRotation);
-	}
-	
-	const FVector SpawnLocation =AvatarActor->GetActorLocation() + FVector::UpVector * WeaponDefinition->SpawnHeightOffset 
-		+ ViewRotation.Vector() * WeaponDefinition->SpawnForwardOffset;
-	
-	const FTransform SpawnTransform(ViewRotation, SpawnLocation);
-	
-	APawn* InstigatorPawn = Cast<APawn>(AvatarActor);
-	
-	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(WeaponDefinition->ProjectileClass, 
-		SpawnTransform, AvatarActor, InstigatorPawn, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-	
-	if (!IsValid(Projectile))
+	if (!GetViewPoint(ViewLocation, ViewRotation))
 	{
 		return false;
 	}
 	
-	int32 SourceTeamId = INDEX_NONE;
+	FHitResult CameraHit;
 	
-	if (const ADRPlayerState* DRPlayerState = Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get()))
+	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(), CameraHit))
 	{
-		SourceTeamId = DRPlayerState->GetTeamId();
+		return false;
 	}
 	
-	Projectile->InitializeProjectile(AbilitySystemComponent, ImpactEffectSpecs, WeaponDefinition->WorldImpactData, SourceTeamId);
+	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 	
+	FVector MuzzleLocation;
+	
+	if (!ResolveMuzzleLocation(ViewRotation.Vector(), MuzzleLocation))
+	{
+		return false;
+	}
+	
+	FVector ProjectileDirection = AimPoint - MuzzleLocation;
+	if (!ProjectileDirection.Normalize())
+	{
+		ProjectileDirection = ViewRotation.Vector();
+	}
+	
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+	UWorld* World = GetWorld();
+	
+	if (!IsValid(AvatarActor)
+		|| !IsValid(AbilitySystem)
+		|| !IsValid(World))
+	{
+		return false;
+	}
+	
+	const FTransform SpawnTransform(ProjectileDirection.Rotation(), MuzzleLocation);
+
+	ADRProjectile* Projectile =	World->SpawnActorDeferred<ADRProjectile>(ProjectileClass, SpawnTransform, AvatarActor,
+			Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (!IsValid(Projectile))
+	{
+		return false;
+	}
+
+	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
+	BuildImpactEffectSpecs(ImpactEffectSpecs);
+
+	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs, WorldImpactData,
+		GetImpactGameplayCueTag(), GetSourceTeamId());
+
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
-	
+
+	PlayServerFirePresentation(MuzzleLocation, AimPoint);
+
 	return true;	
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

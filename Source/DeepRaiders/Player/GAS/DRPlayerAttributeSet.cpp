@@ -2,6 +2,7 @@
 
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 
 UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 {
@@ -13,6 +14,9 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 
 	InitMaxSnowGauge(100.f);
 	InitSnowGauge(100.f);
+	InitSnowAbsorbPower(1.f);
+	InitSnowAbsorbRadius(100.f);
+	InitSnowAbsorbSpeed(10.f);
 
 	InitMoveSpeedMultiplier(1.f);
 }
@@ -27,6 +31,9 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxFreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbPower, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbRadius, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
 }
 
@@ -58,6 +65,21 @@ void UDRPlayerAttributeSet::OnRep_SnowGauge(const FGameplayAttributeData& OldSno
 void UDRPlayerAttributeSet::OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, OldMaxSnowGauge);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbPower(const FGameplayAttributeData& OldSnowAbsorbPower)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbPower, OldSnowAbsorbPower);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbRadius(const FGameplayAttributeData& OldSnowAbsorbRadius)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbRadius, OldSnowAbsorbRadius);
+}
+
+void UDRPlayerAttributeSet::OnRep_SnowAbsorbSpeed(const FGameplayAttributeData& OldSnowAbsorbSpeed)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, SnowAbsorbSpeed, OldSnowAbsorbSpeed);
 }
 
 void UDRPlayerAttributeSet::OnRep_MoveSpeedMultiplier(
@@ -136,6 +158,18 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxSnowGauge());
 	}
+	else if (Attribute == GetSnowAbsorbPowerAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
+	else if (Attribute == GetSnowAbsorbRadiusAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
+	else if (Attribute == GetSnowAbsorbSpeedAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
 	else if (Attribute == GetIncomingDamageAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
@@ -150,22 +184,47 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
+	if (Data.EvaluatedData.Attribute != GetIncomingDamageAttribute())
 	{
-		const float Damage = GetIncomingDamage();
-
-		SetIncomingDamage(0.f);
-
-		if (Damage > 0.f)
-		{
-			SetHealth(FMath::Clamp(GetHealth() - Damage, 0.f, GetMaxHealth()));
-		}
-	
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[GAS][Damage] Damage=%.1f Health=%.1f"),
-			Damage,
-			GetHealth());
+		return;
 	}
+
+	const float RawDamage = GetIncomingDamage();
+	// 처리 직후 바로 비움
+	SetIncomingDamage(0.f);
+	if (RawDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float HealthBefore = GetHealth();
+	// 이미 죽은 대상에게 들어온 후속 Effect는 통계에 포함하지 않는다.
+	if (HealthBefore <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float HealthAfter = FMath::Clamp(HealthBefore - RawDamage, 0.f, GetMaxHealth());
+	const float AppliedDamage = HealthBefore - HealthAfter;
+	if (AppliedDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
+	ADRPlayerState* TargetPlayerState = IsValid(TargetASC) ? Cast<ADRPlayerState>(TargetASC->GetOwnerActor()) : nullptr;
+	ADRPlayerState* SourcePlayerState = IsValid(SourceASC) ? Cast<ADRPlayerState>(SourceASC->GetOwnerActor()) : nullptr;
+
+	const bool bFatal = HealthBefore > KINDA_SMALL_NUMBER && HealthAfter <= KINDA_SMALL_NUMBER;
+	// 먼저 Combat Result를 기록
+	if (IsValid(TargetPlayerState) && TargetPlayerState->HasAuthority())
+	{
+		TargetPlayerState->HandleDamageResolved(SourcePlayerState, AppliedDamage, bFatal);
+	}
+
+	SetHealth(HealthAfter);
+
+	UE_LOG(LogTemp, Log, TEXT( "[GAS][Damage] " "Raw=%.1f Applied=%.1f " "Health=%.1f->%.1f Fatal=%d " "Source=%s Target=%s"), 
+		RawDamage, AppliedDamage, HealthBefore, HealthAfter, bFatal, *GetNameSafe(SourcePlayerState), *GetNameSafe(TargetPlayerState));
 }

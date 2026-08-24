@@ -13,7 +13,24 @@ class UDRPlayerAttributeSet;
 class UDRPerkComponent;
 class UGameplayAbility;
 class UGameplayEffect;
+class UDRQuickSlotComponent;
+class UDRItemDefinition;
 struct FOnAttributeChangeData;
+class UDRCombatStatsComponent;
+
+USTRUCT(BlueprintType)
+struct FDRPublicQuickSlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UDRItemDefinition> ItemDefinition;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 Quantity = 0;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRCoinsChangedSignature,
@@ -41,6 +58,33 @@ public:
 	{
 		return PerkComponent;
 	}
+	
+	UDRCombatStatsComponent* GetCombatStatsComponent() const
+	{
+		return CombatStatsComponent;
+	}
+	
+	/*
+	 * 서버에서 실제 Damage가 확정됐을 때 호출.
+	 * SourcePlayerState == nullptr -> 환경 Damage 등
+	 * SourcePlayerState == this -> 낙사 / 자해 등
+	 * SourcePlayerState != this -> 다른 Player가 가한 Damage
+	 */
+	void HandleDamageResolved(
+		ADRPlayerState* SourcePlayerState,
+		float AppliedDamage,
+		bool bFatal);
+	
+	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
+	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
+
+	const TArray<FDRPublicQuickSlot>& GetPublicQuickSlots() const
+	{
+		return PublicQuickSlots;
+	}
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Quick Slot")
+	FDRPublicQuickSlotsChanged OnPublicQuickSlotsChanged;
 	
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -101,6 +145,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
 	void SetCoins(int32 NewCoins);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
+	void AddCoins(int32 Amount);
+
 	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
 	FDRCoinsChangedSignature OnCoinsChanged;
 
@@ -143,6 +190,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
 	TObjectPtr<UDRPerkComponent> PerkComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat Stats")
+	TObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;
+	
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();
 
@@ -200,6 +250,12 @@ protected:
 	int32 Coins = 1000;
 
 private:
+	UFUNCTION()
+	void OnRep_PublicQuickSlots();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PublicQuickSlots)
+	TArray<FDRPublicQuickSlot> PublicQuickSlots;
+
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
 

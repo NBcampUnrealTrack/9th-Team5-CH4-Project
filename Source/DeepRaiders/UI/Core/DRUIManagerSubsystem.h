@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "DRUIManagerSubsystem.generated.h"
 
@@ -19,9 +20,23 @@ public:
 	virtual void Deinitialize() override;
 
 	void Configure(APlayerController* InPlayerController, UDRUIConfig* InUIConfig);
+
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	UUserWidget* PushScreen(FGameplayTag ScreenTag);
+
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void PopScreen(FGameplayTag ScreenTag);
+
+	UFUNCTION(BlueprintPure, Category = "UI")
+	bool IsScreenOpen(FGameplayTag ScreenTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "UI")
+	UUserWidget* GetScreen(FGameplayTag ScreenTag) const;
+
 	UUserWidget* CreateManagedWidget(
 		TSubclassOf<UUserWidget> WidgetClass,
-		EDRUILayer Layer);
+		EDRUILayer Layer,
+		int32 Order = 0);
 	void SetManagedWidgetVisible(UUserWidget* Widget, bool bVisible);
 	void ReleaseManagedWidget(UUserWidget* Widget);
 
@@ -42,4 +57,7 @@ private:
 	TArray<TObjectPtr<UUserWidget>> ManagedWidgets;
 
 	TMap<TWeakObjectPtr<UUserWidget>, EDRUILayer> WidgetLayers;
+
+	UPROPERTY(Transient)
+	TMap<FGameplayTag, TObjectPtr<UUserWidget>> ActiveScreens;
 };

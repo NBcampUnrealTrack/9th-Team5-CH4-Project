@@ -6,12 +6,23 @@
       <Path>Plugins/GameplayMessageRouter</Path>
       <Path>Plugins/VoxelFree</Path>
       <Path>Source/DeepRaiders/Audio</Path>
+      <Path>Source/DeepRaiders/GAS</Path>
+      <Path>Source/DeepRaiders/Input</Path>
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
       <Path>Source/DeepRaiders/Inventory/DRInventoryTypes.h</Path>
+      <Path>Source/DeepRaiders/Item/DRItemTypes.h</Path>
+      <Path>Source/DeepRaiders/Item/DRMeleeWeaponDefinition.cpp</Path>
+      <Path>Source/DeepRaiders/Item/DRMeleeWeaponDefinition.h</Path>
       <Path>Source/DeepRaiders/Item/GAS</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.cpp</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.h</Path>
+      <Path>Source/DeepRaiders/MessageSystem</Path>
+      <Path>Source/DeepRaiders/Perk</Path>
+      <Path>Source/DeepRaiders/Player/Animation/DRAnimationTypes.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Animation/DRAnimationTypes.h</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRCombatStatsComponent.cpp</Path>
+      <Path>Source/DeepRaiders/Player/Components/DRCombatStatsComponent.h</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.cpp</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHealthComponent.h</Path>
       <Path>Source/DeepRaiders/Player/Components/DRHeldItemComponent.cpp</Path>
@@ -26,13 +37,39 @@
       <Path>Source/DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h</Path>
       <Path>Source/DeepRaiders/Player/Components/DRTeleportComponent.cpp</Path>
       <Path>Source/DeepRaiders/Player/Components/DRTeleportComponent.h</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_AbsorbSnow.cpp</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_AbsorbSnow.h</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_DropSelectedItem.cpp</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_DropSelectedItem.h</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_Interact.cpp</Path>
+      <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_Interact.h</Path>
+      <Path>Source/DeepRaiders/Snow</Path>
       <Path>Source/DeepRaiders/Storage</Path>
       <Path>Source/DeepRaiders/Storage/DRStorage.cpp</Path>
       <Path>Source/DeepRaiders/Storage/DRStorage.h</Path>
       <Path>Source/DeepRaiders/Teleport</Path>
       <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.cpp</Path>
       <Path>Source/DeepRaiders/Teleport/DRTeleportPoint.h</Path>
+      <Path>Source/DeepRaiders/UI/Perk</Path>
+      <Path>Source/DeepRaiders/UI/Scoreboard</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRPerkResetTestWidget.cpp</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRPerkResetTestWidget.h</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopBuyPanelWidget.cpp</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopBuyPanelWidget.h</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopSellItemInfoWidget.cpp</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopSellItemInfoWidget.h</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopSellPanelWidget.cpp</Path>
+      <Path>Source/DeepRaiders/UI/Shop/DRShopSellPanelWidget.h</Path>
       <Path>Source/DeepRaiders/UI/Teleport</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRInventoryViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRInventoryViewModel.h</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRScoreboardViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRScoreboardViewModel.h</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopSellViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopSellViewModel.h</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.cpp</Path>
+      <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.h</Path>
+      <Path>Source/DeepRaidersEditor</Path>
     </explicitIncludes>
     <explicitExcludes />
   </component>

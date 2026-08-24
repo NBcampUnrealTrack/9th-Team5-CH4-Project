@@ -1,9 +1,10 @@
 #include "DRTeleportUIComponent.h"
 
+#include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
-#include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportSelectWidget.h"
 #include "Engine/LocalPlayer.h"
@@ -74,6 +75,8 @@ void UDRTeleportUIComponent::BindTeleportComponent(UDRTeleportComponent* NewTele
 
 void UDRTeleportUIComponent::CloseTeleportSelectWidget()
 {
+	SetTeleportOpenTag(false);
+
 	if (IsValid(TeleportSelectWidget))
 	{
 		TeleportSelectWidget->OnCloseRequested.RemoveDynamic(
@@ -82,7 +85,7 @@ void UDRTeleportUIComponent::CloseTeleportSelectWidget()
 
 		if (IsValid(UIManager))
 		{
-			UIManager->ReleaseManagedWidget(TeleportSelectWidget);
+			UIManager->PopScreen(DRGameplayTags::UI_Screen_Teleport);
 		}
 		else
 		{
@@ -95,10 +98,8 @@ void UDRTeleportUIComponent::CloseTeleportSelectWidget()
 
 void UDRTeleportUIComponent::HandleTeleportUseRequested(ADRTeleportPoint* CurrentTeleportPoint)
 {
-	const UDRUIConfig* UIConfig = IsValid(UIManager) ? UIManager->GetUIConfig() : nullptr;
 	if (!IsValid(PlayerController) || !PlayerController->IsLocalController()
-		|| !IsValid(CurrentTeleportPoint) || !IsValid(UIConfig)
-		|| !UIConfig->TeleportSelectWidgetClass)
+		|| !IsValid(CurrentTeleportPoint) || !IsValid(UIManager))
 	{
 		return;
 	}
@@ -106,9 +107,7 @@ void UDRTeleportUIComponent::HandleTeleportUseRequested(ADRTeleportPoint* Curren
 	CloseTeleportSelectWidget();
 
 	TeleportSelectWidget = Cast<UDRTeleportSelectWidget>(
-		UIManager->CreateManagedWidget(
-			UIConfig->TeleportSelectWidgetClass,
-			UIConfig->TeleportLayer));
+		UIManager->PushScreen(DRGameplayTags::UI_Screen_Teleport));
 	if (!IsValid(TeleportSelectWidget))
 	{
 		return;
@@ -118,9 +117,25 @@ void UDRTeleportUIComponent::HandleTeleportUseRequested(ADRTeleportPoint* Curren
 	TeleportSelectWidget->OnCloseRequested.AddUniqueDynamic(
 		this,
 		&ThisClass::HandleTeleportCloseRequested);
+	SetTeleportOpenTag(true);
 }
 
 void UDRTeleportUIComponent::HandleTeleportCloseRequested()
 {
 	CloseTeleportSelectWidget();
+}
+
+void UDRTeleportUIComponent::SetTeleportOpenTag(bool bIsOpen) const
+{
+	if (!IsValid(PlayerController))
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = PlayerController->GetAbilitySystemComponent())
+	{
+		ASC->SetLooseGameplayTagCount(
+			DRGameplayTags::State_UI_TeleportOpen,
+			bIsOpen ? 1 : 0);
+	}
 }

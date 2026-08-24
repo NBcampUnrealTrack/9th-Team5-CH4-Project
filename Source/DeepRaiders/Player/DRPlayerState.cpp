@@ -9,25 +9,18 @@
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+#include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
 
 ADRPlayerState::ADRPlayerState()
 {
-	AbilitySystemComponent =
-		CreateDefaultSubobject<UAbilitySystemComponent>(
-			TEXT("AbilitySystemComponent"));
-
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
-	AbilitySystemComponent->SetReplicationMode(
-		EGameplayEffectReplicationMode::Mixed);
-	
-	PlayerAttributeSet =
-		CreateDefaultSubobject<UDRPlayerAttributeSet>(
-			TEXT("PlayerAttributeSet"));
-
-	PerkComponent =
-		CreateDefaultSubobject<UDRPerkComponent>(
-			TEXT("PerkComponent"));
+	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
+	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
+	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
@@ -44,8 +37,68 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, DeepestDigLocation);
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
-	DOREPLIFETIME(ADRPlayerState, Coins);
+
+	// 실제 코인 값은 서버와 해당 PlayerState의 소유 클라이언트만 공유한다.
+	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
+	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
+}
+
+void ADRPlayerState::HandleDamageResolved(
+	ADRPlayerState* SourcePlayerState,
+	float AppliedDamage,
+	bool bFatal)
+{
+	if (!HasAuthority() || !IsValid(CombatStatsComponent) || AppliedDamage <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// 피해자는 DamageTaken을 항상 기록. - 낙뎀도 포함
+	CombatStatsComponent->RecordDamageTaken(AppliedDamage, bFatal);
+
+	// Source가 없거나 자기 자신이면 DamageDealt / Kill로 인정하지 않는다. -> Fall Damage 걸러짐
+	if (!IsValid(SourcePlayerState) || SourcePlayerState == this)
+	{
+		return;
+	}
+
+	UDRCombatStatsComponent* SourceStats = SourcePlayerState->GetCombatStatsComponent();
+	if (!IsValid(SourceStats))
+	{
+		return;
+	}
+
+	SourceStats->RecordDamageDealt(AppliedDamage, bFatal);
+
+	UE_LOG(LogTemp, Log, TEXT( "[CombatStats] Source=%s Target=%s " "AppliedDamage=%.1f Fatal=%d"), 
+		*GetNameSafe(SourcePlayerState), *GetNameSafe(this), AppliedDamage, bFatal);
+}
+
+void ADRPlayerState::UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent)
+{
+	if (!HasAuthority() || !IsValid(QuickSlotComponent))
+	{
+		return;
+	}
+
+	PublicQuickSlots.SetNum(QuickSlotComponent->GetSlotCount());
+	for (int32 SlotIndex = 0; SlotIndex < PublicQuickSlots.Num(); ++SlotIndex)
+	{
+		FDRItemInstance ItemInstance;
+		const bool bHasItem = QuickSlotComponent->GetQuickSlot(SlotIndex, ItemInstance);
+		FDRPublicQuickSlot& SnapshotSlot = PublicQuickSlots[SlotIndex];
+		SnapshotSlot.ItemDefinition = bHasItem ? ItemInstance.Definition.Get() : nullptr;
+		SnapshotSlot.Quantity = bHasItem ? ItemInstance.Quantity : 0;
+	}
+
+	OnPublicQuickSlotsChanged.Broadcast();
+	ForceNetUpdate();
+}
+
+void ADRPlayerState::OnRep_PublicQuickSlots()
+{
+	OnPublicQuickSlotsChanged.Broadcast();
 }
 
 bool ADRPlayerState::UpdateDeepestDigLocation(const FVector& Location)
@@ -126,6 +179,18 @@ void ADRPlayerState::SetCoins(int32 NewCoins)
 	Coins = ClampedCoins;
 	OnRep_Coins(PreviousCoins);
 	ForceNetUpdate();
+}
+
+void ADRPlayerState::AddCoins(int32 Amount)
+{
+	if (!HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	// int32 덧셈 전에 int64로 확장해 오버플로를 방지한다.
+	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
+	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
 }
 
 void ADRPlayerState::ResetForRespawn()
@@ -475,9 +540,11 @@ void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("Coins changed: Previous=%d New=%d"),
+		TEXT("[Coin] Player=%s Previous=%d New=%d Delta=%d"),
+		*GetNameSafe(this),
 		PreviousCoins,
-		Coins);
+		Coins,
+		Coins - PreviousCoins);
 
 	OnCoinsChanged.Broadcast(Coins);
 }

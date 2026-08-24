@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayTagContainer.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -22,12 +23,13 @@ class UDRJetpackComponent;
 class UDRItemActionPresentationComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
+class UDRSnowRemoveComponent;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class USpringArmComponent;
 class UDRPlayerAttributeSet;
 class UDRItemAnimationSet;
-class UAnimMontage;
+class UDRFreezeVisualComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -64,10 +66,7 @@ public:
 
 	void HandleJumpPressed();
 	void HandleJumpReleased();
-
-	/** 로컬 플레이어가 손에 든 아이템 던지기를 요청한다. */
-	void RequestThrowHeldItem();
-
+	
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
@@ -97,15 +96,6 @@ public:
 
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
-
-	void RequestPrimaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
-	void RequestSecondaryItemAction(EDRItemActionTriggerEvent TriggerEvent);
-
-	/**
-	 * 현재 장착 아이템에 해당 Action이 할당되어 있는지 확인한다.
-	 * 클라이언트 UX 검사와 서버 권한 검증 양쪽에서 사용한다.
-	 */
-	bool HasHeldItemAction(EDRItemActionType ActionType) const;
 
 	void NotifyMineConfirmedFromServer();
 
@@ -154,8 +144,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
 
-	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage);
-	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage);
+	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation);
+	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
+	const FVector& MuzzleLocation, const FVector& TargetLocation);
 	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
 
@@ -181,9 +173,6 @@ protected:
 	virtual void BeginPlay() override;
 
 	void InitializeAbilitySystem();
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
-	TObjectPtr<UDRMiningComponent> MiningComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
 	TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
@@ -203,6 +192,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Snow", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;
+	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;

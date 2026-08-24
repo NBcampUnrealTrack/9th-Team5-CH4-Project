@@ -18,6 +18,21 @@ namespace DRGameplayTags
 		"Player is absorbing snow.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_InventoryOpen,
+		"State.UI.InventoryOpen",
+		"Local player's inventory UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_ShopOpen,
+		"State.UI.ShopOpen",
+		"Local player's shop UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_UI_TeleportOpen,
+		"State.UI.TeleportOpen",
+		"Local player's teleport UI is open.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");
@@ -36,7 +51,12 @@ namespace DRGameplayTags
 		Ability_Snow_Absorb,
 		"Ability.Snow.Absorb",
 		"Snow absorption ability.");
-
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Weapon_Ranged,
+		"Cooldown.Weapon.Ranged",
+		"Shared fire interval cooldown for ranged weapons.");
+	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
@@ -52,6 +72,51 @@ namespace DRGameplayTags
 		"Data.Damage",
 		"Damage amount passed through GAS.");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Health_Heal,
+		"Data.Health.Heal",
+		"Health Heal amount passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Cooldown_Duration,
+		"Data.Cooldown.Duration",
+		"Cooldown duration passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_HUD,
+		"UI.Screen.HUD",
+		"Main HUD screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_QuickSlot,
+		"UI.Screen.QuickSlot",
+		"Quick slot screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Inventory_Player,
+		"UI.Screen.Inventory.Player",
+		"Player inventory screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Inventory_Storage,
+		"UI.Screen.Inventory.Storage",
+		"Storage inventory screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Teleport,
+		"UI.Screen.Teleport",
+		"Teleport selection screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Shop,
+		"UI.Screen.Shop",
+		"Shop screen.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_Scoreboard,
+		"UI.Screen.Scoreboard",
+		"Match scoreboard screen.");
+	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Attack_Miss,
 		"GameplayCue.Sound.Attack.Miss",

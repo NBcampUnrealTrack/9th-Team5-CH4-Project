@@ -4,6 +4,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "EngineUtils.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -13,6 +14,7 @@
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
@@ -24,6 +26,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
@@ -37,8 +40,10 @@
 #include "AbilitySystemComponent.h"
 #include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
+#include "GameplayPrediction.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -48,12 +53,14 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
+	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
 
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
+	ScoreboardUIComponent = CreateDefaultSubobject<UDRScoreboardUIComponent>(TEXT("ScoreboardUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -89,6 +96,12 @@ void ADRPlayerController::BeginPlay()
 
 	Super::BeginPlay();
 
+	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
+	StartingWeaponSelectionComponent->Initialize(
+		StartingProjectileWeaponDefinition,
+		InventoryComponent,
+		QuickSlotComponent);
+
 	ApplyViewPitchLimits();
 	
 	/*
@@ -101,6 +114,10 @@ void ADRPlayerController::BeginPlay()
 	if (HasAuthority())
 	{
 		InitializeStartingQuickSlot();
+		QuickSlotComponent->OnQuickSlotsChangedDelegate.AddDynamic(
+			this,
+			&ThisClass::RefreshPublicQuickSlotSnapshot);
+		RefreshPublicQuickSlotSnapshot();
 	}
 
 	// 입력 매핑은 이 PC에서 실제로 입력받는 컨트롤러에만 등록한다.
@@ -127,6 +144,14 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
+}
+
+void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
+{
+	if (ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>())
+	{
+		DRPlayerState->UpdatePublicQuickSlots(QuickSlotComponent);
+	}
 }
 
 void ADRPlayerController::SetupInputComponent()
@@ -174,6 +199,13 @@ void ADRPlayerController::SetupInputComponent()
 		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
 	}
 	
+	if (IsValid(ScoreboardAction))
+	{
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Started, this, &ThisClass::HandleScoreboardStarted);
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Completed, this, &ThisClass::HandleScoreboardCompleted);
+		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Canceled, this, &ThisClass::HandleScoreboardCompleted);
+	}
+	
 	SetupGASInputComponent();
 }
 
@@ -202,19 +234,31 @@ void ADRPlayerController::SetupGASInputComponent()
 
 	if (IsValid(PrimaryAction))
 	{
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Primary));
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Primary));
 		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Primary));
 	}
 
 	if (IsValid(SecondaryAction))
 	{
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Secondary));
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Secondary));
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
 	}
 	
 	if (IsValid(InventoryAction))
 	{
-		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputPressed, static_cast<int32>(EDRAbilityInputId::Inventory));
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Inventory));
+	}
+	
+	if (IsValid(InteractionAction))
+	{
+		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Interaction));
+	}
+	
+	if (IsValid(DropAction))
+	{
+		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Drop));
 	}
 
 	bGASInputBound = true;
@@ -226,6 +270,11 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 	ApplyViewPitchLimits();
 	
+	if (HasAuthority())
+	{
+		RefreshPublicQuickSlotSnapshot();
+	}
+
 	if (IsValid(QuickSlotComponent))
 	{
 		QuickSlotComponent->RefreshSelectedItem();
@@ -247,6 +296,7 @@ void ADRPlayerController::OnRep_Pawn()
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
 	}
+
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -257,6 +307,7 @@ void ADRPlayerController::OnRep_PlayerState()
 
 	if (IsValid(HUDUIComponent))
 	{
+		HUDUIComponent->RefreshPlayerCharacter();
 		HUDUIComponent->RefreshPerks();
 	}
 }
@@ -287,7 +338,14 @@ void ADRPlayerController::HandleLook(const FInputActionValue& Value)
 		return;
 	}
 
-	PlayerCharacter->LookInput(Value.Get<FVector2D>());
+	FVector2D LookInput = Value.Get<FVector2D>();
+	if (const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
+	{
+		LookInput.X *= UserSettings->GetMouseSensitivityX();
+		LookInput.Y *= UserSettings->GetMouseSensitivityY();
+	}
+
+	PlayerCharacter->LookInput(LookInput);
 }
 
 void ADRPlayerController::HandleJumpStarted(const FInputActionValue&)
@@ -337,6 +395,20 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(1, StartingProjectileWeaponDefinition, 1);
 	}
 	
+#if WITH_EDITOR
+	
+	if (!InventoryComponent->GetItemAtSlot(2))
+	{
+		InventoryComponent->TryAddItemToSlot(2, TestItemDefinition1, TestItemQuantity1);
+	}
+	
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, TestItemDefinition2, TestItemQuantity2);
+	}
+	
+#endif
+	
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
@@ -357,40 +429,144 @@ void ADRPlayerController::ApplyViewPitchLimits()
 	PlayerCameraManager->ViewPitchMax = PlayerCharacter->GetAimPitchMaxDegrees();
 }
 
-void ADRPlayerController::HandleGASInputPressed(int32 InputId)
+void ADRPlayerController::HandleScoreboardStarted(const FInputActionValue&)
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	if (IsValid(ScoreboardUIComponent))
 	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
-		if (Spec)
+		ScoreboardUIComponent->ShowScoreboard();
+	}
+}
+
+void ADRPlayerController::HandleScoreboardCompleted(const FInputActionValue&)
+{
+	if (IsValid(ScoreboardUIComponent))
+	{
+		ScoreboardUIComponent->HideScoreboard();
+	}
+}
+
+void ADRPlayerController::HandleGASInputStarted(int32 InputId)
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId)
 		{
-			Spec->InputPressed = true;
-			if (Spec->IsActive())
-			{
-				ASC->AbilitySpecInputPressed(*Spec);
-			}
-			else
-			{
-				ASC->TryActivateAbility(Spec->Handle);
-			}
+			MatchingHandles.Add(Spec.Handle);
 		}
+	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+
+		Spec->InputPressed = true;
+		if (Spec->IsActive())
+		{
+			ASC->AbilitySpecInputPressed(*Spec);
+			ASC->InvokeReplicatedEvent(
+				EAbilityGenericReplicatedEvent::InputPressed,
+				Spec->Handle,
+				GetAbilityActivationPredictionKey(*Spec));
+		}
+		else
+		{
+			ASC->TryActivateAbility(Spec->Handle);
+		}
+	}
+}
+
+void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId && Spec.IsActive())
+		{
+			MatchingHandles.Add(Spec.Handle);
+		}
+	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec || !Spec->IsActive())
+		{
+			continue;
+		}
+
+		Spec->InputPressed = true;
+		ASC->AbilitySpecInputPressed(*Spec);
+		ASC->InvokeReplicatedEvent(
+			EAbilityGenericReplicatedEvent::InputPressed,
+			Spec->Handle,
+			GetAbilityActivationPredictionKey(*Spec));
 	}
 }
 
 void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 {
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!IsValid(ASC))
 	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromInputID(InputId);
-		if (Spec)
+		return;
+	}
+
+	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.InputID == InputId)
 		{
-			Spec->InputPressed = false;
-			if (Spec->IsActive())
-			{
-				ASC->AbilitySpecInputReleased(*Spec);
-			}
+			MatchingHandles.Add(Spec.Handle);
 		}
 	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
+	{
+		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
+		if (!Spec)
+		{
+			continue;
+		}
+
+		const bool bWasActive = Spec->IsActive();
+		Spec->InputPressed = false;
+		if (bWasActive)
+		{
+			ASC->AbilitySpecInputReleased(*Spec);
+			ASC->InvokeReplicatedEvent(
+				EAbilityGenericReplicatedEvent::InputReleased,
+				Spec->Handle,
+				GetAbilityActivationPredictionKey(*Spec));
+		}
+	}
+}
+
+FPredictionKey ADRPlayerController::GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const
+{
+	UGameplayAbility* AbilityInstance = Spec.GetPrimaryInstance();
+	if (!AbilityInstance)
+	{
+		return FPredictionKey();
+	}
+
+	return AbilityInstance->GetCurrentActivationInfo().GetActivationPredictionKey();
 }
 
 void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
@@ -412,39 +588,67 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
 {
-	AvailableShops.RemoveAll(
-		[](const TWeakObjectPtr<ADRShop>& Shop)
+	if (ADRShop* Shop = FindInteractableShop())
+	{
+		ShopUIComponent->ToggleShopWidget(Shop);
+	}
+}
+
+ADRShop* ADRPlayerController::FindInteractableShop() const
+{
+	APawn* ControlledPawn = GetPawn();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(ControlledPawn) || !IsValid(World))
+	{
+		return nullptr;
+	}
+
+	ADRShop* ClosestShop = nullptr;
+	float ClosestDistanceSquared = TNumericLimits<float>::Max();
+
+	for (TActorIterator<ADRShop> ShopIterator(World); ShopIterator; ++ShopIterator)
+	{
+		ADRShop* Shop = *ShopIterator;
+
+		if (!IsValid(Shop) || !Shop->IsPawnInShopArea(ControlledPawn))
 		{
-			return !Shop.IsValid();
-		});
+			continue;
+		}
 
-	if (!AvailableShops.IsEmpty())
-	{
-		ShopUIComponent->ToggleShopWidget(AvailableShops.Last().Get());
-	}
-}
+		const float DistanceSquared = FVector::DistSquared(
+			ControlledPawn->GetActorLocation(),
+			Shop->GetActorLocation());
 
-void ADRPlayerController::SetAvailableShop(
-	ADRShop* Shop)
-{
-	if (!IsValid(Shop))
-	{
-		return;
+		if (DistanceSquared < ClosestDistanceSquared)
+		{
+			ClosestShop = Shop;
+			ClosestDistanceSquared = DistanceSquared;
+		}
 	}
 
-	AvailableShops.Remove(Shop);
-	AvailableShops.Add(Shop);
+	return ClosestShop;
 }
 
-void ADRPlayerController::ClearAvailableShop(
+void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
-	AvailableShops.Remove(Shop);
+	if (!IsShopInteractionAvailable()
+		&& IsValid(StartingWeaponSelectionComponent))
+	{
+		StartingWeaponSelectionComponent->ExpireSelection();
+	}
 
-	if (IsValid(ShopUIComponent))
+	if (IsLocalController()
+		&& IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
+}
+
+bool ADRPlayerController::IsShopInteractionAvailable() const
+{
+	return IsValid(FindInteractableShop());
 }
 
 #pragma region Teleport

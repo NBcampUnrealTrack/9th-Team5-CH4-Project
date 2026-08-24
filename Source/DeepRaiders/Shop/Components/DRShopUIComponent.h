@@ -12,6 +12,7 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
+class UDRStartingWeaponSelectionComponent;
 class UDRUIManagerSubsystem;
 class UDRShopWidget;
 class UDRUpgradeComponent;
@@ -26,9 +27,11 @@ public:
 	UDRShopUIComponent();
 
 	/** 지정한 상점의 UI를 열거나 닫는다. */
+	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void ToggleShopWidget(AActor* ShopActor);
 
 	/** 지정한 상점이 현재 열려 있으면 UI를 닫는다. */
+	UFUNCTION(BlueprintCallable, Category = "Shop|UI")
 	void CloseShop(const AActor* ShopActor);
 
 protected:
@@ -46,9 +49,16 @@ private:
 	UFUNCTION()
 	void HideShopWidget();
 
+	/** 로컬 ASC에 상점 UI 표시 상태를 기록한다. */
+	void SetShopOpenTag(bool bIsOpen) const;
+
 	/** UI에서 선택한 Offer를 서버 거래 컴포넌트로 전달한다. */
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
+
+	/** UI에서 선택한 인벤토리 아이템을 서버 판매 요청으로 전달한다. */
+	UFUNCTION()
+	void HandleSellRequested(FGuid InstanceId);
 
 	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
 	UFUNCTION()
@@ -61,6 +71,9 @@ private:
 	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
 	UFUNCTION()
 	void HandleCoinsChanged(int32 NewCoins);
+
+	/** 선택 완료 또는 만료 시 열려 있는 무기 선택 탭을 비활성화한다. */
+	void HandleStartingWeaponSelectionAvailabilityChanged(bool IsAvailable);
 
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
@@ -99,6 +112,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;

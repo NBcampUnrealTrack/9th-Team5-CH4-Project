@@ -14,6 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRStartingWeaponSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
@@ -26,6 +27,9 @@ class UDRTeleportUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
+class UDRScoreboardUIComponent;
+struct FGameplayAbilitySpec;
+struct FPredictionKey;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -73,12 +77,20 @@ private:
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
 	
-	void HandleGASInputPressed(int32 InputId);
+	void HandleGASInputStarted(int32 InputId);
+	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
+	FPredictionKey GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const;
 
 	void InitializeStartingQuickSlot();
+
+	UFUNCTION()
+	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
+
+	void HandleScoreboardStarted(const FInputActionValue& Value);
+	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
@@ -104,12 +116,27 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> InteractionAction;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> DropAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> ScoreboardAction;
+	
 #pragma region QuickSlot
 
 public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
+
+	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
+	UDRStartingWeaponSelectionComponent* GetStartingWeaponSelectionComponent() const
+	{
+		return StartingWeaponSelectionComponent;
+	}
 
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
 	{
@@ -131,7 +158,23 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+
+protected:
+
+#pragma endregion
 	
+#pragma region DEBUG BUILD
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity1 = 1;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> TestItemDefinition2;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	int32 TestItemQuantity2 = 1;
 #pragma endregion
 
 #pragma region UI
@@ -142,13 +185,16 @@ public:
 		return InventoryUIComponent;
 	}
 	
-	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
-	void SetAvailableShop(ADRShop* Shop);
+	/** 상점 영역 이탈에 따른 선택 만료와 UI 종료를 처리한다. */
+	void NotifyShopAreaExited(ADRShop* Shop);
 
-	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
-	void ClearAvailableShop(ADRShop* Shop);
+	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
+	bool IsShopInteractionAvailable() const;
 
 private:
+	/** 현재 Pawn이 상호작용 영역 안에 있는 가장 가까운 상점을 찾는다. */
+	ADRShop* FindInteractableShop() const;
+
 	/** 현재 상점의 UI를 열거나 닫는다. */
 	void HandleToggleShop(const FInputActionValue& Value);
 
@@ -160,11 +206,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
-	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Weapon")
+	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
@@ -177,6 +223,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
 
 #pragma endregion
 

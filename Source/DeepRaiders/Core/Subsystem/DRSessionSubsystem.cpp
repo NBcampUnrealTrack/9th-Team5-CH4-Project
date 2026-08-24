@@ -180,13 +180,23 @@ void UDRSessionSubsystem::CreateSessionInternal(const UWorld* ServerWorld, int32
 	}
 }
 
-void UDRSessionSubsystem::JoinServer(const FString& Address)
+void UDRSessionSubsystem::JoinListenServer(const FString& Address)
+{
+	JoinServerInternal(Address, TEXT("리슨 서버"));
+}
+
+void UDRSessionSubsystem::JoinDedicatedServer(const FString& Address)
+{
+	JoinServerInternal(Address, TEXT("데디케이티드 서버"));
+}
+
+void UDRSessionSubsystem::JoinServerInternal(const FString& Address, const TCHAR* ServerType)
 {
 	const UWorld* World = GetWorld();
 
 	if (IsValid(World) && World->GetNetMode() == NM_DedicatedServer)
 	{
-		UE_LOG(LogDRSession, Warning, TEXT("[Session] 접속 생략: 전용 서버는 접속할 수 없음"));
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] %s 접속 생략: 전용 서버는 접속할 수 없음"), ServerType);
 		OnJoinSessionComplete.Broadcast(false);
 		return;
 	}
@@ -195,7 +205,7 @@ void UDRSessionSubsystem::JoinServer(const FString& Address)
 
 	if (TrimmedAddress.IsEmpty())
 	{
-		UE_LOG(LogDRSession, Warning, TEXT("[Session] 접속 실패: 주소가 비어 있음"));
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] %s 접속 실패: 주소가 비어 있음"), ServerType);
 		OnJoinSessionComplete.Broadcast(false);
 		return;
 	}
@@ -209,7 +219,12 @@ void UDRSessionSubsystem::JoinServer(const FString& Address)
 	FString ResolvedAddress;
 	if (!TryResolveConnectAddress(TrimmedAddress, ResolvedAddress))
 	{
-		UE_LOG(LogDRSession, Error, TEXT("[Session] 접속 실패: 주소 변환 실패 주소=\"%s\""), *TrimmedAddress);
+		UE_LOG(
+			LogDRSession,
+			Error,
+			TEXT("[Session] %s 접속 실패: 주소 변환 실패 주소=\"%s\""),
+			ServerType,
+			*TrimmedAddress);
 		OnJoinSessionComplete.Broadcast(false);
 		return;
 	}
@@ -218,12 +233,23 @@ void UDRSessionSubsystem::JoinServer(const FString& Address)
 
 	if (!IsValid(PlayerController))
 	{
-		UE_LOG(LogDRSession, Error, TEXT("[Session] 접속 실패: 플레이어 컨트롤러가 유효하지 않음 주소=\"%s\""), *ResolvedAddress);
+		UE_LOG(
+			LogDRSession,
+			Error,
+			TEXT("[Session] %s 접속 실패: 플레이어 컨트롤러가 유효하지 않음 주소=\"%s\""),
+			ServerType,
+			*ResolvedAddress);
 		OnJoinSessionComplete.Broadcast(false);
 		return;
 	}
 
-	UE_LOG(LogDRSession, Log, TEXT("[Session] 서버 접속 이동 입력=\"%s\" 변환주소=\"%s\""), *TrimmedAddress, *ResolvedAddress);
+	UE_LOG(
+		LogDRSession,
+		Log,
+		TEXT("[Session] %s 접속 이동 입력=\"%s\" 변환주소=\"%s\""),
+		ServerType,
+		*TrimmedAddress,
+		*ResolvedAddress);
 	OnJoinSessionComplete.Broadcast(true);
 
 	PlayerController->ClientTravel(ResolvedAddress, TRAVEL_Absolute);

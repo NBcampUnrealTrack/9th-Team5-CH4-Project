@@ -56,7 +56,7 @@ public:
 	// 특정 인스턴스에서 요청한 수량을 제거
 	// 수량 부족 시 실패
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
-	bool TryRemoveFromItemInstance(FGuid InstanceId, int32 Quantity);
+	bool TryRemoveItemInstance(FGuid InstanceId, int32 Quantity);
 	
 	// 동일한 Definition을 가진 여러 엔트리에서 요청 수량을 제거
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
@@ -64,7 +64,7 @@ public:
 
 	/** 지정된 인스턴스를 모두 검증하고 변경 알림 한 번으로 일괄 제거한다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
-	bool TryRemoveItemInstances(const TArray<FGuid>& InstanceIds);
+	bool TryRemoveItemInstanceArray(const TArray<FGuid>& InstanceIds);
 	
 	// SourceInstanceId가 가리키는 Instance를 DestinationInventory로 이동시킨다.
 	// 서버에서만 실행, 실제로 이동한 수량 반환, 요청한 수량의 처리가 불가능한 경우 실패
@@ -77,10 +77,10 @@ public:
 	void RequestSwapSlots(int32 SourceSlotIndex, int32 TargetSlotIndex);
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
-	bool FindItemInstance(FGuid InstanceId, FDRItemInstance& OutItemInstance) const;
+	bool CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
-	bool CanAddItem(UDRItemDefinition* Definition, int32 Quantity) const;
+	bool CanAddItemInstance(const FDRItemInstance& ItemInstance) const;
 	
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetAddableQuantity(UDRItemDefinition* Definition) const;
