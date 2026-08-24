@@ -65,6 +65,14 @@ void UDRShopUIComponent::CloseShop(const AActor* ShopActor)
 	}
 }
 
+void UDRShopUIComponent::CompleteStartingWeaponSelection()
+{
+	if (IsValid(ShopWidget))
+	{
+		ShopWidget->CompleteStartingWeaponSelection();
+	}
+}
+
 void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 {
 	if (IsValid(ShopWidget) || !IsValid(ShopActor))
@@ -119,6 +127,10 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 			ShopComponent->GetItemOffers(),
 			EDRShopOfferType::Purchase));
 	ShopWidget->InitializeSellPanel(InventoryComponent);
+	ShopWidget->InitializeStartingWeaponPanel(
+		PlayerController,
+		PlayerController->GetStartingWeaponTable(),
+		PlayerController->IsStartingWeaponSelectionAvailable());
 	RefreshUpgradeOffers();
 	RefreshPerkOffers();
 	ShopWidget->OnCloseRequested.AddDynamic(

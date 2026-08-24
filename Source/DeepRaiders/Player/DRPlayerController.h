@@ -23,10 +23,12 @@ class UDRHUDUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
+class UDRStartingWeaponUIComponent;
 class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRScoreboardUIComponent;
+class UDataTable;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
@@ -54,6 +56,7 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
+	virtual void BeginPlayingState() override;
 	virtual void SetupInputComponent() override;
 	
 	void SetupGASInputComponent();
@@ -82,6 +85,13 @@ private:
 	FPredictionKey GetAbilityActivationPredictionKey(const FGameplayAbilitySpec& Spec) const;
 
 	void InitializeStartingQuickSlot();
+	void ExpireStartingWeaponSelection();
+
+	UFUNCTION(Client, Reliable)
+	void ClientCompleteStartingWeaponSelection();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSelectStartingWeapon(FName RowName);
 
 	UFUNCTION()
 	void RefreshPublicQuickSlotSnapshot();
@@ -130,6 +140,12 @@ protected:
 public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
+	UDataTable* GetStartingWeaponTable() const { return StartingWeaponTable; }
+	bool IsStartingWeaponSelectionAvailable() const
+	{
+		return !IsStartingWeaponSelected && !IsStartingWeaponSelectionExpired;
+	}
+	void RequestStartingWeaponSelection(FName RowName);
 
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
 	{
@@ -151,6 +167,19 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Player|Starting Weapon",
+		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRStartingWeaponTableRow"))
+	TObjectPtr<UDataTable> StartingWeaponTable;
+
+private:
+	bool IsStartingWeaponSelected = false;
+	bool IsStartingWeaponSelectionExpired = false;
+
+protected:
 
 #pragma endregion
 	
@@ -214,6 +243,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRStartingWeaponUIComponent> StartingWeaponUIComponent;
 	
 #pragma endregion
 

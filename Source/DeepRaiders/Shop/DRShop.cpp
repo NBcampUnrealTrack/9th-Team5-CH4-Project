@@ -63,7 +63,8 @@ void ADRShop::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADRShop::HandlePawnEntered(APawn* Pawn)
 {
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
+	if (!IsValid(Pawn)
+		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
 		return;
 	}
@@ -77,7 +78,8 @@ void ADRShop::HandlePawnEntered(APawn* Pawn)
 
 void ADRShop::HandlePawnExited(APawn* Pawn)
 {
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
+	if (!IsValid(Pawn)
+		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
 		return;
 	}

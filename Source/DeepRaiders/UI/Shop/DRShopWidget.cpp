@@ -2,6 +2,8 @@
 
 #include "Components/Button.h"
 #include "Components/WidgetSwitcher.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/UI/StartingWeapon/DRStartingWeaponSelectWidget.h"
 #include "DRShopBuyPanelWidget.h"
 #include "DRShopSellPanelWidget.h"
 
@@ -23,6 +25,39 @@ void UDRShopWidget::InitializeSellPanel(UDRInventoryComponent* InventoryComponen
 	}
 }
 
+void UDRShopWidget::InitializeStartingWeaponPanel(
+	ADRPlayerController* PlayerController,
+	UDataTable* StartingWeaponTable,
+	bool IsSelectionAvailable)
+{
+	if (!IsValid(StartingWeaponPanelButton) || !IsValid(StartingWeaponPanel))
+	{
+		return;
+	}
+
+	StartingWeaponPanelButton->SetVisibility(
+		IsSelectionAvailable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	if (!IsSelectionAvailable)
+	{
+		HandleBuyPanelButtonClicked();
+		return;
+	}
+
+	StartingWeaponPanel->InitializeSelection(PlayerController, StartingWeaponTable);
+	HandleStartingWeaponPanelButtonClicked();
+}
+
+void UDRShopWidget::CompleteStartingWeaponSelection()
+{
+	if (IsValid(StartingWeaponPanelButton))
+	{
+		StartingWeaponPanelButton->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	HandleBuyPanelButtonClicked();
+}
+
 void UDRShopWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
@@ -35,6 +70,13 @@ void UDRShopWidget::NativeOnInitialized()
 	if (IsValid(SellPanelButton))
 	{
 		SellPanelButton->OnClicked.AddDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
+	}
+
+	if (IsValid(StartingWeaponPanelButton))
+	{
+		StartingWeaponPanelButton->OnClicked.AddDynamic(
+			this,
+			&ThisClass::HandleStartingWeaponPanelButtonClicked);
 	}
 
 	if (IsValid(CloseButton))
@@ -65,6 +107,13 @@ void UDRShopWidget::NativeDestruct()
 	if (IsValid(SellPanelButton))
 	{
 		SellPanelButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
+	}
+
+	if (IsValid(StartingWeaponPanelButton))
+	{
+		StartingWeaponPanelButton->OnClicked.RemoveDynamic(
+			this,
+			&ThisClass::HandleStartingWeaponPanelButtonClicked);
 	}
 
 	if (IsValid(CloseButton))
@@ -98,6 +147,14 @@ void UDRShopWidget::HandleSellPanelButtonClicked()
 	if (IsValid(PanelSwitcher) && IsValid(SellPanel))
 	{
 		PanelSwitcher->SetActiveWidget(SellPanel);
+	}
+}
+
+void UDRShopWidget::HandleStartingWeaponPanelButtonClicked()
+{
+	if (IsValid(PanelSwitcher) && IsValid(StartingWeaponPanel))
+	{
+		PanelSwitcher->SetActiveWidget(StartingWeaponPanel);
 	}
 }
 

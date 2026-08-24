@@ -15,6 +15,8 @@
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRStartingWeaponTable.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
@@ -31,6 +33,7 @@
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/StartingWeapon/DRStartingWeaponUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -41,6 +44,7 @@
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
+#include "Engine/DataTable.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -57,6 +61,7 @@ ADRPlayerController::ADRPlayerController()
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
 	ScoreboardUIComponent = CreateDefaultSubobject<UDRScoreboardUIComponent>(TEXT("ScoreboardUIComponent"));
+	StartingWeaponUIComponent = CreateDefaultSubobject<UDRStartingWeaponUIComponent>(TEXT("StartingWeaponUIComponent"));
 }
 
 void ADRPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -134,6 +139,11 @@ void ADRPlayerController::BeginPlay()
 
 	InputSubsystem->RemoveMappingContext(MappingContext);
 	InputSubsystem->AddMappingContext(MappingContext, 0);
+}
+
+void ADRPlayerController::BeginPlayingState()
+{
+	Super::BeginPlayingState();
 }
 
 void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
@@ -286,6 +296,7 @@ void ADRPlayerController::OnRep_Pawn()
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
 	}
+
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -392,6 +403,103 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 #endif
 	
 	QuickSlotComponent->RequestSelectSlot(0);	
+}
+
+void ADRPlayerController::ClientCompleteStartingWeaponSelection_Implementation()
+{
+	IsStartingWeaponSelected = true;
+
+	if (IsValid(ShopUIComponent))
+	{
+		ShopUIComponent->CompleteStartingWeaponSelection();
+	}
+
+	if (IsValid(StartingWeaponUIComponent))
+	{
+		StartingWeaponUIComponent->CloseSelection();
+	}
+}
+
+void ADRPlayerController::RequestStartingWeaponSelection(FName RowName)
+{
+	if (IsLocalController() && !RowName.IsNone())
+	{
+		ServerSelectStartingWeapon(RowName);
+	}
+}
+
+void ADRPlayerController::ServerSelectStartingWeapon_Implementation(FName RowName)
+{
+	if (!IsStartingWeaponSelectionAvailable()
+		|| RowName.IsNone()
+		|| !IsValid(StartingWeaponTable)
+		|| !IsValid(StartingProjectileWeaponDefinition)
+		|| !IsValid(InventoryComponent)
+		|| !IsValid(QuickSlotComponent))
+	{
+		return;
+	}
+
+	const FDRStartingWeaponTableRow* Row =
+		StartingWeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponSelection"));
+	UDRProjectileWeaponItemDefinition* SelectedWeapon = Row
+		? Row->WeaponDefinition.LoadSynchronous()
+		: nullptr;
+
+	if (!IsValid(SelectedWeapon))
+	{
+		return;
+	}
+
+	int32 WeaponSlotIndex = INDEX_NONE;
+	const FDRItemInstance* CurrentWeapon = nullptr;
+
+	for (int32 SlotIndex = 0; SlotIndex < InventoryComponent->GetMaxSlots(); ++SlotIndex)
+	{
+		const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
+		if (ItemInstance
+			&& ItemInstance->Definition.Get() == StartingProjectileWeaponDefinition)
+		{
+			WeaponSlotIndex = SlotIndex;
+			CurrentWeapon = ItemInstance;
+			break;
+		}
+	}
+
+	if (WeaponSlotIndex == INDEX_NONE || !CurrentWeapon)
+	{
+		return;
+	}
+
+	const bool IsApplied = StartingProjectileWeaponDefinition == SelectedWeapon
+		|| InventoryComponent->TryReplaceItemDefinition(
+			CurrentWeapon->InstanceId,
+			StartingProjectileWeaponDefinition,
+			SelectedWeapon);
+
+	if (!IsApplied)
+	{
+		return;
+	}
+
+	QuickSlotComponent->RequestSelectSlot(WeaponSlotIndex);
+	IsStartingWeaponSelected = true;
+	ClientCompleteStartingWeaponSelection();
+}
+
+void ADRPlayerController::ExpireStartingWeaponSelection()
+{
+	if (!IsStartingWeaponSelectionAvailable())
+	{
+		return;
+	}
+
+	IsStartingWeaponSelectionExpired = true;
+
+	if (IsValid(ShopUIComponent))
+	{
+		ShopUIComponent->CompleteStartingWeaponSelection();
+	}
 }
 
 void ADRPlayerController::ApplyViewPitchLimits()
@@ -598,6 +706,11 @@ void ADRPlayerController::ClearAvailableShop(
 	ADRShop* Shop)
 {
 	AvailableShops.Remove(Shop);
+
+	if (AvailableShops.IsEmpty())
+	{
+		ExpireStartingWeaponSelection();
+	}
 
 	if (IsValid(ShopUIComponent))
 	{
