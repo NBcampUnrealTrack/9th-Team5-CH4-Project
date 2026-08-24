@@ -129,7 +129,7 @@ void UDRShopTransactionComponent::ServerRequestSell_Implementation(
 
 	const int32 SellPrice = Definition->Price / 2;
 
-	if (Inventory->TryRemoveFromItemInstance(InstanceId, 1))
+	if (Inventory->TryRemoveItemInstance(InstanceId, 1))
 	{
 		PlayerState->SetCoins(PlayerState->GetCoins() + SellPrice);
 	}
