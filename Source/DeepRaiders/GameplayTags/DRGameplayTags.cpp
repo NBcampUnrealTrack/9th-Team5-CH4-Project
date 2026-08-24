@@ -116,11 +116,6 @@ namespace DRGameplayTags
 		UI_Screen_Scoreboard,
 		"UI.Screen.Scoreboard",
 		"Match scoreboard screen.");
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		UI_Screen_StartingWeapon,
-		"UI.Screen.StartingWeapon",
-		"Starting weapon selection screen.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Attack_Miss,

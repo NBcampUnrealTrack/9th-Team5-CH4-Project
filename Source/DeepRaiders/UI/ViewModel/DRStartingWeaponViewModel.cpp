@@ -1,5 +1,6 @@
 #include "DRStartingWeaponViewModel.h"
 
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRStartingWeaponTable.h"
 #include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "Engine/DataTable.h"
@@ -19,8 +20,7 @@ void UDRStartingWeaponEntryViewModel::Initialize(
 	const FText& InDescription)
 {
 	OwnerViewModel = InOwnerViewModel;
-	UE_MVVM_SET_PROPERTY_VALUE(RowName, InRowName);
-	UE_MVVM_SET_PROPERTY_VALUE(WeaponDefinition, InWeaponDefinition);
+	RowName = InRowName;
 	UE_MVVM_SET_PROPERTY_VALUE(Description, InDescription);
 
 	if (!IsValid(InWeaponDefinition))
@@ -76,7 +76,7 @@ void UDRStartingWeaponViewModel::Initialize(
 void UDRStartingWeaponViewModel::Deinitialize()
 {
 	SelectionComponent.Reset();
-	UE_MVVM_SET_PROPERTY_VALUE(SelectedWeapon, nullptr);
+	SelectedWeapon = nullptr;
 	UE_MVVM_SET_PROPERTY_VALUE(IsConfirmEnabled, false);
 	UE_MVVM_SET_PROPERTY_VALUE(
 		WeaponEntries,
@@ -105,6 +105,6 @@ void UDRStartingWeaponViewModel::SelectWeapon(
 	}
 
 	WeaponEntry->SetSelected(true);
-	UE_MVVM_SET_PROPERTY_VALUE(SelectedWeapon, WeaponEntry);
+	SelectedWeapon = WeaponEntry;
 	UE_MVVM_SET_PROPERTY_VALUE(IsConfirmEnabled, true);
 }

@@ -54,7 +54,6 @@ void UDRStartingWeaponSelectWidget::DeinitializeSelection()
 void UDRStartingWeaponSelectWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	SetIsFocusable(true);
 
 	WeaponListView->OnItemClicked().AddUObject(this, &ThisClass::HandleWeaponClicked);
 	ConfirmButton->OnClicked.AddDynamic(this, &ThisClass::HandleConfirmClicked);

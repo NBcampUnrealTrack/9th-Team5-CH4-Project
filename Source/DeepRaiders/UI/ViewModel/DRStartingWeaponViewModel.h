@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "MVVMViewModelBase.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DRStartingWeaponViewModel.generated.h"
 
 class UTexture2D;
+class UDRProjectileWeaponItemDefinition;
 class UDRStartingWeaponSelectionComponent;
 class UDRStartingWeaponViewModel;
 
@@ -16,16 +16,9 @@ class DEEPRAIDERS_API UDRStartingWeaponEntryViewModel : public UMVVMViewModelBas
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category = "Starting Weapon")
 	void Select();
 
 protected:
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
-	FName RowName = NAME_None;
-
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
-	TObjectPtr<UDRProjectileWeaponItemDefinition> WeaponDefinition;
-
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
 	FText DisplayName;
 
@@ -40,6 +33,8 @@ protected:
 
 private:
 	friend class UDRStartingWeaponViewModel;
+
+	FName RowName = NAME_None;
 
 	void Initialize(
 		UDRStartingWeaponViewModel* InOwnerViewModel,
@@ -61,18 +56,13 @@ public:
 	/** 선택 컴포넌트의 DT를 읽어 ListView 항목을 생성한다. */
 	void Initialize(UDRStartingWeaponSelectionComponent* InSelectionComponent);
 
-	UFUNCTION(BlueprintCallable, Category = "Starting Weapon")
 	void Deinitialize();
 
-	UFUNCTION(BlueprintCallable, Category = "Starting Weapon")
 	void ConfirmSelection();
 
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
 	TArray<TObjectPtr<UDRStartingWeaponEntryViewModel>> WeaponEntries;
-
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
-	TObjectPtr<UDRStartingWeaponEntryViewModel> SelectedWeapon;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Weapon")
 	bool IsConfirmEnabled = false;
@@ -81,6 +71,9 @@ private:
 	friend class UDRStartingWeaponEntryViewModel;
 
 	void SelectWeapon(UDRStartingWeaponEntryViewModel* WeaponEntry);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRStartingWeaponEntryViewModel> SelectedWeapon;
 
 	TWeakObjectPtr<UDRStartingWeaponSelectionComponent> SelectionComponent;
 };
