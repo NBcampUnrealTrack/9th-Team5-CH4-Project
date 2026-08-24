@@ -45,8 +45,7 @@ private:
 
 	bool bDedicatedSessionCreationRequested = false; // 세션 생성 중복 방지
 
-	void CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName,
-	                           const FString& MatchType);
+	void CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName, const FString& MatchType);
 
 	void HandleCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void ClearSessionDelegateHandles();
