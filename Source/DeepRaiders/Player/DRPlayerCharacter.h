@@ -71,6 +71,9 @@ public:
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
 
+	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
+	void RefreshTeamColor();
+
 	void ApplyHandEquipmentVisual(
 		UStaticMesh* WorldMesh,
 		const FTransform& WorldTransform);
@@ -232,6 +235,15 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
 	float AimPitchMaxDegrees = 45.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FName TeamColorParameterName = TEXT("Paint Tint");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team0Color = FLinearColor::Red;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team1Color = FLinearColor::Blue;
 	
 #pragma region QuickSlot
 
