@@ -41,7 +41,7 @@ void UDRGA_MeleeAttack::ActivateAbility(
 		return;
 	}
 
-	UDRMeleeCombatComponent* Melee = Character->FindComponentByClass<UDRMeleeCombatComponent>();
+	UDRMeleeCombatComponent* Melee = Character->GetMeleeCombatComponent();
 	if (!IsValid(Melee))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
