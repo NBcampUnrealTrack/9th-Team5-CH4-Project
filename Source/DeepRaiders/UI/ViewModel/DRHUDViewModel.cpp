@@ -7,6 +7,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/Components/DRInteractionComponent.h"
 
 void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 {
@@ -23,7 +24,10 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	QuickSlotComponent = IsValid(PlayerController)
 		? PlayerController->GetQuickSlotComponent()
 		: nullptr;
-
+	InteractionComponent = IsValid(PlayerController)
+		? PlayerController->GetInteractionComponent()
+		: nullptr;
+	
 	// GAS 속성 변경 델리게이트 연결
 	if (AbilitySystemComponent.IsValid())
 	{
@@ -56,12 +60,19 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 			this,
 			&ThisClass::HandleSelectedQuickSlotItemChanged);
 	}
+	
+	if (InteractionComponent.IsValid())
+	{
+		InteractionFocusChangedHandle = InteractionComponent->OnFocusedInteractableChanged
+			.AddUObject(this, &ThisClass::HandleFocusedInteractableChanged);
+	}
 
 	// 최초 리프레쉬
 	RefreshHealth();
 	RefreshSnowGauge();
 	RefreshFreezeGauge();
 	RefreshAmmoVisibility();
+	RefreshInteractionPrompt();
 }
 
 void UDRHUDViewModel::Deinitialize()
@@ -74,6 +85,12 @@ void UDRHUDViewModel::Deinitialize()
 		QuickSlotComponent->OnSelectedQuickSlotItemChangedDelegate.RemoveDynamic(
 			this,
 			&ThisClass::HandleSelectedQuickSlotItemChanged);
+	}
+	
+	if (InteractionComponent.IsValid()
+		&& InteractionFocusChangedHandle.IsValid())
+	{
+		InteractionComponent->OnFocusedInteractableChanged.Remove(InteractionFocusChangedHandle);
 	}
 
 	if (AbilitySystemComponent.IsValid())
@@ -94,12 +111,15 @@ void UDRHUDViewModel::Deinitialize()
 
 	AbilitySystemComponent.Reset();
 	QuickSlotComponent.Reset();
+	InteractionComponent.Reset();
+	
 	HealthChangedHandle.Reset();
 	MaxHealthChangedHandle.Reset();
 	SnowGaugeChangedHandle.Reset();
 	MaxSnowGaugeChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
 	MaxFreezeGaugeChangedHandle.Reset();
+	InteractionFocusChangedHandle.Reset();
 }
 
 void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
@@ -206,4 +226,24 @@ void UDRHUDViewModel::RefreshAmmoVisibility()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAmmoVisible,
 		IsValid(WeaponDefinition));
+}
+
+void UDRHUDViewModel::HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData)
+{
+	RefreshInteractionPrompt();
+}
+
+void UDRHUDViewModel::RefreshInteractionPrompt()
+{
+	AActor* FocusedTarget = InteractionComponent.IsValid() ? InteractionComponent->GetFocusedTarget() : nullptr;
+
+	const bool bNewVisible = IsValid(FocusedTarget);
+
+	const FDRInteractionPromptData PromptData = bNewVisible ?
+		InteractionComponent->GetFocusedPromptData() : FDRInteractionPromptData();
+
+	UE_MVVM_SET_PROPERTY_VALUE(bIsInteractionPromptVisible, bNewVisible);
+	UE_MVVM_SET_PROPERTY_VALUE(InteractionActionText, PromptData.ActionText);
+	UE_MVVM_SET_PROPERTY_VALUE(InteractionTitleText, PromptData.TitleText);
+	UE_MVVM_SET_PROPERTY_VALUE(InteractionDetailText, PromptData.DetailText);
 }

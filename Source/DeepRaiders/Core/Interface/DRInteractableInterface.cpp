@@ -1,6 +1,10 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 
 #include "DRInteractableInterface.h"
 
-// Add default functionality here for any IDRInteractableInterface functions that are not pure virtual.
+bool IDRInteractableInterface::GetInteractionPromptData_Implementation(APawn* Interactor,
+	FDRInteractionPromptData& OutPromptData) const
+{
+	OutPromptData.ActionText = NSLOCTEXT("DRInteraction", "DefaultInteractionAction", "상호작용");
+	
+	return true;
+}
