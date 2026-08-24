@@ -4,6 +4,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "EngineUtils.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -579,48 +580,59 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
 {
-	AvailableShops.RemoveAll(
-		[](const TWeakObjectPtr<ADRShop>& Shop)
-		{
-			return !Shop.IsValid();
-		});
-
-	if (!AvailableShops.IsEmpty())
+	if (ADRShop* Shop = FindInteractableShop())
 	{
-		ShopUIComponent->ToggleShopWidget(AvailableShops.Last().Get());
+		ShopUIComponent->ToggleShopWidget(Shop);
 	}
 }
 
-void ADRPlayerController::SetAvailableShop(
-	ADRShop* Shop)
+ADRShop* ADRPlayerController::FindInteractableShop() const
 {
-	if (!IsValid(Shop))
+	APawn* ControlledPawn = GetPawn();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(ControlledPawn) || !IsValid(World))
 	{
-		return;
+		return nullptr;
 	}
 
-	AvailableShops.Remove(Shop);
-	AvailableShops.Add(Shop);
+	ADRShop* ClosestShop = nullptr;
+	float ClosestDistanceSquared = TNumericLimits<float>::Max();
+
+	for (TActorIterator<ADRShop> ShopIterator(World); ShopIterator; ++ShopIterator)
+	{
+		ADRShop* Shop = *ShopIterator;
+
+		if (!IsValid(Shop) || !Shop->IsPawnInShopArea(ControlledPawn))
+		{
+			continue;
+		}
+
+		const float DistanceSquared = FVector::DistSquared(
+			ControlledPawn->GetActorLocation(),
+			Shop->GetActorLocation());
+
+		if (DistanceSquared < ClosestDistanceSquared)
+		{
+			ClosestShop = Shop;
+			ClosestDistanceSquared = DistanceSquared;
+		}
+	}
+
+	return ClosestShop;
 }
 
-void ADRPlayerController::ClearAvailableShop(
+void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
-	AvailableShops.Remove(Shop);
-	// 파괴된 상점의 약한 참조가 선택 기회를 잘못 유지하지 않도록 함께 정리한다.
-	AvailableShops.RemoveAll(
-		[](const TWeakObjectPtr<ADRShop>& AvailableShop)
-		{
-			return !AvailableShop.IsValid();
-		});
-
-	if (AvailableShops.IsEmpty())
+	if (!IsShopInteractionAvailable()
+		&& IsValid(StartingWeaponSelectionComponent))
 	{
-		// 최초 상점 영역을 완전히 벗어나면 이후에는 다시 선택할 수 없다.
 		StartingWeaponSelectionComponent->ExpireSelection();
 	}
 
-	if (IsLocalController() && IsValid(ShopUIComponent))
+	if (IsLocalController()
+		&& IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
@@ -628,11 +640,7 @@ void ADRPlayerController::ClearAvailableShop(
 
 bool ADRPlayerController::IsShopInteractionAvailable() const
 {
-	return AvailableShops.ContainsByPredicate(
-		[](const TWeakObjectPtr<ADRShop>& Shop)
-		{
-			return Shop.IsValid();
-		});
+	return IsValid(FindInteractableShop());
 }
 
 #pragma region Teleport

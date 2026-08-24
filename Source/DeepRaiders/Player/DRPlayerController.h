@@ -185,16 +185,16 @@ public:
 		return InventoryUIComponent;
 	}
 	
-	/** 상호작용 범위 안에서 입력을 받을 상점을 등록한다. */
-	void SetAvailableShop(ADRShop* Shop);
-
-	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
-	void ClearAvailableShop(ADRShop* Shop);
+	/** 상점 영역 이탈에 따른 선택 만료와 UI 종료를 처리한다. */
+	void NotifyShopAreaExited(ADRShop* Shop);
 
 	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
 	bool IsShopInteractionAvailable() const;
 
 private:
+	/** 현재 Pawn이 상호작용 영역 안에 있는 가장 가까운 상점을 찾는다. */
+	ADRShop* FindInteractableShop() const;
+
 	/** 현재 상점의 UI를 열거나 닫는다. */
 	void HandleToggleShop(const FInputActionValue& Value);
 
@@ -205,9 +205,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
-
-	/** 현재 플레이어가 상호작용할 수 있는 상점 목록이다. */
-	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;

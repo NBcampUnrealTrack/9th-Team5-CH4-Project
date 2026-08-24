@@ -19,6 +19,9 @@ class DEEPRAIDERS_API ADRShop : public AActor
 public:
 	ADRShop();
 
+	/** Pawn이 상점 영역 안에 있는지 확인한다. */
+	bool IsPawnInShopArea(const APawn* Pawn) const;
+
 	USoundBase* GetPurchaseSound() const
 	{
 		return PurchaseSound;
@@ -35,10 +38,7 @@ protected:
 
 private:
 	UFUNCTION()
-	void HandlePawnEntered(APawn* Pawn);
-
-	UFUNCTION()
-	void HandlePawnExited(APawn* Pawn);
+	void HandleShopAreaExited(APawn* Pawn);
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<USceneComponent> Root;

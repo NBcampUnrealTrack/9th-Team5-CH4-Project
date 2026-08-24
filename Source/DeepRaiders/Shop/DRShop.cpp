@@ -34,36 +34,36 @@ ADRShop::ADRShop()
 	PurchaseSound = PurchaseSoundAsset.Object;
 }
 
+bool ADRShop::IsPawnInShopArea(const APawn* Pawn) const
+{
+	return IsValid(Pawn)
+		&& IsValid(ShopAreaComponent)
+		&& ShopAreaComponent->IsOverlappingActor(Pawn);
+}
+
 void ADRShop::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ShopAreaComponent->OnPawnEntered.AddDynamic(
-		this,
-		&ThisClass::HandlePawnEntered);
 	ShopAreaComponent->OnPawnExited.AddDynamic(
 		this,
-		&ThisClass::HandlePawnExited);
+		&ThisClass::HandleShopAreaExited);
 }
 
 void ADRShop::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (IsValid(ShopAreaComponent))
 	{
-		ShopAreaComponent->OnPawnEntered.RemoveDynamic(
-			this,
-			&ThisClass::HandlePawnEntered);
 		ShopAreaComponent->OnPawnExited.RemoveDynamic(
 			this,
-			&ThisClass::HandlePawnExited);
+			&ThisClass::HandleShopAreaExited);
 	}
 
 	Super::EndPlay(EndPlayReason);
 }
 
-void ADRShop::HandlePawnEntered(APawn* Pawn)
+void ADRShop::HandleShopAreaExited(APawn* Pawn)
 {
-	// 로컬은 상점 UI 입력을, 서버는 시작 무기 선택 권한 검증을 위해 범위를 기록한다.
 	if (!IsValid(Pawn)
 		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
@@ -73,22 +73,6 @@ void ADRShop::HandlePawnEntered(APawn* Pawn)
 	if (ADRPlayerController* PlayerController =
 		Cast<ADRPlayerController>(Pawn->GetController()))
 	{
-		PlayerController->SetAvailableShop(this);
-	}
-}
-
-void ADRShop::HandlePawnExited(APawn* Pawn)
-{
-	// 양쪽 범위를 함께 해제해 UI 종료와 서버 선택 만료 상태를 일치시킨다.
-	if (!IsValid(Pawn)
-		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
-	{
-		return;
-	}
-
-	if (ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(Pawn->GetController()))
-	{
-		PlayerController->ClearAvailableShop(this);
+		PlayerController->NotifyShopAreaExited(this);
 	}
 }
