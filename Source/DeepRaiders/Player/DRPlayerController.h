@@ -14,6 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
+class UDRStartingWeaponSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
@@ -131,6 +132,12 @@ public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
 
+	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
+	UDRStartingWeaponSelectionComponent* GetStartingWeaponSelectionComponent() const
+	{
+		return StartingWeaponSelectionComponent;
+	}
+
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
 	{
 		return ShopTransactionComponent;
@@ -151,6 +158,8 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+
+protected:
 
 #pragma endregion
 	
@@ -182,6 +191,9 @@ public:
 	/** 범위를 벗어난 상점이 현재 상점이면 등록을 해제한다. */
 	void ClearAvailableShop(ADRShop* Shop);
 
+	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
+	bool IsShopInteractionAvailable() const;
+
 private:
 	/** 현재 상점의 UI를 열거나 닫는다. */
 	void HandleToggleShop(const FInputActionValue& Value);
@@ -194,11 +206,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
-	/** 로컬 플레이어가 현재 상호작용할 수 있는 상점 목록이다. */
+	/** 현재 플레이어가 상호작용할 수 있는 상점 목록이다. */
 	TArray<TWeakObjectPtr<ADRShop>> AvailableShops;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Weapon")
+	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
@@ -214,7 +229,7 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRScoreboardUIComponent> ScoreboardUIComponent;
-	
+
 #pragma endregion
 
 #pragma region Teleport

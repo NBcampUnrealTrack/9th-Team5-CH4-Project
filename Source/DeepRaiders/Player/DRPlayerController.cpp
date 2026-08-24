@@ -24,6 +24,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
@@ -50,6 +51,7 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
+	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
 
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
@@ -91,6 +93,12 @@ void ADRPlayerController::BeginPlay()
 	}
 
 	Super::BeginPlay();
+
+	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
+	StartingWeaponSelectionComponent->Initialize(
+		StartingProjectileWeaponDefinition,
+		InventoryComponent,
+		QuickSlotComponent);
 
 	ApplyViewPitchLimits();
 	
@@ -286,6 +294,7 @@ void ADRPlayerController::OnRep_Pawn()
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
 	}
+
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -598,11 +607,32 @@ void ADRPlayerController::ClearAvailableShop(
 	ADRShop* Shop)
 {
 	AvailableShops.Remove(Shop);
+	// 파괴된 상점의 약한 참조가 선택 기회를 잘못 유지하지 않도록 함께 정리한다.
+	AvailableShops.RemoveAll(
+		[](const TWeakObjectPtr<ADRShop>& AvailableShop)
+		{
+			return !AvailableShop.IsValid();
+		});
 
-	if (IsValid(ShopUIComponent))
+	if (AvailableShops.IsEmpty())
+	{
+		// 최초 상점 영역을 완전히 벗어나면 이후에는 다시 선택할 수 없다.
+		StartingWeaponSelectionComponent->ExpireSelection();
+	}
+
+	if (IsLocalController() && IsValid(ShopUIComponent))
 	{
 		ShopUIComponent->CloseShop(Shop);
 	}
+}
+
+bool ADRPlayerController::IsShopInteractionAvailable() const
+{
+	return AvailableShops.ContainsByPredicate(
+		[](const TWeakObjectPtr<ADRShop>& Shop)
+		{
+			return Shop.IsValid();
+		});
 }
 
 #pragma region Teleport

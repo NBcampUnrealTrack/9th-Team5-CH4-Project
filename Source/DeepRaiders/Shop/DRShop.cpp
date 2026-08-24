@@ -63,7 +63,9 @@ void ADRShop::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADRShop::HandlePawnEntered(APawn* Pawn)
 {
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
+	// 로컬은 상점 UI 입력을, 서버는 시작 무기 선택 권한 검증을 위해 범위를 기록한다.
+	if (!IsValid(Pawn)
+		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
 		return;
 	}
@@ -77,7 +79,9 @@ void ADRShop::HandlePawnEntered(APawn* Pawn)
 
 void ADRShop::HandlePawnExited(APawn* Pawn)
 {
-	if (!IsValid(Pawn) || !Pawn->IsLocallyControlled())
+	// 양쪽 범위를 함께 해제해 UI 종료와 서버 선택 만료 상태를 일치시킨다.
+	if (!IsValid(Pawn)
+		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
 	{
 		return;
 	}
