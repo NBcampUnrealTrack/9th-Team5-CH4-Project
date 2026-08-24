@@ -14,12 +14,10 @@ UDRStartingWeaponSelectionComponent::UDRStartingWeaponSelectionComponent()
 }
 
 void UDRStartingWeaponSelectionComponent::Initialize(
-	UDataTable* InWeaponTable,
 	UDRItemDefinition* InStartingWeaponDefinition,
 	UDRInventoryComponent* InInventoryComponent,
 	UDRQuickSlotComponent* InQuickSlotComponent)
 {
-	WeaponTable = InWeaponTable;
 	StartingWeaponDefinition = InStartingWeaponDefinition;
 	InventoryComponent = InInventoryComponent;
 	QuickSlotComponent = InQuickSlotComponent;

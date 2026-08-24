@@ -30,9 +30,8 @@ class DEEPRAIDERS_API UDRStartingWeaponSelectionComponent : public UActorCompone
 public:
 	UDRStartingWeaponSelectionComponent();
 
-	/** PlayerController에 설정된 기존 에셋과 장비 컴포넌트를 연결한다. */
+	/** 기본 무기와 장비 컴포넌트를 연결한다. */
 	void Initialize(
-		UDataTable* InWeaponTable,
 		UDRItemDefinition* InStartingWeaponDefinition,
 		UDRInventoryComponent* InInventoryComponent,
 		UDRQuickSlotComponent* InQuickSlotComponent);
@@ -69,7 +68,10 @@ private:
 	/** 기본 총은 같은 슬롯에서 교체하고, 없으면 가장 앞의 빈 슬롯에 지급한다. */
 	bool TryApplySelection(UDRItemDefinition* SelectedWeapon);
 
-	UPROPERTY(Transient)
+	UPROPERTY(
+		EditDefaultsOnly,
+		Category = "Starting Weapon",
+		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRStartingWeaponTableRow"))
 	TObjectPtr<UDataTable> WeaponTable;
 
 	UPROPERTY(Transient)

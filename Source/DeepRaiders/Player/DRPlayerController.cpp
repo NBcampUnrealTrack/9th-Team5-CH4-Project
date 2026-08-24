@@ -42,7 +42,6 @@
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
-#include "Engine/DataTable.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -95,9 +94,8 @@ void ADRPlayerController::BeginPlay()
 
 	Super::BeginPlay();
 
-	// 기존 BP에 설정된 시작 장비 데이터를 전용 선택 컴포넌트에 전달한다.
+	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
 	StartingWeaponSelectionComponent->Initialize(
-		StartingWeaponTable,
 		StartingProjectileWeaponDefinition,
 		InventoryComponent,
 		QuickSlotComponent);

@@ -28,7 +28,6 @@ class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRScoreboardUIComponent;
-class UDataTable;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
@@ -159,14 +158,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
-
-	/** 기존 PlayerController BP의 설정값을 유지하고 선택 컴포넌트에 주입한다. */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Player|Starting Weapon",
-		meta = (RequiredAssetDataTags = "RowStructure=/Script/DeepRaiders.DRStartingWeaponTableRow"))
-	TObjectPtr<UDataTable> StartingWeaponTable;
 
 protected:
 
