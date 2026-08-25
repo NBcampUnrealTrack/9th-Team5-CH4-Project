@@ -14,6 +14,16 @@ enum class EDRItemCategory : uint8
 	End,
 };
 
+UENUM(BlueprintType)
+enum class EDRItemRarity : uint8
+{
+	Common UMETA(DisplayName = "Common"),
+	Uncommon UMETA(DisplayName = "Uncommon"),
+	Rare UMETA(DisplayName = "Rare"),
+	Epic UMETA(DisplayName = "Epic"),
+	Legendary UMETA(DisplayName = "Legendary"),
+};
+
 // ItemInstance에 부여될 개별 인스턴스 값
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRItemRuntimeState

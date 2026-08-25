@@ -14,8 +14,9 @@ class UPrimitiveComponent;
 UENUM(BlueprintType)
 enum class EDRWorldItemState : uint8
 {
-	Dropped,
-	Thrown
+	Dropped  UMETA(DisplayName = "Dropped"),
+	Thrown  UMETA(DisplayName = "Thrown"),
+	Emerging UMETA(DisplayName = "Emerging"),
 };
 
 UCLASS()
@@ -73,6 +74,11 @@ protected:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayDroppedSound();
 	
+	void SetWorldItemState(EDRWorldItemState NewState);
+	
+	virtual void HandleWorldItemStateChanged();
+	virtual void RefreshItemPresentation();
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TObjectPtr<UStaticMeshComponent> StaticMeshComponent;
@@ -92,9 +98,8 @@ protected:
 	
 private:
 	// ItemInstance 갱신 시마다 호출
-	// MeshData 갱신
-	void RefreshItemPresentation();
 	void ApplyWorldItemCollision();
+	
 	bool bGroundHitEventArmed = false;
 	float GroundHitArmHeight = 0.f;
 	TWeakObjectPtr<APawn> IgnoredThrower;

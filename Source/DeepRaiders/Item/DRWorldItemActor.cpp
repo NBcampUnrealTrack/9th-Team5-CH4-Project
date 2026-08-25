@@ -124,9 +124,7 @@ void ADRWorldItemActor::MarkAsThrown(APawn* Thrower)
 	}
 
 	ThrowingPawn = Thrower;
-	WorldItemState = EDRWorldItemState::Thrown;
-	ApplyWorldItemCollision();
-	ForceNetUpdate();
+	SetWorldItemState(EDRWorldItemState::Thrown);
 }
 
 void ADRWorldItemActor::BroadcastMined()
@@ -186,10 +184,8 @@ void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, A
 
 	if (WorldItemState == EDRWorldItemState::Thrown)
 	{
-		WorldItemState = EDRWorldItemState::Dropped;
 		ThrowingPawn = nullptr;
-		ApplyWorldItemCollision();
-		ForceNetUpdate();
+		SetWorldItemState(EDRWorldItemState::Dropped);
 	}
 
 	if (bGroundHitEventArmed && Hit.ImpactNormal.Z >= 0.5f)
@@ -223,7 +219,8 @@ void ADRWorldItemActor::MulticastPlayPickupSound_Implementation(APawn* Interacto
 void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
-	if (IsValid(Definition) && Definition->Category == EDRItemCategory::Ore)
+	if (IsValid(Definition) 
+		&& Definition->Category == EDRItemCategory::Ore)
 	{
 		FGameplayCueParameters CueParameters;
 		CueParameters.OriginalTag = DRGameplayTags::GameplayCue_Sound_Ore_Dropped;
@@ -279,7 +276,7 @@ void ADRWorldItemActor::OnRep_ItemInstance()
 
 void ADRWorldItemActor::OnRep_WorldItemState()
 {
-	ApplyWorldItemCollision();
+	HandleWorldItemStateChanged();
 }
 
 void ADRWorldItemActor::ApplyWorldItemCollision()
@@ -316,6 +313,32 @@ void ADRWorldItemActor::ApplyWorldItemCollision()
 		StaticMeshComponent->IgnoreActorWhenMoving(ThrowingPawn, true);
 		IgnoredThrower = ThrowingPawn;
 	}
+}
+
+void ADRWorldItemActor::SetWorldItemState(EDRWorldItemState NewState)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const bool bStateChanged = WorldItemState != NewState;
+	WorldItemState = NewState;
+
+	if (HasActorBegunPlay())
+	{
+		HandleWorldItemStateChanged();
+	}
+
+	if (bStateChanged)
+	{
+		ForceNetUpdate();
+	}	
+}
+
+void ADRWorldItemActor::HandleWorldItemStateChanged()
+{
+	ApplyWorldItemCollision();
 }
 
 void ADRWorldItemActor::RefreshItemPresentation()
