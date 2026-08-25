@@ -12,9 +12,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DRPlayerState.h"
-#include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
@@ -27,6 +25,9 @@
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
+
+#include "DrawDebugHelpers.h"
+#include "GameFramework/PlayerController.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -404,38 +405,15 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-float ADRPlayerCharacter::GetNormalizedAimPitch() const
+float ADRPlayerCharacter::GetAimPitchDegrees() const
 {
 	const FRotator BaseAimRotation = GetBaseAimRotation();
 	const FRotator ActorRotation = GetActorRotation();
 
-	const FRotator DeltaRotation = (BaseAimRotation - ActorRotation).GetNormalized();
+	const FRotator DeltaRotation =
+		(BaseAimRotation - ActorRotation).GetNormalized();
 
-	const float AimPitch = DeltaRotation.Pitch;
-
-	if (AimPitch >= 0.f)
-	{
-		if (AimPitchMaxDegrees <= KINDA_SMALL_NUMBER)
-		{
-			return 0.f;
-		}
-
-		return FMath::Clamp(AimPitch / AimPitchMaxDegrees, 0.f, 1.f);
-	}
-
-	const float DownRange = FMath::Abs(AimPitchMinDegrees);
-
-	if (DownRange <= KINDA_SMALL_NUMBER)
-	{
-		return 0.f;
-	}
-
-	return FMath::Clamp(AimPitch / DownRange, -1.f, 0.f);
-}
-
-void ADRPlayerCharacter::BeginPlay()
-{
-	Super::BeginPlay();
+	return DeltaRotation.Pitch;
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()
