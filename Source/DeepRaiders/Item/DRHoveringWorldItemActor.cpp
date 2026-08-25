@@ -341,7 +341,7 @@ void ADRHoveringWorldItemActor::UpdateHoverTransform()
 	
 	const float PhaseRadians = PhaseRatio * UE_TWO_PI;
 	const float TimeRadians = GetSynchronizedWorldTime() * GetHoverFrequency() * UE_TWO_PI;
-	const float HoverOffset = FMath::Sin(TimeRadians + PhaseRadians * GetHoverAmplitude());
+	const float HoverOffset = FMath::Sin(TimeRadians + PhaseRadians) * GetHoverAmplitude();
 	
 	PresentationMeshComponent->SetRelativeLocation(FVector::UpVector * HoverOffset);	
 }
