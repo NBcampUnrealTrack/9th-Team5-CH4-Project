@@ -160,6 +160,8 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
 	void ClearFrozenState();
 	
+	void HandleFreezeGaugeResolved();
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -199,7 +201,7 @@ protected:
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	
-	void EvaluateFrozenState();
+	void EvaluateFrozenState(float FreezeGauge, float Health);
 
 	// Freeze Decay
 	void RestartFreezeDecay();
@@ -217,7 +219,6 @@ protected:
 
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
-	FDelegateHandle MaxFreezeGaugeChangedHandle;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;

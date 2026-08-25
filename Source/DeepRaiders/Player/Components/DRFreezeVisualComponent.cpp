@@ -96,7 +96,6 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	 */
 	if (BoundAbilitySystem.Get() == InASC
 		&& FreezeGaugeChangedHandle.IsValid()
-		&& MaxFreezeGaugeChangedHandle.IsValid()
 		&& FrozenTagChangedHandle.IsValid())
 	{
 		RefreshTargetFreezeAmount(true);
@@ -109,9 +108,6 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 
 	FreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(
 		UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleFreezeGaugeChanged);
-
-	MaxFreezeGaugeChangedHandle = InASC->GetGameplayAttributeValueChangeDelegate(
-		UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(this, &ThisClass::HandleMaxFreezeGaugeChanged);
 
 	FrozenTagChangedHandle = InASC->RegisterGameplayTagEvent(
 		DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::HandleFrozenTagChanged);
@@ -137,12 +133,6 @@ void UDRFreezeVisualComponent::UnbindAbilitySystem()
 				UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
 		}
 
-		if (MaxFreezeGaugeChangedHandle.IsValid())
-		{
-			ASC->GetGameplayAttributeValueChangeDelegate(
-				UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).Remove(MaxFreezeGaugeChangedHandle);
-		}
-
 		if (FrozenTagChangedHandle.IsValid())
 		{
 			ASC->RegisterGameplayTagEvent(
@@ -151,7 +141,6 @@ void UDRFreezeVisualComponent::UnbindAbilitySystem()
 	}
 
 	FreezeGaugeChangedHandle.Reset();
-	MaxFreezeGaugeChangedHandle.Reset();
 	FrozenTagChangedHandle.Reset();
 
 	BoundAbilitySystem.Reset();
@@ -177,9 +166,9 @@ void UDRFreezeVisualComponent::RefreshTargetFreezeAmount(bool bSnapImmediately)
 	}
 
 	const float FreezeGauge = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetFreezeGaugeAttribute());
-	const float MaxFreezeGauge = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute());
-	TargetFreezeAmount = MaxFreezeGauge > KINDA_SMALL_NUMBER ? FMath::Clamp(FreezeGauge / MaxFreezeGauge, 0.f, 1.f) : 0.f;
-
+	const float MaxHealth = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxHealthAttribute());
+	TargetFreezeAmount = MaxHealth > KINDA_SMALL_NUMBER ? FMath::Clamp(FreezeGauge / MaxHealth, 0.f, 1.f) : 0.f;
+	
 	if (bSnapImmediately)
 	{
 		VisualFreezeAmount = TargetFreezeAmount;

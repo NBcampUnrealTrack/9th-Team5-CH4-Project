@@ -50,9 +50,6 @@ protected:
 	float FreezeGauge = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
-	float MaxFreezeGauge = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGaugeRatio = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Ammo")
@@ -84,7 +81,6 @@ private:
 	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle MaxSnowGaugeChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
-	FDelegateHandle MaxFreezeGaugeChangedHandle;
 	
 #pragma region Interaction
 protected:
