@@ -2,9 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "AbilitySystemInterface.h"
-#include "GameplayTagContainer.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -146,7 +144,7 @@ public:
 	}
 	
 	UFUNCTION(BlueprintPure, Category = "Player|Aim")
-	float GetNormalizedAimPitch() const;
+	float GetAimPitchDegrees() const;
 
 	float GetAimPitchMinDegrees() const
 	{
@@ -160,7 +158,7 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-
+	
 	void InitializeAbilitySystem();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
@@ -216,10 +214,10 @@ private:
 	FVector LastLandedLocation = FVector::ZeroVector;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
-	float AimPitchMinDegrees = -55.f;
+	float AimPitchMinDegrees = -90.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
-	float AimPitchMaxDegrees = 45.f;
+	float AimPitchMaxDegrees = 90.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
 	FName TeamColorParameterName = TEXT("Paint Tint");
