@@ -264,6 +264,7 @@ private:
 public:
 	UFUNCTION(BlueprintPure, Category = "Player|Teleport")
 	int32 GetTeamId() const { return TeamId != INDEX_NONE ? TeamId : GetPlayerId(); }
+	bool HasAssignedTeam() const { return TeamId != INDEX_NONE; }
 
 	void SetTeamId(int32 NewTeamId);
 
