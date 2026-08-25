@@ -1,4 +1,5 @@
 #include "DRVoxelTerrainAreaSyncActor.h"
+#include "DRVoxelTerrainDepositUtils.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
@@ -44,6 +45,45 @@ namespace
 	}
 
 	constexpr float DRStaticMeshSampleJitterRatio = 0.4f;
+	constexpr float DRStaticMeshFootprintEdgeStrength = 0.55f;
+	constexpr float DRDepositBatchIntervalSeconds = 0.1f;
+	constexpr int32 DRTerrainNetworkChunkSize = 32;
+	constexpr int32 DRTerrainNetworkChunkVoxelCount =
+		DRTerrainNetworkChunkSize * DRTerrainNetworkChunkSize * DRTerrainNetworkChunkSize;
+	// 메시 표면과 복셀 등가면이 정확히 맞닿을 때 정밀도 오차로 검은 틈이 생기지 않도록
+	// 지지 표면을 메시 안쪽으로 복셀 한 칸의 10%만큼 넣는다.
+	constexpr float DRStaticMeshContactInsetVoxels = 0.1f;
+
+	void DiscardStaticMeshFootprintData(FDRVoxelDepositInBoxRequest& Request)
+	{
+		// 정밀 트레이스를 완료할 수 없는 경우 외부 후보와 부분 결과를 모두 버리고 완료 플래그를 세운다.
+		// 플래그를 남기지 않으면 라이브러리의 Resolve 단계가 외부 결과를 영원히 기다리게 된다.
+		Request.ExternalCandidatePositions.Reset();
+		Request.ExternalSupportSurfaceZByVoxel.Reset();
+		Request.ExternalResolvedAmountScaleByVoxel.Reset();
+		Request.bExternalFootprintsResolved = true;
+	}
+
+	bool IsEligibleStaticMeshDepositHit(
+		const FHitResult& Hit,
+		float MinimumSurfaceNormalZ,
+		FName RequiredSurfaceTag)
+	{
+		const UStaticMeshComponent* StaticMeshComponent =
+			Cast<UStaticMeshComponent>(Hit.GetComponent());
+		if (!IsValid(StaticMeshComponent) ||
+			StaticMeshComponent->GetMobility() != EComponentMobility::Static ||
+			Hit.ImpactPoint.ContainsNaN() || Hit.ImpactNormal.ContainsNaN() ||
+			Hit.ImpactNormal.Z < MinimumSurfaceNormalZ)
+		{
+			return false;
+		}
+
+		const AActor* HitActor = Hit.GetActor();
+		return RequiredSurfaceTag.IsNone() ||
+			StaticMeshComponent->ComponentHasTag(RequiredSurfaceTag) ||
+			(IsValid(HitActor) && HitActor->ActorHasTag(RequiredSurfaceTag));
+	}
 
 	// 서버가 Revision 오름차순으로 추가한 배열에서 주어진 Revision보다 큰 첫 항목을 찾는다.
 	// 전체 히스토리를 매 Tick 선형 순회하지 않기 위한 upper-bound 이진 탐색이다.
@@ -73,6 +113,228 @@ namespace
 	{
 		return Records.Num() > 0 && Records.Last().Revision > Revision;
 	}
+
+	int32 FloorDivide(int32 Value, int32 Divisor)
+	{
+		check(Divisor > 0);
+		int32 Quotient = Value / Divisor;
+		const int32 Remainder = Value % Divisor;
+		if (Remainder < 0)
+		{
+			--Quotient;
+		}
+		return Quotient;
+	}
+
+	FIntVector GetNetworkChunkCoordinate(const FIntVector& Position)
+	{
+		return FIntVector(
+			FloorDivide(Position.X, DRTerrainNetworkChunkSize),
+			FloorDivide(Position.Y, DRTerrainNetworkChunkSize),
+			FloorDivide(Position.Z, DRTerrainNetworkChunkSize));
+	}
+
+	FIntVector GetNetworkChunkMin(const FIntVector& ChunkCoordinate)
+	{
+		return ChunkCoordinate * DRTerrainNetworkChunkSize;
+	}
+
+	int32 GetNetworkChunkLocalIndex(
+		const FIntVector& Position,
+		const FIntVector& ChunkCoordinate)
+	{
+		const FIntVector Local = Position - GetNetworkChunkMin(ChunkCoordinate);
+		check(
+			Local.X >= 0 && Local.X < DRTerrainNetworkChunkSize &&
+			Local.Y >= 0 && Local.Y < DRTerrainNetworkChunkSize &&
+			Local.Z >= 0 && Local.Z < DRTerrainNetworkChunkSize);
+		return Local.X + Local.Y * DRTerrainNetworkChunkSize +
+			Local.Z * DRTerrainNetworkChunkSize * DRTerrainNetworkChunkSize;
+	}
+
+	uint32 EncodeSignedInt(int32 Value)
+	{
+		return Value >= 0
+			? static_cast<uint32>(Value) * 2u
+			: static_cast<uint32>(-static_cast<int64>(Value) * 2 - 1);
+	}
+
+	int32 DecodeSignedInt(uint32 Value)
+	{
+		return (Value & 1u) == 0u
+			? static_cast<int32>(Value >> 1u)
+			: static_cast<int32>(-static_cast<int64>((Value >> 1u) + 1u));
+	}
+
+	void SerializeSignedIntPacked(FArchive& Ar, int32& Value)
+	{
+		uint32 PackedValue = Ar.IsSaving() ? EncodeSignedInt(Value) : 0u;
+		Ar.SerializeIntPacked(PackedValue);
+		if (Ar.IsLoading())
+		{
+			Value = DecodeSignedInt(PackedValue);
+		}
+	}
+
+	struct FDRNetworkDepositGroupKey
+	{
+		FIntVector ChunkCoordinate = FIntVector::ZeroValue;
+		uint8 MaterialIndex = 0;
+
+		bool operator==(const FDRNetworkDepositGroupKey& Other) const
+		{
+			return ChunkCoordinate == Other.ChunkCoordinate &&
+				MaterialIndex == Other.MaterialIndex;
+		}
+	};
+
+	uint32 GetTypeHash(const FDRNetworkDepositGroupKey& Key)
+	{
+		uint32 Hash = HashCombine(
+			::GetTypeHash(Key.ChunkCoordinate.X),
+			::GetTypeHash(Key.ChunkCoordinate.Y));
+		Hash = HashCombine(Hash, ::GetTypeHash(Key.ChunkCoordinate.Z));
+		return HashCombine(Hash, ::GetTypeHash(Key.MaterialIndex));
+	}
+}
+
+bool FDRTerrainEditFastArrayItem::NetSerialize(
+	FArchive& Ar,
+	UPackageMap* Map,
+	bool& bOutSuccess)
+{
+	bOutSuccess = true;
+
+	uint8 TypeValue = static_cast<uint8>(Type);
+	Ar.SerializeBits(&TypeValue, 1);
+	if (Ar.IsLoading())
+	{
+		if (TypeValue > static_cast<uint8>(EDRTerrainEditType::Dig))
+		{
+			Ar.SetError();
+			bOutSuccess = false;
+			return false;
+		}
+		Type = static_cast<EDRTerrainEditType>(TypeValue);
+	}
+
+	uint32 PackedRevision = Ar.IsSaving() ? static_cast<uint32>(FMath::Max(0, Revision)) : 0u;
+	Ar.SerializeIntPacked(PackedRevision);
+	if (Ar.IsLoading())
+	{
+		Revision = static_cast<int32>(PackedRevision);
+	}
+
+	if (Type == EDRTerrainEditType::Dig)
+	{
+		if (Ar.IsLoading())
+		{
+			ChunkCoordinate = FIntVector::ZeroValue;
+			MaterialIndex = 0;
+			Deltas.Reset();
+		}
+		bool bLocationSuccess = true;
+		Location.NetSerialize(Ar, Map, bLocationSuccess);
+		Ar << Radius;
+		bOutSuccess = bLocationSuccess && FMath::IsFinite(Radius) && Radius > 0.f;
+		return bOutSuccess;
+	}
+
+	SerializeSignedIntPacked(Ar, ChunkCoordinate.X);
+	SerializeSignedIntPacked(Ar, ChunkCoordinate.Y);
+	SerializeSignedIntPacked(Ar, ChunkCoordinate.Z);
+	Ar.SerializeBits(&MaterialIndex, 8);
+	if (Ar.IsLoading())
+	{
+		Location = FVector::ZeroVector;
+		Radius = 0.f;
+	}
+
+	uint32 DeltaCount = Ar.IsSaving() ? static_cast<uint32>(Deltas.Num()) : 0u;
+	Ar.SerializeIntPacked(DeltaCount);
+	if (DeltaCount > static_cast<uint32>(DRTerrainNetworkChunkVoxelCount))
+	{
+		Ar.SetError();
+		bOutSuccess = false;
+		return false;
+	}
+	if (Ar.IsLoading())
+	{
+		Deltas.SetNum(static_cast<int32>(DeltaCount));
+	}
+
+	int32 PreviousIndex = -1;
+	for (uint32 DeltaIndex = 0; DeltaIndex < DeltaCount; ++DeltaIndex)
+	{
+		FDRVoxelCompressedValueDelta& Delta = Deltas[static_cast<int32>(DeltaIndex)];
+		uint32 PackedIndexDelta = 0u;
+		if (Ar.IsSaving())
+		{
+			if (Delta.LocalIndex <= PreviousIndex ||
+				Delta.LocalIndex >= DRTerrainNetworkChunkVoxelCount)
+			{
+				Ar.SetError();
+				bOutSuccess = false;
+				return false;
+			}
+			PackedIndexDelta = static_cast<uint32>(Delta.LocalIndex - PreviousIndex - 1);
+		}
+
+		Ar.SerializeIntPacked(PackedIndexDelta);
+		if (Ar.IsLoading())
+		{
+			const int64 DecodedIndex =
+				static_cast<int64>(PreviousIndex) + PackedIndexDelta + 1;
+			if (DecodedIndex < 0 || DecodedIndex >= DRTerrainNetworkChunkVoxelCount)
+			{
+				Ar.SetError();
+				bOutSuccess = false;
+				return false;
+			}
+			Delta.LocalIndex = static_cast<int32>(DecodedIndex);
+		}
+
+		uint16 PackedValue = Ar.IsSaving()
+			? static_cast<uint16>(static_cast<int16>(FMath::Clamp(
+				Delta.QuantizedValue,
+				-DRVoxelTerrain::QuantizedValueMax,
+				DRVoxelTerrain::QuantizedValueMax)))
+			: 0u;
+		Ar.SerializeBits(&PackedValue, 16);
+		if (Ar.IsLoading())
+		{
+			Delta.QuantizedValue = static_cast<int16>(PackedValue);
+		}
+		PreviousIndex = Delta.LocalIndex;
+	}
+
+	return true;
+}
+
+void FDRTerrainEditFastArray::NotifyOwner()
+{
+	if (Owner)
+	{
+		Owner->HandleReplicatedTerrainEdits();
+	}
+}
+
+void FDRTerrainEditFastArray::PostReplicatedAdd(
+	const TArrayView<int32> AddedIndices,
+	int32 FinalSize)
+{
+	(void)AddedIndices;
+	(void)FinalSize;
+	NotifyOwner();
+}
+
+void FDRTerrainEditFastArray::PostReplicatedChange(
+	const TArrayView<int32> ChangedIndices,
+	int32 FinalSize)
+{
+	(void)ChangedIndices;
+	(void)FinalSize;
+	NotifyOwner();
 }
 
 ADRVoxelTerrainAreaSyncActor::ADRVoxelTerrainAreaSyncActor()
@@ -83,6 +345,7 @@ ADRVoxelTerrainAreaSyncActor::ADRVoxelTerrainAreaSyncActor()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	NetDormancy = DORM_Never;
+	TerrainEdits.SetOwner(this);
 }
 
 void ADRVoxelTerrainAreaSyncActor::OnConstruction(const FTransform& Transform)
@@ -194,6 +457,8 @@ void ADRVoxelTerrainAreaSyncActor::EnsureTerrainChunksCurrent()
 void ADRVoxelTerrainAreaSyncActor::BeginPlay()
 {
 	Super::BeginPlay();
+	// PIE 복제나 객체 복사 경로에서도 런타임 콜백 대상이 반드시 현재 액터를 가리키게 한다.
+	TerrainEdits.SetOwner(this);
 	EnsureTerrainChunksCurrent();
 
 	// 클라이언트는 타이머로 스캔하거나 퇴적을 생성하지 않고 복제된 델타만 재생한다.
@@ -262,13 +527,24 @@ void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
 	// 서버는 원본 데이터를 변경하고 델타를 만들며, 클라이언트는 복제된 결과만 적용한다.
 	if (HasAuthority())
 	{
+		if (PendingDepositVoxelValues.Num() > 0)
+		{
+			PendingDepositBatchAge += FMath::Max(0.f, DeltaSeconds);
+			if (PendingDepositBatchAge >= DRDepositBatchIntervalSeconds)
+			{
+				FlushPendingDepositBatch();
+			}
+		}
+
 		if (!bEnableDepositAccumulation &&
-			(bDepositPassActive || DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive))
+			(bDepositPassActive || DepositRequests.Num() > 0 ||
+				bStaticMeshSurfaceScanActive || bStaticMeshFootprintScanActive))
 		{
 			CancelDepositPass();
 		}
 
 		ProcessStaticMeshSurfaceScan();
+		ProcessStaticMeshFootprintScan();
 		ProcessServerDepositRequests();
 		// 이전 청크가 이번 틱에 끝났다면 즉시 다음 청크 요청을 준비한다.
 		// 실제 스캔/쓰기는 다음 Tick부터 시작되므로 한 프레임 예산은 여전히 한 청크에만 사용된다.
@@ -278,8 +554,7 @@ void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
 	{
 		const bool bHasPendingTerrainEdit =
 			TerrainEditRevision > LastAppliedTerrainRevision ||
-			HasRecordAfterRevision(DepositDeltaRecords, LastAppliedTerrainRevision) ||
-			HasRecordAfterRevision(DigDeltaRecords, LastAppliedTerrainRevision);
+			HasRecordAfterRevision(TerrainEdits.Items, LastAppliedTerrainRevision);
 		if (bHasPendingTerrainEdit)
 		{
 			ApplyPendingDeltaRecords();
@@ -294,8 +569,7 @@ void ADRVoxelTerrainAreaSyncActor::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME(ADRVoxelTerrainAreaSyncActor, VoxelWorld);
 	DOREPLIFETIME(ADRVoxelTerrainAreaSyncActor, TerrainEditRevision);
-	DOREPLIFETIME(ADRVoxelTerrainAreaSyncActor, DepositDeltaRecords);
-	DOREPLIFETIME(ADRVoxelTerrainAreaSyncActor, DigDeltaRecords);
+	DOREPLIFETIME(ADRVoxelTerrainAreaSyncActor, TerrainEdits);
 }
 
 void ADRVoxelTerrainAreaSyncActor::OnRep_VoxelWorld()
@@ -306,8 +580,12 @@ void ADRVoxelTerrainAreaSyncActor::OnRep_VoxelWorld()
 
 void ADRVoxelTerrainAreaSyncActor::OnRep_TerrainDeltaState()
 {
-	// 세 복제 프로퍼티가 같은 프레임에 도착한다는 보장은 없다.
-	// Apply 함수가 누락 Revision을 확인하므로 현재 도착한 자료만으로 안전하게 재생을 시도한다.
+	// 최종 Revision이 FastArray 항목보다 먼저 도착해도 누락 Revision 검사로 뒤 항목 적용을 보류한다.
+	HandleReplicatedTerrainEdits();
+}
+
+void ADRVoxelTerrainAreaSyncActor::HandleReplicatedTerrainEdits()
+{
 	ApplyPendingDeltaRecords();
 }
 
@@ -382,7 +660,8 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 		return;
 	}
 
-	if (bDepositPassActive || DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive)
+	if (bDepositPassActive || DepositRequests.Num() > 0 ||
+		bStaticMeshSurfaceScanActive || bStaticMeshFootprintScanActive)
 	{
 		// 타이머 주기보다 전체 청크 패스가 오래 걸려도 패스를 중첩하지 않는다.
 		// 진행 중 패스가 모든 청크를 끝낸 다음 타이머 호출에서만 새 패스를 시작한다.
@@ -413,12 +692,7 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 	}
 
 	FRandomStream ChunkOrderRandomStream(FMath::Rand());
-	for (int32 OrderIndex = DepositChunkOrder.Num() - 1; OrderIndex > 0; --OrderIndex)
-	{
-		DepositChunkOrder.Swap(
-			OrderIndex,
-			ChunkOrderRandomStream.RandRange(0, OrderIndex));
-	}
+	DRVoxelTerrain::ShuffleArray(DepositChunkOrder, ChunkOrderRandomStream);
 
 	NextDepositChunkOrderIndex = 0;
 	ActiveDepositChunkIndex = INDEX_NONE;
@@ -431,7 +705,7 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 void ADRVoxelTerrainAreaSyncActor::StartNextDepositChunk()
 {
 	if (!HasAuthority() || !bEnableDepositAccumulation || !bDepositPassActive ||
-		DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive)
+		DepositRequests.Num() > 0 || bStaticMeshSurfaceScanActive || bStaticMeshFootprintScanActive)
 	{
 		return;
 	}
@@ -485,6 +759,11 @@ void ADRVoxelTerrainAreaSyncActor::StartNextDepositChunk()
 			continue;
 		}
 
+		// StaticMesh를 퇴적 지지면으로 사용하지 않더라도 충돌 가능한 천장은 실내 복셀 후보를 가려야 한다.
+		// 후보와 풋프린트 셀의 동기 차폐 검사는 샘플 수가 제한된 요청 단계에서만 수행된다.
+		Request.bBlockDepositBelowWorldStatic = bBlockDepositBelowStaticMeshes;
+		Request.bTraceComplexWorldStaticOcclusion = bTraceComplexStaticMeshSurfaces;
+
 		ActiveDepositChunkIndex = ChunkIndex;
 		// 이 포인터는 액터가 소유하는 패스 집합을 가리킨다. 라이브러리가 실제로 기록한 중심/지지 복셀을
 		// 즉시 집합에 추가하므로 다음 청크는 경계 중첩 위치를 다시 누적하지 않는다.
@@ -512,14 +791,39 @@ void ADRVoxelTerrainAreaSyncActor::StartNextDepositChunk()
 
 void ADRVoxelTerrainAreaSyncActor::CancelDepositPass()
 {
+	// 이미 서버 지형에 반영된 대기 값은 요청 취소와 함께 버리면 클라이언트가 영구적으로 놓치므로 먼저 확정한다.
+	FlushPendingDepositBatch();
 	DepositRequests.Reset();
 	CancelStaticMeshSurfaceScan();
+	CancelStaticMeshFootprintScan();
 	DepositChunkOrder.Reset();
 	DepositPassWrittenVoxelPositions.Reset();
 	DepositPassWrittenColumns.Reset();
 	NextDepositChunkOrderIndex = 0;
 	ActiveDepositChunkIndex = INDEX_NONE;
 	bDepositPassActive = false;
+}
+
+FDRVoxelDepositInBoxRequest* ADRVoxelTerrainAreaSyncActor::GetActiveDepositRequest()
+{
+	if (DepositRequests.Num() == 0 || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return nullptr;
+	}
+
+	FDRVoxelDepositInBoxRequest& Request = DepositRequests[0];
+	return Request.bIsValid && Request.VoxelWorld.Get() == VoxelWorld
+		? &Request
+		: nullptr;
+}
+
+FDRVoxelDepositInBoxRequest* ADRVoxelTerrainAreaSyncActor::GetActiveDepositRequest(
+	EDRVoxelDepositRequestPhase ExpectedPhase)
+{
+	FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest();
+	return Request != nullptr && Request->Phase == ExpectedPhase
+		? Request
+		: nullptr;
 }
 
 void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
@@ -529,19 +833,16 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 		return;
 	}
 
-	const FDRVoxelDepositInBoxRequest& ActiveRequest = DepositRequests[0];
-	if (!bEnableDepositAccumulation ||
-		!IsValid(VoxelWorld) ||
-		!VoxelWorld->IsCreated() ||
-		ActiveRequest.VoxelWorld.Get() != VoxelWorld)
+	if (!bEnableDepositAccumulation || GetActiveDepositRequest() == nullptr)
 	{
 		// 기능이 꺼졌거나 대상 월드가 교체되면 이전 표면/월드를 기준으로 한 요청을 즉시 폐기한다.
 		CancelDepositPass();
 		return;
 	}
 
-	// 비동기 메시 트레이스가 끝나기 전에 복셀 요청이 완료되어 배열에서 제거되면 결과를 합칠 곳이 없어진다.
-	// 따라서 메시 스캔 동안만 복셀 읽기/쓰기를 보류하고, 완료된 같은 틱부터 아래 상태 머신을 진행한다.
+	// 1차 메시 스캔은 커버리지 후보 자체를 추가하므로 끝나기 전에 Build 단계를 진행하면 전체 후보 수가 달라진다.
+	// 이 스캔만 완료될 때까지 요청을 보류한다. 선택 후 2차 정밀 스캔은 복셀 풋프린트 해석과 병렬로 진행하며,
+	// 라이브러리는 bExternalFootprintsResolved가 켜질 때까지 Apply 단계로 넘어가지 않는다.
 	if (bStaticMeshSurfaceScanActive)
 	{
 		return;
@@ -567,7 +868,8 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 
 	// 요청이 배열에서 제거됐다는 것은 선택된 후보의 쓰기 시도까지 모두 끝났다는 뜻이다.
 	// 실제 변경 수가 0이어도 해당 청크의 이번 패스 처리는 완료됐으므로 다음 청크로 넘어갈 수 있다.
-	if (DepositRequests.Num() == 0)
+	const bool bChunkCompleted = DepositRequests.Num() == 0;
+	if (bChunkCompleted)
 	{
 		if (TerrainChunks.IsValidIndex(ProcessedChunkIndex))
 		{
@@ -576,16 +878,135 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 		ActiveDepositChunkIndex = INDEX_NONE;
 	}
 
-	if (ModifiedVoxelCount <= 0 || DeltaRecord.Deltas.Num() == 0)
+	if (ModifiedVoxelCount > 0 && DeltaRecord.Deltas.Num() > 0)
+	{
+		AccumulateDepositDeltaRecord(DeltaRecord);
+	}
+
+	// 청크가 끝나기 전에도 0.1초 타이머가 긴 요청의 대기 값을 주기적으로 확정한다.
+	// 청크 완료 시에는 남은 값을 즉시 보내 다음 청크의 변경과 한 배치에 섞이지 않게 한다.
+	if (bChunkCompleted)
+	{
+		FlushPendingDepositBatch();
+	}
+
+	UE_LOG(
+		LogTemp,
+		Verbose,
+		TEXT("Deposit processed. Revision=%d ModifiedVoxelCount=%d ScannedColumnCount=%d RemainingRequestCount=%d PendingVoxelCount=%d"),
+		TerrainEditRevision,
+		ModifiedVoxelCount,
+		ScannedColumnCount,
+		RemainingRequestCount,
+		PendingDepositVoxelValues.Num());
+}
+
+void ADRVoxelTerrainAreaSyncActor::AccumulateDepositDeltaRecord(
+	const FDRVoxelDepositDeltaRecord& DeltaRecord)
+{
+	DRVoxelTerrain::FInclusiveVoxelBoxDimensions Dimensions;
+	if (!HasAuthority() || DeltaRecord.Deltas.Num() == 0 ||
+		!DRVoxelTerrain::TryGetInclusiveVoxelBoxDimensions(
+			DeltaRecord.VoxelMin,
+			DeltaRecord.VoxelMax,
+			Dimensions))
 	{
 		return;
 	}
 
-	// 스캔만 했거나 모든 쓰기 시도가 실패한 틱에는 Revision을 소비하지 않는다.
-	// 실제 서버 복셀 값이 바뀐 배치만 하나의 편집 단위로 번호를 부여하고 복제 배열에 추가한다.
-	TerrainEditRevision++;
-	DeltaRecord.Revision = TerrainEditRevision;
-	DepositDeltaRecords.Add(MoveTemp(DeltaRecord));
+	for (const FDRVoxelCompressedValueDelta& Delta : DeltaRecord.Deltas)
+	{
+		if (Delta.LocalIndex < 0 || Delta.LocalIndex >= Dimensions.TotalVoxelCount)
+		{
+			continue;
+		}
+
+		const FIntVector Position = DRVoxelTerrain::GetInclusiveVoxelPosition(
+			Delta.LocalIndex,
+			DeltaRecord.VoxelMin,
+			Dimensions);
+		FDRPendingDepositVoxelValue& PendingValue =
+			PendingDepositVoxelValues.FindOrAdd(Position);
+		PendingValue.QuantizedValue = FMath::Clamp(
+			Delta.QuantizedValue,
+			-DRVoxelTerrain::QuantizedValueMax,
+			DRVoxelTerrain::QuantizedValueMax);
+		PendingValue.MaterialIndex = DeltaRecord.MaterialIndex;
+	}
+}
+
+void ADRVoxelTerrainAreaSyncActor::FlushPendingDepositBatch()
+{
+	if (!HasAuthority() || PendingDepositVoxelValues.Num() == 0)
+	{
+		PendingDepositBatchAge = 0.f;
+		return;
+	}
+
+	TMap<FDRNetworkDepositGroupKey, TArray<FDRVoxelCompressedValueDelta>> GroupedDeltas;
+	GroupedDeltas.Reserve(PendingDepositVoxelValues.Num());
+	for (const TPair<FIntVector, FDRPendingDepositVoxelValue>& PendingPair
+		: PendingDepositVoxelValues)
+	{
+		FDRNetworkDepositGroupKey GroupKey;
+		GroupKey.ChunkCoordinate = GetNetworkChunkCoordinate(PendingPair.Key);
+		GroupKey.MaterialIndex = PendingPair.Value.MaterialIndex;
+
+		FDRVoxelCompressedValueDelta Delta;
+		Delta.LocalIndex = GetNetworkChunkLocalIndex(
+			PendingPair.Key,
+			GroupKey.ChunkCoordinate);
+		Delta.QuantizedValue = PendingPair.Value.QuantizedValue;
+		GroupedDeltas.FindOrAdd(GroupKey).Add(Delta);
+	}
+
+	TArray<FDRNetworkDepositGroupKey> SortedGroupKeys;
+	GroupedDeltas.GenerateKeyArray(SortedGroupKeys);
+	SortedGroupKeys.Sort([](
+		const FDRNetworkDepositGroupKey& A,
+		const FDRNetworkDepositGroupKey& B)
+	{
+		if (A.ChunkCoordinate.X != B.ChunkCoordinate.X)
+		{
+			return A.ChunkCoordinate.X < B.ChunkCoordinate.X;
+		}
+		if (A.ChunkCoordinate.Y != B.ChunkCoordinate.Y)
+		{
+			return A.ChunkCoordinate.Y < B.ChunkCoordinate.Y;
+		}
+		if (A.ChunkCoordinate.Z != B.ChunkCoordinate.Z)
+		{
+			return A.ChunkCoordinate.Z < B.ChunkCoordinate.Z;
+		}
+		return A.MaterialIndex < B.MaterialIndex;
+	});
+
+	const int32 BatchedVoxelCount = PendingDepositVoxelValues.Num();
+	PendingDepositVoxelValues.Reset();
+	PendingDepositBatchAge = 0.f;
+
+	for (const FDRNetworkDepositGroupKey& GroupKey : SortedGroupKeys)
+	{
+		TArray<FDRVoxelCompressedValueDelta>* Deltas = GroupedDeltas.Find(GroupKey);
+		if (!Deltas || Deltas->Num() == 0)
+		{
+			continue;
+		}
+
+		Deltas->Sort([](
+			const FDRVoxelCompressedValueDelta& A,
+			const FDRVoxelCompressedValueDelta& B)
+		{
+			return A.LocalIndex < B.LocalIndex;
+		});
+
+		FDRTerrainEditFastArrayItem Item;
+		Item.Type = EDRTerrainEditType::Deposit;
+		Item.ChunkCoordinate = GroupKey.ChunkCoordinate;
+		Item.MaterialIndex = GroupKey.MaterialIndex;
+		Item.Deltas = MoveTemp(*Deltas);
+		AddTerrainEditItem(MoveTemp(Item));
+	}
 
 	TrimReplicatedTerrainRecords();
 	ForceNetUpdate();
@@ -593,11 +1014,20 @@ void ADRVoxelTerrainAreaSyncActor::ProcessServerDepositRequests()
 	UE_LOG(
 		LogTemp,
 		Verbose,
-		TEXT("Deposit replicated. Revision=%d ModifiedVoxelCount=%d ScannedColumnCount=%d RemainingRequestCount=%d"),
+		TEXT("Deposit batch replicated. FinalRevision=%d VoxelCount=%d ChunkRecordCount=%d"),
 		TerrainEditRevision,
-		ModifiedVoxelCount,
-		ScannedColumnCount,
-		RemainingRequestCount);
+		BatchedVoxelCount,
+		SortedGroupKeys.Num());
+}
+
+void ADRVoxelTerrainAreaSyncActor::AddTerrainEditItem(
+	FDRTerrainEditFastArrayItem&& Item)
+{
+	check(HasAuthority());
+	Item.Revision = ++TerrainEditRevision;
+	FDRTerrainEditFastArrayItem& AddedItem =
+		TerrainEdits.Items.Add_GetRef(MoveTemp(Item));
+	TerrainEdits.MarkItemDirty(AddedItem);
 }
 
 bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshSurfaceScan(
@@ -652,12 +1082,7 @@ bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshSurfaceScan(
 
 	// 복셀 후보와 다른 고정 상수를 섞어도 요청 Seed 하나로 전체 분포를 재현할 수 있다.
 	StaticMeshTraceRandomStream.Initialize(RequestSettings.RandomSeed ^ 0x5A17C9E3);
-	for (int32 Index = StaticMeshTraceColumnOrder.Num() - 1; Index > 0; --Index)
-	{
-		StaticMeshTraceColumnOrder.Swap(
-			Index,
-			StaticMeshTraceRandomStream.RandRange(0, Index));
-	}
+	DRVoxelTerrain::ShuffleArray(StaticMeshTraceColumnOrder, StaticMeshTraceRandomStream);
 
 	StaticMeshScanVoxelWorld = VoxelWorld;
 	StaticMeshScanCenter = ScanCenter;
@@ -675,8 +1100,10 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 		return;
 	}
 
+	FDRVoxelDepositInBoxRequest* ActiveRequest = GetActiveDepositRequest(
+		EDRVoxelDepositRequestPhase::BuildCandidates);
 	if (!HasAuthority() || !bEnableDepositAccumulation || !bDepositOnStaticMeshes ||
-		DepositRequests.Num() == 0 || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		ActiveRequest == nullptr ||
 		StaticMeshScanVoxelWorld.Get() != VoxelWorld)
 	{
 		// 기능 비활성화는 메시 스캔만 취소하면 기존 요청이 복셀 전용으로 계속될 수 있다.
@@ -708,20 +1135,10 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 
 			for (const FHitResult& Hit : TraceData.OutHits)
 			{
-				UStaticMeshComponent* StaticMeshComponent = Cast<UStaticMeshComponent>(Hit.GetComponent());
-				AActor* HitActor = Hit.GetActor();
-				if (!IsValid(StaticMeshComponent) ||
-					StaticMeshComponent->GetMobility() != EComponentMobility::Static ||
-					Hit.ImpactPoint.ContainsNaN() || Hit.ImpactNormal.ContainsNaN() ||
-					Hit.ImpactNormal.Z < MinimumSurfaceNormalZ)
-				{
-					continue;
-				}
-
-				const bool bTagMatches = RequiredStaticMeshSurfaceTag.IsNone() ||
-					StaticMeshComponent->ComponentHasTag(RequiredStaticMeshSurfaceTag) ||
-					(IsValid(HitActor) && HitActor->ActorHasTag(RequiredStaticMeshSurfaceTag));
-				if (!bTagMatches)
+				if (!IsEligibleStaticMeshDepositHit(
+					Hit,
+					MinimumSurfaceNormalZ,
+					RequiredStaticMeshSurfaceTag))
 				{
 					continue;
 				}
@@ -752,8 +1169,7 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 
 	const FVector BoxMin = StaticMeshScanCenter - StaticMeshScanExtent;
 	const FVector BoxMax = StaticMeshScanCenter + StaticMeshScanExtent;
-	const FDRVoxelDepositInBoxSettings& ActiveDepositSettings =
-		DepositRequests[0].DepositSettings;
+	const FDRVoxelDepositInBoxSettings& ActiveDepositSettings = ActiveRequest->DepositSettings;
 	const float JitterRadius =
 		ActiveDepositSettings.SurfaceSampleSpacing * DRStaticMeshSampleJitterRatio;
 
@@ -796,14 +1212,9 @@ void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshSurfaceScan()
 
 void ADRVoxelTerrainAreaSyncActor::FinishStaticMeshSurfaceScan()
 {
-	if (!bStaticMeshSurfaceScanActive || DepositRequests.Num() == 0)
-	{
-		CancelStaticMeshSurfaceScan();
-		return;
-	}
-
-	FDRVoxelDepositInBoxRequest& Request = DepositRequests[0];
-	if (!Request.bIsValid || Request.VoxelWorld.Get() != VoxelWorld)
+	FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest(
+		EDRVoxelDepositRequestPhase::BuildCandidates);
+	if (!bStaticMeshSurfaceScanActive || Request == nullptr)
 	{
 		CancelStaticMeshSurfaceScan();
 		return;
@@ -829,7 +1240,7 @@ void ADRVoxelTerrainAreaSyncActor::FinishStaticMeshSurfaceScan()
 
 	int32 AddedCandidateCount = 0;
 	UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
-		Request,
+		*Request,
 		StaticMeshSurfaceHitPositions,
 		AddedCandidateCount);
 
@@ -858,6 +1269,311 @@ void ADRVoxelTerrainAreaSyncActor::CancelStaticMeshSurfaceScan()
 	bStaticMeshSurfaceScanActive = false;
 }
 
+bool ADRVoxelTerrainAreaSyncActor::BeginStaticMeshFootprintScan()
+{
+	CancelStaticMeshFootprintScan();
+
+	if (!HasAuthority() || !bDepositOnStaticMeshes)
+	{
+		return false;
+	}
+
+	FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest(
+		EDRVoxelDepositRequestPhase::ResolveFootprints);
+	if (Request == nullptr)
+	{
+		return false;
+	}
+
+	if (Request->ExternalCandidatePositions.Num() == 0)
+	{
+		Request->bExternalFootprintsResolved = true;
+		return true;
+	}
+
+	const int32 Radius = Request->DepositFootprintRadius;
+	const float MaximumSlopeTangent = FMath::Tan(FMath::DegreesToRadians(
+		FMath::Clamp(MaxStaticMeshSlopeAngle, 0.f, 89.f)));
+	TMap<FIntPoint, FDRStaticMeshFootprintTraceTarget> UniqueTargets;
+
+	// 선택된 중심마다 원형 셀을 펼치되, 같은 X/Y 셀이 여러 중심과 겹치면 한 번만 트레이스한다.
+	// 겹친 셀은 가장 강한 감쇠값과 모든 중심이 허용하는 높이 범위의 합집합을 사용한다.
+	for (const FIntVector& Center : Request->ExternalCandidatePositions)
+	{
+		for (int32 OffsetX = -Radius; OffsetX <= Radius; ++OffsetX)
+		{
+			for (int32 OffsetY = -Radius; OffsetY <= Radius; ++OffsetY)
+			{
+				float AmountScale = 1.f;
+				float AllowedHeightDelta = 1.f;
+				if (!DRVoxelTerrain::EvaluateFootprintOffset(
+					OffsetX,
+					OffsetY,
+					Radius,
+					DRStaticMeshFootprintEdgeStrength,
+					MaximumSlopeTangent,
+					AmountScale,
+					AllowedHeightDelta))
+				{
+					continue;
+				}
+
+				const int64 TargetX64 = static_cast<int64>(Center.X) + OffsetX;
+				const int64 TargetY64 = static_cast<int64>(Center.Y) + OffsetY;
+				if (TargetX64 < Request->WriteVoxelMin.X || TargetX64 > Request->WriteVoxelMax.X ||
+					TargetY64 < Request->WriteVoxelMin.Y || TargetY64 > Request->WriteVoxelMax.Y)
+				{
+					continue;
+				}
+
+				const float CenterSurfaceZ = static_cast<float>(Center.Z - 1);
+				const FIntPoint TargetXY(
+					static_cast<int32>(TargetX64),
+					static_cast<int32>(TargetY64));
+
+				if (FDRStaticMeshFootprintTraceTarget* ExistingTarget = UniqueTargets.Find(TargetXY))
+				{
+					ExistingTarget->AmountScale = FMath::Max(ExistingTarget->AmountScale, AmountScale);
+					ExistingTarget->MinLocalSurfaceZ = FMath::Min(
+						ExistingTarget->MinLocalSurfaceZ,
+						CenterSurfaceZ - AllowedHeightDelta);
+					ExistingTarget->MaxLocalSurfaceZ = FMath::Max(
+						ExistingTarget->MaxLocalSurfaceZ,
+						CenterSurfaceZ + AllowedHeightDelta);
+				}
+				else
+				{
+					FDRStaticMeshFootprintTraceTarget NewTarget;
+					NewTarget.VoxelXY = TargetXY;
+					NewTarget.AmountScale = AmountScale;
+					NewTarget.MinLocalSurfaceZ = CenterSurfaceZ - AllowedHeightDelta;
+					NewTarget.MaxLocalSurfaceZ = CenterSurfaceZ + AllowedHeightDelta;
+					UniqueTargets.Add(TargetXY, NewTarget);
+				}
+			}
+		}
+	}
+
+	UniqueTargets.GenerateValueArray(StaticMeshFootprintTraceTargets);
+	StaticMeshFootprintTraceTargets.Sort([](
+		const FDRStaticMeshFootprintTraceTarget& A,
+		const FDRStaticMeshFootprintTraceTarget& B)
+	{
+		if (A.VoxelXY.X != B.VoxelXY.X)
+		{
+			return A.VoxelXY.X < B.VoxelXY.X;
+		}
+		return A.VoxelXY.Y < B.VoxelXY.Y;
+	});
+
+	// 1차 중심 히트는 선택에만 사용한다. 이제부터는 셀별 실제 높이만 지지 정보로 인정한다.
+	Request->ExternalSupportSurfaceZByVoxel.Reset();
+	Request->ExternalResolvedAmountScaleByVoxel.Reset();
+	Request->bExternalFootprintsResolved = StaticMeshFootprintTraceTargets.Num() == 0;
+	StaticMeshFootprintScanCenter = GetActorLocation();
+	StaticMeshFootprintScanExtent = FVector(
+		FMath::Abs(BoxExtent.X),
+		FMath::Abs(BoxExtent.Y),
+		FMath::Abs(BoxExtent.Z));
+	NextStaticMeshFootprintTraceIndex = 0;
+	bStaticMeshFootprintScanActive = StaticMeshFootprintTraceTargets.Num() > 0;
+	return true;
+}
+
+void ADRVoxelTerrainAreaSyncActor::ProcessStaticMeshFootprintScan()
+{
+	if (!bStaticMeshFootprintScanActive)
+	{
+		FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest(
+			EDRVoxelDepositRequestPhase::ResolveFootprints);
+		if (Request == nullptr || Request->bExternalFootprintsResolved)
+		{
+			return;
+		}
+
+		if (!bDepositOnStaticMeshes)
+		{
+			// 런타임에 옵션이 꺼졌다면 이미 선택된 메시 중심을 버리고 복셀 지형 결과만으로 요청을 계속한다.
+			DiscardStaticMeshFootprintData(*Request);
+			return;
+		}
+
+		if (!BeginStaticMeshFootprintScan())
+		{
+			// 정밀 스캔을 시작할 수 없는 상태에서 요청을 영구 대기시키지 않는다.
+			DiscardStaticMeshFootprintData(*Request);
+		}
+		return;
+	}
+
+	if (!HasAuthority() || !bEnableDepositAccumulation)
+	{
+		CancelStaticMeshFootprintScan();
+		return;
+	}
+
+	FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest(
+		EDRVoxelDepositRequestPhase::ResolveFootprints);
+	if (!bDepositOnStaticMeshes || Request == nullptr)
+	{
+		if (Request != nullptr)
+		{
+			DiscardStaticMeshFootprintData(*Request);
+		}
+		CancelStaticMeshFootprintScan();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		DiscardStaticMeshFootprintData(*Request);
+		CancelStaticMeshFootprintScan();
+		return;
+	}
+
+	const float MinimumSurfaceNormalZ = FMath::Cos(FMath::DegreesToRadians(
+		FMath::Clamp(MaxStaticMeshSlopeAngle, 0.f, 90.f)));
+
+	// 완료된 핸들은 발행할 때 함께 저장한 목표 셀로 복원한다. 비동기 완료 순서는 결과에 영향을 주지 않는다.
+	for (int32 PendingIndex = PendingStaticMeshFootprintTraces.Num() - 1;
+		PendingIndex >= 0;
+		--PendingIndex)
+	{
+		const FDRPendingStaticMeshFootprintTrace PendingTrace =
+			PendingStaticMeshFootprintTraces[PendingIndex];
+		FTraceDatum TraceData;
+		if (World->QueryTraceData(PendingTrace.Handle, TraceData))
+		{
+			PendingStaticMeshFootprintTraces.RemoveAtSwap(PendingIndex, 1, EAllowShrinking::No);
+
+			for (const FHitResult& Hit : TraceData.OutHits)
+			{
+				if (!IsEligibleStaticMeshDepositHit(
+					Hit,
+					MinimumSurfaceNormalZ,
+					RequiredStaticMeshSurfaceTag))
+				{
+					continue;
+				}
+
+				const FVoxelVector LocalSurfacePosition = VoxelWorld->GlobalToLocalFloat(Hit.ImpactPoint);
+				const float LocalSurfaceZ = static_cast<float>(LocalSurfacePosition.Z);
+				if (!FMath::IsFinite(LocalSurfaceZ) ||
+					LocalSurfaceZ < PendingTrace.Target.MinLocalSurfaceZ ||
+					LocalSurfaceZ > PendingTrace.Target.MaxLocalSurfaceZ)
+				{
+					// 중심과 연결될 수 없는 높이의 표면은 절벽 너머 또는 다른 오브젝트로 보고 제외한다.
+					continue;
+				}
+
+				const float ContactSurfaceZ = LocalSurfaceZ - DRStaticMeshContactInsetVoxels;
+				const int64 CandidateZ64 = FMath::FloorToInt64(ContactSurfaceZ) + 1;
+				if (CandidateZ64 <= Request->WriteVoxelMin.Z || CandidateZ64 > Request->WriteVoxelMax.Z)
+				{
+					continue;
+				}
+
+				const FIntVector DepositPosition(
+					PendingTrace.Target.VoxelXY.X,
+					PendingTrace.Target.VoxelXY.Y,
+					static_cast<int32>(CandidateZ64));
+				float& StoredSurfaceZ = Request->ExternalSupportSurfaceZByVoxel.FindOrAdd(
+					DepositPosition,
+					ContactSurfaceZ);
+				StoredSurfaceZ = FMath::Max(StoredSurfaceZ, ContactSurfaceZ);
+				float& StoredAmountScale = Request->ExternalResolvedAmountScaleByVoxel.FindOrAdd(
+					DepositPosition,
+					PendingTrace.Target.AmountScale);
+				StoredAmountScale = FMath::Max(
+					StoredAmountScale,
+					PendingTrace.Target.AmountScale);
+				break;
+			}
+		}
+		else if (!World->IsTraceHandleValid(PendingTrace.Handle, false))
+		{
+			PendingStaticMeshFootprintTraces.RemoveAtSwap(PendingIndex, 1, EAllowShrinking::No);
+		}
+	}
+
+	const FDRDepositTickBudgets TickBudgets = GetDepositTickBudgets(PerformancePreset);
+	const int32 TraceBudget = FMath::Max(1, TickBudgets.StaticMeshTraces);
+	const int32 PendingTraceLimit = FMath::Max(1, TickBudgets.StaticMeshTraces * 2);
+	int32 IssuedTraceCount = 0;
+
+	FCollisionObjectQueryParams ObjectQueryParams;
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(DRStaticMeshDepositFootprint),
+		bTraceComplexStaticMeshSurfaces);
+	QueryParams.AddIgnoredActor(this);
+
+	const float TraceTopZ = StaticMeshFootprintScanCenter.Z + StaticMeshFootprintScanExtent.Z;
+	const float TraceBottomZ = StaticMeshFootprintScanCenter.Z - StaticMeshFootprintScanExtent.Z;
+	while (IssuedTraceCount < TraceBudget &&
+		PendingStaticMeshFootprintTraces.Num() < PendingTraceLimit &&
+		NextStaticMeshFootprintTraceIndex < StaticMeshFootprintTraceTargets.Num())
+	{
+		const FDRStaticMeshFootprintTraceTarget& Target =
+			StaticMeshFootprintTraceTargets[NextStaticMeshFootprintTraceIndex++];
+		const FVector TargetWorldPosition = VoxelWorld->LocalToGlobalFloatBP(FVector(
+			static_cast<float>(Target.VoxelXY.X),
+			static_cast<float>(Target.VoxelXY.Y),
+			0.f));
+		const FTraceHandle TraceHandle = World->AsyncLineTraceByObjectType(
+			EAsyncTraceType::Single,
+			FVector(TargetWorldPosition.X, TargetWorldPosition.Y, TraceTopZ),
+			FVector(TargetWorldPosition.X, TargetWorldPosition.Y, TraceBottomZ),
+			ObjectQueryParams,
+			QueryParams);
+		if (TraceHandle.IsValid())
+		{
+			FDRPendingStaticMeshFootprintTrace& PendingTrace =
+				PendingStaticMeshFootprintTraces.AddDefaulted_GetRef();
+			PendingTrace.Handle = TraceHandle;
+			PendingTrace.Target = Target;
+		}
+		IssuedTraceCount++;
+	}
+
+	if (NextStaticMeshFootprintTraceIndex >= StaticMeshFootprintTraceTargets.Num() &&
+		PendingStaticMeshFootprintTraces.Num() == 0)
+	{
+		FinishStaticMeshFootprintScan();
+	}
+}
+
+void ADRVoxelTerrainAreaSyncActor::FinishStaticMeshFootprintScan()
+{
+	FDRVoxelDepositInBoxRequest* Request = GetActiveDepositRequest(
+		EDRVoxelDepositRequestPhase::ResolveFootprints);
+	if (bStaticMeshFootprintScanActive && Request != nullptr)
+	{
+		Request->bExternalFootprintsResolved = true;
+		UE_LOG(
+			LogTemp,
+			Verbose,
+			TEXT("Static mesh footprint scan completed. TargetCount=%d ValidSurfaceCount=%d"),
+			StaticMeshFootprintTraceTargets.Num(),
+			Request->ExternalSupportSurfaceZByVoxel.Num());
+	}
+
+	CancelStaticMeshFootprintScan();
+}
+
+void ADRVoxelTerrainAreaSyncActor::CancelStaticMeshFootprintScan()
+{
+	// 완료 전 핸들을 폐기하면 결과를 더 이상 조회하지 않는다. 요청 자체를 취소할 때 호출되므로
+	// 이전 메시 표면 결과가 다음 청크 요청에 들어가는 것을 막는 것이 우선이다.
+	PendingStaticMeshFootprintTraces.Reset();
+	StaticMeshFootprintTraceTargets.Reset();
+	StaticMeshFootprintScanCenter = FVector::ZeroVector;
+	StaticMeshFootprintScanExtent = FVector::ZeroVector;
+	NextStaticMeshFootprintTraceIndex = 0;
+	bStaticMeshFootprintScanActive = false;
+}
+
 void ADRVoxelTerrainAreaSyncActor::ApplyPendingDeltaRecords()
 {
 	if (HasAuthority() || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
@@ -865,57 +1581,16 @@ void ADRVoxelTerrainAreaSyncActor::ApplyPendingDeltaRecords()
 		return;
 	}
 
-	// 배열은 서버에서 Revision 오름차순으로 추가된다. 전체 기록을 매 Tick 처음부터 순회하지 않고
-	// 이진 탐색으로 LastApplied 바로 다음 위치를 찾아 히스토리가 커져도 탐색 비용을 낮게 유지한다.
-	int32 DepositIndex = FindFirstRecordAfterRevision(
-		DepositDeltaRecords,
-		LastAppliedTerrainRevision);
-	int32 DigIndex = FindFirstRecordAfterRevision(
-		DigDeltaRecords,
+	// 통합 배열은 서버 Revision 오름차순이므로 LastApplied 바로 다음 항목을 이진 탐색으로 찾는다.
+	int32 EditIndex = FindFirstRecordAfterRevision(
+		TerrainEdits.Items,
 		LastAppliedTerrainRevision);
 
-	// DepositDeltaRecords와 DigDeltaRecords는 별도 프로퍼티라 도착 순서가 보장되지 않는다.
-	// 두 배열의 다음 항목 중 Revision이 작은 것을 선택해 하나의 서버 편집 흐름처럼 병합한다.
-	while (true)
+	while (EditIndex < TerrainEdits.Items.Num())
 	{
-		const FDRVoxelDepositDeltaRecord* DepositRecord =
-			DepositIndex < DepositDeltaRecords.Num()
-				? &DepositDeltaRecords[DepositIndex]
-				: nullptr;
-		const FDRVoxelDigDeltaRecord* DigRecord =
-			DigIndex < DigDeltaRecords.Num()
-				? &DigDeltaRecords[DigIndex]
-				: nullptr;
-
-		if (!DepositRecord && !DigRecord)
-		{
-			const int32 ExpectedRevision = LastAppliedTerrainRevision + 1;
-			// 서버 Revision은 앞서 있지만 해당 레코드가 아직 없으면 다른 프로퍼티의 복제가 늦은 경우일 수 있다.
-			// 이후 편집을 먼저 적용하지 않고 다음 OnRep 또는 Tick까지 기다려 지형 결과가 뒤집히는 것을 막는다.
-			if (TerrainEditRevision >= ExpectedRevision &&
-				LastReportedMissingRevision != ExpectedRevision)
-			{
-				LastReportedMissingRevision = ExpectedRevision;
-				UE_LOG(
-					LogTemp,
-					Warning,
-					TEXT("Terrain delta unavailable. Expected=%d ServerRevision=%d."),
-					ExpectedRevision,
-					TerrainEditRevision);
-			}
-			return;
-		}
-
-		// 서버 편집은 반드시 연속 Revision으로 적용한다. 예를 들어 5가 없는데 6을 먼저 적용하면
-		// 5가 나중에 도착했을 때 쌓기/굴착의 최종 결과가 서버와 달라질 수 있다.
+		const FDRTerrainEditFastArrayItem& Item = TerrainEdits.Items[EditIndex];
 		const int32 ExpectedRevision = LastAppliedTerrainRevision + 1;
-		const bool bApplyDeposit =
-			DepositRecord && (!DigRecord || DepositRecord->Revision < DigRecord->Revision);
-		const int32 NextRevision = bApplyDeposit
-			? DepositRecord->Revision
-			: DigRecord->Revision;
-
-		if (NextRevision != ExpectedRevision)
+		if (Item.Revision != ExpectedRevision)
 		{
 			if (LastReportedMissingRevision != ExpectedRevision)
 			{
@@ -925,29 +1600,37 @@ void ADRVoxelTerrainAreaSyncActor::ApplyPendingDeltaRecords()
 					Warning,
 					TEXT("Terrain delta revision gap. Expected=%d Received=%d. Later deltas will wait."),
 					ExpectedRevision,
-					NextRevision);
+					Item.Revision);
 			}
 			return;
 		}
 
-		// 두 배열 중 더 이른 Revision의 타입에 맞는 재생 함수를 호출한다.
-		// 재생이 실패하면 LastApplied를 전진시키지 않아 월드가 준비된 다음 호출에서 다시 시도할 수 있다.
 		bool bApplied = false;
-		if (bApplyDeposit)
+		if (Item.Type == EDRTerrainEditType::Deposit)
 		{
+			FDRVoxelDepositDeltaRecord DepositRecord;
+			DepositRecord.Revision = Item.Revision;
+			DepositRecord.VoxelMin = GetNetworkChunkMin(Item.ChunkCoordinate);
+			DepositRecord.VoxelMax =
+				DepositRecord.VoxelMin + FIntVector(DRTerrainNetworkChunkSize - 1);
+			DepositRecord.MaterialIndex = Item.MaterialIndex;
+			DepositRecord.Deltas = Item.Deltas;
+
 			int32 AppliedVoxelCount = 0;
 			bApplied = UDRVoxelTerrainQueryLibrary::ApplyDepositDeltaRecord(
 				VoxelWorld,
-				*DepositRecord,
+				DepositRecord,
 				AppliedVoxelCount);
-			DepositIndex++;
 		}
 		else
 		{
+			FDRVoxelDigDeltaRecord DigRecord;
+			DigRecord.Revision = Item.Revision;
+			DigRecord.Location = Item.Location;
+			DigRecord.Radius = Item.Radius;
 			bApplied = UDRVoxelTerrainQueryLibrary::ApplyDigDeltaRecord(
 				VoxelWorld,
-				*DigRecord);
-			DigIndex++;
+				DigRecord);
 		}
 
 		if (!bApplied)
@@ -956,8 +1639,22 @@ void ADRVoxelTerrainAreaSyncActor::ApplyPendingDeltaRecords()
 		}
 
 		// 성공한 경우에만 재생 커서를 전진시키고 이전 누락 경고 상태를 해제한다.
-		LastAppliedTerrainRevision = NextRevision;
+		LastAppliedTerrainRevision = Item.Revision;
 		LastReportedMissingRevision = 0;
+		++EditIndex;
+	}
+
+	const int32 ExpectedRevision = LastAppliedTerrainRevision + 1;
+	if (TerrainEditRevision >= ExpectedRevision &&
+		LastReportedMissingRevision != ExpectedRevision)
+	{
+		LastReportedMissingRevision = ExpectedRevision;
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Terrain delta unavailable. Expected=%d ServerRevision=%d."),
+			ExpectedRevision,
+			TerrainEditRevision);
 	}
 }
 
@@ -968,25 +1665,17 @@ void ADRVoxelTerrainAreaSyncActor::TrimReplicatedTerrainRecords()
 		return;
 	}
 
-	// 배열별 개수가 아니라 공통 Revision 범위로 잘라야 퇴적과 굴착 사이의 상대 순서가 유지된다.
-	// 단, 기록을 제거한 뒤 접속한 클라이언트는 누락분을 복원할 수 없으므로 체크포인트가 있을 때만 제한값을 사용한다.
+	// 기록을 제거한 뒤 접속한 클라이언트는 누락분을 복원할 수 없으므로 체크포인트가 있을 때만 제한값을 사용한다.
 	const int32 MinimumRevisionToKeep = FMath::Max(
 		1,
 		TerrainEditRevision - MaxReplicatedDeltaRecords + 1);
-	const int32 DepositRecordsToRemove = FindFirstRecordAfterRevision(
-		DepositDeltaRecords,
+	const int32 RecordsToRemove = FindFirstRecordAfterRevision(
+		TerrainEdits.Items,
 		MinimumRevisionToKeep - 1);
-	const int32 DigRecordsToRemove = FindFirstRecordAfterRevision(
-		DigDeltaRecords,
-		MinimumRevisionToKeep - 1);
-
-	if (DepositRecordsToRemove > 0)
+	if (RecordsToRemove > 0)
 	{
-		DepositDeltaRecords.RemoveAt(0, DepositRecordsToRemove, EAllowShrinking::No);
-	}
-	if (DigRecordsToRemove > 0)
-	{
-		DigDeltaRecords.RemoveAt(0, DigRecordsToRemove, EAllowShrinking::No);
+		TerrainEdits.Items.RemoveAt(0, RecordsToRemove, EAllowShrinking::No);
+		TerrainEdits.MarkArrayDirty();
 	}
 }
 
@@ -1041,6 +1730,9 @@ void ADRVoxelTerrainAreaSyncActor::HandleTerrainDug(const FVector& Location, flo
 		return;
 	}
 
+	// 굴착보다 먼저 서버에 반영된 퇴적은 먼저 Revision을 확정해야 클라이언트에서도 동일 순서를 유지한다.
+	FlushPendingDepositBatch();
+
 	// 진행 중인 요청의 후보 표면은 굴착 이전 높이를 기준으로 계산됐을 수 있다.
 	// 그대로 쓰면 파낸 공간 위에 오래된 후보가 쌓일 수 있으므로 현재 청크뿐 아니라 남은 패스 순서와
 	// 비동기 메시 트레이스까지 함께 폐기한다. 다음 타이머 주기에는 변경된 지형을 기준으로 새 패스를 만든다.
@@ -1048,11 +1740,11 @@ void ADRVoxelTerrainAreaSyncActor::HandleTerrainDug(const FVector& Location, flo
 
 	// 이 델리게이트는 서버의 실제 굴착이 끝난 뒤 호출된다. 여기서 서버 지형을 다시 수정하지 않고
 	// 클라이언트 재생에 필요한 위치, 반지름, Revision만 기록해 중복 굴착을 방지한다.
-	FDRVoxelDigDeltaRecord DigRecord;
-	DigRecord.Revision = ++TerrainEditRevision;
-	DigRecord.Location = Location;
-	DigRecord.Radius = Radius;
-	DigDeltaRecords.Add(DigRecord);
+	FDRTerrainEditFastArrayItem DigItem;
+	DigItem.Type = EDRTerrainEditType::Dig;
+	DigItem.Location = Location;
+	DigItem.Radius = Radius;
+	AddTerrainEditItem(MoveTemp(DigItem));
 
 	TrimReplicatedTerrainRecords();
 	ForceNetUpdate();

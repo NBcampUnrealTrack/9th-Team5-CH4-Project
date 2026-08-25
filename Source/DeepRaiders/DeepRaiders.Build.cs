@@ -10,7 +10,7 @@ public class DeepRaiders : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
+			"Core", "CoreUObject", "Engine", "NetCore", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
 			
 			// Online
 			"OnlineSubsystem", "OnlineSubsystemUtils", "Sockets",

@@ -3,11 +3,13 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DRVoxelTerrainQueryLibrary.h"
+#include "Net/Serialization/FastArraySerializer.h"
 #include "WorldCollision.h"
 #include "DRVoxelTerrainAreaSyncActor.generated.h"
 
 class AVoxelWorld;
 class UDRVoxelTerrainSubsystem;
+class ADRVoxelTerrainAreaSyncActor;
 
 UENUM(BlueprintType)
 enum class EDRDepositPerformancePreset : uint8
@@ -41,6 +43,118 @@ struct FDRVoxelTerrainChunkBounds
 	// 이 청크가 마지막으로 완료된 전체 퇴적 패스 번호다. 디버그 및 진행 상태 확인용이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
 	int32 LastProcessedPass = INDEX_NONE;
+};
+
+// 커버리지 선택을 통과한 고정 메시 중심의 원형 범위를 실제 메시 형상에 다시 투영할 한 셀이다.
+// 리플렉션이나 복제 대상이 아닌 서버 런타임 자료이므로 가벼운 일반 C++ 구조체로 유지한다.
+struct FDRStaticMeshFootprintTraceTarget
+{
+	FIntPoint VoxelXY = FIntPoint::ZeroValue;
+	float AmountScale = 1.f;
+	float MinLocalSurfaceZ = 0.f;
+	float MaxLocalSurfaceZ = 0.f;
+};
+
+// 비동기 핸들과 그 핸들이 어떤 풋프린트 셀을 검사하는지 함께 보관한다.
+// 완료 순서가 발행 순서와 달라도 결과를 올바른 X/Y 셀과 강도에 연결할 수 있다.
+struct FDRPendingStaticMeshFootprintTrace
+{
+	FTraceHandle Handle;
+	FDRStaticMeshFootprintTraceTarget Target;
+};
+
+UENUM()
+enum class EDRTerrainEditType : uint8
+{
+	Deposit,
+	Dig
+};
+
+// FastArray의 단일 편집 항목이다. 퇴적은 고정 32^3 복셀 청크 하나를, 굴착은 구 중심과 반지름을 저장한다.
+// 커스텀 NetSerialize가 퇴적 값을 16비트로, 정렬된 LocalIndex 차이를 packed integer로 전송한다.
+USTRUCT()
+struct FDRTerrainEditFastArrayItem : public FFastArraySerializerItem
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	EDRTerrainEditType Type = EDRTerrainEditType::Deposit;
+
+	UPROPERTY()
+	int32 Revision = 0;
+
+	UPROPERTY()
+	FIntVector ChunkCoordinate = FIntVector::ZeroValue;
+
+	UPROPERTY()
+	uint8 MaterialIndex = 0;
+
+	UPROPERTY()
+	TArray<FDRVoxelCompressedValueDelta> Deltas;
+
+	UPROPERTY()
+	FVector_NetQuantize Location = FVector::ZeroVector;
+
+	UPROPERTY()
+	float Radius = 0.f;
+
+	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);
+};
+
+template<>
+struct TStructOpsTypeTraits<FDRTerrainEditFastArrayItem>
+	: public TStructOpsTypeTraitsBase2<FDRTerrainEditFastArrayItem>
+{
+	enum
+	{
+		WithNetSerializer = true
+	};
+};
+
+// 퇴적과 굴착을 하나의 Revision 정렬 배열로 복제한다. 새 항목과 제거 항목만 FastArray delta로 전송된다.
+USTRUCT()
+struct FDRTerrainEditFastArray : public FFastArraySerializer
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FDRTerrainEditFastArrayItem> Items;
+
+	bool NetDeltaSerialize(FNetDeltaSerializeInfo& DeltaParams)
+	{
+		return FastArrayDeltaSerialize<
+			FDRTerrainEditFastArrayItem,
+			FDRTerrainEditFastArray>(Items, DeltaParams, *this);
+	}
+
+	void SetOwner(ADRVoxelTerrainAreaSyncActor* InOwner)
+	{
+		Owner = InOwner;
+	}
+
+	void PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize);
+	void PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize);
+
+private:
+	void NotifyOwner();
+	ADRVoxelTerrainAreaSyncActor* Owner = nullptr;
+};
+
+template<>
+struct TStructOpsTypeTraits<FDRTerrainEditFastArray>
+	: public TStructOpsTypeTraitsBase2<FDRTerrainEditFastArray>
+{
+	enum
+	{
+		WithNetDeltaSerializer = true
+	};
+};
+
+// 서버에서 여러 틱의 퇴적 변경을 합치는 동안 같은 복셀의 마지막 값과 머터리얼만 보관한다.
+struct FDRPendingDepositVoxelValue
+{
+	int32 QuantizedValue = 0;
+	uint8 MaterialIndex = 0;
 };
 
 // 지정 영역의 퇴적 요청 처리, 편집 델타 복제, 클라이언트 재생을 한 곳에서 관리한다.
@@ -151,6 +265,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
 	bool bDepositOnStaticMeshes = false;
 
+	// true면 StaticMesh 위 퇴적 사용 여부와 관계없이 위쪽 WorldStatic 충돌을 천장으로 취급한다.
+	// 복셀 지형 후보가 지붕/천장 아래에서 선택되거나 풋프린트가 실내로 번지는 것을 막는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
+	bool bBlockDepositBelowStaticMeshes = true;
+
 	// 이 각도보다 가파른 고정 메시 표면은 퇴적 지지면에서 제외한다. 내부에서는 노멀 Z 기준으로 변환한다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, AdvancedDisplay, Category="Voxel Terrain|Deposit|Static Mesh", meta=(ClampMin="0.0", ClampMax="90.0"))
 	float MaxStaticMeshSlopeAngle = 50.f;
@@ -173,26 +292,32 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category="Voxel Terrain|Sync|Chunks")
 	TArray<FDRVoxelTerrainChunkBounds> TerrainChunks;
 
-	// 퇴적과 굴착 모두 이 번호를 공유한다. 두 배열이 서로 다른 네트워크 프레임에 도착해도
-	// 클라이언트가 Revision을 기준으로 병합하면 서버에서 발생한 지형 편집 순서를 그대로 복원할 수 있다.
+	// 퇴적과 굴착 모두 이 번호를 공유하며 FastArray 항목은 항상 이 번호의 오름차순으로 추가된다.
 	UPROPERTY(ReplicatedUsing=OnRep_TerrainDeltaState, BlueprintReadOnly, Category="Voxel Terrain|Sync")
 	int32 TerrainEditRevision = 0;
 
-	// 서버에서 실제로 값이 바뀐 퇴적 배치만 누적한다. OnRep에서 굴착 배열과 Revision 순서로 병합한다.
-	UPROPERTY(ReplicatedUsing=OnRep_TerrainDeltaState, BlueprintReadOnly, Category="Voxel Terrain|Sync")
+	// 퇴적과 굴착을 하나의 FastArray로 복제해 새 항목/삭제분만 전송하고 타입 간 도착 순서 병합을 없앤다.
+	UPROPERTY(Replicated)
+	FDRTerrainEditFastArray TerrainEdits;
+
+	// 이전 Blueprint 자산의 프로퍼티 참조를 깨지 않기 위한 비복제 호환 필드다. 새 기록은 TerrainEdits만 사용한다.
+	UPROPERTY(Transient, BlueprintReadOnly, Category="Voxel Terrain|Sync", meta=(DeprecatedProperty, DeprecationMessage="Use the unified terrain edit stream."))
 	TArray<FDRVoxelDepositDeltaRecord> DepositDeltaRecords;
 
-	// 관리 영역과 겹친 서버 굴착 이벤트를 누적한다. 위치/반지름만으로 클라이언트 RemoveSphere를 재생한다.
-	UPROPERTY(ReplicatedUsing=OnRep_TerrainDeltaState, BlueprintReadOnly, Category="Voxel Terrain|Sync")
+	UPROPERTY(Transient, BlueprintReadOnly, Category="Voxel Terrain|Sync", meta=(DeprecatedProperty, DeprecationMessage="Use the unified terrain edit stream."))
 	TArray<FDRVoxelDigDeltaRecord> DigDeltaRecords;
 
 	// VoxelWorld 참조가 도착하면 청크 경계를 갱신하고, 먼저 도착해 있던 델타의 재생을 다시 시도한다.
 	UFUNCTION()
 	void OnRep_VoxelWorld();
 
-	// Revision 또는 두 델타 배열 중 어느 프로퍼티가 도착해도 동일한 병합/재생 경로를 실행한다.
+	// 서버의 최종 Revision이 먼저 도착한 경우에도 현재 FastArray 자료만으로 안전하게 재생을 시도한다.
 	UFUNCTION()
 	void OnRep_TerrainDeltaState();
+
+public:
+	// FastArray의 추가/변경 콜백이 새 편집을 즉시 재생할 수 있게 하는 진입점이다.
+	void HandleReplicatedTerrainEdits();
 
 private:
 	// 서버에서만 사용하는 틱 분할 요청 큐다. 현재 액터는 진행 중 요청이 있으면 새 요청을 추가하지 않는다.
@@ -212,6 +337,15 @@ private:
 	int32 NextStaticMeshTraceColumnIndex = 0;
 	bool bStaticMeshSurfaceScanActive = false;
 
+	// 1차 저해상도 스캔과 커버리지 선택이 끝난 뒤, 실제로 선택된 고정 메시 패치만 복셀 셀 단위로
+	// 다시 추적한다. 이 단계에서 메시 바깥 셀과 급경사 셀을 제거해 떠 있는 수평 눈판을 방지한다.
+	TArray<FDRPendingStaticMeshFootprintTrace> PendingStaticMeshFootprintTraces;
+	TArray<FDRStaticMeshFootprintTraceTarget> StaticMeshFootprintTraceTargets;
+	FVector StaticMeshFootprintScanCenter = FVector::ZeroVector;
+	FVector StaticMeshFootprintScanExtent = FVector::ZeroVector;
+	int32 NextStaticMeshFootprintTraceIndex = 0;
+	bool bStaticMeshFootprintScanActive = false;
+
 	// 한 번의 전체 패스에서 모든 청크를 정확히 한 번씩 처리한다. 순서를 Seed로 섞어 맵 한쪽부터
 	// 누적되는 모습을 막고, 진행 중 패스가 끝나기 전에는 타이머가 새 패스를 중첩하지 않는다.
 	TArray<int32> DepositChunkOrder;
@@ -223,6 +357,10 @@ private:
 	// 패스가 끝나거나 취소되면 비워지므로 장기 동기화 히스토리와는 무관한 서버 런타임 상태다.
 	TSet<FIntVector> DepositPassWrittenVoxelPositions;
 	TSet<FIntPoint> DepositPassWrittenColumns;
+
+	// 여러 틱에서 같은 복셀을 다시 변경하면 마지막 값만 남긴 뒤 0.1초 또는 청크 완료 시 FastArray로 확정한다.
+	TMap<FIntVector, FDRPendingDepositVoxelValue> PendingDepositVoxelValues;
+	float PendingDepositBatchAge = 0.f;
 
 	// 클라이언트가 마지막으로 성공적으로 적용한 Revision과 중복 경고 방지용 누락 Revision이다.
 	int32 LastAppliedTerrainRevision = 0;
@@ -252,6 +390,15 @@ private:
 	void CancelDepositPass();
 	// 요청의 현재 단계를 Tick 예산만큼 처리하고 변경 델타를 복제 기록에 추가한다.
 	void ProcessServerDepositRequests();
+	// 현재 월드와 일치하는 유효한 첫 요청을 반환한다. 단계 지정 버전은 상태 머신 진입 조건도 확인한다.
+	FDRVoxelDepositInBoxRequest* GetActiveDepositRequest();
+	FDRVoxelDepositInBoxRequest* GetActiveDepositRequest(EDRVoxelDepositRequestPhase ExpectedPhase);
+	// 라이브러리의 틱별 임시 레코드를 절대 복셀 좌표로 풀어 대기 배치에 병합한다.
+	void AccumulateDepositDeltaRecord(const FDRVoxelDepositDeltaRecord& DeltaRecord);
+	// 대기 변경을 고정 32^3 청크/머터리얼별 FastArray 항목으로 확정한다.
+	void FlushPendingDepositBatch();
+	// 새 통합 편집 항목을 추가하고 FastArray에 dirty 표시한다.
+	void AddTerrainEditItem(FDRTerrainEditFastArrayItem&& Item);
 	// 고정 메시용 비동기 트레이스 스캔을 시작하고, 매 Tick 결과 회수와 새 트레이스 발행을 진행한다.
 	bool BeginStaticMeshSurfaceScan(
 		const FDRVoxelDepositInBoxSettings& RequestSettings,
@@ -262,9 +409,16 @@ private:
 	void FinishStaticMeshSurfaceScan();
 	// 기능 비활성화, 월드 교체, 액터 종료 시 아직 완료되지 않은 핸들과 임시 결과를 폐기한다.
 	void CancelStaticMeshSurfaceScan();
-	// 클라이언트에서 퇴적/굴착 배열을 공통 Revision 순서로 병합해 재생한다.
+	// 선택된 메시 중심의 원형 풋프린트를 셀별 비동기 트레이스로 정밀하게 표면에 투영한다.
+	bool BeginStaticMeshFootprintScan();
+	void ProcessStaticMeshFootprintScan();
+	// 정밀 결과가 모두 준비됐음을 요청에 알린 뒤 라이브러리의 Apply 단계가 진행되게 한다.
+	void FinishStaticMeshFootprintScan();
+	// 진행 중 정밀 핸들과 임시 대상만 폐기한다. 요청을 끝낼지는 호출부가 별도로 결정한다.
+	void CancelStaticMeshFootprintScan();
+	// 클라이언트에서 통합 FastArray를 Revision 순서로 재생한다.
 	void ApplyPendingDeltaRecords();
-	// 설정된 Revision 보존 범위보다 오래된 두 종류의 기록을 함께 제거한다.
+	// 설정된 Revision 보존 범위보다 오래된 통합 기록을 제거한다.
 	void TrimReplicatedTerrainRecords();
 	// 서버 TerrainSubsystem의 굴착 완료 이벤트를 구독/해제한다.
 	void BindTerrainDugDelegate();

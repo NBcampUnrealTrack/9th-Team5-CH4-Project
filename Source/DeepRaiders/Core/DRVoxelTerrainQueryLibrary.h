@@ -11,7 +11,9 @@ enum class EDRVoxelDepositRequestPhase : uint8
 {
 	// 청크의 모든 X/Y 샘플 열을 순회하면서 지표면 위의 퇴적 후보를 수집하는 단계다.
 	BuildCandidates,
-	// 전체 후보 중 커버리지 퍼센트만 선택한 뒤 원형 풋프린트를 펼쳐 복셀 값과 머터리얼을 기록하는 단계다.
+	// 선택된 중심의 원형 풋프린트 각 칸에서 실제 표면 높이를 다시 찾아 최종 쓰기 위치를 만드는 단계다.
+	ResolveFootprints,
+	// 표면 해석이 끝난 위치에 복셀 값과 머터리얼을 기록하는 단계다.
 	ApplyVoxels,
 	// 모든 샘플 열과 남은 후보를 처리해 요청 배열에서 제거해도 되는 상태다.
 	Finished
@@ -143,26 +145,21 @@ struct FDRVoxelDepositInBoxRequest
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	FIntVector WriteVoxelMax = FIntVector::ZeroValue;
 
-	// Build 단계에서는 청크 전체에서 발견한 후보를, Apply 단계에서는 퍼센트 선택을 통과한 후보만 담는다.
+	// Build 단계에서는 청크 전체에서 발견한 후보를, Resolve 단계에서는 퍼센트 선택을 통과한 중심만 담는다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	TArray<FIntVector> PendingVoxels;
 
-	// PendingVoxels에서 다음으로 풋프린트를 펼칠 후보의 인덱스다.
+	// ResolvedVoxelPositions에서 다음으로 실제 기록할 위치의 인덱스다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
 	int32 NextVoxelIndex = 0;
 
-	// 큰 풋프린트를 한 틱에 전부 쓰지 않고, 중심과 다음 오프셋을 기억해 다음 틱에서 이어서 처리한다.
-	// 이 상태가 있어야 설정한 복셀 쓰기 시도 예산이 풋프린트 크기와 무관하게 지켜진다.
+	// 복셀 지형 후보의 풋프린트를 여러 틱에 나누어 해석하기 위한 중심 인덱스와 오프셋 인덱스다.
+	// 각 오프셋마다 제한된 Z 범위에서 실제 지표면을 찾으므로 이 진행 상태가 프레임 예산을 보장한다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
-	FIntVector ActiveFootprintCenter = FIntVector::ZeroValue;
+	int32 NextResolveCandidateIndex = 0;
 
-	// (2R+1)^2 정사각형 안에서 다음 틱에 검사할 오프셋의 선형 인덱스다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
-	int32 NextFootprintOffsetIndex = 0;
-
-	// true면 현재 중심의 풋프린트가 아직 끝나지 않았으므로 새 후보로 넘어가면 안 된다.
-	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
-	bool bHasActiveFootprint = false;
+	int32 NextResolveOffsetIndex = 0;
 
 	// 섞인 ScanColumnOrder의 현재 항목을 실제 로컬 X/Y 좌표로 변환한 결과다.
 	UPROPERTY(BlueprintReadOnly, Category="Voxel|Deposit")
@@ -208,19 +205,37 @@ struct FDRVoxelDepositInBoxRequest
 	// 후보 중복과 현재 요청 안에서 이미 기록한 쓰기 중복을 빠르게 제거하기 위한 서버 전용 집합이다.
 	TSet<FIntVector> PendingVoxelPositions;
 	TSet<FIntVector> WrittenVoxelPositions;
+	// 선택 중심의 평평한 Z를 그대로 펼치지 않고, 각 X/Y 열에서 다시 찾은 실제 표면 바로 위 좌표를 저장한다.
+	// AmountScale 배열은 같은 인덱스의 중심 거리 감쇠값이며 중복 좌표는 가장 큰 값을 하나만 유지한다.
+	TArray<FIntVector> ResolvedVoxelPositions;
+	TArray<float> ResolvedAmountScales;
+	TMap<FIntVector, int32> ResolvedVoxelIndexByPosition;
+	bool bVoxelFootprintsResolved = false;
+	bool bExternalFootprintsResolved = true;
+	bool bExternalWritesMerged = false;
 	// 청크 액터가 한 패스 동안 공유하는 중복 방지 집합을 가리킨다. nullptr이면 요청 내부 집합만 사용한다.
 	// 액터 멤버를 가리키는 비소유 포인터이며 요청보다 액터가 오래 살고, 패스 취소 시 요청을 먼저 제거한다.
 	TSet<FIntVector>* SharedWrittenVoxelPositions = nullptr;
 	// 앞서 처리한 청크의 확장 풋프린트가 건드린 XY 열이다. 그 결과 높아진 표면을 다음 청크가
 	// 같은 패스에서 새 후보로 다시 잡지 않도록 후보 생성 단계에서만 확인한다.
 	TSet<FIntPoint>* SharedWrittenColumns = nullptr;
-	// 외부 지지 높이를 가진 후보 중심만 따로 기억해 퍼센트 선택에서 제외된 메시 후보의 지지 정보가
-	// 일반 복셀 후보에 잘못 적용되지 않도록 선택 완료 시 맵을 정리한다.
+	// 퍼센트 선택을 통과한 고정 메시 후보 중심만 남긴다. 이 중심의 풋프린트는 액터가 각 칸마다
+	// 비동기 트레이스를 다시 발행해 메시 가장자리와 경사를 실제 형상대로 해석한다.
 	TSet<FIntVector> ExternalCandidatePositions;
 	// 고정 메시 표면은 복셀 밀도장에 고체로 존재하지 않는다. 키는 메시 바로 위에 쓸 복셀이고,
-	// 값은 복셀 로컬 좌표계에서 측정한 실제 메시 표면 Z다. 쓰기 단계는 이 높이로 메시 안쪽의
+	// 값은 정밀 트레이스로 측정한 복셀 로컬 좌표계의 실제 메시 표면 Z다. 쓰기 단계는 이 높이로 메시 안쪽의
 	// 얇은 지지층과 첫 퇴적층의 밀도값을 계산해 첫 누적부터 등가면이 메시 표면에 붙도록 만든다.
 	TMap<FIntVector, float> ExternalSupportSurfaceZByVoxel;
+	// 고정 메시의 정밀 풋프린트 셀도 중심에서 멀수록 얇아지도록 셀별 강도를 함께 저장한다.
+	TMap<FIntVector, float> ExternalResolvedAmountScaleByVoxel;
+	// 복셀 풋프린트는 제한된 높이 범위만 다시 찾으면 높은 천장 아래의 바닥을 잘못 선택할 수 있다.
+	// 각 XY 열의 전체 Z 최상단 표면을 요청 동안 캐시해 모든 풋프린트 셀이 같은 가시성 규칙을 사용하게 한다.
+	TMap<FIntPoint, int32> TopSurfaceZByColumn;
+	// 청크 액터가 활성화하면 최종 복셀 쓰기 후보 위의 WorldStatic 충돌을 검사해 천장 아래 쓰기를 막는다.
+	// 외부 메시 표면 후보 자체는 이 검사에서 제외한다.
+	float WorldBoxTopZ = 0.f;
+	bool bBlockDepositBelowWorldStatic = false;
+	bool bTraceComplexWorldStaticOcclusion = false;
 };
 
 UCLASS()
@@ -266,8 +281,8 @@ public:
 		const FVector& AreaExtent);
 
 	// 비동기 물리 트레이스로 찾은 고정 메시 표면을 기존 복셀 퇴적 요청에 합친다.
-	// 각 표면은 복셀 좌표로 변환되고 풋프린트 범위까지 외부 지지 높이가 기록되며,
-	// 실제 값/머터리얼 변경은 일반 후보와 동일하게 ProcessDepositInBoxRequestsTick에서 수행된다.
+	// 여기서는 커버리지 선택용 중심만 추가한다. 선택된 중심 주변의 실제 메시 높이와 가장자리는
+	// 액터의 두 번째 비동기 트레이스 단계에서 확정하고, 최종 기록은 일반 후보와 같은 경로를 사용한다.
 	UFUNCTION(BlueprintCallable, Category="Voxel|Deposit")
 	static bool AddExternalSurfaceDepositCandidates(
 		UPARAM(ref) FDRVoxelDepositInBoxRequest& Request,
