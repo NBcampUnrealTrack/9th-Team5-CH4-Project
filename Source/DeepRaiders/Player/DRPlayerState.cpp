@@ -482,6 +482,11 @@ void ADRPlayerState::EvaluateFrozenState()
 	}
 
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	
+	// 빙결 게이지는 Frozen 진입 시 소비한다.
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
+
+	StopFreezeDecay();
 }
 
 void ADRPlayerState::RestartFreezeDecay()
