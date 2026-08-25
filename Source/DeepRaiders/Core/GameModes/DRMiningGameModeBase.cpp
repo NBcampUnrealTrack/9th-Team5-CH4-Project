@@ -6,6 +6,8 @@
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/DRTeamPlayerStart.h"
+#include "DeepRaiders/Gameplay/Team/DRTeamMovingActor.h"
+#include "DeepRaiders/Snow/DRSnowControlZone.h"
 #include "EngineUtils.h"
 
 ADRMiningGameModeBase::ADRMiningGameModeBase()
@@ -19,6 +21,7 @@ void ADRMiningGameModeBase::BeginPlay()
 
 	// 현재는 맵 시작과 동시에 지급하며, 추후 실제 경기 시작 지점으로 이동할 수 있다.
 	StartTimer();
+	StartTeamSwitchTimer();
 }
 
 void ADRMiningGameModeBase::StartTimer()
@@ -53,8 +56,63 @@ void ADRMiningGameModeBase::StartTimer()
 void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	EndTimer();
+	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRMiningGameModeBase::StartTeamSwitchTimer()
+{
+	RefreshActiveTeam();
+	ApplyActiveTeam(true);
+
+	if (TeamSwitchInterval <= 0.f)
+	{
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		TeamSwitchTimerHandle,
+		this,
+		&ThisClass::RefreshActiveTeam,
+		TeamSwitchInterval,
+		true);
+}
+
+void ADRMiningGameModeBase::RefreshActiveTeam()
+{
+	float TeamAmounts[2] = {0.f, 0.f};
+
+	// 모든 거점의 눈 양을 합산해 현재 열세 팀을 결정한다.
+	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		for (const FDRSnowTeamAmount& Team : Iterator->GetControlRatio().Teams)
+		{
+			if (Team.TeamId == 0 || Team.TeamId == 1)
+			{
+				TeamAmounts[Team.TeamId] += Team.Amount;
+			}
+		}
+	}
+
+	if (FMath::IsNearlyEqual(TeamAmounts[0], TeamAmounts[1]))
+	{
+		ActiveTeamId = INDEX_NONE;
+	}
+	else
+	{
+		ActiveTeamId = TeamAmounts[0] < TeamAmounts[1] ? 0 : 1;
+	}
+
+	ApplyActiveTeam(false);
+}
+
+void ADRMiningGameModeBase::ApplyActiveTeam(bool bImmediate)
+{
+	for (TActorIterator<ADRTeamMovingActor> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->SetTeamActive(Iterator->GetTeamId() == ActiveTeamId, bImmediate);
+	}
 }
 
 void ADRMiningGameModeBase::EndTimer()
@@ -214,11 +272,17 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 
 AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Player)
 {
-	const ADRPlayerState* PlayerState =
+	ADRPlayerState* PlayerState =
 		IsValid(Player) ? Player->GetPlayerState<ADRPlayerState>() : nullptr;
 	if (!IsValid(PlayerState))
 	{
 		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	// ChoosePlayerStart가 PostLogin보다 먼저 호출될 수 있으므로 스폰 선택 전에 팀을 확정한다.
+	if (PlayerState->GetTeamId() != 0 && PlayerState->GetTeamId() != 1)
+	{
+		PlayerState->SetTeamId(PlayerState->GetPlayerId() % 2);
 	}
 
 	TArray<ADRTeamPlayerStart*> TeamStarts;
@@ -240,5 +304,11 @@ AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Pla
 		return Super::ChoosePlayerStart_Implementation(Player);
 	}
 
-	return TeamStarts[FMath::RandHelper(TeamStarts.Num())];
+	// 같은 팀 시작점이 여러 개여도 실행할 때마다 위치가 바뀌지 않도록 고정 순서로 선택한다.
+	TeamStarts.Sort([](const ADRTeamPlayerStart& Left, const ADRTeamPlayerStart& Right)
+	{
+		return Left.GetPathName() < Right.GetPathName();
+	});
+
+	return TeamStarts[0];
 }

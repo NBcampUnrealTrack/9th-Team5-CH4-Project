@@ -7,6 +7,7 @@
       <Path>Plugins/VoxelFree</Path>
       <Path>Source/DeepRaiders/Audio</Path>
       <Path>Source/DeepRaiders/GAS</Path>
+      <Path>Source/DeepRaiders/Gameplay</Path>
       <Path>Source/DeepRaiders/Input</Path>
       <Path>Source/DeepRaiders/Inventory</Path>
       <Path>Source/DeepRaiders/Inventory/Component</Path>
