@@ -257,7 +257,7 @@ void ADRPlayerState::BeginPlay()
 		BindStatusPolicy();
 
 		EvaluateDeadState();
-		EvaluateFrozenState();
+		EvaluateFrozenState(PlayerAttributeSet->GetFreezeGauge(), PlayerAttributeSet->GetHealth());
 	}
 }
 
@@ -276,14 +276,17 @@ void ADRPlayerState::HandleHealthChanged(const FOnAttributeChangeData& Data)
 		return;
 	}
 
-	/*
-	 * 살아있다가 Health가 0 이하가 된
-	 * 순간만 Death 상태 평가.
-	 */
-	if (Data.OldValue > KINDA_SMALL_NUMBER && Data.NewValue <= KINDA_SMALL_NUMBER)
+	if (Data.NewValue <= KINDA_SMALL_NUMBER)
 	{
-		EvaluateDeadState();
+		if (Data.OldValue > KINDA_SMALL_NUMBER)
+		{
+			EvaluateDeadState();
+		}
+
+		return;
 	}
+
+	EvaluateFrozenState(PlayerAttributeSet->GetFreezeGauge(), Data.NewValue);
 }
 
 void ADRPlayerState::EvaluateDeadState()
@@ -351,15 +354,6 @@ void ADRPlayerState::BindStatusPolicy()
 				this,
 				&ThisClass::HandleFreezeGaugeChanged);
 
-	MaxFreezeGaugeChangedHandle =
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(
-				UDRPlayerAttributeSet::
-					GetMaxFreezeGaugeAttribute())
-			.AddUObject(
-				this,
-				&ThisClass::HandleMaxFreezeGaugeChanged);
-	
 	HealthChangedHandle =
 		AbilitySystemComponent->
 			GetGameplayAttributeValueChangeDelegate(
@@ -387,16 +381,6 @@ void ADRPlayerState::UnbindStatusPolicy()
 		FreezeGaugeChangedHandle.Reset();
 	}
 
-	if (MaxFreezeGaugeChangedHandle.IsValid())
-	{
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(
-				UDRPlayerAttributeSet::
-					GetMaxFreezeGaugeAttribute())
-			.Remove(MaxFreezeGaugeChangedHandle);
-		MaxFreezeGaugeChangedHandle.Reset();
-	}
-	
 	if (HealthChangedHandle.IsValid())
 	{
 		AbilitySystemComponent->
@@ -416,7 +400,7 @@ void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data
 		return;
 	}
 
-	EvaluateFrozenState();
+	EvaluateFrozenState(Data.NewValue, PlayerAttributeSet->GetHealth());
 
 	// 100에 도달해서 Frozen이 됐다면
 	// 자연 감소는 더 이상 하지 않는다.
@@ -443,17 +427,18 @@ void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data
 
 void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
 {
-	EvaluateFrozenState();
+	// 비주얼용 MaxFreezeGauge 변경.
+	// Frozen 판정은 FreezeGauge / Health 변경 시 수행.
 }
 
-void ADRPlayerState::EvaluateFrozenState()
+void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 {
-	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !FrozenEffectClass)
 	{
 		return;
 	}
-	
-	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !FrozenEffectClass)
+
+	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
 	{
 		return;
 	}
@@ -463,13 +448,12 @@ void ADRPlayerState::EvaluateFrozenState()
 		return;
 	}
 
-	const UDRPlayerAttributeSet* Attributes = AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>();
-	if (!IsValid(Attributes))
+	if (Health <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
-	
-	if (Attributes->GetFreezeGauge() < Attributes->GetMaxFreezeGauge())
+
+	if (FreezeGauge + KINDA_SMALL_NUMBER < Health)
 	{
 		return;
 	}
@@ -482,6 +466,22 @@ void ADRPlayerState::EvaluateFrozenState()
 	}
 
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
+
+	StopFreezeDecay();
+}
+
+void ADRPlayerState::HandleFreezeGaugeResolved()
+{
+	if (!HasAuthority()
+		|| !IsValid(PlayerAttributeSet))
+	{
+		return;
+	}
+
+	EvaluateFrozenState(
+		PlayerAttributeSet->GetFreezeGauge(),
+		PlayerAttributeSet->GetHealth());
 }
 
 void ADRPlayerState::RestartFreezeDecay()

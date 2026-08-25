@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRProjectileTypes.generated.h"
 
 // Projectile이 월드에 적중했을 때 사용할 눈 생성 설정
@@ -21,5 +22,11 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World", meta = (ClampMin = 0.0, UIMin = 0.0))
 	float SnowAmount = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
+	EDRSnowVoxelEditTool SnowEditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
+	bool bAllowVirtualSurfaceFallback = true;
 	
 };

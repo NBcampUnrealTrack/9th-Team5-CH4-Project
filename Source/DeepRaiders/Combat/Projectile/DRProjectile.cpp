@@ -163,14 +163,8 @@ bool ADRProjectile::IsFriendlyTarget(const AActor* TargetActor) const
 	return DRCombatTeam::IsFriendlyTarget(SourceTeamId, TargetActor);
 }
 
-void ADRProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
+void ADRProjectile::HandleWorldImpact(const FHitResult& /*ImpactResult*/)
 {
-	if (!WorldImpactData.bAddSnow)
-	{
-		return;
-	}
-	
-	// World 지형 변동 관련 코드 추가 위치
 }
 
 void ADRProjectile::RefreshFriendlyCollisionIgnores()

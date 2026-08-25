@@ -26,7 +26,6 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHealth)
 
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, FreezeGauge)
-	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxFreezeGauge)
 
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowGauge)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
@@ -45,8 +44,6 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_FreezeGauge, Category = "Player|Freeze")
 	FGameplayAttributeData FreezeGauge;
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxFreezeGauge, Category = "Player|Freeze")
-	FGameplayAttributeData MaxFreezeGauge;
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_SnowGauge, Category = "Player|Snow")
 	FGameplayAttributeData SnowGauge;
@@ -75,8 +72,6 @@ protected:
 
 	UFUNCTION()
 	void OnRep_FreezeGauge(const FGameplayAttributeData& OldFreezeGauge);
-	UFUNCTION()
-	void OnRep_MaxFreezeGauge(const FGameplayAttributeData& OldMaxFreezeGauge);
 
 	UFUNCTION()
 	void OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge);

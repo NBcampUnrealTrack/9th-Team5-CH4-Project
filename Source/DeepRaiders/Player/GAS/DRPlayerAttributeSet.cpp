@@ -9,7 +9,6 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitMaxHealth(100.f);
 	InitHealth(100.f);
 
-	InitMaxFreezeGauge(100.f);
 	InitFreezeGauge(0.f);
 
 	InitMaxSnowGauge(100.f);
@@ -28,7 +27,6 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, Health, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, FreezeGauge, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxFreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowAbsorbPower, COND_None, REPNOTIFY_Always);
@@ -50,11 +48,6 @@ void UDRPlayerAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMax
 void UDRPlayerAttributeSet::OnRep_FreezeGauge(const FGameplayAttributeData& OldFreezeGauge)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, FreezeGauge, OldFreezeGauge);
-}
-
-void UDRPlayerAttributeSet::OnRep_MaxFreezeGauge(const FGameplayAttributeData& OldMaxFreezeGauge)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxFreezeGauge, OldMaxFreezeGauge);
 }
 
 void UDRPlayerAttributeSet::OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge)
@@ -116,13 +109,6 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 			SetHealth(NewValue);
 		}
 	}
-	else if (Attribute == GetMaxFreezeGaugeAttribute())
-	{
-		if (GetFreezeGauge() > NewValue)
-		{
-			SetFreezeGauge(NewValue);
-		}
-	}
 	else if (Attribute == GetMaxSnowGaugeAttribute())
 	{
 		if (GetSnowGauge() > NewValue)
@@ -141,14 +127,6 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	else if (Attribute == GetHealthAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
-	}
-	else if (Attribute == GetMaxFreezeGaugeAttribute())
-	{
-		NewValue = FMath::Max(NewValue, 1.f);
-	}
-	else if (Attribute == GetFreezeGaugeAttribute())
-	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxFreezeGauge());
 	}
 	else if (Attribute == GetMaxSnowGaugeAttribute())
 	{
@@ -184,6 +162,28 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 {
 	Super::PostGameplayEffectExecute(Data);
 
+	// FreezeGain Instant GE가 실제 적용 완료된 시점에서
+	// 확정된 Gauge / Health로 빙결 상태를 평가한다.
+	if (Data.EvaluatedData.Attribute == GetFreezeGaugeAttribute())
+	{
+		UAbilitySystemComponent* TargetASC =
+			GetOwningAbilitySystemComponent();
+
+		ADRPlayerState* TargetPlayerState =
+			IsValid(TargetASC)
+				? Cast<ADRPlayerState>(
+					TargetASC->GetOwnerActor())
+				: nullptr;
+
+		if (IsValid(TargetPlayerState)
+			&& TargetPlayerState->HasAuthority())
+		{
+			TargetPlayerState->HandleFreezeGaugeResolved();
+		}
+
+		return;
+	}
+	
 	if (Data.EvaluatedData.Attribute != GetIncomingDamageAttribute())
 	{
 		return;

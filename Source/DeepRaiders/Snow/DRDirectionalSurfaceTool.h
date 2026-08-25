@@ -52,6 +52,16 @@ public:
 		float Strength,
 		bool bAdd);
 
+	// Voxel 표면이 아닌 StaticMesh 등의 Hit 표면을 plane distance field처럼 취급해 footprint를 만든다.
+	static FVoxelSurfaceEditsProcessedVoxels MakeVirtualSurfaceFootprint(
+		AVoxelWorld* VoxelWorld,
+		const FVector& WorldLocation,
+		const FVector& SurfaceNormal,
+		float Radius,
+		float Falloff,
+		float Strength,
+		bool bAdd);
+
 	// Processed surface 결과에서 0면을 가로지르는 swept volume만 실제 voxel 값에 반영한다.
 	// Add는 비어 있던 stamp 부피를 채우고, Remove는 해당 stamp 부피를 비운다.
 	static float ApplySurfaceVolumeEdit(

@@ -46,9 +46,6 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		FreezeGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleFreezeGaugeChanged);
-		MaxFreezeGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(
-				this, &ThisClass::HandleMaxFreezeGaugeChanged);
 	}
 
 	if (QuickSlotComponent.IsValid())
@@ -105,8 +102,6 @@ void UDRHUDViewModel::Deinitialize()
 			UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()).Remove(MaxSnowGaugeChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
-		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).Remove(MaxFreezeGaugeChangedHandle);
 	}
 
 	AbilitySystemComponent.Reset();
@@ -118,7 +113,6 @@ void UDRHUDViewModel::Deinitialize()
 	SnowGaugeChangedHandle.Reset();
 	MaxSnowGaugeChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
-	MaxFreezeGaugeChangedHandle.Reset();
 	InteractionFocusChangedHandle.Reset();
 }
 
@@ -201,13 +195,11 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
 		: nullptr;
 	const float NewFreezeGauge = IsValid(AttributeSet) ? AttributeSet->GetFreezeGauge() : 0.f;
-	const float NewMaxFreezeGauge = IsValid(AttributeSet) ? AttributeSet->GetMaxFreezeGauge() : 0.f;
-	const float NewFreezeGaugeRatio = NewMaxFreezeGauge > KINDA_SMALL_NUMBER
-		? FMath::Clamp(NewFreezeGauge / NewMaxFreezeGauge, 0.f, 1.f)
+	const float NewFreezeGaugeRatio = MaxHealth > KINDA_SMALL_NUMBER
+		? FMath::Clamp(NewFreezeGauge / MaxHealth, 0.f, 1.f)
 		: 0.f;
 
 	UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, NewFreezeGauge);
-	UE_MVVM_SET_PROPERTY_VALUE(MaxFreezeGauge, NewMaxFreezeGauge);
 	UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, NewFreezeGaugeRatio);
 }
 
