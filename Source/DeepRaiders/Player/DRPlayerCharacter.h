@@ -157,7 +157,8 @@ public:
 	}
 	
 protected:
-
+	virtual void BeginPlay() override;
+	
 	void InitializeAbilitySystem();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
