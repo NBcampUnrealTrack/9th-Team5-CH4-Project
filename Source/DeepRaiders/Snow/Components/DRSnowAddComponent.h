@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
 	void SetAddEditTool(EDRSnowVoxelEditTool InEditTool);
 
+	UFUNCTION(BlueprintCallable, Category = "Snow|Add")
+	void SetAllowVirtualSurfaceFallback(bool bInAllowVirtualSurfaceFallback);
+
 protected:
 	// 위치/노멀/반경/양/기본 interaction context만 채운다.
 	// TeamId나 TargetVoxelWorld를 강제로 지정해야 하면 호출자가 Request 생성 후 덮어쓴다.
@@ -61,6 +64,8 @@ protected:
 	// VoxelWorld actor를 직접 맞거나, VoxelWorld 하위 collision component를 맞은 경우를 모두 처리한다.
 	AVoxelWorld* GetVoxelWorldFromHit(const FHitResult& HitResult) const;
 
+	AVoxelWorld* ResolveFallbackVoxelWorld() const;
+
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Snow|Add")
 	FDRSnowAddedSignature OnSnowAdded;
@@ -75,4 +80,7 @@ protected:
 	// Voxel 표면을 어떤 방식으로 올릴지 선택한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Add")
 	EDRSnowVoxelEditTool AddEditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Add")
+	bool bAllowVirtualSurfaceFallback = false;
 };

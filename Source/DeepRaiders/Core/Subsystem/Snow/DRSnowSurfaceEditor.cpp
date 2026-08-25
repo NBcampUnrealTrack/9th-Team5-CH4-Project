@@ -134,14 +134,31 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
 		// Directional 도구의 실제 변경 목록은 Subsystem이 Ownership/Volume 원본 데이터를 갱신할 때 사용한다.
-		const FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint =
-			UDRDirectionalSurfaceTool::FindSurfaceFootprint(
-				VoxelWorld,
-				Request.WorldLocation,
-				Request.Radius,
-				SnowSurfaceFalloff,
-				Request.Amount,
-				true);
+		FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint;
+		if (!Request.bUseVirtualSurface)
+		{
+			SurfaceFootprint =
+				UDRDirectionalSurfaceTool::FindSurfaceFootprint(
+					VoxelWorld,
+					Request.WorldLocation,
+					Request.Radius,
+					SnowSurfaceFalloff,
+					Request.Amount,
+					true);
+		}
+		if (Request.bUseVirtualSurface ||
+			(Request.bAllowVirtualSurfaceFallback && SurfaceFootprint.Voxels->Num() == 0))
+		{
+			SurfaceFootprint =
+				UDRDirectionalSurfaceTool::MakeVirtualSurfaceFootprint(
+					VoxelWorld,
+					Request.WorldLocation,
+					Request.SurfaceNormal,
+					Request.Radius,
+					SnowSurfaceFalloff,
+					Request.Amount,
+					true);
+		}
 
 		TArray<FModifiedVoxelValue> ModifiedValues;
 		FVoxelIntBox EditedBounds;
