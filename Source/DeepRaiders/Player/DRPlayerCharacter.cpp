@@ -214,6 +214,11 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 
 	Super::Landed(Hit);
 
+	if (HasAuthority())
+	{
+		LastLandedLocation = GetActorLocation();
+	}
+
 	if (IsValid(PlayerLifecycleComponent))
 	{
 		PlayerLifecycleComponent->HandleLanded(LandingSpeed);
@@ -436,6 +441,12 @@ float ADRPlayerCharacter::GetNormalizedAimPitch() const
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		// 첫 착지 전에는 스폰 위치를 안전한 반환점으로 사용한다.
+		LastLandedLocation = GetActorLocation();
+	}
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()
