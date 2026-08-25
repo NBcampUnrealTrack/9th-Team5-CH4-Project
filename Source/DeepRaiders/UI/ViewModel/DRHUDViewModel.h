@@ -38,10 +38,10 @@ protected:
 	float HealthRatio = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
-	float SnowGauge = 0.f;
+	int32 SnowGauge = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
-	float MaxSnowGauge = 0.f;
+	int32 MaxSnowGauge = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	float SnowGaugeRatio = 0.f;

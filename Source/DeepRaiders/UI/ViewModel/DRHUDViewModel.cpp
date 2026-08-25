@@ -184,8 +184,8 @@ void UDRHUDViewModel::RefreshSnowGauge()
 		? FMath::Clamp(NewSnowGauge / NewMaxSnowGauge, 0.f, 1.f)
 		: 0.f;
 
-	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, NewSnowGauge);
-	UE_MVVM_SET_PROPERTY_VALUE(MaxSnowGauge, NewMaxSnowGauge);
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, FMath::RoundToInt(NewSnowGauge));
+	UE_MVVM_SET_PROPERTY_VALUE(MaxSnowGauge, FMath::RoundToInt(NewMaxSnowGauge));
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, NewSnowGaugeRatio);
 }
 
