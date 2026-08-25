@@ -192,14 +192,11 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(NewPlayer);
 
-	// 첫 스폰 위치를 선택하기 전에 서버에서 팀을 확정한다.
 	if (IsValid(PlayerController))
 	{
 		if (ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>())
 		{
-			const int32 AssignedTeamId = PlayerState->GetPlayerId() % 2;
-
-			PlayerState->SetTeamId(AssignedTeamId);
+			const int32 AssignedTeamId = AssignBalancedTeam(PlayerState);
 
 			UE_LOG(
 				LogTemp,
@@ -270,6 +267,57 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
 }
 
+void ADRMiningGameModeBase::Logout(AController* Exiting)
+{
+	const ADRPlayerState* PlayerState =
+		IsValid(Exiting) ? Exiting->GetPlayerState<ADRPlayerState>() : nullptr;
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("[Logout] Player=%s PlayerId=%d TeamId=%d"),
+		*GetNameSafe(PlayerState),
+		IsValid(PlayerState) ? PlayerState->GetPlayerId() : INDEX_NONE,
+		IsValid(PlayerState) ? PlayerState->GetTeamId() : INDEX_NONE);
+
+	// 기본 Logout이 Pawn, Controller, PlayerState와 GameState PlayerArray를 정리한다.
+	Super::Logout(Exiting);
+}
+
+int32 ADRMiningGameModeBase::AssignBalancedTeam(ADRPlayerState* PlayerState) const
+{
+	if (!IsValid(PlayerState) || PlayerState->HasAssignedTeam())
+	{
+		return IsValid(PlayerState) ? PlayerState->GetTeamId() : INDEX_NONE;
+	}
+
+	int32 TeamCounts[2] = {0, 0};
+	if (IsValid(GameState))
+	{
+		for (APlayerState* ExistingState : GameState->PlayerArray)
+		{
+			const ADRPlayerState* ExistingDRState = Cast<ADRPlayerState>(ExistingState);
+			if (!IsValid(ExistingDRState) || ExistingDRState == PlayerState ||
+				!ExistingDRState->HasAssignedTeam())
+			{
+				continue;
+			}
+
+			const int32 ExistingTeamId = ExistingDRState->GetTeamId();
+			if (ExistingTeamId == 0 || ExistingTeamId == 1)
+			{
+				++TeamCounts[ExistingTeamId];
+			}
+		}
+	}
+
+	const int32 AssignedTeamId = TeamCounts[0] == TeamCounts[1]
+		? FMath::RandRange(0, 1)
+		: (TeamCounts[0] < TeamCounts[1] ? 0 : 1);
+	PlayerState->SetTeamId(AssignedTeamId);
+	return AssignedTeamId;
+}
+
 AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Player)
 {
 	ADRPlayerState* PlayerState =
@@ -279,11 +327,9 @@ AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Pla
 		return Super::ChoosePlayerStart_Implementation(Player);
 	}
 
+
 	// ChoosePlayerStart가 PostLogin보다 먼저 호출될 수 있으므로 스폰 선택 전에 팀을 확정한다.
-	if (PlayerState->GetTeamId() != 0 && PlayerState->GetTeamId() != 1)
-	{
-		PlayerState->SetTeamId(PlayerState->GetPlayerId() % 2);
-	}
+	AssignBalancedTeam(PlayerState);
 
 	TArray<ADRTeamPlayerStart*> TeamStarts;
 	for (TActorIterator<ADRTeamPlayerStart> Iterator(GetWorld()); Iterator; ++Iterator)

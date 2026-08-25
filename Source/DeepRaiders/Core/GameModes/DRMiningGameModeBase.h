@@ -23,6 +23,7 @@ public:
 	void EndTimer();
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 protected:
@@ -49,6 +50,8 @@ protected:
 	float TeamSwitchInterval = 10.f;
 
 private:
+	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
+
 	/** 마지막 처리 회차 이후의 지급액을 합산해 각 플레이어에게 지급한다. */
 	void GrantPassiveCoins();
 
