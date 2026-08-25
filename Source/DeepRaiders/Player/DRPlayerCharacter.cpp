@@ -26,9 +26,6 @@
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 
-#include "DrawDebugHelpers.h"
-#include "GameFramework/PlayerController.h"
-
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
@@ -414,6 +411,17 @@ float ADRPlayerCharacter::GetAimPitchDegrees() const
 		(BaseAimRotation - ActorRotation).GetNormalized();
 
 	return DeltaRotation.Pitch;
+}
+
+void ADRPlayerCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		// 첫 착지 전에는 스폰 위치를 안전한 반환점으로 사용한다.
+		LastLandedLocation = GetActorLocation();
+	}
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()

@@ -61,6 +61,12 @@ public:
 
 	virtual void Landed(const FHitResult& Hit) override;
 
+	/** 서버에서 기록한 가장 최근 착지 위치를 반환한다. */
+	const FVector& GetLastLandedLocation() const
+	{
+		return LastLandedLocation;
+	}
+
 	void HandleJumpPressed();
 	void HandleJumpReleased();
 	
@@ -203,6 +209,8 @@ private:
 	bool bAbilitySystemReady = false;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+
+	FVector LastLandedLocation = FVector::ZeroVector;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
 	float AimPitchMinDegrees = -90.f;

@@ -6,6 +6,12 @@
 #include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelWorld.h"
 
+static float GetSmoothFalloffWeight(const float Alpha)
+{
+	const float ClampedAlpha = FMath::Clamp(Alpha, 0.f, 1.f);
+	return 1.f - ClampedAlpha * ClampedAlpha * (3.f - 2.f * ClampedAlpha);
+}
+
 UDRDirectionalSurfaceTool::UDRDirectionalSurfaceTool()
 {
 	ToolName = TEXT("DR Voxel Directional Surface Tool");
@@ -124,6 +130,94 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::FindSurfaceFootprin
 			Strength * (bAdd ? -1.f : 1.f)));
 
 	return UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
+}
+
+FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeVirtualSurfaceFootprint(
+	AVoxelWorld* VoxelWorld,
+	const FVector& WorldLocation,
+	const FVector& SurfaceNormal,
+	float Radius,
+	float Falloff,
+	float Strength,
+	bool bAdd)
+{
+	FVoxelSurfaceEditsProcessedVoxels Result;
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || Radius <= 0.f || Strength <= 0.f)
+	{
+		return Result;
+	}
+
+	const FVector SafeNormal = SurfaceNormal.GetSafeNormal();
+	if (SafeNormal.IsNearlyZero())
+	{
+		return Result;
+	}
+
+	const float ShellWorldThickness = FMath::Max(VoxelWorld->VoxelSize, VoxelWorld->VoxelSize * Strength);
+	const FVoxelIntBox Bounds =
+		UVoxelBlueprintLibrary::MakeIntBoxFromGlobalPositionAndRadius(
+			VoxelWorld,
+			WorldLocation,
+			Radius + ShellWorldThickness);
+	if (!Bounds.IsValid())
+	{
+		return Result;
+	}
+
+	TArray<FVoxelSurfaceEditsVoxel> Voxels;
+	for (int32 Z = Bounds.Min.Z; Z < Bounds.Max.Z; ++Z)
+	{
+		for (int32 Y = Bounds.Min.Y; Y < Bounds.Max.Y; ++Y)
+		{
+			for (int32 X = Bounds.Min.X; X < Bounds.Max.X; ++X)
+			{
+				const FIntVector Position(X, Y, Z);
+				const FVector VoxelWorldLocation = VoxelWorld->LocalToGlobal(Position);
+				const FVector Delta = VoxelWorldLocation - WorldLocation;
+				const float SignedWorldDistance = FVector::DotProduct(Delta, SafeNormal);
+				const float SignedVoxelDistance = SignedWorldDistance / FMath::Max(KINDA_SMALL_NUMBER, VoxelWorld->VoxelSize);
+
+				const FVector PlanarDelta = Delta - SafeNormal * SignedWorldDistance;
+				const float PlanarDistance = PlanarDelta.Size();
+				if (PlanarDistance > Radius)
+				{
+					continue;
+				}
+
+				const float FalloffStart = Radius * FMath::Clamp(Falloff, 0.f, 1.f);
+				float FalloffWeight = 1.f;
+				if (Radius > FalloffStart && PlanarDistance > FalloffStart)
+				{
+					FalloffWeight = GetSmoothFalloffWeight((PlanarDistance - FalloffStart) / (Radius - FalloffStart));
+				}
+				if (FalloffWeight <= KINDA_SMALL_NUMBER)
+				{
+					continue;
+				}
+
+				FVoxelSurfaceEditsVoxel Voxel;
+				Voxel.Position = Position;
+				Voxel.Normal = SafeNormal;
+				Voxel.Value = SignedVoxelDistance;
+				Voxel.SurfacePosition = VoxelWorld->GlobalToLocalFloat(WorldLocation).ToFloat();
+				Voxel.Strength = Strength * FalloffWeight * (bAdd ? -1.f : 1.f);
+				Voxels.Add(Voxel);
+			}
+		}
+	}
+
+	if (Voxels.Num() == 0)
+	{
+		return Result;
+	}
+
+	Result.Bounds = Bounds;
+	Result.Info.bHasValues = true;
+	Result.Info.bHasNormals = true;
+	Result.Info.bHasSurfacePositions = true;
+	Result.Info.bHasExactDistanceField = true;
+	Result.Voxels = MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(MoveTemp(Voxels));
+	return Result;
 }
 
 float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(

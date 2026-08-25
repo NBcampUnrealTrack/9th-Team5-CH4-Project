@@ -13,6 +13,7 @@ class UDRAbilitySet;
 class UTexture2D;
 class USoundBase;
 class UDRItemAnimationSet;
+class UDRWorldItemPresentationProfile;
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
@@ -30,6 +31,9 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	EDRItemCategory Category;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRItemRarity Rarity = EDRItemRarity::Common;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 MaxStackSize = 1;
@@ -52,6 +56,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	EDRItemCategory Category;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
+	EDRItemRarity Rarity = EDRItemRarity::Common;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FText DisplayName;
@@ -97,6 +104,9 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World Presentation")
+	TObjectPtr<UDRWorldItemPresentationProfile> WorldItemPresentationProfile = nullptr;
 	
 	// Sound
 	

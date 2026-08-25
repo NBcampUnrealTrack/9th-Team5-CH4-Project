@@ -85,6 +85,15 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
 
+	// DirectionalSurfaceTool이 기존 Voxel 표면을 찾지 못했을 때
+	// HitResult의 위치/노멀을 가상 표면으로 사용해 허공 복셀을 생성할지 여부다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	bool bAllowVirtualSurfaceFallback = false;
+
+	// VoxelWorld가 아닌 Hit 표면을 직접 기준으로 삼아 DirectionalSurfaceTool footprint를 만든다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	bool bUseVirtualSurface = false;
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
 };
@@ -150,6 +159,12 @@ struct DEEPRAIDERS_API FDRSnowAddOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bAllowVirtualSurfaceFallback = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bUseVirtualSurface = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	int32 TeamId = INDEX_NONE;

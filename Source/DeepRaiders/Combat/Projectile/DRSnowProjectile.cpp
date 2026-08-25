@@ -24,5 +24,6 @@ void ADRSnowProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 	SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
 	SnowAddComponent->SetAddSettings(ImpactData.SnowRadius, ImpactData.SnowAmount);
 	SnowAddComponent->SetAddEditTool(ImpactData.SnowEditTool);
+	SnowAddComponent->SetAllowVirtualSurfaceFallback(ImpactData.bAllowVirtualSurfaceFallback);
 	SnowAddComponent->TryAddSnowFromHit(ImpactResult);
 }

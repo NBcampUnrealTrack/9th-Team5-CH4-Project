@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
+#include "DeepRaiders/Item/DRWorldItemTypes.h"
 #include "DRWorldItemSubsystem.generated.h"
 
 class ADRWorldItemActor;
@@ -24,11 +25,20 @@ public:
 	 * 서버 전용
 	 */
 	ADRWorldItemActor* SpawnWorldItem(const FDRItemInstance& ItemInstance, const FTransform& BaseSpawnTransform);
+	ADRWorldItemActor* SpawnWorldItem(const FDRItemInstance& ItemInstance, const FDRWorldItemSpawnParams& SpawnParams);
 	
 	/*
 	 * 서버가 Definition을 기반으로 새로운 ItemInstance를 생성하고 월드에 스폰시킨다.
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Item|World")
-	ADRWorldItemActor* SpawnWorldItemFromDefinition(UDRItemDefinition* Definition, const FTransform& BaseSpawnTransform, int32 Quantity = 1);
+	ADRWorldItemActor* SpawnWorldItemFromDefinition(UDRItemDefinition* Definition,
+		const FTransform& BaseSpawnTransform, int32 Quantity = 1);
+	
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Item|World")
+	ADRWorldItemActor* SpawnWorldItemFromDefinitionWithParams(UDRItemDefinition* Definition,
+		const FDRWorldItemSpawnParams& SpawnParams, int32 Quantity = 1);
+	
+private:
+	FTransform ResolveHoverSpawnTransform(const UDRItemDefinition* Definition, const FDRWorldItemSpawnParams& SpawnParams) const;
 	
 };

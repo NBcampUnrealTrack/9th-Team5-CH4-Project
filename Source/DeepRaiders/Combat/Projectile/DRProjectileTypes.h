@@ -25,5 +25,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
 	EDRSnowVoxelEditTool SnowEditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
+	bool bAllowVirtualSurfaceFallback = true;
 	
 };
