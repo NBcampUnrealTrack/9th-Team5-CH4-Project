@@ -20,6 +20,7 @@ namespace DRGameplayTags
 
 	// Cooldown
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Test);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);

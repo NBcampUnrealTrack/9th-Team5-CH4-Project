@@ -249,6 +249,11 @@ void ADRPlayerController::SetupGASInputComponent()
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Secondary));
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
 	}
+
+	if (IsValid(Skill1Action))
+	{
+		EnhancedInputComponent->BindAction(Skill1Action, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Skill1));
+	}
 	
 	if (IsValid(InventoryAction))
 	{
