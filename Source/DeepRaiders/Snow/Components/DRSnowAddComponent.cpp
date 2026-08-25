@@ -4,6 +4,7 @@
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "EngineUtils.h"
 #include "VoxelWorld.h"
 
 bool UDRSnowAddComponent::TryAddSnowFromHit(
@@ -23,6 +24,11 @@ bool UDRSnowAddComponent::TryAddSnowFromHit(
 
 	FDRSnowSurfaceAddRequest Request = MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
+	if (!IsValid(Request.TargetVoxelWorld.Get()))
+	{
+		Request.TargetVoxelWorld = ResolveFallbackVoxelWorld();
+		Request.bUseVirtualSurface = Request.bAllowVirtualSurfaceFallback;
+	}
 
 	return ExecuteAddRequest(Request, GetInteractableActorFromHit(HitResult));
 }
@@ -54,6 +60,11 @@ void UDRSnowAddComponent::SetAddEditTool(EDRSnowVoxelEditTool InEditTool)
 	AddEditTool = InEditTool;
 }
 
+void UDRSnowAddComponent::SetAllowVirtualSurfaceFallback(bool bInAllowVirtualSurfaceFallback)
+{
+	bAllowVirtualSurfaceFallback = bInAllowVirtualSurfaceFallback;
+}
+
 bool UDRSnowAddComponent::ExecuteAddRequest(
 	const FDRSnowSurfaceAddRequest& Request,
 	AActor* FallbackTarget)
@@ -78,6 +89,8 @@ bool UDRSnowAddComponent::ExecuteAddRequest(
 				Operation.Radius = Request.Radius;
 				Operation.Amount = Request.Amount;
 				Operation.EditTool = Request.EditTool;
+				Operation.bAllowVirtualSurfaceFallback = Request.bAllowVirtualSurfaceFallback;
+				Operation.bUseVirtualSurface = Request.bUseVirtualSurface;
 				Operation.TeamId = Request.Context.TeamId;
 				Operation.VoxelWorldName = IsValid(Request.TargetVoxelWorld.Get())
 					? Request.TargetVoxelWorld->GetFName()
@@ -119,6 +132,7 @@ FDRSnowSurfaceAddRequest UDRSnowAddComponent::MakeAddRequest(FVector WorldLocati
 	Request.Radius = AddRadius;
 	Request.Amount = AddAmount;
 	Request.EditTool = AddEditTool;
+	Request.bAllowVirtualSurfaceFallback = bAllowVirtualSurfaceFallback;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }
@@ -132,4 +146,23 @@ AVoxelWorld* UDRSnowAddComponent::GetVoxelWorldFromHit(const FHitResult& HitResu
 
 	const UPrimitiveComponent* HitComponent = HitResult.GetComponent();
 	return IsValid(HitComponent) ? Cast<AVoxelWorld>(HitComponent->GetOwner()) : nullptr;
+}
+
+AVoxelWorld* UDRSnowAddComponent::ResolveFallbackVoxelWorld() const
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			return *It;
+		}
+	}
+
+	return nullptr;
 }

@@ -289,12 +289,6 @@ bool UDRMiningComponent::HandleMineRequestOnServer(
 		VoxelInvokerControl->ReportDigLocation(Operation.Location);
 	}
 	
-	// 서버에서의 땅파기 성공 여부를 캐릭터에게 알려줌
-	if (IsValid(OwnerCharacter.Get()))
-	{
-		OwnerCharacter->NotifyMineConfirmedFromServer();
-	}
-
 	return true;
 }
 

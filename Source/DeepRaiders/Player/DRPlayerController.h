@@ -28,6 +28,7 @@ class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRScoreboardUIComponent;
+class UDRInteractionComponent;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
@@ -113,6 +114,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> SecondaryAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> Skill1Action;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
@@ -291,6 +295,15 @@ private:
 	TArray<FDRSnowOperationRecord> PendingSnowHistory;
 	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
 	FTimerHandle SnowJoinSnapshotRetryTimer;
+#pragma endregion
+
+#pragma region Interact
+public:
+	UDRInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
+	
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Interaction")
+	TObjectPtr<UDRInteractionComponent> InteractionComponent;	
 #pragma endregion
 	
 };

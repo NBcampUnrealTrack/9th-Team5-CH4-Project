@@ -79,11 +79,9 @@ protected:
 	
 #pragma region Interact
 public:
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
-	bool CanInteract(APawn* Interactor) const;
+	virtual bool CanInteract_Implementation(APawn* Interactor) const;
 	
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
-	bool Interact(APawn* Interactor);
+	virtual bool Interact_Implementation(APawn* Interactor);
 #pragma endregion
 
 };

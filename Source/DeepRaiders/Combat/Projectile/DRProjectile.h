@@ -42,6 +42,9 @@ protected:
 	
 	// 월드 충돌 처리
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult);
+
+	const FDRProjectileWorldImpactData& GetWorldImpactData() const { return WorldImpactData; }
+	int32 GetSourceTeamId() const {	return SourceTeamId; }
 	
 	// 아군 충돌 무시 설정
 	void RefreshFriendlyCollisionIgnores();

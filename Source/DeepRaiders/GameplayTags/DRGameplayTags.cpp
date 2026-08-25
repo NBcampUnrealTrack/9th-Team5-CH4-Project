@@ -56,6 +56,11 @@ namespace DRGameplayTags
 		Cooldown_Weapon_Ranged,
 		"Cooldown.Weapon.Ranged",
 		"Shared fire interval cooldown for ranged weapons.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Test,
+		"Cooldown.Skill.Test",
+		"Cooldown for the test character skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
@@ -131,6 +136,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Attack_Kill,
 		"GameplayCue.Sound.Attack.Kill",
 		"Attack killed the target.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Attack_Swing,
+		"GameplayCue.Sound.Attack.Swing",
+		"Melee weapon swing.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Dig,
@@ -151,4 +161,24 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Ore_Discovered,
 		"GameplayCue.Sound.Ore.Discovered",
 		"Ore discovered.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+	GameplayCue_Sound_Player_Land,
+	"GameplayCue.Sound.Player.Land",
+	"Player landed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_FallDamage,
+		"GameplayCue.Sound.Player.FallDamage",
+		"Player took fall damage.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_FallDeath,
+		"GameplayCue.Sound.Player.FallDeath",
+		"Player died from fall damage.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Rifle_Fire,
+		"GameplayCue.Sound.Weapon.Rifle.Fire",
+		"Rifle fired.");
 }

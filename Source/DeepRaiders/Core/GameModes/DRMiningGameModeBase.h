@@ -23,6 +23,7 @@ public:
 	void EndTimer();
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -40,6 +41,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Coin", meta = (ClampMin = "0"))
 	int32 PassiveCoinIncreaseAmount = 0;
 
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Team Movement",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float TeamSwitchInterval = 10.f;
+
 private:
 	/** 마지막 처리 회차 이후의 지급액을 합산해 각 플레이어에게 지급한다. */
 	void GrantPassiveCoins();
@@ -48,6 +56,12 @@ private:
 	int64 GetPassiveCoinAmountAtGrantIndex(int64 GrantIndex) const;
 
 	FTimerHandle PassiveCoinTimerHandle;
+	FTimerHandle TeamSwitchTimerHandle;
+	int32 ActiveTeamId = INDEX_NONE;
+
+	void StartTeamSwitchTimer();
+	void RefreshActiveTeam();
+	void ApplyActiveTeam(bool bImmediate);
 
 	/** 패시브 코인 지급을 시작한 서버 경기 시간이다. */
 	double PassiveCoinStartTime = 0.0;

@@ -5,6 +5,7 @@
 #include "AbilitySystemGlobals.h"
 #include "DRItemInstance.h"
 #include "DRItemDefinition.h"
+#include "DRProjectileWeaponDefinition.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -123,9 +124,7 @@ void ADRWorldItemActor::MarkAsThrown(APawn* Thrower)
 	}
 
 	ThrowingPawn = Thrower;
-	WorldItemState = EDRWorldItemState::Thrown;
-	ApplyWorldItemCollision();
-	ForceNetUpdate();
+	SetWorldItemState(EDRWorldItemState::Thrown);
 }
 
 void ADRWorldItemActor::BroadcastMined()
@@ -185,10 +184,8 @@ void ADRWorldItemActor::HandleStaticMeshHit(UPrimitiveComponent* HitComponent, A
 
 	if (WorldItemState == EDRWorldItemState::Thrown)
 	{
-		WorldItemState = EDRWorldItemState::Dropped;
 		ThrowingPawn = nullptr;
-		ApplyWorldItemCollision();
-		ForceNetUpdate();
+		SetWorldItemState(EDRWorldItemState::Dropped);
 	}
 
 	if (bGroundHitEventArmed && Hit.ImpactNormal.Z >= 0.5f)
@@ -222,7 +219,8 @@ void ADRWorldItemActor::MulticastPlayPickupSound_Implementation(APawn* Interacto
 void ADRWorldItemActor::MulticastPlayDroppedSound_Implementation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
-	if (IsValid(Definition) && Definition->Category == EDRItemCategory::Ore)
+	if (IsValid(Definition) 
+		&& Definition->Category == EDRItemCategory::Ore)
 	{
 		FGameplayCueParameters CueParameters;
 		CueParameters.OriginalTag = DRGameplayTags::GameplayCue_Sound_Ore_Dropped;
@@ -278,7 +276,7 @@ void ADRWorldItemActor::OnRep_ItemInstance()
 
 void ADRWorldItemActor::OnRep_WorldItemState()
 {
-	ApplyWorldItemCollision();
+	HandleWorldItemStateChanged();
 }
 
 void ADRWorldItemActor::ApplyWorldItemCollision()
@@ -317,6 +315,32 @@ void ADRWorldItemActor::ApplyWorldItemCollision()
 	}
 }
 
+void ADRWorldItemActor::SetWorldItemState(EDRWorldItemState NewState)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const bool bStateChanged = WorldItemState != NewState;
+	WorldItemState = NewState;
+
+	if (HasActorBegunPlay())
+	{
+		HandleWorldItemStateChanged();
+	}
+
+	if (bStateChanged)
+	{
+		ForceNetUpdate();
+	}	
+}
+
+void ADRWorldItemActor::HandleWorldItemStateChanged()
+{
+	ApplyWorldItemCollision();
+}
+
 void ADRWorldItemActor::RefreshItemPresentation()
 {
 	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
@@ -342,6 +366,7 @@ void ADRWorldItemActor::RefreshItemPresentation()
 bool ADRWorldItemActor::CanInteract_Implementation(APawn* Interactor) const
 {
 	if (!HasAuthority()
+		|| WorldItemState != EDRWorldItemState::Dropped
 		|| bInteractionInProgress
 		|| !ItemInstance.IsValid()
 		|| !IsValid(Interactor)
@@ -358,7 +383,7 @@ bool ADRWorldItemActor::CanInteract_Implementation(APawn* Interactor) const
 
 bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 {
-	if (!CanInteract_Implementation(Interactor))
+	if (!Execute_CanInteract(this, Interactor))
 	{
 		return false;
 	}
@@ -394,6 +419,56 @@ bool ADRWorldItemActor::Interact_Implementation(APawn* Interactor)
 		return false;
 	}
 	
+	return true;
+}
+
+bool ADRWorldItemActor::GetInteractionPromptData_Implementation(APawn* Interactor,
+	FDRInteractionPromptData& OutPromptData) const
+{
+	if (WorldItemState != EDRWorldItemState::Dropped
+		|| !ItemInstance.IsValid())
+	{
+		return false;
+	}
+
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+
+	if (!IsValid(Definition))
+	{
+		return false;
+	}
+
+	OutPromptData.ActionText = Definition->WorldInteractionText.IsEmpty() ?
+		NSLOCTEXT("DRInteraction", "DefaultItemInteractionAction", "상호작용") : Definition->WorldInteractionText;
+
+	OutPromptData.TitleText = Definition->DisplayName;
+	OutPromptData.DetailText = FText::GetEmpty();
+
+	// 현재 개별 인스턴스 정보가 유의미한 경우가 ProjectileWeapon이 유일하다.
+	// 추후 다양해질 경우 개선 필요.
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(Definition);
+
+	if (IsValid(WeaponDefinition)
+		&& WeaponDefinition->ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo)
+	{
+		const FDRProjectileWeaponRuntimeState* WeaponState = 
+			ItemInstance.RuntimeState.GetPtr<FDRProjectileWeaponRuntimeState>();
+
+		if (WeaponState != nullptr)
+		{
+			OutPromptData.DetailText = FText::Format(
+				NSLOCTEXT("DRInteraction", "WorldItemAmmo", " {0} / {1}"),
+				FText::AsNumber(WeaponState->CurrentAmmo),
+				FText::AsNumber(WeaponDefinition->InitialAmmo));
+		}
+	}
+	else if (ItemInstance.Quantity > 1)
+	{
+		OutPromptData.DetailText = FText::Format(
+			NSLOCTEXT("DRInteraction", "WorldItemQuantity", " x{0}"),
+			FText::AsNumber(ItemInstance.Quantity));
+	}
+
 	return true;
 }
 #pragma endregion

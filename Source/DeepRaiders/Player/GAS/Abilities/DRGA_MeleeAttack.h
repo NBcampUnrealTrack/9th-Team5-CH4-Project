@@ -29,7 +29,7 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		bool bReplicateEndAbility,
 		bool bWasCancelled) override;
-	
+
 	UFUNCTION()
 	void HandleMontageCompleted();
 
@@ -39,7 +39,13 @@ protected:
 private:
 	void HandleMeleeHit(const FHitResult& HitResult);
 
+	void ExecuteSoundCue(
+		const FGameplayTag& SoundCueTag,
+		AActor* SourceActor,
+		const FVector& Location) const;
+
 	TWeakObjectPtr<UDRMeleeCombatComponent> ActiveMeleeComponent;
 	TWeakObjectPtr<UDRMeleeWeaponItemDefinition> ActiveWeaponDefinition;
+
 	FDelegateHandle MeleeHitDelegateHandle;
 };

@@ -27,6 +27,7 @@
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
+#include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
@@ -55,6 +56,9 @@ ADRPlayerController::ADRPlayerController()
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
 	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
 
+	// Interaction Initialize
+	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
+	
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
@@ -244,6 +248,11 @@ void ADRPlayerController::SetupGASInputComponent()
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Secondary));
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Secondary));
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
+	}
+
+	if (IsValid(Skill1Action))
+	{
+		EnhancedInputComponent->BindAction(Skill1Action, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Skill1));
 	}
 	
 	if (IsValid(InventoryAction))

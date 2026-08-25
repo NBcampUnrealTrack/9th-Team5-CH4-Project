@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
+#include "Abilities/GameplayAbilityTargetTypes.h"
+#include "DeepRaiders/Core/Interaction/DRInteractionTypes.h"
 #include "DRGA_Interact.generated.h"
 
 class AActor;
@@ -23,16 +25,25 @@ public:
 	
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
-	AActor* FindBestInteractionTarget(APawn* Interactor) const;
+	bool SendLocalInteractionAttempt(EDRInteractionValidationResult& OutFailureResult);
 	
-	// 상호작용 대상이 다른 물체에 가려지지 않는지 체크
-	bool HasClearLineOfSight(UWorld* World, APawn* Interactor, AActor* Target, const FVector& ViewLocation, const FVector& TargetLocation) const;
+	bool RegisterTargetDataDelegate();
+	void UnregisterTargetDataDelegate();
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction", meta = (ClampMin = "0.0", Units = "cm"))
-	float MaxInteractionDistance = 300.0f;
+	// SetTargetData가 변경되면 호출되는 함수
+	// Target을 검증하고 Interact를 시도한다.
+	void HandleServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FGameplayTag ApplicationTag);
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Interaction", meta = (ClampMin = "0.1", ClampMax = "89.0", Units = "deg"))
-	float MaxInteractionAngleDegrees = 6.f;
+	// TargetData에서 Target을 추출
+	EDRInteractionValidationResult ExtractTargetActor(const FGameplayAbilityTargetDataHandle& TargetData,
+		AActor*& OutTarget) const;
 	
+	// 서버에서 실제로 Interact를 시도
+	EDRInteractionValidationResult ExecuteServerInteraction(AActor* Target) const;
+	
+	void LogInteractionFailure(EDRInteractionValidationResult Result, AActor* Target) const;
+	
+	FDelegateHandle TargetDataDelegateHandle;
 };

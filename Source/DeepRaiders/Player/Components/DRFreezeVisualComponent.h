@@ -118,7 +118,6 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystem;
 
 	FDelegateHandle FreezeGaugeChangedHandle;
-	FDelegateHandle MaxFreezeGaugeChangedHandle;
 
 
 	// -------------------------------------------------

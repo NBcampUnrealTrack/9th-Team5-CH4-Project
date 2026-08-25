@@ -2,9 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "DeepRaiders/Item/DRItemActionTypes.h"
 #include "AbilitySystemInterface.h"
-#include "GameplayTagContainer.h"
 #include "DRPlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -20,7 +18,6 @@ class UDRMiningComponent;
 class UDRTeleportComponent;
 class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
-class UDRItemActionPresentationComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
 class UDRSnowRemoveComponent;
@@ -64,12 +61,21 @@ public:
 
 	virtual void Landed(const FHitResult& Hit) override;
 
+	/** 서버에서 기록한 가장 최근 착지 위치를 반환한다. */
+	const FVector& GetLastLandedLocation() const
+	{
+		return LastLandedLocation;
+	}
+
 	void HandleJumpPressed();
 	void HandleJumpReleased();
 	
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
+
+	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
+	void RefreshTeamColor();
 
 	void ApplyHandEquipmentVisual(
 		UStaticMesh* WorldMesh,
@@ -97,8 +103,6 @@ public:
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
 
-	void NotifyMineConfirmedFromServer();
-
 	UDRMeleeCombatComponent* GetMeleeCombatComponent() const
 	{
 		return MeleeCombatComponent;
@@ -108,18 +112,6 @@ public:
 	{
 		return WorldHandEquipmentMesh;
 	}
-
-	/**
-	 * CombatComponent가 서버에서 공격을 승인했을 때
-	 * 기존 Character Presentation을 실행한다.
-	 */
-	void PlayMeleeWorldPresentationFromServer();
-
-	/**
-	 * 서버에서 Melee Hit가 확정됐을 때
-	 * 기존 Sound / CameraShake 표현을 실행한다.
-	 */
-	void PlayMeleeHitPresentationFromServer(ADRPlayerCharacter* HitPlayer, bool bKilled, const FVector& ImpactLocation);
 
 	UDRJetpackComponent* GetJetpackComponent() const
 	{
@@ -144,11 +136,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Animation")
 	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
 
-	void PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation);
-	void PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation);
-	
 	FDROnAbilitySystemReady OnAbilitySystemReady;
 
 	bool IsAbilitySystemReady() const
@@ -157,7 +144,7 @@ public:
 	}
 	
 	UFUNCTION(BlueprintPure, Category = "Player|Aim")
-	float GetNormalizedAimPitch() const;
+	float GetAimPitchDegrees() const;
 
 	float GetAimPitchMinDegrees() const
 	{
@@ -171,7 +158,7 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-
+	
 	void InitializeAbilitySystem();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
@@ -182,9 +169,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRJetpackComponent> JetpackComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Item Action", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRItemActionPresentationComponent> ItemActionPresentationComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
@@ -226,12 +210,23 @@ private:
 	bool bAbilitySystemReady = false;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+
+	FVector LastLandedLocation = FVector::ZeroVector;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
-	float AimPitchMinDegrees = -55.f;
+	float AimPitchMinDegrees = -90.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
-	float AimPitchMaxDegrees = 45.f;
+	float AimPitchMaxDegrees = 90.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FName TeamColorParameterName = TEXT("Paint Tint");
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team0Color = FLinearColor::Red;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team1Color = FLinearColor::Blue;
 	
 #pragma region QuickSlot
 

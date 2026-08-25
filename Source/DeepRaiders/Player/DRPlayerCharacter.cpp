@@ -9,17 +9,15 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DRPlayerState.h"
-#include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
-#include "DeepRaiders/Player/Components/DRItemActionPresentationComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
@@ -52,7 +50,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
-	ItemActionPresentationComponent = CreateDefaultSubobject<UDRItemActionPresentationComponent>(TEXT("ItemActionPresentationComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
@@ -260,6 +257,7 @@ void ADRPlayerCharacter::PossessedBy(AController* NewController)
 	 * 새 Character를 Avatar로 연결한다.
 	 */
 	InitializeAbilitySystem();
+	RefreshTeamColor();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][PossessedBy] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), 
 		*GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe( GetAbilitySystemComponent()));
@@ -285,8 +283,33 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	InitializeAbilitySystem();
+	RefreshTeamColor();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][OnRep_PlayerState] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), *GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe(GetAbilitySystemComponent()));
+}
+
+void ADRPlayerCharacter::RefreshTeamColor()
+{
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+	if (!IsValid(DRPlayerState) || !IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	const int32 TeamId = DRPlayerState->GetTeamId();
+	if (TeamId != 0 && TeamId != 1)
+	{
+		return;
+	}
+
+	const FLinearColor TeamColor = TeamId == 0 ? Team0Color : Team1Color;
+	for (int32 MaterialIndex = 0; MaterialIndex < GetMesh()->GetNumMaterials(); ++MaterialIndex)
+	{
+		if (UMaterialInstanceDynamic* Material = GetMesh()->CreateDynamicMaterialInstance(MaterialIndex))
+		{
+			Material->SetVectorParameterValue(TeamColorParameterName, TeamColor);
+		}
+	}
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)
@@ -347,36 +370,6 @@ void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)
 	AddControllerPitchInput(LookInput.Y);
 }
 
-void ADRPlayerCharacter::NotifyMineConfirmedFromServer()
-{
-	if (!HasAuthority() || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::Dig);
-}
-
-void ADRPlayerCharacter::PlayMeleeWorldPresentationFromServer()
-{
-	if (!HasAuthority() || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayWorldActionFromServer(EDRItemActionType::MeleeAttack);
-}
-
-void ADRPlayerCharacter::PlayMeleeHitPresentationFromServer(ADRPlayerCharacter* HitPlayer, bool bKilled, const FVector& ImpactLocation)
-{
-	if (!HasAuthority() || !IsValid(HitPlayer) || !IsValid(ItemActionPresentationComponent))
-	{
-		return;
-	}
-
-	ItemActionPresentationComponent->PlayMeleeHitFeedbackFromServer(HitPlayer, bKilled, ImpactLocation);
-}
-
 float ADRPlayerCharacter::GetDisplayedJetpackFuelRatio() const
 {
 	return IsValid(JetpackComponent) ? JetpackComponent->GetDisplayedFuelRatio() : 0.f;
@@ -409,56 +402,26 @@ UDRItemAnimationSet* ADRPlayerCharacter::GetCurrentItemAnimationSet() const
 	return IsValid(ItemDefinition) ? ItemDefinition->ItemAnimationSet : nullptr;
 }
 
-void ADRPlayerCharacter::PlayWeaponFirePresentationLocal(UAnimMontage* FireMontage, const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation)
-{
-	if (IsValid(ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->PlayWeaponFireLocal(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
-	}
-}
-
-void ADRPlayerCharacter::PlayWeaponFirePresentationFromServer(UAnimMontage* FireMontage,const FGameplayTag& FireGameplayCueTag,
-	const FVector& MuzzleLocation, const FVector& TargetLocation)
-{
-	if (IsValid(ItemActionPresentationComponent))
-	{
-		ItemActionPresentationComponent->PlayWeaponFireFromServer(FireMontage, FireGameplayCueTag, MuzzleLocation, TargetLocation);
-	}
-}
-
-float ADRPlayerCharacter::GetNormalizedAimPitch() const
+float ADRPlayerCharacter::GetAimPitchDegrees() const
 {
 	const FRotator BaseAimRotation = GetBaseAimRotation();
 	const FRotator ActorRotation = GetActorRotation();
 
-	const FRotator DeltaRotation = (BaseAimRotation - ActorRotation).GetNormalized();
+	const FRotator DeltaRotation =
+		(BaseAimRotation - ActorRotation).GetNormalized();
 
-	const float AimPitch = DeltaRotation.Pitch;
-
-	if (AimPitch >= 0.f)
-	{
-		if (AimPitchMaxDegrees <= KINDA_SMALL_NUMBER)
-		{
-			return 0.f;
-		}
-
-		return FMath::Clamp(AimPitch / AimPitchMaxDegrees, 0.f, 1.f);
-	}
-
-	const float DownRange = FMath::Abs(AimPitchMinDegrees);
-
-	if (DownRange <= KINDA_SMALL_NUMBER)
-	{
-		return 0.f;
-	}
-
-	return FMath::Clamp(AimPitch / DownRange, -1.f, 0.f);
+	return DeltaRotation.Pitch;
 }
 
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		// 첫 착지 전에는 스폰 위치를 안전한 반환점으로 사용한다.
+		LastLandedLocation = GetActorLocation();
+	}
 }
 
 void ADRPlayerCharacter::InitializeAbilitySystem()
