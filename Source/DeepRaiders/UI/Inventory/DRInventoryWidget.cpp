@@ -7,6 +7,8 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/UniformGridSlot.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/UI/Perk/DRPerkWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRInventoryViewModel.h"
 #include "DRInventorySlotWidget.h"
 #include "MVVMSubsystem.h"
@@ -46,6 +48,14 @@ void UDRInventoryWidget::InitializeInventory(UDRInventoryComponent* NewInventory
 	}
 
 	InventoryComponent = NewInventoryComponent;
+	ADRPlayerState* PlayerState = IsValid(InventoryViewModel)
+		? InventoryViewModel->GetPlayerState()
+		: nullptr;
+	if (IsValid(PerkWidget))
+	{
+		PerkWidget->InitializePerks(
+			IsValid(PlayerState) ? PlayerState->GetPerkComponent() : nullptr);
+	}
 }
 
 void UDRInventoryWidget::InitializeViewModel(UDRInventoryViewModel* NewViewModel)
@@ -68,6 +78,12 @@ void UDRInventoryWidget::InitializeViewModel(UDRInventoryViewModel* NewViewModel
 
 	// Manual ViewModel 주입 시 초기 배열 바인딩이 누락되지 않도록 즉시 반영한다.
 	SetQuickSlotEntries(NewViewModel->GetQuickSlotEntries());
+	ADRPlayerState* PlayerState = NewViewModel->GetPlayerState();
+	if (IsValid(PerkWidget))
+	{
+		PerkWidget->InitializePerks(
+			IsValid(PlayerState) ? PlayerState->GetPerkComponent() : nullptr);
+	}
 }
 
 void UDRInventoryWidget::SetQuickSlotEntries(

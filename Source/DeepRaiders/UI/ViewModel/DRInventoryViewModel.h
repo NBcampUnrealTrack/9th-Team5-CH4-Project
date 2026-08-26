@@ -86,6 +86,8 @@ public:
 		return InventoryComponent.Get();
 	}
 
+	ADRPlayerState* GetPlayerState() const;
+
 	TArray<UDRInventorySlotEntryViewModel*> GetQuickSlotEntries() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

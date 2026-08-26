@@ -11,6 +11,7 @@ class UDRInventoryComponent;
 class UDRInventorySlotEntryViewModel;
 class UDRInventorySlotWidget;
 class UDRInventoryViewModel;
+class UDRPerkWidget;
 class UUniformGridPanel;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRInventoryEntryClicked, FGuid, EntryId);
@@ -61,6 +62,9 @@ protected:
 	
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UUniformGridPanel> QuickSlotPanel;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRPerkWidget> PerkWidget;
 	
 private:
 	/** Widget Blueprint에 등록한 Manual ViewModel 이름이다. */
