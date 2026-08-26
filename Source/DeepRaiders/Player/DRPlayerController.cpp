@@ -102,7 +102,7 @@ void ADRPlayerController::BeginPlay()
 
 	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
 	StartingWeaponSelectionComponent->Initialize(
-		StartingProjectileWeaponDefinition,
+		StartingRifle,
 		InventoryComponent,
 		QuickSlotComponent);
 
@@ -317,7 +317,6 @@ void ADRPlayerController::OnRep_PlayerState()
 	if (IsValid(HUDUIComponent))
 	{
 		HUDUIComponent->RefreshPlayerCharacter();
-		HUDUIComponent->RefreshPerks();
 	}
 }
 
@@ -388,7 +387,10 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(InventoryComponent) ||
 		!IsValid(QuickSlotComponent) ||
 		!IsValid(StartingShovelDefinition) ||
-		!IsValid(StartingProjectileWeaponDefinition) ||
+		!IsValid(StartingRifle) ||
+		!IsValid(StartingShotgun) ||
+		// !IsValid(StartingSprayer) ||
+		// !IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
 		return;
@@ -401,19 +403,34 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	
 	if (!InventoryComponent->GetItemAtSlot(1))
 	{
-		InventoryComponent->TryAddItemToSlot(1, StartingProjectileWeaponDefinition, 1);
+		InventoryComponent->TryAddItemToSlot(1, StartingRifle, 1);
 	}
-	
-#if WITH_EDITOR
 	
 	if (!InventoryComponent->GetItemAtSlot(2))
 	{
-		InventoryComponent->TryAddItemToSlot(2, TestItemDefinition1, TestItemQuantity1);
+		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
 	
-	if (!InventoryComponent->GetItemAtSlot(3))
+	// if (!InventoryComponent->GetItemAtSlot(3))
+	// {
+	// 	InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
+	// }
+	//
+	// if (!InventoryComponent->GetItemAtSlot(4))
+	// {
+	// 	InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
+	// }
+	
+#if WITH_EDITOR
+	
+	if (!InventoryComponent->GetItemAtSlot(5))
 	{
-		InventoryComponent->TryAddItemToSlot(3, TestItemDefinition2, TestItemQuantity2);
+		InventoryComponent->TryAddItemToSlot(5, TestItemDefinition1, TestItemQuantity1);
+	}
+	
+	if (!InventoryComponent->GetItemAtSlot(6))
+	{
+		InventoryComponent->TryAddItemToSlot(6, TestItemDefinition2, TestItemQuantity2);
 	}
 	
 #endif

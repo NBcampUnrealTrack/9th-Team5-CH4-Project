@@ -51,6 +51,16 @@ class DEEPRAIDERS_API UDRItemDefinition : public UPrimaryDataAsset
 	GENERATED_BODY()
 	
 public:
+	bool IsSellable() const
+	{
+		return bCanBeSold && Price >= 2;
+	}
+
+	int32 GetSellPrice() const
+	{
+		return IsSellable() ? Price / 2 : 0;
+	}
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	FName ItemId;
 	

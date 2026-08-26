@@ -5,7 +5,6 @@
 #include "DRHUDUIComponent.generated.h"
 
 class UDRHUDViewModel;
-class UDRPerkWidget;
 class UDRUIManagerSubsystem;
 class UUserWidget;
 
@@ -21,16 +20,11 @@ public:
 	/** 현재 컨트롤러가 소유한 캐릭터를 HUD ViewModel에 다시 연결한다. */
 	void RefreshPlayerCharacter();
 
-	/** HUD에 배치된 퍽 위젯을 현재 PlayerState에 연결한다. */
-	void RefreshPerks();
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	void CachePerkWidget();
-
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 
@@ -40,6 +34,4 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UDRHUDViewModel> HUDViewModel;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UDRPerkWidget> PerkWidget;
 };

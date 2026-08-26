@@ -18,6 +18,22 @@ TArray<UDRInventorySlotEntryViewModel*> UDRInventoryViewModel::GetQuickSlotEntri
 	return Entries;
 }
 
+ADRPlayerState* UDRInventoryViewModel::GetPlayerState() const
+{
+	if (PlayerState.IsValid())
+	{
+		return PlayerState.Get();
+	}
+
+	const AActor* Owner = QuickSlotComponent.IsValid()
+		? QuickSlotComponent->GetOwner()
+		: InventoryComponent.IsValid() ? InventoryComponent->GetOwner() : nullptr;
+	const APlayerController* PlayerController = Cast<APlayerController>(Owner);
+	return IsValid(PlayerController)
+		? PlayerController->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+}
+
 void UDRInventorySlotEntryViewModel::Initialize(
 	UDRInventoryComponent* InInventoryComponent,
 	int32 InSlotIndex)

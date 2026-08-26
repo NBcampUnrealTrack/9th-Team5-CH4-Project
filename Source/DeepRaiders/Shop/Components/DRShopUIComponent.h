@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Shop/DRShopItemTable.h"
+#include "DeepRaiders/Shop/DRShopSellTypes.h"
 #include "DRShopUIComponent.generated.h"
 
 class AActor;
@@ -58,7 +59,7 @@ private:
 
 	/** UI에서 선택한 인벤토리 아이템을 서버 판매 요청으로 전달한다. */
 	UFUNCTION()
-	void HandleSellRequested(FGuid InstanceId);
+	void HandleSellRequested(EDRShopSellTargetType TargetType, FGuid InstanceId);
 
 	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
 	UFUNCTION()

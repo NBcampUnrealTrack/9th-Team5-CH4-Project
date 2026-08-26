@@ -4,21 +4,33 @@
 #include "Blueprint/UserWidget.h"
 #include "DRPerkSlotWidget.generated.h"
 
-class UDRPerkDefinition;
-class UImage;
+class UDRPerkEntryViewModel;
 
-/** 디자이너에서 구성한 퍽 슬롯의 아이콘만 갱신한다. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRPerkSlotClickedSignature, FGuid, PerkInstanceId);
+
 UCLASS()
 class DEEPRAIDERS_API UDRPerkSlotWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	/** 퍽 정의의 아이콘을 표시하며, 정의나 아이콘이 없으면 빈 슬롯으로 만든다. */
-	void SetPerkDefinition(const UDRPerkDefinition* PerkDefinition);
+	void InitializeViewModel(UDRPerkEntryViewModel* NewViewModel);
+
+	UPROPERTY(BlueprintAssignable, Category = "Perk")
+	FDRPerkSlotClickedSignature OnSlotClicked;
+
+protected:
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent) override;
 
 private:
-	/** 슬롯 배경과 별개로 구매한 퍽 아이콘만 표시한다. */
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UImage> PerkIcon;
+	UPROPERTY(EditDefaultsOnly, Category = "Perk|MVVM")
+	FName EntryViewModelName = TEXT("DRPerkEntryViewModel");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRPerkEntryViewModel> EntryViewModel;
+
+	FGuid PerkInstanceId;
+	bool IsPointerPressed = false;
 };

@@ -43,6 +43,8 @@ void UDRShopSellItemInfoWidget::HandleSellButtonClicked()
 {
 	if (IsValid(SellViewModel) && SellViewModel->CanSell())
 	{
-		OnSellRequested.Broadcast(SellViewModel->GetSelectedInstanceId());
+		OnSellRequested.Broadcast(
+			SellViewModel->GetSelectedTargetType(),
+			SellViewModel->GetSelectedInstanceId());
 	}
 }

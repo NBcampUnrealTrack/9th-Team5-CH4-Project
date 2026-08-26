@@ -1,23 +1,59 @@
 #include "DRPerkSlotWidget.h"
 
-#include "Components/Image.h"
-#include "DeepRaiders/Perk/DRPerkDefinition.h"
+#include "DeepRaiders/UI/ViewModel/DRPerkViewModel.h"
+#include "InputCoreTypes.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
 
-void UDRPerkSlotWidget::SetPerkDefinition(
-	const UDRPerkDefinition* PerkDefinition)
+void UDRPerkSlotWidget::InitializeViewModel(UDRPerkEntryViewModel* NewViewModel)
 {
-	if (!IsValid(PerkIcon))
+	EntryViewModel = NewViewModel;
+	PerkInstanceId.Invalidate();
+	if (!IsValid(EntryViewModel))
 	{
 		return;
 	}
 
-	UTexture2D* Icon = IsValid(PerkDefinition)
-		? PerkDefinition->Icon
-		: nullptr;
+	PerkInstanceId = EntryViewModel->GetPerkInstanceId();
+	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+	if (!IsValid(View)
+		|| !View->SetViewModel(EntryViewModelName, EntryViewModel))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Perk Entry ViewModel '%s' was not registered on %s"),
+			*EntryViewModelName.ToString(), *GetName());
+	}
+}
 
-	PerkIcon->SetBrushFromTexture(Icon);
-	PerkIcon->SetVisibility(
-		IsValid(Icon)
-			? ESlateVisibility::HitTestInvisible
-			: ESlateVisibility::Hidden);
+FReply UDRPerkSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (!PerkInstanceId.IsValid()
+		|| InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+	}
+
+	IsPointerPressed = true;
+	return FReply::Handled().CaptureMouse(TakeWidget());
+}
+
+FReply UDRPerkSlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (!IsPointerPressed || InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+	}
+
+	IsPointerPressed = false;
+	if (PerkInstanceId.IsValid() && InGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition()))
+	{
+		OnSlotClicked.Broadcast(PerkInstanceId);
+	}
+
+	return FReply::Handled().ReleaseMouseCapture();
+}
+
+void UDRPerkSlotWidget::NativeOnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	IsPointerPressed = false;
+	Super::NativeOnMouseCaptureLost(CaptureLostEvent);
 }

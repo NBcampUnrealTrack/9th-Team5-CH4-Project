@@ -4,14 +4,11 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
-#include "DeepRaiders/UI/Perk/DRPerkWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRHUDViewModel.h"
 #include "Engine/LocalPlayer.h"
 #include "MVVMSubsystem.h"
-#include "Blueprint/WidgetTree.h"
 #include "View/MVVMView.h"
 
 UDRHUDUIComponent::UDRHUDUIComponent()
@@ -59,7 +56,6 @@ void UDRHUDUIComponent::BeginPlay()
 	}
 
 	RefreshPlayerCharacter();
-	RefreshPerks();
 }
 
 void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -80,7 +76,6 @@ void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	HUDWidget = nullptr;
 	HUDViewModel = nullptr;
-	PerkWidget = nullptr;
 	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
@@ -100,43 +95,3 @@ void UDRHUDUIComponent::RefreshPlayerCharacter()
 	HUDViewModel->Initialize(PlayerCharacter);
 }
 
-void UDRHUDUIComponent::RefreshPerks()
-{
-	CachePerkWidget();
-
-	if (!IsValid(PerkWidget))
-	{
-		return;
-	}
-
-	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
-	ADRPlayerState* PlayerState = IsValid(PlayerController)
-		? PlayerController->GetPlayerState<ADRPlayerState>()
-		: nullptr;
-	UDRPerkComponent* PerkComponent = IsValid(PlayerState)
-		? PlayerState->GetPerkComponent()
-		: nullptr;
-
-	PerkWidget->InitializePerks(PerkComponent);
-}
-
-void UDRHUDUIComponent::CachePerkWidget()
-{
-	if (IsValid(PerkWidget)
-		|| !IsValid(HUDWidget)
-		|| !IsValid(HUDWidget->WidgetTree))
-	{
-		return;
-	}
-
-	TArray<UWidget*> Widgets;
-	HUDWidget->WidgetTree->GetAllWidgets(Widgets);
-	for (UWidget* Widget : Widgets)
-	{
-		if (UDRPerkWidget* FoundPerkWidget = Cast<UDRPerkWidget>(Widget))
-		{
-			PerkWidget = FoundPerkWidget;
-			return;
-		}
-	}
-}

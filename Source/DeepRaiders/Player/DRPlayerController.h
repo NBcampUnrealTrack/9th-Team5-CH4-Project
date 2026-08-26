@@ -161,7 +161,16 @@ protected:
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
-	TObjectPtr<UDRItemDefinition> StartingProjectileWeaponDefinition;
+	TObjectPtr<UDRItemDefinition> StartingRifle;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingShotgun;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingSprayer;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingCannon;
 
 protected:
 

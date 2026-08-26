@@ -1,106 +1,98 @@
 #include "DRPerkWidget.h"
 
 #include "Blueprint/WidgetTree.h"
-#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
-#include "DeepRaiders/UI/Perk/DRPerkSlotWidget.h"
+#include "Components/ScaleBox.h"
+#include "Components/UniformGridPanel.h"
+#include "Components/UniformGridSlot.h"
+#include "DeepRaiders/UI/ViewModel/DRPerkViewModel.h"
+#include "DRPerkSlotWidget.h"
+#include "MVVMSubsystem.h"
+#include "View/MVVMView.h"
 
-void UDRPerkWidget::InitializePerks(
-	UDRPerkComponent* NewPerkComponent)
+void UDRPerkWidget::InitializePerks(UDRPerkComponent* NewPerkComponent)
 {
-	// 슬롯 위젯은 코드에서 생성하지 않고 디자이너에 배치된 슬롯을 사용한다.
-	CachePerkSlots();
-
-	// 같은 컴포넌트가 다시 전달되면 이벤트를 중복 연결하지 않고 표시만 갱신한다.
-	if (PerkComponent == NewPerkComponent)
+	if (!IsValid(PerkViewModel))
 	{
-		RefreshPerks();
+		PerkViewModel = NewObject<UDRPerkViewModel>(this);
+	}
+
+	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
+	if (!IsValid(View)
+		|| !View->SetViewModel(PerkViewModelName, PerkViewModel))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("Perk ViewModel '%s' was not registered on %s"),
+			*PerkViewModelName.ToString(),
+			*GetName());
 		return;
 	}
 
-	UnbindPerkComponent();
-	PerkComponent = NewPerkComponent;
-
-	if (IsValid(PerkComponent))
-	{
-		// 구매 또는 복제로 퍽 목록이 변경될 때 즉시 UI를 갱신한다.
-		PerkComponent->OnPerksChanged.AddUniqueDynamic(
-			this,
-			&ThisClass::RefreshPerks);
-	}
-
-	RefreshPerks();
+	PerkViewModel->Initialize(NewPerkComponent);
 }
 
-void UDRPerkWidget::NativeDestruct()
+void UDRPerkWidget::SetPerkEntries(
+	const TArray<UDRPerkEntryViewModel*>& NewPerkEntries)
 {
-	UnbindPerkComponent();
-	PerkSlots.Reset();
-	Super::NativeDestruct();
-}
-
-void UDRPerkWidget::CachePerkSlots()
-{
-	if (!PerkSlots.IsEmpty() || !IsValid(WidgetTree))
+	if (!IsValid(SlotPanel) || !SlotWidgetClass)
 	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("Perk UI setup is invalid. SlotPanel=%s, SlotWidgetClass=%s"),
+			*GetNameSafe(SlotPanel),
+			*GetNameSafe(SlotWidgetClass));
 		return;
 	}
 
-	TArray<UWidget*> Widgets;
-	WidgetTree->GetAllWidgets(Widgets);
-	for (UWidget* Widget : Widgets)
-	{
-		if (UDRPerkSlotWidget* PerkSlot = Cast<UDRPerkSlotWidget>(Widget))
-		{
-			PerkSlots.Add(PerkSlot);
-		}
-	}
-}
+	SlotPanel->ClearChildren();
 
-void UDRPerkWidget::RefreshPerks()
-{
-	// 컴포넌트가 아직 준비되지 않은 경우 모든 슬롯을 숨긴다.
-	const int32 MaxPerkSlotCount = IsValid(PerkComponent)
-		? PerkComponent->GetMaxPerkSlotCount()
-		: 0;
-	const TArray<FDRPerkEntry>* PerkEntries = IsValid(PerkComponent)
-		? &PerkComponent->GetPerkEntries()
-		: nullptr;
-
-	for (int32 SlotIndex = 0;
-		SlotIndex < PerkSlots.Num();
-		++SlotIndex)
+	const int32 ColumnCount = FMath::Max(1, PerkSlotsPerRow);
+	for (int32 Index = 0; Index < NewPerkEntries.Num(); ++Index)
 	{
-		UDRPerkSlotWidget* PerkSlot = PerkSlots[SlotIndex].Get();
-		if (!IsValid(PerkSlot))
+		UDRPerkEntryViewModel* EntryViewModel = NewPerkEntries[Index];
+		if (!IsValid(EntryViewModel))
 		{
 			continue;
 		}
 
-		const bool IsAvailableSlot = SlotIndex < MaxPerkSlotCount;
-		// 최대 슬롯 수 안의 빈 슬롯은 유지하고 초과 슬롯만 숨긴다.
-		PerkSlot->SetVisibility(
-			IsAvailableSlot
-				? ESlateVisibility::SelfHitTestInvisible
-				: ESlateVisibility::Collapsed);
+		UDRPerkSlotWidget* SlotWidget = CreateWidget<UDRPerkSlotWidget>(
+			GetOwningPlayer(),
+			SlotWidgetClass);
+		if (!IsValid(SlotWidget))
+		{
+			continue;
+		}
 
-		// 구매된 퍽은 배열 순서대로 앞쪽 빈 슬롯부터 표시한다.
-		const UDRPerkDefinition* PerkDefinition =
-			IsAvailableSlot && PerkEntries
-				&& PerkEntries->IsValidIndex(SlotIndex)
-				? (*PerkEntries)[SlotIndex].PerkDefinition
-				: nullptr;
-		PerkSlot->SetPerkDefinition(PerkDefinition);
+		SlotWidget->InitializeViewModel(EntryViewModel);
+		SlotWidget->OnSlotClicked.AddDynamic(this, &ThisClass::HandleSlotClicked);
+
+		UScaleBox* SlotScaleBox = WidgetTree->ConstructWidget<UScaleBox>();
+		SlotScaleBox->SetStretch(EStretch::ScaleToFit);
+		SlotScaleBox->SetStretchDirection(EStretchDirection::Both);
+		SlotScaleBox->AddChild(SlotWidget);
+
+		UUniformGridSlot* GridSlot = SlotPanel->AddChildToUniformGrid(
+			SlotScaleBox,
+			Index / ColumnCount,
+			Index % ColumnCount);
+		GridSlot->SetHorizontalAlignment(HAlign_Fill);
+		GridSlot->SetVerticalAlignment(VAlign_Fill);
 	}
 }
 
-void UDRPerkWidget::UnbindPerkComponent()
+void UDRPerkWidget::HandleSlotClicked(FGuid PerkInstanceId)
 {
-	if (IsValid(PerkComponent))
+	OnPerkClicked.Broadcast(PerkInstanceId);
+}
+
+void UDRPerkWidget::NativeDestruct()
+{
+	if (IsValid(PerkViewModel))
 	{
-		PerkComponent->OnPerksChanged.RemoveDynamic(
-			this,
-			&ThisClass::RefreshPerks);
+		PerkViewModel->Deinitialize();
 	}
 
-	PerkComponent = nullptr;
+	Super::NativeDestruct();
 }
