@@ -9,6 +9,9 @@
 
 class AVoxelWorld;
 
+using FDRDirectionalSurfaceEditComplete =
+	TFunction<void(TArray<FModifiedVoxelValue>&&, FVoxelIntBox)>;
+
 // SurfaceTool의 브러시 모양은 재사용하되, 밀어낼 surface shell을 실제 이동시키지 않고
 // 이번 이동이 지나갈 swept volume만 stamp처럼 add/remove 합성하는 Voxel Tool이다.
 UCLASS()
@@ -72,6 +75,14 @@ public:
 		TArray<FModifiedVoxelValue>& ModifiedValues,
 		FVoxelIntBox& EditedBounds,
 		bool bUpdateRender = true);
+
+	// density 쓰기를 VoxelWorld 작업 풀에서 실행하고 게임 스레드에서 완료 콜백을 호출한다.
+	static bool ApplySurfaceVolumeEditAsync(
+		AVoxelWorld* VoxelWorld,
+		const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
+		float DistanceDivisor,
+		bool bAdd,
+		FDRDirectionalSurfaceEditComplete Completion);
 
 	// 실제로 값이 변한 voxel 위치만 material paint 입력으로 변환한다.
 	static FVoxelSurfaceEditsProcessedVoxels MakeModifiedValueVoxelGroup(

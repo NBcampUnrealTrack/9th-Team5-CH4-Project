@@ -122,7 +122,8 @@ FVoxelIntBox ADRSnowControlZone::MakeVoxelBoundsFromWorldBounds(
 
 ADRSnowControlZone::ADRSnowControlZone()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -137,14 +138,35 @@ ADRSnowControlZone::ADRSnowControlZone()
 void ADRSnowControlZone::BeginPlay()
 {
 	Super::BeginPlay();
+
+	RefreshControlRatio();
+	SetActorTickEnabled(bUpdateControlRatioEveryTick);
+	if (!bUpdateControlRatioEveryTick)
+	{
+		GetWorldTimerManager().SetTimer(
+			ControlUpdateTimerHandle,
+			this,
+			&ThisClass::RefreshControlRatio,
+			FMath::Max(0.01f, ControlUpdateInterval),
+			true);
+	}
+
 	InitializeDebug();
 }
 
 void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(ControlUpdateTimerHandle);
 	DeinitializeDebug();
 	Super::EndPlay(EndPlayReason);
 }
+
+void ADRSnowControlZone::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	RefreshControlRatio();
+}
+
 FBox ADRSnowControlZone::GetZoneWorldBounds() const
 {
 	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
@@ -152,21 +174,26 @@ FBox ADRSnowControlZone::GetZoneWorldBounds() const
 
 FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
 {
-	FDRSnowControlRatio EmptyRatio;
+	return CachedControlRatio;
+}
 
+void ADRSnowControlZone::RefreshControlRatio()
+{
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
 	{
-		return EmptyRatio;
+		CachedControlRatio = FDRSnowControlRatio();
+		return;
 	}
 
 	const UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
 	if (!IsValid(SnowSubsystem))
 	{
-		return EmptyRatio;
+		CachedControlRatio = FDRSnowControlRatio();
+		return;
 	}
 
-	return SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
+	CachedControlRatio = SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
 }
 
 #pragma region Debug

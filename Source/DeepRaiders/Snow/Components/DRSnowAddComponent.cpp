@@ -29,6 +29,11 @@ bool UDRSnowAddComponent::TryAddSnowFromHit(
 		Request.TargetVoxelWorld = ResolveFallbackVoxelWorld();
 		Request.bUseVirtualSurface = Request.bAllowVirtualSurfaceFallback;
 	}
+	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+	{
+		// 투사체 충돌 정보로 편집 영역을 만들며 표면 재탐색을 생략한다.
+		Request.bUseVirtualSurface = true;
+	}
 
 	return ExecuteAddRequest(Request, GetInteractableActorFromHit(HitResult));
 }
