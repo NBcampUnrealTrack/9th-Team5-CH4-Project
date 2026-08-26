@@ -186,8 +186,8 @@ void UDRMeleeCombatComponent::SweepSegment(const FVector& Start, const FVector& 
 
 	for (const FHitResult& HitResult : HitResults)
 	{
-		ADRPlayerCharacter* HitPlayer = Cast<ADRPlayerCharacter>(HitResult.GetActor());
-		if (!IsValid(HitPlayer) || HitPlayer == Character)
+		AActor* HitActor = HitResult.GetActor();
+		if (!IsValid(HitActor) || HitActor == Character)
 		{
 			continue;
 		}
@@ -449,18 +449,25 @@ bool UDRMeleeCombatComponent::EvaluateWeaponSweepSample(const UAnimMontage* Mont
 void UDRMeleeCombatComponent::ProcessHit(const FHitResult& HitResult)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
-	ADRPlayerCharacter* HitPlayer = Cast<ADRPlayerCharacter>(HitResult.GetActor());
-	if (!IsValid(Character) || !IsValid(HitPlayer) || HitPlayer == Character || HitPlayer->IsDead() || !bIsAttacking)
+	AActor* HitActor = HitResult.GetActor();
+	if (!IsValid(Character) || !IsValid(HitActor) || HitActor == Character || !bIsAttacking)
+	{
+		return;
+	}
+	
+	const ADRPlayerCharacter* HitPlayer = Cast<ADRPlayerCharacter>(HitActor);
+	if (IsValid(HitPlayer)
+		&& HitPlayer->IsDead())
 	{
 		return;
 	}
 
-	if (AlreadyHitActors.Contains(HitPlayer))
+	if (AlreadyHitActors.Contains(HitActor))
 	{
 		return;
 	}
 
-	AlreadyHitActors.Add(HitPlayer);
+	AlreadyHitActors.Add(HitActor);
 
 	/*
 	 * 여기서는 "맞았다"는 사실만 전달.

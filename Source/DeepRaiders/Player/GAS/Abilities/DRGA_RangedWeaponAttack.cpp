@@ -12,7 +12,9 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 
+#include "Kismet/GameplayStatics.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "AbilitySystemComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -562,8 +564,66 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 	}
 }
 
+float UDRGA_RangedWeaponAttack::GetBreakableDamageAmount() const
+{
+	return FMath::Max(0.f, BreakableDamage);
+}
+
+bool UDRGA_RangedWeaponAttack::TryApplyBreakableDamage(const FHitResult& HitResult) const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr 
+		|| !ActorInfo->IsNetAuthority())
+	{
+		return false;
+	}
+
+	ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(HitResult.GetActor());
+
+	if (!IsValid(BreakableTarget) 
+		|| BreakableTarget->IsBroken())
+	{
+		return false;
+	}
+
+	const float DamageAmount = GetBreakableDamageAmount();
+
+	if (DamageAmount <= 0.f)
+	{
+		return false;
+	}
+
+	AActor* DamageCauser = ActorInfo->AvatarActor.Get();
+
+	if (!IsValid(DamageCauser))
+	{
+		return false;
+	}
+
+	FVector DamageDirection = HitResult.TraceEnd - HitResult.TraceStart;
+
+	if (!DamageDirection.Normalize())
+	{
+		DamageDirection = DamageCauser->GetActorForwardVector();
+	}
+
+	AController* InstigatorController = ActorInfo->PlayerController.Get();
+
+	const float AppliedDamage =	UGameplayStatics::ApplyPointDamage(
+			BreakableTarget,
+			DamageAmount,
+			DamageDirection,
+			HitResult,
+			InstigatorController,
+			DamageCauser,
+			UDamageType::StaticClass());
+
+	return AppliedDamage > KINDA_SMALL_NUMBER;	
+}
+
 void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* TargetAbilitySystem,
-	const FHitResult& HitResult, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const
+                                                      const FHitResult& HitResult, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	if (ActorInfo == nullptr 

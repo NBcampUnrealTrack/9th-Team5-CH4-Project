@@ -193,7 +193,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	}
 
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();	
 	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem))
 	{
 		return false;
@@ -267,7 +267,8 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		return false;
 	}
 
-	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs, WorldImpactData, GetImpactGameplayCueTag(), GetSourceTeamId());
+	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs,
+		GetBreakableDamageAmount(), WorldImpactData, GetImpactGameplayCueTag(), GetSourceTeamId());
 
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 

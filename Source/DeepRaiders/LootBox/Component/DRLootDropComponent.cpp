@@ -184,8 +184,7 @@ bool UDRLootDropComponent::RollLootQuantities(EDRLootTier LootTier, const FDRLoo
 
 		const TArray<const FDRLootTableRow*>* RarityRows = RowsByRarity.Find(SelectedRarity);
 		const FDRLootTableRow* SelectedRow = RarityRows != nullptr
-			                                     ? SelectWeightedLootRow(*RarityRows, RandomStream)
-			                                     : nullptr;
+			                                     ? SelectWeightedLootRow(*RarityRows, RandomStream) : nullptr;
 
 		if (SelectedRow == nullptr
 			|| !IsValid(SelectedRow->ItemDefinition))
