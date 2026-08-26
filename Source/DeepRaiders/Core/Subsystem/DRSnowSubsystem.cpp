@@ -121,7 +121,7 @@ void UDRSnowSubsystem::QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIn
 			RenderUpdateTimerHandle,
 			this,
 			&ThisClass::FlushRenderUpdates,
-			0.2f,
+			0.1f,
 			false);
 	}
 }
