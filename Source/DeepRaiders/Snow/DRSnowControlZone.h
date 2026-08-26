@@ -72,12 +72,16 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	FBox GetZoneWorldBounds() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Snow|Control")
 	FDRSnowControlRatio GetControlRatio() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Snow|Control")
+	void RefreshControlRatio();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
@@ -86,6 +90,20 @@ protected:
 	// 레벨에 배치한 뒤 BoxExtent로 점령/계산 구역을 지정한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<UBoxComponent> ZoneBounds;
+
+	// true면 매 틱, false면 ControlUpdateInterval마다 점령 비율을 갱신한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Control|Update")
+	bool bUpdateControlRatioEveryTick = false;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Snow|Control|Update",
+		meta = (ClampMin = "0.01", Units = "s", EditCondition = "!bUpdateControlRatioEveryTick"))
+	float ControlUpdateInterval = 1.f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Update")
+	FDRSnowControlRatio CachedControlRatio;
 
 #pragma region Debug
 
@@ -139,6 +157,7 @@ private:
 	TObjectPtr<UTextBlock> DebugTextBlock = nullptr;
 
 	FTimerHandle DebugUpdateTimerHandle;
+	FTimerHandle ControlUpdateTimerHandle;
 
 #pragma endregion
 };

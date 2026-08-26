@@ -1,5 +1,7 @@
 #include "DRSnowSubsystem.h"
 
+#include "Engine/World.h"
+#include "VoxelRender/IVoxelLODManager.h"
 #include "VoxelWorld.h"
 
 UDRSnowSubsystem::UDRSnowSubsystem()
@@ -26,11 +28,11 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 	}
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
-		const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
-		Result.AddedAmount = EditResult.AppliedAmount;
 		Result.TeamId = Request.Context.TeamId;
-		// Directional 도구는 표면 편집 결과의 실제 변경 voxel만 원본 데이터에 반영한다.
-		ApplyAddedSurfaceEdit(Request, EditResult);
+		DirectionalAddQueue.Enqueue(Request);
+		ProcessNextDirectionalAdd();
+		// 호출자는 비동기 작업 접수를 기준으로 네트워크 작업을 등록한다.
+		Result.AddedAmount = Request.Amount;
 		return Result;
 	}
 	Result = VolumeStore.AddSnow(Request);
@@ -39,6 +41,102 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 		SurfaceEditor.AddSnowAtArea(Request);
 	}
 	return Result;
+}
+
+void UDRSnowSubsystem::ProcessNextDirectionalAdd()
+{
+	if (bDirectionalAddInProgress)
+	{
+		return;
+	}
+
+	FDRSnowSurfaceAddRequest Request;
+	if (!DirectionalAddQueue.Dequeue(Request))
+	{
+		return;
+	}
+
+	bDirectionalAddInProgress = true;
+	SurfaceEditor.SetWorld(GetWorld());
+	const TWeakObjectPtr<UDRSnowSubsystem> WeakThis(this);
+	const bool bStarted = SurfaceEditor.AddDirectionalSnowAtAreaAsync(
+		Request,
+		[WeakThis, Request](FDRSnowSurfaceEditResult&& EditResult)
+		{
+			if (UDRSnowSubsystem* SnowSubsystem = WeakThis.Get())
+			{
+				// 완료된 실제 변경 voxel만 원본 데이터에 반영한 뒤 다음 요청을 시작한다.
+				SnowSubsystem->ApplyAddedSurfaceEdit(Request, EditResult);
+				SnowSubsystem->QueueRenderUpdate(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
+				SnowSubsystem->bDirectionalAddInProgress = false;
+				SnowSubsystem->ProcessNextDirectionalAdd();
+			}
+		});
+
+	if (!bStarted)
+	{
+		bDirectionalAddInProgress = false;
+		ProcessNextDirectionalAdd();
+	}
+}
+
+void UDRSnowSubsystem::QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIntBox& Bounds)
+{
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !Bounds.IsValid())
+	{
+		return;
+	}
+
+	FDRSnowPendingRenderUpdate* PendingUpdate = PendingRenderUpdates.FindByPredicate(
+		[VoxelWorld](const FDRSnowPendingRenderUpdate& Entry)
+		{
+			return Entry.VoxelWorld == VoxelWorld;
+		});
+	if (!PendingUpdate)
+	{
+		PendingUpdate = &PendingRenderUpdates.AddDefaulted_GetRef();
+		PendingUpdate->VoxelWorld = VoxelWorld;
+	}
+
+	// 같은 월드에서 겹치는 편집 영역은 한 번만 렌더 갱신한다.
+	FVoxelIntBox MergedBounds = Bounds;
+	for (int32 Index = 0; Index < PendingUpdate->Bounds.Num();)
+	{
+		if (!MergedBounds.Intersect(PendingUpdate->Bounds[Index]))
+		{
+			++Index;
+			continue;
+		}
+
+		MergedBounds = MergedBounds + PendingUpdate->Bounds[Index];
+		PendingUpdate->Bounds.RemoveAtSwap(Index, 1, EAllowShrinking::No);
+		Index = 0;
+	}
+	PendingUpdate->Bounds.Add(MergedBounds);
+
+	UWorld* World = GetWorld();
+	if (IsValid(World) && !World->GetTimerManager().IsTimerActive(RenderUpdateTimerHandle))
+	{
+		World->GetTimerManager().SetTimer(
+			RenderUpdateTimerHandle,
+			this,
+			&ThisClass::FlushRenderUpdates,
+			0.1f,
+			false);
+	}
+}
+
+void UDRSnowSubsystem::FlushRenderUpdates()
+{
+	for (FDRSnowPendingRenderUpdate& PendingUpdate : PendingRenderUpdates)
+	{
+		AVoxelWorld* VoxelWorld = PendingUpdate.VoxelWorld.Get();
+		if (IsValid(VoxelWorld) && VoxelWorld->IsCreated() && !PendingUpdate.Bounds.IsEmpty())
+		{
+			VoxelWorld->GetLODManager().UpdateBounds(PendingUpdate.Bounds);
+		}
+	}
+	PendingRenderUpdates.Reset();
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request)

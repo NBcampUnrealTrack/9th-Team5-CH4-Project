@@ -63,6 +63,34 @@ bool PaintProcessedTeamSurface(
 	return EditedMaterialBounds.IsValid();
 }
 
+void PaintProcessedTeamSurfaceAsync(
+	AVoxelWorld* VoxelWorld,
+	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
+	const int32 TeamId,
+	TFunction<void()> Completion)
+{
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
+		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB)
+	{
+		Completion();
+		return;
+	}
+
+	UVoxelSurfaceEditTools::EditVoxelMaterialsAsync(
+		VoxelWorld,
+		MakeTeamPaintMaterial(VoxelWorld->MaterialConfig, TeamId),
+		ProcessedVoxels,
+		FOnVoxelToolComplete_WithModifiedMaterials::CreateLambda(
+			[Completion = MoveTemp(Completion)](const TArray<FModifiedVoxelMaterial>&) mutable
+			{
+				Completion();
+			}),
+		nullptr,
+		true,
+		false,
+		false);
+}
+
 float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 {
 	float ModifiedValueAmount = 0.f;
@@ -310,6 +338,92 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 
 	Result.VoxelWorld = VoxelWorld;
 	return Result;
+}
+
+bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
+	const FDRSnowSurfaceAddRequest& Request,
+	TFunction<void(FDRSnowSurfaceEditResult&&)> Completion)
+{
+	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool ||
+		Request.Radius <= 0.f || Request.Amount <= 0.f || !Completion)
+	{
+		return false;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint;
+	if (!Request.bUseVirtualSurface)
+	{
+		SurfaceFootprint = UDRDirectionalSurfaceTool::FindSurfaceFootprint(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.Radius,
+			SnowSurfaceFalloff,
+			Request.Amount,
+			true);
+	}
+	if (Request.bUseVirtualSurface ||
+		(Request.bAllowVirtualSurfaceFallback && SurfaceFootprint.Voxels->Num() == 0))
+	{
+		SurfaceFootprint = UDRDirectionalSurfaceTool::MakeVirtualSurfaceFootprint(
+			VoxelWorld,
+			Request.WorldLocation,
+			Request.SurfaceNormal,
+			Request.Radius,
+			SnowSurfaceFalloff,
+			Request.Amount,
+			true);
+	}
+
+	const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld = VoxelWorld;
+	return UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
+		VoxelWorld,
+		SurfaceFootprint,
+		SnowSurfaceDistanceDivisor,
+		true,
+		[WeakVoxelWorld, Request, Completion = MoveTemp(Completion)](
+			TArray<FModifiedVoxelValue>&& ModifiedValues,
+			FVoxelIntBox EditedBounds) mutable
+		{
+			FDRSnowSurfaceEditResult Result;
+			AVoxelWorld* ValidVoxelWorld = WeakVoxelWorld.Get();
+			if (!IsValid(ValidVoxelWorld) || !ValidVoxelWorld->IsCreated())
+			{
+				Completion(MoveTemp(Result));
+				return;
+			}
+
+			Result.AppliedAmount = FMath::Min(Request.Amount, GetModifiedValueAmount(ModifiedValues));
+			if (Result.AppliedAmount <= 0.f || !EditedBounds.IsValid())
+			{
+				Completion(MoveTemp(Result));
+				return;
+			}
+
+			const FVoxelSurfaceEditsProcessedVoxels PaintVoxels =
+				UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
+					EditedBounds,
+					ModifiedValues,
+					true);
+			Result.VoxelWorld = ValidVoxelWorld;
+			Result.EditedBounds = EditedBounds;
+			Result.ModifiedValues = MoveTemp(ModifiedValues);
+			Result.bUseModifiedValuesForVolume = true;
+
+			PaintProcessedTeamSurfaceAsync(
+				ValidVoxelWorld,
+				PaintVoxels,
+				Request.Context.TeamId,
+				[Result = MoveTemp(Result), Completion = MoveTemp(Completion)]() mutable
+				{
+					Completion(MoveTemp(Result));
+				});
+		});
 }
 
 FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
