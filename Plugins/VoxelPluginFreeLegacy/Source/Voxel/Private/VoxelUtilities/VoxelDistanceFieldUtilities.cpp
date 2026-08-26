@@ -6,6 +6,7 @@
 #include "VoxelShaders/VoxelDistanceFieldShader.h"
 
 #include "Async/ParallelFor.h"
+#include "Misc/App.h"
 
 FColor FVoxelDistanceFieldUtilities::GetDistanceFieldColor(float Value)
 {
@@ -25,11 +26,14 @@ FColor FVoxelDistanceFieldUtilities::GetDistanceFieldColor(float Value)
 
 void FVoxelDistanceFieldUtilities::JumpFlood(const FIntVector& Size, TArray<FVector3f>& InOutSurfacePositions, bool bMultiThreaded, int32 MaxPasses_Debug)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(JumpFlood);
+
 	VOXEL_ASYNC_FUNCTION_COUNTER();
-	
+
 	check(InOutSurfacePositions.Num() == Size.X * Size.Y * Size.Z);
-	
-	if (false)
+
+	const bool bCanUseGPU = IsInGameThread() && FApp::CanEverRender();
+	if (bCanUseGPU)
 	{
 		const auto DataPtr = MakeVoxelShared<TArray<FVector3f>>(MoveTemp(InOutSurfacePositions));
 
@@ -38,39 +42,38 @@ void FVoxelDistanceFieldUtilities::JumpFlood(const FIntVector& Size, TArray<FVec
 		Helper->WaitForCompletion();
 
 		InOutSurfacePositions = MoveTemp(*DataPtr);
+		return;
 	}
-	else
+
+	bool bUseTempAsSrc = false;
+
+	TArray<FVector3f> Temp;
+	Temp.Empty(InOutSurfacePositions.Num());
+	Temp.SetNumUninitialized(InOutSurfacePositions.Num());
+
+	const int32 PowerOfTwo = FMath::CeilLogTwo(Size.GetMax());
+	for (int32 Pass = 0; Pass < PowerOfTwo; Pass++)
 	{
-		bool bUseTempAsSrc = false;
-		
-		TArray<FVector3f> Temp;
-		Temp.Empty(InOutSurfacePositions.Num());
-		Temp.SetNumUninitialized(InOutSurfacePositions.Num());
-		
-		const int32 PowerOfTwo = FMath::CeilLogTwo(Size.GetMax());
-		for (int32 Pass = 0; Pass < PowerOfTwo; Pass++)
+		if (MaxPasses_Debug == Pass)
 		{
-			if (MaxPasses_Debug == Pass)
-			{
-				break;
-			}
-			
-			// -1: we want to start with half the size
-			const int32 Step = 1 << (PowerOfTwo - 1 - Pass);
-			JumpFloodStep_CPU(
-				Size, 
-				bUseTempAsSrc ? Temp : InOutSurfacePositions,
-				bUseTempAsSrc ? InOutSurfacePositions : Temp,
-				Step,
-				bMultiThreaded);
-
-			bUseTempAsSrc = !bUseTempAsSrc;
+			break;
 		}
 
-		if (bUseTempAsSrc)
-		{
-			InOutSurfacePositions = MoveTemp(Temp);
-		}
+		// -1: we want to start with half the size
+		const int32 Step = 1 << (PowerOfTwo - 1 - Pass);
+		JumpFloodStep_CPU(
+			Size,
+			bUseTempAsSrc ? Temp : InOutSurfacePositions,
+			bUseTempAsSrc ? InOutSurfacePositions : Temp,
+			Step,
+			bMultiThreaded);
+
+		bUseTempAsSrc = !bUseTempAsSrc;
+	}
+
+	if (bUseTempAsSrc)
+	{
+		InOutSurfacePositions = MoveTemp(Temp);
 	}
 }
 

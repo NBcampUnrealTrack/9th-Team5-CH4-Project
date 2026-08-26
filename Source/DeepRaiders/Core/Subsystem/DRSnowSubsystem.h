@@ -1,7 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Queue.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "TimerManager.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
@@ -11,6 +13,12 @@
 #include "DRSnowSubsystem.generated.h"
 
 class AVoxelWorld;
+
+struct FDRSnowPendingRenderUpdate
+{
+	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+	TArray<FVoxelIntBox> Bounds;
+};
 
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
@@ -60,9 +68,16 @@ private:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const TArray<FModifiedVoxelValue>& ModifiedValues,
 		float MaxRemovedAmount);
+	void ProcessNextDirectionalAdd();
+	void QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIntBox& Bounds);
+	void FlushRenderUpdates();
 
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
+	TQueue<FDRSnowSurfaceAddRequest> DirectionalAddQueue;
+	bool bDirectionalAddInProgress = false;
+	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;
+	FTimerHandle RenderUpdateTimerHandle;
 };

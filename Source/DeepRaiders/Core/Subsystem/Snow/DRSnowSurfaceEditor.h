@@ -14,6 +14,7 @@ struct FDRSnowSurfaceEditResult
 	// 요청량이 아니라 Voxel 값이 실제로 변한 양이다.
 	float AppliedAmount = 0.f;
 	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+	FVoxelIntBox EditedBounds;
 	// DirectionalSurfaceTool처럼 원본 Store가 실제 변경 위치를 따라가야 할 때만 채운다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	bool bUseModifiedValuesForVolume = false;
@@ -30,6 +31,9 @@ public:
 	}
 
 	FDRSnowSurfaceEditResult AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
+	bool AddDirectionalSnowAtAreaAsync(
+		const FDRSnowSurfaceAddRequest& Request,
+		TFunction<void(FDRSnowSurfaceEditResult&&)> Completion);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 	// ownership을 우선하고, ownership이 없는 표면만 Volume의 우세 팀으로 다시 칠한다.
 	bool RepaintSnowMaterialsAtArea(
