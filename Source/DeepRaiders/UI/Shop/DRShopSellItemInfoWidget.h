@@ -2,12 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "DeepRaiders/Shop/DRShopSellTypes.h"
 #include "DRShopSellItemInfoWidget.generated.h"
 
 class UButton;
 class UDRShopSellViewModel;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRShopSellRequestedSignature, FGuid, InstanceId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRShopSellRequestedSignature,
+	EDRShopSellTargetType, TargetType, FGuid, InstanceId);
 
 /** 선택한 판매 아이템 정보를 표시하고 판매 요청을 전달한다. */
 UCLASS()

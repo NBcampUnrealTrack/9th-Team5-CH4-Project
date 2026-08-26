@@ -15,6 +15,7 @@ class UDRPerkWidget;
 class UUniformGridPanel;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRInventoryEntryClicked, FGuid, EntryId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRInventoryPerkClicked, FGuid, PerkInstanceId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRInventoryCloseRequested);
 
 UCLASS()
@@ -35,6 +36,9 @@ public:
 	
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDRInventoryEntryClicked OnEntryClickedDelegate;
+
+	UPROPERTY(BlueprintAssignable, Category = "Inventory")
+	FDRInventoryPerkClicked OnPerkClickedDelegate;
 	
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FDRInventoryCloseRequested OnCloseRequestedDelegate;
@@ -46,6 +50,9 @@ protected:
 private:
 	UFUNCTION()
 	void HandleSlotClicked(FGuid InstanceId);
+
+	UFUNCTION()
+	void HandlePerkClicked(FGuid PerkInstanceId);
 
 	UFUNCTION()
 	void HandleMoveRequested(int32 SourceSlotIndex, int32 TargetSlotIndex);

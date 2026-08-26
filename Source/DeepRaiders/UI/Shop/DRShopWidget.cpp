@@ -17,11 +17,13 @@ void UDRShopWidget::SetOffers(
 	}
 }
 
-void UDRShopWidget::InitializeSellPanel(UDRInventoryComponent* InventoryComponent)
+void UDRShopWidget::InitializeSellPanel(
+	UDRInventoryComponent* InventoryComponent,
+	UDRPerkComponent* PerkComponent)
 {
 	if (IsValid(SellPanel))
 	{
-		SellPanel->InitializeInventory(InventoryComponent);
+		SellPanel->InitializeInventory(InventoryComponent, PerkComponent);
 	}
 }
 
@@ -158,7 +160,9 @@ void UDRShopWidget::HandleOfferRequested(FDRShopOfferRequest Request)
 	OnOfferRequested.Broadcast(Request);
 }
 
-void UDRShopWidget::HandleSellRequested(FGuid InstanceId)
+void UDRShopWidget::HandleSellRequested(
+	EDRShopSellTargetType TargetType,
+	FGuid InstanceId)
 {
-	OnSellRequested.Broadcast(InstanceId);
+	OnSellRequested.Broadcast(TargetType, InstanceId);
 }

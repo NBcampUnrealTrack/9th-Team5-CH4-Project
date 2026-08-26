@@ -138,7 +138,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 		MakeOfferViews(
 			ShopComponent->GetItemOffers(),
 			EDRShopOfferType::Purchase));
-	ShopWidget->InitializeSellPanel(InventoryComponent);
+	ShopWidget->InitializeSellPanel(InventoryComponent, PerkComponent);
 	// 선택 가능 상태라면 상점이 열릴 때 최초 무기 탭을 우선 표시한다.
 	ShopWidget->InitializeStartingWeaponPanel(StartingWeaponSelectionComponent);
 	RefreshUpgradeOffers();
@@ -268,11 +268,20 @@ void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 	}
 }
 
-void UDRShopUIComponent::HandleSellRequested(FGuid InstanceId)
+void UDRShopUIComponent::HandleSellRequested(
+	EDRShopSellTargetType TargetType,
+	FGuid InstanceId)
 {
 	if (IsValid(ShopTransactionComponent))
 	{
-		ShopTransactionComponent->RequestSell(ActiveShop.Get(), InstanceId);
+		if (TargetType == EDRShopSellTargetType::Perk)
+		{
+			ShopTransactionComponent->RequestSellPerk(ActiveShop.Get(), InstanceId);
+		}
+		else
+		{
+			ShopTransactionComponent->RequestSell(ActiveShop.Get(), InstanceId);
+		}
 	}
 }
 

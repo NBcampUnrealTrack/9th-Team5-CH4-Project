@@ -14,7 +14,16 @@ class DEEPRAIDERS_API UDRPerkEntryViewModel : public UMVVMViewModelBase
 {
 	GENERATED_BODY()
 
+public:
+	FGuid GetPerkInstanceId() const
+	{
+		return PerkInstanceId;
+	}
+
 protected:
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Perk")
+	FGuid PerkInstanceId;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Perk")
 	FText DisplayName;
 
@@ -24,7 +33,7 @@ protected:
 private:
 	friend class UDRPerkViewModel;
 
-	void Initialize(UDRPerkDefinition* NewPerkDefinition);
+	void Initialize(FGuid NewPerkInstanceId, UDRPerkDefinition* NewPerkDefinition);
 };
 
 /** PerkComponent의 상태를 퍽 슬롯 목록으로 변환한다. */

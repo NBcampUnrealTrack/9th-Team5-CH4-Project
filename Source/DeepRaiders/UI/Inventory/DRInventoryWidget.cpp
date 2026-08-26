@@ -17,10 +17,20 @@
 void UDRInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (IsValid(PerkWidget))
+	{
+		PerkWidget->OnPerkClicked.AddUniqueDynamic(this, &ThisClass::HandlePerkClicked);
+	}
 }
 
 void UDRInventoryWidget::NativeDestruct()
 {
+	if (IsValid(PerkWidget))
+	{
+		PerkWidget->OnPerkClicked.RemoveDynamic(this, &ThisClass::HandlePerkClicked);
+	}
+
 	if (IsValid(InventoryViewModel))
 	{
 		InventoryViewModel->Deinitialize();
@@ -56,6 +66,11 @@ void UDRInventoryWidget::InitializeInventory(UDRInventoryComponent* NewInventory
 		PerkWidget->InitializePerks(
 			IsValid(PlayerState) ? PlayerState->GetPerkComponent() : nullptr);
 	}
+}
+
+void UDRInventoryWidget::HandlePerkClicked(FGuid PerkInstanceId)
+{
+	OnPerkClickedDelegate.Broadcast(PerkInstanceId);
 }
 
 void UDRInventoryWidget::InitializeViewModel(UDRInventoryViewModel* NewViewModel)

@@ -4,14 +4,16 @@
 #include "DeepRaiders/UI/ViewModel/DRShopSellViewModel.h"
 #include "DRShopSellItemInfoWidget.h"
 
-void UDRShopSellPanelWidget::InitializeInventory(UDRInventoryComponent* NewInventoryComponent)
+void UDRShopSellPanelWidget::InitializeInventory(
+	UDRInventoryComponent* NewInventoryComponent,
+	UDRPerkComponent* NewPerkComponent)
 {
 	if (!IsValid(SellViewModel))
 	{
 		SellViewModel = NewObject<UDRShopSellViewModel>(this);
 	}
 
-	SellViewModel->Initialize(NewInventoryComponent);
+	SellViewModel->Initialize(NewInventoryComponent, NewPerkComponent);
 
 	if (IsValid(InventoryPanel))
 	{
@@ -31,6 +33,7 @@ void UDRShopSellPanelWidget::NativeConstruct()
 	if (IsValid(InventoryPanel))
 	{
 		InventoryPanel->OnEntryClickedDelegate.AddUniqueDynamic(this, &ThisClass::HandleEntryClicked);
+		InventoryPanel->OnPerkClickedDelegate.AddUniqueDynamic(this, &ThisClass::HandlePerkClicked);
 	}
 
 	if (IsValid(ItemInfoPanel))
@@ -44,6 +47,7 @@ void UDRShopSellPanelWidget::NativeDestruct()
 	if (IsValid(InventoryPanel))
 	{
 		InventoryPanel->OnEntryClickedDelegate.RemoveDynamic(this, &ThisClass::HandleEntryClicked);
+		InventoryPanel->OnPerkClickedDelegate.RemoveDynamic(this, &ThisClass::HandlePerkClicked);
 	}
 
 	if (IsValid(ItemInfoPanel))
@@ -68,7 +72,17 @@ void UDRShopSellPanelWidget::HandleEntryClicked(FGuid InstanceId)
 	}
 }
 
-void UDRShopSellPanelWidget::HandleSellRequested(FGuid InstanceId)
+void UDRShopSellPanelWidget::HandlePerkClicked(FGuid PerkInstanceId)
 {
-	OnSellRequested.Broadcast(InstanceId);
+	if (IsValid(SellViewModel))
+	{
+		SellViewModel->SelectPerk(PerkInstanceId);
+	}
+}
+
+void UDRShopSellPanelWidget::HandleSellRequested(
+	EDRShopSellTargetType TargetType,
+	FGuid InstanceId)
+{
+	OnSellRequested.Broadcast(TargetType, InstanceId);
 }

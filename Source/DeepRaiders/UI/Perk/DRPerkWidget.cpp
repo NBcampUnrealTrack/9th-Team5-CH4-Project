@@ -5,6 +5,7 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/UniformGridSlot.h"
 #include "DeepRaiders/UI/ViewModel/DRPerkViewModel.h"
+#include "DRPerkSlotWidget.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
 
@@ -56,7 +57,7 @@ void UDRPerkWidget::SetPerkEntries(
 			continue;
 		}
 
-		UUserWidget* SlotWidget = CreateWidget<UUserWidget>(
+		UDRPerkSlotWidget* SlotWidget = CreateWidget<UDRPerkSlotWidget>(
 			GetOwningPlayer(),
 			SlotWidgetClass);
 		if (!IsValid(SlotWidget))
@@ -64,18 +65,8 @@ void UDRPerkWidget::SetPerkEntries(
 			continue;
 		}
 
-		UMVVMView* EntryView = UMVVMSubsystem::GetViewFromUserWidget(SlotWidget);
-		if (!IsValid(EntryView)
-			|| !EntryView->SetViewModel(EntryViewModelName, EntryViewModel))
-		{
-			UE_LOG(
-				LogTemp,
-				Error,
-				TEXT("Perk Entry ViewModel '%s' was not registered on %s"),
-				*EntryViewModelName.ToString(),
-				*GetNameSafe(SlotWidget));
-			continue;
-		}
+		SlotWidget->InitializeViewModel(EntryViewModel);
+		SlotWidget->OnSlotClicked.AddDynamic(this, &ThisClass::HandleSlotClicked);
 
 		UScaleBox* SlotScaleBox = WidgetTree->ConstructWidget<UScaleBox>();
 		SlotScaleBox->SetStretch(EStretch::ScaleToFit);
@@ -89,6 +80,11 @@ void UDRPerkWidget::SetPerkEntries(
 		GridSlot->SetHorizontalAlignment(HAlign_Fill);
 		GridSlot->SetVerticalAlignment(VAlign_Fill);
 	}
+}
+
+void UDRPerkWidget::HandleSlotClicked(FGuid PerkInstanceId)
+{
+	OnPerkClicked.Broadcast(PerkInstanceId);
 }
 
 void UDRPerkWidget::NativeDestruct()

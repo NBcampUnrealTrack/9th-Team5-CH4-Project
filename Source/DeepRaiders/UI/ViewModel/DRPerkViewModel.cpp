@@ -3,7 +3,9 @@
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 
-void UDRPerkEntryViewModel::Initialize(UDRPerkDefinition* NewPerkDefinition)
+void UDRPerkEntryViewModel::Initialize(
+	FGuid NewPerkInstanceId,
+	UDRPerkDefinition* NewPerkDefinition)
 {
 	const FText NewDisplayName = IsValid(NewPerkDefinition)
 		? NewPerkDefinition->DisplayName
@@ -12,6 +14,7 @@ void UDRPerkEntryViewModel::Initialize(UDRPerkDefinition* NewPerkDefinition)
 		? NewPerkDefinition->Icon.Get()
 		: nullptr;
 
+	UE_MVVM_SET_PROPERTY_VALUE(PerkInstanceId, NewPerkInstanceId);
 	UE_MVVM_SET_PROPERTY_VALUE(DisplayName, NewDisplayName);
 	UE_MVVM_SET_PROPERTY_VALUE(Icon, NewIcon);
 }
@@ -59,12 +62,17 @@ void UDRPerkViewModel::RebuildPerkEntries()
 
 		for (int32 SlotIndex = 0; SlotIndex < MaxPerkSlotCount; ++SlotIndex)
 		{
-			UDRPerkDefinition* PerkDefinition = ComponentEntries.IsValidIndex(SlotIndex)
-				? ComponentEntries[SlotIndex].PerkDefinition.Get()
+			const FDRPerkEntry* PerkEntry = ComponentEntries.IsValidIndex(SlotIndex)
+				? &ComponentEntries[SlotIndex]
+				: nullptr;
+			UDRPerkDefinition* PerkDefinition = PerkEntry
+				? PerkEntry->PerkDefinition.Get()
 				: nullptr;
 			UDRPerkEntryViewModel* EntryViewModel =
 				NewObject<UDRPerkEntryViewModel>(this);
-			EntryViewModel->Initialize(PerkDefinition);
+			EntryViewModel->Initialize(
+				PerkEntry ? PerkEntry->PerkInstanceId : FGuid(),
+				PerkDefinition);
 			NewPerkEntries.Add(EntryViewModel);
 		}
 	}
