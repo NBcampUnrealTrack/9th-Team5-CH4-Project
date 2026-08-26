@@ -83,6 +83,11 @@ void UDRShopBuyPanelWidget::NativeOnInitialized()
 		PerkButton->OnClicked.AddDynamic(this, &ThisClass::HandlePerkButtonClicked);
 	}
 
+	if (IsValid(SkillButton))
+	{
+		SkillButton->OnClicked.AddDynamic(this, &ThisClass::HandleSkillButtonClicked);
+	}
+
 	SelectSection(SelectedSection);
 }
 
@@ -113,6 +118,11 @@ void UDRShopBuyPanelWidget::NativeDestruct()
 		PerkButton->OnClicked.RemoveDynamic(this, &ThisClass::HandlePerkButtonClicked);
 	}
 
+	if (IsValid(SkillButton))
+	{
+		SkillButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleSkillButtonClicked);
+	}
+
 	Super::NativeDestruct();
 }
 
@@ -121,7 +131,8 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 	if (!IsValid(EquipmentButton)
 		|| !IsValid(ConsumableButton)
 		|| !IsValid(UpgradeButton)
-		|| !IsValid(PerkButton))
+		|| !IsValid(PerkButton)
+		|| !IsValid(SkillButton))
 	{
 		return;
 	}
@@ -138,6 +149,7 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 	ConsumableButton->SetIsEnabled(Section != EDRShopOfferSection::Consumable);
 	UpgradeButton->SetIsEnabled(Section != EDRShopOfferSection::Upgrade);
 	PerkButton->SetIsEnabled(Section != EDRShopOfferSection::Perk);
+	SkillButton->SetIsEnabled(Section != EDRShopOfferSection::Skill);
 }
 
 void UDRShopBuyPanelWidget::HandleEquipmentButtonClicked()
@@ -158,6 +170,11 @@ void UDRShopBuyPanelWidget::HandleUpgradeButtonClicked()
 void UDRShopBuyPanelWidget::HandlePerkButtonClicked()
 {
 	SelectSection(EDRShopOfferSection::Perk);
+}
+
+void UDRShopBuyPanelWidget::HandleSkillButtonClicked()
+{
+	SelectSection(EDRShopOfferSection::Skill);
 }
 
 void UDRShopBuyPanelWidget::HandleOfferRequested(FDRShopOfferRequest Request)

@@ -15,7 +15,14 @@ class DEEPRAIDERS_API UDRGA_CharacterSkillBase : public UGameplayAbility
 public:
 	UDRGA_CharacterSkillBase();
 
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(
+		FDataValidationContext& Context) const override;
+#endif
+
 protected:
+	virtual UGameplayEffect* GetCooldownGameplayEffect() const override;
+
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -29,7 +36,13 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
 	ADRPlayerCharacter* GetPlayerCharacter(const FGameplayAbilityActorInfo* ActorInfo) const;
-	ADRPlayerState* GetDRPlayerState(const FGameplayAbilityActorInfo* ActorInfo) const;
+
+#if WITH_EDITOR
+	static bool IsCooldownEffectValid(
+		const UGameplayEffect* CooldownEffect,
+		FGameplayTag ExpectedCooldownTag,
+		FDataValidationContext& Context);
+#endif
 
 	UPROPERTY(
 		EditDefaultsOnly,

@@ -9,6 +9,8 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
@@ -115,10 +117,14 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	PerkComponent = IsValid(PlayerState)
 		? PlayerState->GetPerkComponent()
 		: nullptr;
+	SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
 
 	if (!IsValid(ShopTransactionComponent)
 		|| !IsValid(InventoryComponent)
-		|| !IsValid(PerkComponent))
+		|| !IsValid(PerkComponent)
+		|| !IsValid(SkillComponent))
 	{
 		return;
 	}
@@ -133,34 +139,14 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	ActiveShop = ShopActor;
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
-	ShopWidget->SetOffers(
-		EDRShopOfferType::Purchase,
-		MakeOfferViews(
-			ShopComponent->GetItemOffers(),
-			EDRShopOfferType::Purchase));
 	ShopWidget->InitializeSellPanel(InventoryComponent, PerkComponent);
 	// 선택 가능 상태라면 상점이 열릴 때 최초 무기 탭을 우선 표시한다.
 	ShopWidget->InitializeStartingWeaponPanel(StartingWeaponSelectionComponent);
+	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
-	RefreshPerkOffers();
-	ShopWidget->OnCloseRequested.AddDynamic(
-		this,
-		&ThisClass::HideShopWidget);
-	ShopWidget->OnOfferRequested.AddDynamic(
-		this,
-		&ThisClass::HandleOfferRequested);
-	ShopWidget->OnSellRequested.AddDynamic(
-		this,
-		&ThisClass::HandleSellRequested);
-	InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
-		this,
-		&ThisClass::HandleInventoryChanged);
-	PerkComponent->OnPerksChanged.AddDynamic(
-		this,
-		&ThisClass::HandlePerksChanged);
-	PlayerState->OnCoinsChanged.AddDynamic(
-		this,
-		&ThisClass::HandleCoinsChanged);
+	RefreshOffers(EDRShopOfferType::Perk);
+	RefreshOffers(EDRShopOfferType::Skill);
+	BindShopEvents();
 	// 상점 UI를 조작하는 동안 캐릭터 이동만 차단한다.
 	PlayerController->FlushPressedKeys();
 
@@ -176,40 +162,10 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 void UDRShopUIComponent::HideShopWidget()
 {
 	SetShopOpenTag(false);
-
-	if (IsValid(InventoryComponent))
-	{
-		InventoryComponent->OnInventoryChangedDelegate.RemoveDynamic(
-			this,
-			&ThisClass::HandleInventoryChanged);
-	}
-
-	if (IsValid(PerkComponent))
-	{
-		PerkComponent->OnPerksChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandlePerksChanged);
-	}
-
-	if (IsValid(PlayerState))
-	{
-		PlayerState->OnCoinsChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
-	}
+	UnbindShopEvents();
 
 	if (IsValid(ShopWidget))
 	{
-		ShopWidget->OnCloseRequested.RemoveDynamic(
-			this,
-			&ThisClass::HideShopWidget);
-		ShopWidget->OnOfferRequested.RemoveDynamic(
-			this,
-			&ThisClass::HandleOfferRequested);
-		ShopWidget->OnSellRequested.RemoveDynamic(
-			this,
-			&ThisClass::HandleSellRequested);
-
 		if (IsValid(UIManager))
 		{
 			UIManager->PopScreen(DRGameplayTags::UI_Screen_Shop);
@@ -227,6 +183,7 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopComponent = nullptr;
 	UpgradeComponent = nullptr;
 	PerkComponent = nullptr;
+	SkillComponent = nullptr;
 	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
@@ -243,6 +200,94 @@ void UDRShopUIComponent::HideShopWidget()
 	}
 
 	IsMoveInputBlocked = false;
+}
+
+void UDRShopUIComponent::BindShopEvents()
+{
+	if (IsValid(ShopWidget))
+	{
+		ShopWidget->OnCloseRequested.AddDynamic(
+			this,
+			&ThisClass::HideShopWidget);
+		ShopWidget->OnOfferRequested.AddDynamic(
+			this,
+			&ThisClass::HandleOfferRequested);
+		ShopWidget->OnSellRequested.AddDynamic(
+			this,
+			&ThisClass::HandleSellRequested);
+	}
+
+	if (IsValid(InventoryComponent))
+	{
+		InventoryComponent->OnInventoryChangedDelegate.AddDynamic(
+			this,
+			&ThisClass::HandleInventoryChanged);
+	}
+
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->OnPerksChanged.AddDynamic(
+			this,
+			&ThisClass::HandlePerksChanged);
+	}
+
+	if (IsValid(SkillComponent))
+	{
+		SkillComponent->OnSkillChanged.AddDynamic(
+			this,
+			&ThisClass::HandleSkillChanged);
+	}
+
+	if (IsValid(PlayerState))
+	{
+		PlayerState->OnCoinsChanged.AddDynamic(
+			this,
+			&ThisClass::HandleCoinsChanged);
+	}
+}
+
+void UDRShopUIComponent::UnbindShopEvents()
+{
+	if (IsValid(ShopWidget))
+	{
+		ShopWidget->OnCloseRequested.RemoveDynamic(
+			this,
+			&ThisClass::HideShopWidget);
+		ShopWidget->OnOfferRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleOfferRequested);
+		ShopWidget->OnSellRequested.RemoveDynamic(
+			this,
+			&ThisClass::HandleSellRequested);
+	}
+
+	if (IsValid(InventoryComponent))
+	{
+		InventoryComponent->OnInventoryChangedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleInventoryChanged);
+	}
+
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->OnPerksChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandlePerksChanged);
+	}
+
+	if (IsValid(SkillComponent))
+	{
+		SkillComponent->OnSkillChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleSkillChanged);
+	}
+
+	if (IsValid(PlayerState))
+	{
+		PlayerState->OnCoinsChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleCoinsChanged);
+	}
 }
 
 void UDRShopUIComponent::SetShopOpenTag(bool bIsOpen) const
@@ -287,20 +332,26 @@ void UDRShopUIComponent::HandleSellRequested(
 
 void UDRShopUIComponent::HandleInventoryChanged()
 {
-	RefreshItemOffers();
+	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
 }
 
 void UDRShopUIComponent::HandlePerksChanged()
 {
-	RefreshPerkOffers();
+	RefreshOffers(EDRShopOfferType::Perk);
+}
+
+void UDRShopUIComponent::HandleSkillChanged()
+{
+	RefreshOffers(EDRShopOfferType::Skill);
 }
 
 void UDRShopUIComponent::HandleCoinsChanged(int32)
 {
-	RefreshItemOffers();
+	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
-	RefreshPerkOffers();
+	RefreshOffers(EDRShopOfferType::Perk);
+	RefreshOffers(EDRShopOfferType::Skill);
 }
 
 void UDRShopUIComponent::HandleStartingWeaponSelectionAvailabilityChanged(
@@ -312,7 +363,7 @@ void UDRShopUIComponent::HandleStartingWeaponSelectionAvailabilityChanged(
 	}
 }
 
-void UDRShopUIComponent::RefreshItemOffers()
+void UDRShopUIComponent::RefreshOffers(EDRShopOfferType OfferType)
 {
 	if (!IsValid(ShopWidget) || !IsValid(ShopComponent))
 	{
@@ -320,10 +371,10 @@ void UDRShopUIComponent::RefreshItemOffers()
 	}
 
 	ShopWidget->SetOffers(
-		EDRShopOfferType::Purchase,
+		OfferType,
 		MakeOfferViews(
 			ShopComponent->GetItemOffers(),
-			EDRShopOfferType::Purchase));
+			OfferType));
 }
 
 void UDRShopUIComponent::RefreshUpgradeOffers()
@@ -345,18 +396,6 @@ void UDRShopUIComponent::RefreshUpgradeOffers()
 			EDRShopOfferType::Upgrade));
 }
 
-void UDRShopUIComponent::RefreshPerkOffers()
-{
-	if (IsValid(ShopWidget) && IsValid(ShopComponent))
-	{
-		ShopWidget->SetOffers(
-			EDRShopOfferType::Perk,
-			MakeOfferViews(
-				ShopComponent->GetItemOffers(),
-				EDRShopOfferType::Perk));
-	}
-}
-
 TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 	const TArray<FDRShopItemOffer>& Offers,
 	EDRShopOfferType OfferType) const
@@ -374,6 +413,9 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		UDRPerkDefinition* PerkDefinition = OfferType == EDRShopOfferType::Perk
 			? Cast<UDRPerkDefinition>(Offer.ItemDefinition)
 			: nullptr;
+		UDRSkillDefinition* SkillDefinition = OfferType == EDRShopOfferType::Skill
+			? Cast<UDRSkillDefinition>(Offer.ItemDefinition)
+			: nullptr;
 
 		if (OfferType == EDRShopOfferType::Perk
 			&& !IsValid(PerkDefinition))
@@ -381,15 +423,15 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			continue;
 		}
 
+		if (OfferType == EDRShopOfferType::Skill
+			&& !IsValid(SkillDefinition))
+		{
+			continue;
+		}
+
 		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
 		OfferView.Request = Offer.MakeRequest();
-		OfferView.Section = OfferType == EDRShopOfferType::Perk
-			? EDRShopOfferSection::Perk
-			: OfferType == EDRShopOfferType::Upgrade
-				? EDRShopOfferSection::Upgrade
-				: Offer.ItemDefinition->Category == EDRItemCategory::Consumable
-					? EDRShopOfferSection::Consumable
-					: EDRShopOfferSection::Equipment;
+		OfferView.Section = ResolveOfferSection(Offer);
 		OfferView.DisplayName = Offer.ItemDefinition->DisplayName;
 
 		if (IsValid(PerkDefinition))
@@ -397,6 +439,12 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			OfferView.DisplayName = FText::Format(
 				FText::FromString(TEXT("{0} 퍽")),
 				PerkDefinition->DisplayName);
+		}
+		else if (IsValid(SkillDefinition))
+		{
+			OfferView.DisplayName = FText::Format(
+				FText::FromString(TEXT("{0} 스킬")),
+				SkillDefinition->DisplayName);
 		}
 		else if (OfferType == EDRShopOfferType::Upgrade
 			&& IsValid(Offer.UpgradeSourceDefinition))
@@ -433,6 +481,13 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 				PlayerState->GetCoins());
 			break;
 
+		case EDRShopOfferType::Skill:
+			OfferView.IsPurchasable = ShopComponent->CanPurchaseSkill(
+				SkillDefinition,
+				SkillComponent,
+				PlayerState->GetCoins());
+			break;
+
 		default:
 			OfferView.IsPurchasable = ShopComponent->CanAfford(
 				Offer.ItemDefinition,
@@ -442,4 +497,26 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 	}
 
 	return OfferViews;
+}
+
+EDRShopOfferSection UDRShopUIComponent::ResolveOfferSection(
+	const FDRShopItemOffer& Offer) const
+{
+	switch (Offer.OfferType)
+	{
+	case EDRShopOfferType::Upgrade:
+		return EDRShopOfferSection::Upgrade;
+
+	case EDRShopOfferType::Perk:
+		return EDRShopOfferSection::Perk;
+
+	case EDRShopOfferType::Skill:
+		return EDRShopOfferSection::Skill;
+
+	default:
+		return IsValid(Offer.ItemDefinition)
+			&& Offer.ItemDefinition->Category == EDRItemCategory::Consumable
+			? EDRShopOfferSection::Consumable
+			: EDRShopOfferSection::Equipment;
+	}
 }

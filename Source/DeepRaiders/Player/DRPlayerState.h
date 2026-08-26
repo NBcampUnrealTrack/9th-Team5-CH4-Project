@@ -11,6 +11,7 @@ class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
 class UDRPerkComponent;
+class UDRSkillComponent;
 class UGameplayAbility;
 class UGameplayEffect;
 class UDRQuickSlotComponent;
@@ -57,6 +58,11 @@ public:
 	UDRPerkComponent* GetPerkComponent() const
 	{
 		return PerkComponent;
+	}
+
+	UDRSkillComponent* GetSkillComponent() const
+	{
+		return SkillComponent;
 	}
 	
 	UDRCombatStatsComponent* GetCombatStatsComponent() const
@@ -191,6 +197,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
 	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Skill")
+	TObjectPtr<UDRSkillComponent> SkillComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat Stats")
 	TObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;

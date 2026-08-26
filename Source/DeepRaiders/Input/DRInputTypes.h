@@ -10,4 +10,5 @@ enum class EDRAbilityInputId : uint8
 	Inventory = 4,
 	Drop = 5,
 	Skill1 = 6,
+	Skill2 = 7,
 };

@@ -12,7 +12,8 @@ enum class EDRShopOfferType : uint8
 {
 	Purchase,
 	Upgrade,
-	Perk
+	Perk,
+	Skill
 };
 
 UENUM(BlueprintType)
@@ -21,7 +22,8 @@ enum class EDRShopOfferSection : uint8
 	Equipment,
 	Consumable,
 	Upgrade,
-	Perk
+	Perk,
+	Skill
 };
 
 USTRUCT(BlueprintType)
@@ -98,6 +100,7 @@ struct FDRShopOfferRequest
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	int32 TargetLevel = 0;
+
 };
 
 USTRUCT(BlueprintType)

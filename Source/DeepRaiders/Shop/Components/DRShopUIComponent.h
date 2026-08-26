@@ -13,6 +13,7 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
+class UDRSkillComponent;
 class UDRStartingWeaponSelectionComponent;
 class UDRUIManagerSubsystem;
 class UDRShopWidget;
@@ -50,6 +51,12 @@ private:
 	UFUNCTION()
 	void HideShopWidget();
 
+	/** 상점 UI 갱신 이벤트를 연결한다. */
+	void BindShopEvents();
+
+	/** 상점 UI 갱신 이벤트 연결을 해제한다. */
+	void UnbindShopEvents();
+
 	/** 로컬 ASC에 상점 UI 표시 상태를 기록한다. */
 	void SetShopOpenTag(bool bIsOpen) const;
 
@@ -69,6 +76,9 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
+	UFUNCTION()
+	void HandleSkillChanged();
+
 	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
 	UFUNCTION()
 	void HandleCoinsChanged(int32 NewCoins);
@@ -79,16 +89,16 @@ private:
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
 
-	/** 현재 코인과 인벤토리 공간에 맞춰 일반 상품을 갱신한다. */
-	void RefreshItemOffers();
-
-	/** 퍽 구매 횟수에 맞춰 Offer UI를 갱신한다. */
-	void RefreshPerkOffers();
+	/** 현재 플레이어 상태에 맞춰 지정한 Offer UI를 갱신한다. */
+	void RefreshOffers(EDRShopOfferType OfferType);
 
 	/** 상점 Offer를 UI 표시용 View 데이터로 변환한다. */
 	TArray<FDRShopOfferView> MakeOfferViews(
 		const TArray<FDRShopItemOffer>& Offers,
 		EDRShopOfferType OfferType) const;
+
+	EDRShopOfferSection ResolveOfferSection(
+		const FDRShopItemOffer& Offer) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopWidget> ShopWidget;
@@ -107,6 +117,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRSkillComponent> SkillComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerState> PlayerState;

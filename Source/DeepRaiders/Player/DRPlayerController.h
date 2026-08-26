@@ -119,6 +119,9 @@ protected:
 	TObjectPtr<UInputAction> Skill1Action;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> Skill2Action;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")

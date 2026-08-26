@@ -9,6 +9,8 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Shop/DRShop.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -99,6 +101,17 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 				PlayerState,
 				ShopComponent,
 				PlayerState->GetPerkComponent(),
+				Request.RowName))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
+		break;
+
+	case EDRShopOfferType::Skill:
+		if (TryPurchaseSkill(
+				PlayerState,
+				ShopComponent,
+				PlayerState->GetSkillComponent(),
 				Request.RowName))
 		{
 			PlayPurchaseSound(ShopActor);
@@ -341,5 +354,30 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		PerkDefinition->Price,
 		PreviousCoins,
 		PlayerState->GetCoins());
+	return true;
+}
+
+bool UDRShopTransactionComponent::TryPurchaseSkill(
+	ADRPlayerState* PlayerState,
+	const UDRShopComponent* ShopComponent,
+	UDRSkillComponent* SkillComponent,
+	FName RowName) const
+{
+	UDRSkillDefinition* SkillDefinition = nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(SkillComponent)
+		|| !ShopComponent->GetSkillDefinition(RowName, SkillDefinition)
+		|| !ShopComponent->CanPurchaseSkill(
+			SkillDefinition,
+			SkillComponent,
+			PlayerState->GetCoins())
+		|| !SkillComponent->EquipSkill(SkillDefinition))
+	{
+		return false;
+	}
+
+	PlayerState->SetCoins(PlayerState->GetCoins() - SkillDefinition->Price);
 	return true;
 }

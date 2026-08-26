@@ -100,4 +100,5 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRStartingWeaponSelectWidget> StartingWeaponPanel;
+
 };
