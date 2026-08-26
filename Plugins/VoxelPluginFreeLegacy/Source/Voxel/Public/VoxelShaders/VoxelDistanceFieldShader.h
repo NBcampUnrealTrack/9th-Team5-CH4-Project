@@ -8,6 +8,9 @@
 #include "RenderCommandFence.h"
 #include "GlobalShader.h"
 
+struct FRHIBatchedShaderParameters;
+struct FRHIBatchedShaderUnbinds;
+
 BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FVoxelDistanceFieldParameters,)
 
 	SHADER_PARAMETER(uint32, SizeX)
@@ -39,13 +42,15 @@ public:
 	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment);
 	
 	void SetBuffers(
-		FRHICommandList& RHICmdList,
+		FRHIBatchedShaderParameters& BatchedParameters,
 		const FRWBuffer& SrcBuffer,
 		const FRWBuffer& DstBuffer) const;
-		
+
 	void SetUniformBuffers(
-		FRHICommandList& RHICmdList, 
+		FRHIBatchedShaderParameters& BatchedParameters,
 		const FVoxelDistanceFieldParameters& Parameters) const;
+
+	void UnsetBuffers(FRHIBatchedShaderUnbinds& BatchedUnbinds) const;
 
 private:
 #if VOXEL_ENGINE_VERSION >= 503

@@ -215,20 +215,20 @@ void ADRSnowControlZone::InitializeDebug()
 	}
 
 	UpdateDebugWidget();
-	if (IsValid(DebugTextBlock))
-	{
-		GetWorldTimerManager().SetTimer(
-			DebugUpdateTimerHandle,
-			this,
-			&ADRSnowControlZone::UpdateDebugWidget,
-			FMath::Max(0.01f, DebugUpdateInterval),
-			true);
-	}
+	// if (IsValid(DebugTextBlock))
+	// {
+	// 	GetWorldTimerManager().SetTimer(
+	// 		DebugUpdateTimerHandle,
+	// 		this,
+	// 		&ADRSnowControlZone::UpdateDebugWidget,
+	// 		FMath::Max(0.01f, DebugUpdateInterval),
+	// 		true);
+	// }
 }
 
 void ADRSnowControlZone::DeinitializeDebug()
 {
-	GetWorldTimerManager().ClearTimer(DebugUpdateTimerHandle);
+	// GetWorldTimerManager().ClearTimer(DebugUpdateTimerHandle);
 	if (IsValid(DebugWidget))
 	{
 		DebugWidget->RemoveFromParent();
