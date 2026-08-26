@@ -105,7 +105,7 @@ void ADRBreakableActor::BreakActor(const FDRBreakableDamageContext& DamageContex
 	
 	ForceNetUpdate();
 	
-	if (BrokenLifeSpan <= KINDA_SMALL_NUMBER);
+	if (BrokenLifeSpan <= KINDA_SMALL_NUMBER)
 	{
 		Destroy();
 		return;

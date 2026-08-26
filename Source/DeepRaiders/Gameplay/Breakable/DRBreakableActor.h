@@ -64,7 +64,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Breakable")
 	TObjectPtr<UStaticMeshComponent> BreakableMeshComponent;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Breakable|Health",meta = (ClampMin = "1.0")))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Breakable|Health",meta = (ClampMin = "1.0"))
 	float MaxHealth = 50.f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breakable|Presentation")
