@@ -2,9 +2,124 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
-#include "DRVoxelTerrainQueryLibrary.generated.h"
+#include "WorldCollision.h"
+#include "DRVoxelTerrainOperationLibrary.generated.h"
 
+class AActor;
 class AVoxelWorld;
+class UWorld;
+class UDRVoxelTerrainOperationLibrary;
+
+// 지형 조작과 wire-format 복원에서 공유하는 좌표/밀도 계산 규칙이다.
+namespace DRVoxelTerrain
+{
+	inline constexpr int32 QuantizedValueMax = 32767;
+
+	struct FInclusiveVoxelBoxDimensions
+	{
+		int32 SizeX = 0;
+		int32 SizeXY = 0;
+		int32 TotalVoxelCount = 0;
+	};
+
+	inline bool TryGetInclusiveVoxelBoxDimensions(
+		const FIntVector& VoxelMin,
+		const FIntVector& VoxelMax,
+		FInclusiveVoxelBoxDimensions& OutDimensions,
+		bool bRequireExpandableBounds = false)
+	{
+		OutDimensions = FInclusiveVoxelBoxDimensions();
+		if (bRequireExpandableBounds &&
+			(VoxelMin.X == MIN_int32 || VoxelMin.Y == MIN_int32 || VoxelMin.Z == MIN_int32 ||
+				VoxelMax.X == MAX_int32 || VoxelMax.Y == MAX_int32 || VoxelMax.Z == MAX_int32))
+		{
+			return false;
+		}
+
+		const int64 SizeX = static_cast<int64>(VoxelMax.X) - VoxelMin.X + 1;
+		const int64 SizeY = static_cast<int64>(VoxelMax.Y) - VoxelMin.Y + 1;
+		const int64 SizeZ = static_cast<int64>(VoxelMax.Z) - VoxelMin.Z + 1;
+		if (SizeX <= 0 || SizeY <= 0 || SizeZ <= 0 ||
+			SizeX > MAX_int32 || SizeY > MAX_int32 || SizeZ > MAX_int32 ||
+			SizeX > MAX_int32 / SizeY || SizeX * SizeY > MAX_int32 / SizeZ)
+		{
+			return false;
+		}
+
+		OutDimensions.SizeX = static_cast<int32>(SizeX);
+		OutDimensions.SizeXY = static_cast<int32>(SizeX * SizeY);
+		OutDimensions.TotalVoxelCount = static_cast<int32>(SizeX * SizeY * SizeZ);
+		return true;
+	}
+
+	inline int32 GetInclusiveVoxelLocalIndex(
+		const FIntVector& Position,
+		const FIntVector& VoxelMin,
+		const FIntVector& VoxelMax)
+	{
+		FInclusiveVoxelBoxDimensions Dimensions;
+		const bool bHasValidDimensions = TryGetInclusiveVoxelBoxDimensions(
+			VoxelMin,
+			VoxelMax,
+			Dimensions);
+		check(bHasValidDimensions);
+		const int64 LocalIndex =
+			(Position.X - VoxelMin.X) +
+			static_cast<int64>(Position.Y - VoxelMin.Y) * Dimensions.SizeX +
+			static_cast<int64>(Position.Z - VoxelMin.Z) * Dimensions.SizeXY;
+		check(LocalIndex >= 0 && LocalIndex < Dimensions.TotalVoxelCount);
+		return static_cast<int32>(LocalIndex);
+	}
+
+	inline FIntVector GetInclusiveVoxelPosition(
+		int32 LocalIndex,
+		const FIntVector& VoxelMin,
+		const FInclusiveVoxelBoxDimensions& Dimensions)
+	{
+		check(LocalIndex >= 0 && LocalIndex < Dimensions.TotalVoxelCount);
+		const int32 LocalZ = LocalIndex / Dimensions.SizeXY;
+		const int32 Remainder = LocalIndex % Dimensions.SizeXY;
+		const int32 LocalY = Remainder / Dimensions.SizeX;
+		const int32 LocalX = Remainder % Dimensions.SizeX;
+		return VoxelMin + FIntVector(LocalX, LocalY, LocalZ);
+	}
+
+	template<typename ElementType>
+	void ShuffleArray(TArray<ElementType>& Values, FRandomStream& RandomStream)
+	{
+		for (int32 Index = Values.Num() - 1; Index > 0; --Index)
+		{
+			Values.Swap(Index, RandomStream.RandRange(0, Index));
+		}
+	}
+
+	inline bool EvaluateFootprintOffset(
+		int32 OffsetX,
+		int32 OffsetY,
+		int32 Radius,
+		float EdgeStrength,
+		float MaximumSlopeTangent,
+		float& OutAmountScale,
+		float& OutAllowedHeightDelta)
+	{
+		const float RadiusAsFloat = static_cast<float>(FMath::Max(1, Radius));
+		const float Distance = FMath::Sqrt(
+			static_cast<float>(OffsetX * OffsetX + OffsetY * OffsetY));
+		if (Radius > 0 && Distance > RadiusAsFloat + 0.5f)
+		{
+			return false;
+		}
+
+		const float DistanceAlpha = Radius > 0
+			? FMath::Clamp(Distance / RadiusAsFloat, 0.f, 1.f)
+			: 0.f;
+		OutAmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
+		OutAllowedHeightDelta = FMath::Max(
+			1.f,
+			Distance * MaximumSlopeTangent + 0.5f);
+		return true;
+	}
+}
 
 UENUM(BlueprintType)
 enum class EDRVoxelDepositRequestPhase : uint8
@@ -17,6 +132,34 @@ enum class EDRVoxelDepositRequestPhase : uint8
 	ApplyVoxels,
 	// 모든 샘플 열과 남은 후보를 처리해 요청 배열에서 제거해도 되는 상태다.
 	Finished
+};
+
+// 복셀 스캔, 쓰기, 물리 트레이스 예산을 하나로 묶는다. 액터는 세부 반복 횟수를 알 필요가 없다.
+UENUM(BlueprintType)
+enum class EDRDepositPerformancePreset : uint8
+{
+	Low,
+	Balanced,
+	High
+};
+
+// 관리 박스를 XY로 나눈 표면 처리 청크다. 각 청크는 관리 영역의 전체 Z 범위를 공유한다.
+USTRUCT(BlueprintType)
+struct FDRVoxelTerrainChunkBounds
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
+	FIntPoint ChunkCoordinate = FIntPoint::ZeroValue;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
+	FVector BoxCenter = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
+	FVector BoxExtent = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Sync|Chunks")
+	int32 LastProcessedPass = INDEX_NONE;
 };
 
 // 복셀 위치는 박스 내부의 1차원 인덱스로, 값은 정수로 양자화해 전송 크기를 줄인다.
@@ -238,23 +381,136 @@ struct FDRVoxelDepositInBoxRequest
 	bool bTraceComplexWorldStaticOcclusion = false;
 };
 
+// 한 번의 호출에 필요한 월드와 액터 설정을 명시적으로 전달한다. 라이브러리가 Actor private 멤버에
+// 접근하지 않으므로 지형 계산과 네트워크 생명주기의 경계가 분명해진다.
+struct FDRVoxelTerrainOperationContext
+{
+	UWorld* World = nullptr;
+	AVoxelWorld* VoxelWorld = nullptr;
+	AActor* TraceOwner = nullptr;
+	TArray<FDRVoxelTerrainChunkBounds>* TerrainChunks = nullptr;
+	const FDRVoxelDepositInBoxSettings* DepositSettings = nullptr;
+	FVector AreaCenter = FVector::ZeroVector;
+	FVector AreaExtent = FVector::ZeroVector;
+	EDRDepositPerformancePreset PerformancePreset = EDRDepositPerformancePreset::Balanced;
+	FName RequiredStaticMeshSurfaceTag = NAME_None;
+	float MaxStaticMeshSlopeAngle = 50.f;
+	bool bHasAuthority = false;
+	bool bEnableDepositAccumulation = false;
+	bool bDepositOnStaticMeshes = false;
+	bool bBlockDepositBelowStaticMeshes = true;
+	bool bTraceComplexStaticMeshSurfaces = false;
+};
+
+struct FDRVoxelTerrainOperationTickResult
+{
+	FDRVoxelDepositDeltaRecord DeltaRecord;
+	int32 ModifiedVoxelCount = 0;
+	int32 ScannedColumnCount = 0;
+	int32 RemainingRequestCount = 0;
+	bool bProcessedRequest = false;
+	bool bChunkCompleted = false;
+	bool bCancelled = false;
+};
+
+// 액터별 퇴적 패스의 가변 상태다. 알고리즘 진입점은 TerrainOperationLibrary만 공개하며,
+// 이 값은 액터 멤버로 고정해 요청이 가리키는 패스 중복 방지 집합의 주소가 바뀌지 않게 한다.
+struct FDRVoxelTerrainOperationState final
+{
+public:
+	FDRVoxelTerrainOperationState() = default;
+	~FDRVoxelTerrainOperationState() = default;
+	FDRVoxelTerrainOperationState(const FDRVoxelTerrainOperationState&) = delete;
+	FDRVoxelTerrainOperationState& operator=(const FDRVoxelTerrainOperationState&) = delete;
+	FDRVoxelTerrainOperationState(FDRVoxelTerrainOperationState&&) = delete;
+	FDRVoxelTerrainOperationState& operator=(FDRVoxelTerrainOperationState&&) = delete;
+
+private:
+	struct FFootprintTraceTarget
+	{
+		FIntPoint VoxelXY = FIntPoint::ZeroValue;
+		float AmountScale = 1.f;
+		float MinLocalSurfaceZ = 0.f;
+		float MaxLocalSurfaceZ = 0.f;
+	};
+
+	struct FPendingFootprintTrace
+	{
+		FTraceHandle Handle;
+		FFootprintTraceTarget Target;
+	};
+
+	bool IsActive() const;
+	bool StartPass(const FDRVoxelTerrainOperationContext& Context);
+	FDRVoxelTerrainOperationTickResult Tick(const FDRVoxelTerrainOperationContext& Context);
+	void Cancel();
+	void StartNextChunk(const FDRVoxelTerrainOperationContext& Context);
+	FDRVoxelDepositInBoxRequest* GetActiveRequest(const FDRVoxelTerrainOperationContext& Context);
+	FDRVoxelDepositInBoxRequest* GetActiveRequest(
+		const FDRVoxelTerrainOperationContext& Context,
+		EDRVoxelDepositRequestPhase ExpectedPhase);
+	void ProcessRequest(
+		const FDRVoxelTerrainOperationContext& Context,
+		FDRVoxelTerrainOperationTickResult& OutResult);
+	bool BeginSurfaceScan(
+		const FDRVoxelTerrainOperationContext& Context,
+		const FDRVoxelDepositInBoxSettings& RequestSettings,
+		const FVector& ScanCenter,
+		const FVector& ScanExtent);
+	void ProcessSurfaceScan(const FDRVoxelTerrainOperationContext& Context);
+	void FinishSurfaceScan(const FDRVoxelTerrainOperationContext& Context);
+	void CancelSurfaceScan();
+	bool BeginFootprintScan(const FDRVoxelTerrainOperationContext& Context);
+	void ProcessFootprintScan(const FDRVoxelTerrainOperationContext& Context);
+	void FinishFootprintScan(const FDRVoxelTerrainOperationContext& Context);
+	void CancelFootprintScan();
+
+	FDRVoxelDepositInBoxRequest ActiveRequest;
+	bool bHasActiveRequest = false;
+	TArray<int32> ChunkOrder;
+	int32 NextChunkOrderIndex = 0;
+	int32 ActiveChunkIndex = INDEX_NONE;
+	int32 PassNumber = 0;
+	bool bPassActive = false;
+	TSet<FIntVector> PassWrittenVoxelPositions;
+	TSet<FIntPoint> PassWrittenColumns;
+
+	TArray<FTraceHandle> PendingSurfaceTraceHandles;
+	TArray<FVector> SurfaceHitPositions;
+	TArray<int32> SurfaceTraceColumnOrder;
+	FRandomStream SurfaceTraceRandomStream;
+	TWeakObjectPtr<AVoxelWorld> SurfaceScanVoxelWorld;
+	FVector SurfaceScanCenter = FVector::ZeroVector;
+	FVector SurfaceScanExtent = FVector::ZeroVector;
+	int32 SurfaceTraceColumnCountY = 0;
+	int32 NextSurfaceTraceColumnIndex = 0;
+	bool bSurfaceScanActive = false;
+
+	TArray<FPendingFootprintTrace> PendingFootprintTraces;
+	TArray<FFootprintTraceTarget> FootprintTraceTargets;
+	FVector FootprintScanCenter = FVector::ZeroVector;
+	FVector FootprintScanExtent = FVector::ZeroVector;
+	int32 NextFootprintTraceIndex = 0;
+	bool bFootprintScanActive = false;
+
+	friend class UDRVoxelTerrainOperationLibrary;
+};
+
 UCLASS()
-class DEEPRAIDERS_API UDRVoxelTerrainQueryLibrary : public UBlueprintFunctionLibrary
+class DEEPRAIDERS_API UDRVoxelTerrainOperationLibrary : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
 public:
-	// 박스 안을 3차원 간격으로 샘플링하고 고체 복셀의 단일 머터리얼 인덱스별 개수를 센다.
-	// TargetMaterialIndices가 비어 있으면 모든 머터리얼을 집계한다.
-	UFUNCTION(BlueprintCallable, Category="Voxel Terrain|Query")
-	static bool GetMaterialCountsInBox(
-		AVoxelWorld* VoxelWorld,
-		const FVector& BoxCenter,
-		const FVector& BoxExtent,
-		float SampleStep,
-		const TArray<uint8>& TargetMaterialIndices,
-		TMap<uint8, int32>& OutMaterialCounts,
-		int32& OutTotalCount);
+	// 액터가 소유한 상태를 통해 전체 퇴적 패스를 시작·진행·취소하는 유일한 공개 진입점이다.
+	static bool IsDepositPassActive(const FDRVoxelTerrainOperationState& State);
+	static bool StartDepositPass(
+		const FDRVoxelTerrainOperationContext& Context,
+		FDRVoxelTerrainOperationState& State);
+	static FDRVoxelTerrainOperationTickResult TickDeposit(
+		const FDRVoxelTerrainOperationContext& Context,
+		FDRVoxelTerrainOperationState& State);
+	static void CancelDeposit(FDRVoxelTerrainOperationState& State);
 
 	// 월드 공간 구와 축 정렬 박스가 겹치는지 판정한다. 굴착이 이 액터의 관리 영역에 영향을 주는지 거르는 용도다.
 	UFUNCTION(BlueprintPure, Category="Voxel Terrain|Query")
@@ -289,9 +545,22 @@ public:
 		const TArray<FVector>& SurfaceWorldPositions,
 		int32& OutAddedCandidateCount);
 
+	// 단일 요청의 현재 Phase 하나를 틱 예산만큼 진행한다.
+	// 반환값은 처리 성공 여부가 아니라 다음 틱에도 같은 요청을 계속 처리해야 하는지를 의미한다.
+	// Out 값은 매 호출마다 초기화되며, ApplyVoxels에서 실제 변경이 생긴 Tick에만 DeltaRecord가 채워진다.
+	// 지형 작업 상태는 동시에 요청 하나만 소유하므로 이 API를 사용해 불필요한 배열 큐 상태를 만들지 않는다.
+	static bool ProcessDepositInBoxRequestTick(
+		FDRVoxelDepositInBoxRequest& Request,
+		int32 MaxScanColumnsToProcess,
+		int32 MaxVoxelWriteAttemptsToProcess,
+		int32& OutModifiedVoxelCount,
+		int32& OutScannedColumnCount,
+		FDRVoxelDepositDeltaRecord& OutDeltaRecord);
+
 	// 배열의 첫 요청을 틱 예산만큼 진행하고, 완료된 요청은 배열에서 제거한다.
 	// 실제 변경이 생긴 틱에만 OutDeltaRecord가 채워져 서버가 해당 결과를 복제할 수 있다.
 	// 반환값은 성공 여부가 아니라 처리 후 Requests에 요청이 남아 있는지를 의미한다.
+	// Blueprint 및 기존 C++ 호출자를 위한 호환 API이며 내부 처리는 단일 요청 API에 위임한다.
 	UFUNCTION(BlueprintCallable, Category="Voxel|Deposit")
 	static bool ProcessDepositInBoxRequestsTick(
 		UPARAM(ref) TArray<FDRVoxelDepositInBoxRequest>& Requests,

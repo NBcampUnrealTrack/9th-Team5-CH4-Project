@@ -1,5 +1,4 @@
-#include "DRVoxelTerrainQueryLibrary.h"
-#include "DRVoxelTerrainDepositUtils.h"
+#include "DRVoxelTerrainOperationLibrary.h"
 
 #include "Engine/World.h"
 #include "VoxelData/VoxelDataIncludes.h"
@@ -960,81 +959,7 @@ namespace
 	}
 }
 
-bool UDRVoxelTerrainQueryLibrary::GetMaterialCountsInBox(
-	AVoxelWorld* VoxelWorld,
-	const FVector& BoxCenter,
-	const FVector& BoxExtent,
-	float SampleStep,
-	const TArray<uint8>& TargetMaterialIndices,
-	TMap<uint8, int32>& OutMaterialCounts,
-	int32& OutTotalCount)
-{
-	// Out 매개변수는 실패하더라도 이전 호출 결과가 남지 않도록 함수 시작 시 항상 초기화한다.
-	OutMaterialCounts.Reset();
-	OutTotalCount = 0;
-
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		!FMath::IsFinite(SampleStep) || SampleStep <= 0.f ||
-		BoxCenter.ContainsNaN() || BoxExtent.ContainsNaN())
-	{
-		return false;
-	}
-
-	const FVector AbsExtent(FMath::Abs(BoxExtent.X), FMath::Abs(BoxExtent.Y), FMath::Abs(BoxExtent.Z));
-	if (AbsExtent.IsNearlyZero())
-	{
-		return false;
-	}
-
-	// 배열을 Set으로 바꿔 각 샘플의 머터리얼 필터 검사를 O(1)에 가깝게 처리한다.
-	// 빈 Set은 필터를 사용하지 않고 발견한 모든 단일 인덱스를 집계한다는 의미다.
-	TSet<uint8> TargetMaterialSet;
-	for (const uint8 MaterialIndex : TargetMaterialIndices)
-	{
-		TargetMaterialSet.Add(MaterialIndex);
-	}
-
-	const bool bUseMaterialFilter = TargetMaterialSet.Num() > 0;
-	const FVector Min = BoxCenter - AbsExtent;
-	const FVector Max = BoxCenter + AbsExtent;
-
-	// 이 함수는 정확한 전체 복셀 개수가 아니라 SampleStep 간격의 표본 통계를 구한다.
-	// SampleStep이 작을수록 정확도는 높아지지만 X*Y*Z 반복 횟수가 증가하므로 기본적으로 비활성화돼 있다.
-	for (float X = Min.X; X <= Max.X; X += SampleStep)
-	{
-		for (float Y = Min.Y; Y <= Max.Y; Y += SampleStep)
-		{
-			for (float Z = Min.Z; Z <= Max.Z; Z += SampleStep)
-			{
-				const FIntVector SampleVoxelPosition = VoxelWorld->GlobalToLocal(FVector(X, Y, Z));
-
-				float Value = 0.f;
-				UVoxelDataTools::GetValue(Value, VoxelWorld, SampleVoxelPosition);
-				// Voxel Plugin의 밀도 값이 0 이하인 샘플만 고체로 집계한다.
-				if (Value > 0.f)
-				{
-					continue;
-				}
-
-				FVoxelMaterial Material;
-				UVoxelDataTools::GetMaterial(Material, VoxelWorld, SampleVoxelPosition);
-
-				const uint8 MaterialIndex = Material.GetSingleIndex();
-				if (bUseMaterialFilter && !TargetMaterialSet.Contains(MaterialIndex))
-				{
-					continue;
-				}
-
-				OutMaterialCounts.FindOrAdd(MaterialIndex)++;
-				OutTotalCount++;
-			}
-		}
-	}
-
-	return true;
-}
-
-bool UDRVoxelTerrainQueryLibrary::IsVoxelUpdateInBox(
+bool UDRVoxelTerrainOperationLibrary::IsVoxelUpdateInBox(
 	const FVector& BoxCenter,
 	const FVector& BoxExtent,
 	const FVector& Location,
@@ -1060,7 +985,7 @@ bool UDRVoxelTerrainQueryLibrary::IsVoxelUpdateInBox(
 	return FVector::DistSquared(ClosestPoint, Location) <= FMath::Square(Radius);
 }
 
-bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
+bool UDRVoxelTerrainOperationLibrary::MakeDepositInBoxRequest(
 	AVoxelWorld* VoxelWorld,
 	const FVector& BoxCenter,
 	const FVector& BoxExtent,
@@ -1187,7 +1112,7 @@ bool UDRVoxelTerrainQueryLibrary::MakeDepositInBoxRequest(
 	return true;
 }
 
-bool UDRVoxelTerrainQueryLibrary::ConfigureDepositRequestWriteBounds(
+bool UDRVoxelTerrainOperationLibrary::ConfigureDepositRequestWriteBounds(
 	FDRVoxelDepositInBoxRequest& Request,
 	const FVector& AreaCenter,
 	const FVector& AreaExtent)
@@ -1259,7 +1184,7 @@ bool UDRVoxelTerrainQueryLibrary::ConfigureDepositRequestWriteBounds(
 	return true;
 }
 
-bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
+bool UDRVoxelTerrainOperationLibrary::AddExternalSurfaceDepositCandidates(
 	FDRVoxelDepositInBoxRequest& Request,
 	const TArray<FVector>& SurfaceWorldPositions,
 	int32& OutAddedCandidateCount)
@@ -1320,35 +1245,25 @@ bool UDRVoxelTerrainQueryLibrary::AddExternalSurfaceDepositCandidates(
 	return true;
 }
 
-bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
-	TArray<FDRVoxelDepositInBoxRequest>& Requests,
+bool UDRVoxelTerrainOperationLibrary::ProcessDepositInBoxRequestTick(
+	FDRVoxelDepositInBoxRequest& Request,
 	int32 MaxScanColumnsToProcess,
 	int32 MaxVoxelWriteAttemptsToProcess,
 	int32& OutModifiedVoxelCount,
 	int32& OutScannedColumnCount,
-	FDRVoxelDepositDeltaRecord& OutDeltaRecord,
-	int32& OutRemainingRequestCount)
+	FDRVoxelDepositDeltaRecord& OutDeltaRecord)
 {
-	// 출력은 "이번 호출에서 수행한 일"만 표현한다. 이전 틱의 값이 누적되지 않도록 매번 초기화한다.
+	// 출력은 누적 통계가 아니라 정확히 이번 호출에서 수행한 일만 나타낸다.
+	// 호출자가 이전 Tick 값을 재사용해도 잘못된 델타를 다시 배치하지 않도록 먼저 모두 초기화한다.
 	OutModifiedVoxelCount = 0;
 	OutScannedColumnCount = 0;
-	OutRemainingRequestCount = 0;
 	OutDeltaRecord = FDRVoxelDepositDeltaRecord();
 
-	if (Requests.Num() == 0)
-	{
-		return false;
-	}
-
-	// 현재 설계는 FIFO 배열의 첫 요청 하나만 진행한다. 액터는 진행 중 요청이 있으면 새 요청을 만들지 않으므로
-	// 보통 배열 크기는 0 또는 1이지만, Blueprint/C++ 호출자가 여러 개를 넣어도 순서대로 처리된다.
-	FDRVoxelDepositInBoxRequest& Request = Requests[0];
 	AVoxelWorld* VoxelWorld = GetUsableRequestVoxelWorld(Request);
-
 	if (VoxelWorld == nullptr)
 	{
-		Requests.RemoveAt(0, 1, EAllowShrinking::No);
-		OutRemainingRequestCount = Requests.Num();
+		// 유효하지 않은 요청은 계속 처리할 작업이 없는 것으로 반환한다.
+		// 소유자인 지형 작업 상태/호환 배열 래퍼가 요청 제거 여부를 결정한다.
 		return false;
 	}
 
@@ -1379,18 +1294,45 @@ bool UDRVoxelTerrainQueryLibrary::ProcessDepositInBoxRequestsTick(
 			OutDeltaRecord);
 	}
 
-	// 참조 중인 Request를 제거한 뒤에는 다시 접근하지 않는다. 이후에는 배열 개수만 출력한다.
-	if (IsDepositRequestFinished(Request))
+	// true는 성공 여부가 아니라 '동일 요청을 다음 Tick에도 유지해야 함'을 의미한다.
+	return !IsDepositRequestFinished(Request);
+}
+
+bool UDRVoxelTerrainOperationLibrary::ProcessDepositInBoxRequestsTick(
+	TArray<FDRVoxelDepositInBoxRequest>& Requests,
+	int32 MaxScanColumnsToProcess,
+	int32 MaxVoxelWriteAttemptsToProcess,
+	int32& OutModifiedVoxelCount,
+	int32& OutScannedColumnCount,
+	FDRVoxelDepositDeltaRecord& OutDeltaRecord,
+	int32& OutRemainingRequestCount)
+{
+	// 이 배열 버전은 과거 Blueprint 계약을 유지하는 얇은 FIFO 어댑터다.
+	// 실제 상태 전이 규칙은 ProcessDepositInBoxRequestTick 한 곳에만 존재한다.
+	OutModifiedVoxelCount = 0;
+	OutScannedColumnCount = 0;
+	OutRemainingRequestCount = 0;
+	OutDeltaRecord = FDRVoxelDepositDeltaRecord();
+	if (Requests.Num() == 0)
+	{
+		return false;
+	}
+
+	if (!ProcessDepositInBoxRequestTick(
+		Requests[0],
+		MaxScanColumnsToProcess,
+		MaxVoxelWriteAttemptsToProcess,
+		OutModifiedVoxelCount,
+		OutScannedColumnCount,
+		OutDeltaRecord))
 	{
 		Requests.RemoveAt(0, 1, EAllowShrinking::No);
 	}
-
 	OutRemainingRequestCount = Requests.Num();
-	// 이 bool은 처리 성공 여부가 아니라 "다음 틱에도 Process를 호출할 작업이 남았는가"를 나타낸다.
 	return OutRemainingRequestCount > 0;
 }
 
-bool UDRVoxelTerrainQueryLibrary::ApplyDepositDeltaRecord(
+bool UDRVoxelTerrainOperationLibrary::ApplyDepositDeltaRecord(
 	AVoxelWorld* VoxelWorld,
 	const FDRVoxelDepositDeltaRecord& DeltaRecord,
 	int32& OutAppliedVoxelCount)
@@ -1467,7 +1409,7 @@ bool UDRVoxelTerrainQueryLibrary::ApplyDepositDeltaRecord(
 	return true;
 }
 
-bool UDRVoxelTerrainQueryLibrary::ApplyDigDeltaRecord(
+bool UDRVoxelTerrainOperationLibrary::ApplyDigDeltaRecord(
 	AVoxelWorld* VoxelWorld,
 	const FDRVoxelDigDeltaRecord& DeltaRecord)
 {
