@@ -23,6 +23,7 @@ public:
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
 	void InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem
 		, const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs
+		, float InBreakableDamageAmount
 		, const FDRProjectileWorldImpactData& InWorldImpactData
 		, FGameplayTag InImpactGameplayCueTag
 		, int32 InSourceTeamId);
@@ -36,6 +37,8 @@ protected:
 	
 	// 플레이어 적중 Effect를 서버에서 적용
 	void ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
+	
+	bool ApplyBreakableDamage(const FHitResult& ImpactResult);
 	
 	// 같은 팀인지 검사
 	bool IsFriendlyTarget(const AActor* TargetActor) const;
@@ -64,6 +67,8 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> SourceAbilitySystem;
 	
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
+	
+	float BreakableDamageAmount = 0.f;
 	
 	FDRProjectileWorldImpactData WorldImpactData;
 	

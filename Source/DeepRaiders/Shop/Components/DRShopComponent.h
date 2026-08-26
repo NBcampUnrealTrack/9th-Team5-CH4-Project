@@ -12,6 +12,8 @@ class UDRShopAreaComponent;
 class UDRItemDefinition;
 class UDRPerkComponent;
 class UDRPerkDefinition;
+class UDRSkillComponent;
+class UDRSkillDefinition;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopComponent : public UActorComponent
@@ -33,10 +35,19 @@ public:
 		FName RowName,
 		UDRPerkDefinition*& OutPerkDefinition) const;
 
+	bool GetSkillDefinition(
+		FName RowName,
+		UDRSkillDefinition*& OutSkillDefinition) const;
+
 	/** 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
 		const UDRPerkDefinition* PerkDefinition,
 		const UDRPerkComponent* PerkComponent,
+		int32 AvailableCoins) const;
+
+	bool CanPurchaseSkill(
+		const UDRSkillDefinition* SkillDefinition,
+		const UDRSkillComponent* SkillComponent,
 		int32 AvailableCoins) const;
 
 	/** 가격과 보유 코인을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
@@ -63,6 +74,11 @@ private:
 
 	/** 일반 상품 또는 단계별 업그레이드 Offer를 목록에 추가한다. */
 	void AddItemOffers(FName RowName, const FDRShopItemTableRow& ItemRow);
+
+	void AddOffer(
+		FName RowName,
+		EDRShopOfferType OfferType,
+		UDRItemDefinition* ItemDefinition);
 
 	UPROPERTY(
 		EditDefaultsOnly,

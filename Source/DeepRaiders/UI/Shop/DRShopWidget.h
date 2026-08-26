@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/Shop/DRShopItemTable.h"
+#include "DeepRaiders/Shop/DRShopSellTypes.h"
 #include "DRShopWidget.generated.h"
 
 class UButton;
 class UDRInventoryComponent;
+class UDRPerkComponent;
 class UDRShopBuyPanelWidget;
 class UDRShopSellPanelWidget;
 class UDRStartingWeaponSelectWidget;
@@ -18,7 +20,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopOfferRequestedSignature,
 	FDRShopOfferRequest,
 	Request);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRShopWidgetSellRequestedSignature, FGuid, InstanceId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRShopWidgetSellRequestedSignature,
+	EDRShopSellTargetType, TargetType, FGuid, InstanceId);
 
 /** 구매·판매 패널 전환과 상점 종료를 관리하는 최상위 화면이다. */
 UCLASS()
@@ -33,7 +36,7 @@ public:
 		const TArray<FDRShopOfferView>& NewOffers);
 
 	/** 판매 패널에 로컬 플레이어 인벤토리를 연결한다. */
-	void InitializeSellPanel(UDRInventoryComponent* InventoryComponent);
+	void InitializeSellPanel(UDRInventoryComponent* InventoryComponent, UDRPerkComponent* PerkComponent);
 
 	/** 최초 무기 선택 탭을 초기화하고 표시 여부를 설정한다. */
 	void InitializeStartingWeaponPanel(
@@ -72,7 +75,7 @@ private:
 	void HandleOfferRequested(FDRShopOfferRequest Request);
 
 	UFUNCTION()
-	void HandleSellRequested(FGuid InstanceId);
+	void HandleSellRequested(EDRShopSellTargetType TargetType, FGuid InstanceId);
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> BuyPanelButton;
@@ -97,4 +100,5 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRStartingWeaponSelectWidget> StartingWeaponPanel;
+
 };

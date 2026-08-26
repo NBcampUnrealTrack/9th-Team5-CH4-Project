@@ -4,5 +4,5 @@ UDRPerkDefinition::UDRPerkDefinition()
 {
 	Category = EDRItemCategory::Perk;
 	MaxStackSize = 1;
-	bCanBeSold = false;
+	bCanBeSold = true;
 }

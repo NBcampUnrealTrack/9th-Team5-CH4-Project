@@ -58,9 +58,14 @@ namespace DRGameplayTags
 		"Shared fire interval cooldown for ranged weapons.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Cooldown_Skill_Test,
-		"Cooldown.Skill.Test",
-		"Cooldown for the test character skill.");
+		Cooldown_Skill_One,
+		"Cooldown.Skill.One",
+		"Cooldown for the first character skill slot.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Two,
+		"Cooldown.Skill.Two",
+		"Cooldown for the second character skill slot.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,

@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
@@ -20,6 +21,7 @@ ADRPlayerState::ADRPlayerState()
 
 	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
+	SkillComponent = CreateDefaultSubobject<UDRSkillComponent>(TEXT("SkillComponent"));
 	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
 }
 
@@ -335,6 +337,11 @@ void ADRPlayerState::GrantDefaultAbilities()
 	if (DefaultAbilitySet)
 	{
 		DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
+	}
+
+	if (IsValid(SkillComponent))
+	{
+		SkillComponent->GrantDefaultSkills();
 	}
 }
 

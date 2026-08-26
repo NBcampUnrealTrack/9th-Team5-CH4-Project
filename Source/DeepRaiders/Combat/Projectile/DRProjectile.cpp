@@ -10,6 +10,9 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 
+#include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
+#include "Kismet/GameplayStatics.h"
+
 ADRProjectile::ADRProjectile()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -69,7 +72,9 @@ void ADRProjectile::BeginPlay()
 }
 
 void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem,
-	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs, const FDRProjectileWorldImpactData& InWorldImpactData,
+	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
+	float InBreakableDamageAmount,
+	const FDRProjectileWorldImpactData& InWorldImpactData,
 	FGameplayTag InImpactGameplayCueTag, int32 InSourceTeamId)
 {
 	if (!HasAuthority())
@@ -79,6 +84,7 @@ void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilit
 	
 	SourceAbilitySystem = InSourceAbilitySystem;
 	ImpactEffectSpecs = InImpactEffectSpecs;
+	BreakableDamageAmount = FMath::Max(0.f, InBreakableDamageAmount);
 	WorldImpactData = InWorldImpactData;
 	ImpactGameplayCueTag = InImpactGameplayCueTag;
 	SourceTeamId = InSourceTeamId;	
@@ -111,6 +117,13 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 		&& HitActor != GetOwner()
 		&& HitActor != GetInstigator())
 	{
+		if (ApplyBreakableDamage(ImpactResult))
+		{
+			ExecuteImpactGameplayCue(ImpactResult);
+			Destroy();
+			return;
+		}
+				
 		UAbilitySystemComponent* TargetAbilitySystem = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
 		
 		// ASC가 있는 Actor와 충돌
@@ -151,6 +164,36 @@ void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySyst
 		
 		SourceASC->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);
 	}
+}
+
+bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
+{
+	ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(ImpactResult.GetActor());
+
+	if (!IsValid(BreakableTarget) 
+		|| BreakableTarget->IsBroken() 
+		|| BreakableDamageAmount <= 0.f)
+	{
+		return false;
+	}
+
+	FVector DamageDirection = ProjectileMovement->Velocity.GetSafeNormal();
+
+	if (DamageDirection.IsNearlyZero())
+	{
+		DamageDirection = GetActorForwardVector();
+	}
+
+	const float AppliedDamage = UGameplayStatics::ApplyPointDamage(
+			BreakableTarget,
+			BreakableDamageAmount,
+			DamageDirection,
+			ImpactResult,
+			GetInstigatorController(),
+			this,
+			UDamageType::StaticClass());
+
+	return AppliedDamage > KINDA_SMALL_NUMBER;
 }
 
 bool ADRProjectile::IsFriendlyTarget(const AActor* TargetActor) const

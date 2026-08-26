@@ -70,6 +70,10 @@ protected:
 	void BuildImpactEffectSpecs(
 		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 
+	float GetBreakableDamageAmount() const;
+	
+	bool TryApplyBreakableDamage(const FHitResult& HitResult) const;
+	
 	void ApplyImpactEffectSpecs(
 		UAbilitySystemComponent* TargetAbilitySystem,
 		const FHitResult& HitResult,
@@ -116,7 +120,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;
-
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float BreakableDamage = 1.f;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category = "Ranged Weapon|Presentation",meta = (
 		GameplayTagFilter = "GameplayCue"))
 	FGameplayTag FireGameplayCueTag;

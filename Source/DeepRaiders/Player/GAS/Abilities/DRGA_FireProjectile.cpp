@@ -50,14 +50,12 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	}
 	
 	FHitResult CameraHit;
-	
 	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(),CameraHit))
 	{
 		return false;
 	}
 
 	FVector MuzzleLocation;
-
 	if (!ResolveMuzzleLocation(ViewRotation.Vector(),MuzzleLocation))
 	{
 		return false;
@@ -76,7 +74,6 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	}
 
 	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
-
 	if (!IsValid(AbilitySystem))
 	{
 		return false;
@@ -123,7 +120,8 @@ void UDRGA_FireProjectile::UnregisterServerShotDelegate()
 
 	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
 	{
-		AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,	GetCurrentAbilitySpecHandle(),
+		AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,	
+			GetCurrentAbilitySpecHandle(),
 			GetCurrentActivationInfo().GetActivationPredictionKey()).Remove(ServerShotDelegateHandle);
 	}
 
@@ -156,65 +154,47 @@ void UDRGA_FireProjectile::HandleServerShotRequest()
 	}
 	
 	// 투사체 발사
-	ExecuteServerProjectileShot();	
+	ExecuteServerProjectileShot();
 }
 
 bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	
 	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
 	{
 		return false;
 	}
-	
+
 	FVector ViewLocation;
 	FRotator ViewRotation;
-	
 	if (!GetViewPoint(ViewLocation, ViewRotation))
 	{
 		return false;
 	}
-	
+
 	FHitResult CameraHit;
-	
 	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(), CameraHit))
 	{
 		return false;
 	}
-	
+
 	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
-	
+
 	FVector MuzzleLocation;
-	
 	if (!ResolveMuzzleLocation(ViewRotation.Vector(), MuzzleLocation))
 	{
 		return false;
 	}
-	
-	FVector ProjectileDirection = AimPoint - MuzzleLocation;
-	if (!ProjectileDirection.Normalize())
+
+	FVector BaseProjectileDirection = AimPoint - MuzzleLocation;
+	if (!BaseProjectileDirection.Normalize())
 	{
-		ProjectileDirection = ViewRotation.Vector();
+		BaseProjectileDirection = ViewRotation.Vector();
 	}
-	
+
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
-	UWorld* World = GetWorld();
-	
-	if (!IsValid(AvatarActor)
-		|| !IsValid(AbilitySystem)
-		|| !IsValid(World))
-	{
-		return false;
-	}
-	
-	const FTransform SpawnTransform(ProjectileDirection.Rotation(), MuzzleLocation);
-
-	ADRProjectile* Projectile =	World->SpawnActorDeferred<ADRProjectile>(ProjectileClass, SpawnTransform, AvatarActor,
-			Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-	if (!IsValid(Projectile))
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();	
+	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem))
 	{
 		return false;
 	}
@@ -222,30 +202,75 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 
-	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs, WorldImpactData,
-		GetImpactGameplayCueTag(), GetSourceTeamId());
+	const int32 SafeProjectileCount = FMath::Max(ProjectileCount, 1);
+	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(SpreadHalfAngleDegrees, 0.f));
+	bool bSpawnedAnyProjectile = false;
+	for (int32 ProjectileIndex = 0; ProjectileIndex < SafeProjectileCount; ++ProjectileIndex)
+	{
+		FVector ProjectileDirection = BaseProjectileDirection;
+
+		if (SpreadRadians > KINDA_SMALL_NUMBER)
+		{
+			ProjectileDirection = FMath::VRandCone(BaseProjectileDirection, SpreadRadians);
+		}
+
+		if (SpawnProjectile(MuzzleLocation, ProjectileDirection, AvatarActor, AbilitySystem, ImpactEffectSpecs))
+		{
+			bSpawnedAnyProjectile = true;
+		}
+	}
+
+	if (!bSpawnedAnyProjectile)
+	{
+		return false;
+	}
+
+	// 발사 Presentation은 Pellet마다 실행하면 안 됨.
+	// Trigger 한 번당 한 번만.
+	PlayServerFirePresentation(MuzzleLocation, AimPoint);
+
+	return true;
+}
+
+bool UDRGA_FireProjectile::SpawnProjectile(
+	const FVector& SpawnLocation,
+	const FVector& ProjectileDirection,
+	AActor* AvatarActor,
+	UAbilitySystemComponent* AbilitySystem,
+	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs)
+{
+	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem) || !ProjectileClass)
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const FVector SafeDirection = ProjectileDirection.GetSafeNormal();
+
+	if (SafeDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const FTransform SpawnTransform(SafeDirection.Rotation(), SpawnLocation);
+
+	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(ProjectileClass, SpawnTransform, AvatarActor, Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (!IsValid(Projectile))
+	{
+		return false;
+	}
+
+	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs,
+		GetBreakableDamageAmount(), WorldImpactData, GetImpactGameplayCueTag(), GetSourceTeamId());
 
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 
-	PlayServerFirePresentation(MuzzleLocation, AimPoint);
-
-	return true;	
+	return true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

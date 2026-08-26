@@ -16,6 +16,9 @@ struct DEEPRAIDERS_API FDRPerkEntry
 {
 	GENERATED_BODY()
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
+	FGuid PerkInstanceId;
+
 	/** 소유 클라이언트에 복제할 퍽 정의다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
@@ -40,6 +43,9 @@ public:
 	/** 보유 중인 동일 퍽 개수를 반환한다. */
 	int32 GetPerkCount(const UDRPerkDefinition* PerkDefinition) const;
 
+	/** 현재 유효한 전체 퍽 개수를 반환한다. */
+	int32 GetTotalPerkCount() const;
+
 	/** UI에 표시할 현재 퍽 목록을 반환한다. */
 	const TArray<FDRPerkEntry>& GetPerkEntries() const
 	{
@@ -59,6 +65,12 @@ public:
 	/** 서버에서 퍽을 추가하고 GameplayEffect를 즉시 적용한다. */
 	bool AddPerk(UDRPerkDefinition* PerkDefinition);
 
+	/** 고유 ID가 일치하는 퍽의 효과와 슬롯을 함께 제거한다. */
+	bool TryRemovePerk(FGuid PerkInstanceId);
+
+	/** 고유 ID가 일치하는 퍽 정의를 반환한다. */
+	UDRPerkDefinition* FindPerkDefinition(FGuid PerkInstanceId) const;
+
 	/** 서버에서 모든 퍽 슬롯과 적용된 GameplayEffect를 초기화한다. */
 	bool ResetPerks();
 
@@ -69,6 +81,12 @@ public:
 	FDRPerksChangedSignature OnPerksChanged;
 
 private:
+	/** 표시 가능한 범위 안에서 비어 있는 첫 슬롯을 반환한다. */
+	int32 FindAvailableSlotIndex() const;
+
+	/** 고유 ID와 정의가 모두 유효한 퍽의 배열 위치를 반환한다. */
+	int32 FindPerkIndex(FGuid PerkInstanceId) const;
+
 	/** 퍽 정의로 GameplayEffectSpec을 생성하고 서버 ASC에 적용한다. */
 	FActiveGameplayEffectHandle ApplyPerkEffect(
 		UAbilitySystemComponent* AbilitySystemComponent,

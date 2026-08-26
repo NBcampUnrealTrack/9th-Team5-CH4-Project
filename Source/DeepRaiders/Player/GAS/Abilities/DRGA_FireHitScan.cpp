@@ -321,6 +321,7 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 
 		if (bApplyServerEffects)
 		{
+			TryApplyBreakableDamage(HitResult);
 			ExecuteImpactGameplayCue(HitResult);
 		}
 

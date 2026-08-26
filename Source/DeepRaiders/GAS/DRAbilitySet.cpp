@@ -1,10 +1,5 @@
 ﻿#include "DRAbilitySet.h"
 
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "DRAbilitySet.h"
-
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"

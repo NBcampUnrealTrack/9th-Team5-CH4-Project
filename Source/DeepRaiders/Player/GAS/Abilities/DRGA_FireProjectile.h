@@ -24,15 +24,23 @@ protected:
 private:
 	void RegisterServerShotDelegate();
 	void UnregisterServerShotDelegate();
-	
+
 	void HandleServerShotRequest();
-	bool ExecuteServerProjectileShot();	
-	
+	bool ExecuteServerProjectileShot();
+
+	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& ProjectileDirection, AActor* AvatarActor, UAbilitySystemComponent* AbilitySystem, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
 	TSubclassOf<ADRProjectile> ProjectileClass;
-	
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess, ClampMin = "1", UIMin = "1"))
+	int32 ProjectileCount = 1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess, ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
+	float SpreadHalfAngleDegrees = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
 	FDRProjectileWorldImpactData WorldImpactData;
-	
+
 	FDelegateHandle ServerShotDelegateHandle;
 };

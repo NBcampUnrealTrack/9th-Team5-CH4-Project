@@ -9,6 +9,8 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
+#include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
+#include "Kismet/GameplayStatics.h"
 
 UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 {
@@ -118,13 +120,48 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	}
 
 	ADRPlayerCharacter* Attacker = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
-	ADRPlayerCharacter* Target = Cast<ADRPlayerCharacter>(HitResult.GetActor());
+	AActor* HitActor = HitResult.GetActor();
 	UDRMeleeWeaponItemDefinition* WeaponDefinition = ActiveWeaponDefinition.Get();
-	if (!IsValid(Attacker) || !IsValid(Target) || !IsValid(WeaponDefinition) || Target == Attacker || Target->IsDead())
+	if (!IsValid(Attacker) || !IsValid(HitActor) || !IsValid(WeaponDefinition) || HitActor == Attacker)
 	{
 		return;
 	}
 
+	if (ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(HitActor))
+	{
+		if (BreakableTarget->IsBroken()
+			|| WeaponDefinition->BaseDamage <= 0.f)
+		{
+			return;
+		}
+		
+		FVector DamageDirection = HitResult.TraceEnd - HitResult.TraceStart;
+		
+		if (!DamageDirection.Normalize())
+		{
+			DamageDirection = Attacker->GetActorForwardVector();
+		}
+		
+		const float AppliedDamage = UGameplayStatics::ApplyPointDamage(BreakableTarget, WeaponDefinition->BaseDamage,
+			DamageDirection, HitResult, Attacker->GetController(), Attacker, UDamageType::StaticClass());
+		
+		if (AppliedDamage > KINDA_SMALL_NUMBER)
+		{
+			// 오브젝트 피격 사운드 
+			//ExecuteSoundCue(DRGameplayTags::GameplayCue_Sound_Attack_Hit, Attacker, HitResult.ImpactPoint);
+		}
+		
+		return;
+	}
+	
+	ADRPlayerCharacter* Target = Cast<ADRPlayerCharacter>(HitActor);
+	
+	if (!IsValid(Target) 
+		|| Target->IsDead())
+	{
+		return;
+	}
+	
 	ADRPlayerState* AttackerPS = Attacker->GetPlayerState<ADRPlayerState>();
 	ADRPlayerState* TargetPS = Target->GetPlayerState<ADRPlayerState>();
 	if (!IsValid(AttackerPS) || !IsValid(TargetPS))

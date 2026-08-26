@@ -9,6 +9,8 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Shop/DRShop.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -38,6 +40,14 @@ void UDRShopTransactionComponent::RequestSell(AActor* ShopActor, FGuid InstanceI
 	if (IsValid(ShopActor) && InstanceId.IsValid())
 	{
 		ServerRequestSell(ShopActor, InstanceId);
+	}
+}
+
+void UDRShopTransactionComponent::RequestSellPerk(AActor* ShopActor, FGuid PerkInstanceId)
+{
+	if (IsValid(ShopActor) && PerkInstanceId.IsValid())
+	{
+		ServerRequestSellPerk(ShopActor, PerkInstanceId);
 	}
 }
 
@@ -96,6 +106,17 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 			PlayPurchaseSound(ShopActor);
 		}
 		break;
+
+	case EDRShopOfferType::Skill:
+		if (TryPurchaseSkill(
+				PlayerState,
+				ShopComponent,
+				PlayerState->GetSkillComponent(),
+				Request.RowName))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
+		break;
 	}
 }
 
@@ -120,18 +141,57 @@ void UDRShopTransactionComponent::ServerRequestSell_Implementation(
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
 		|| !IsValid(Definition)
-		|| !Definition->bCanBeSold
-		|| Definition->Price < 2
+		|| !Definition->IsSellable()
 		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
 	{
 		return;
 	}
 
-	const int32 SellPrice = Definition->Price / 2;
+	const int32 SellPrice = Definition->GetSellPrice();
 
 	if (Inventory->TryRemoveItemInstance(InstanceId, 1))
 	{
-		PlayerState->SetCoins(PlayerState->GetCoins() + SellPrice);
+		PlayerState->AddCoins(SellPrice);
+	}
+}
+
+void UDRShopTransactionComponent::ServerRequestSellPerk_Implementation(
+	AActor* ShopActor,
+	FGuid PerkInstanceId)
+{
+	ADRPlayerState* PlayerState = GetPlayerState();
+	const UDRShopComponent* ShopComponent = IsValid(ShopActor)
+		? ShopActor->FindComponentByClass<UDRShopComponent>()
+		: nullptr;
+	UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	const UDRPerkDefinition* PerkDefinition = IsValid(PerkComponent)
+		? PerkComponent->FindPerkDefinition(PerkInstanceId)
+		: nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(PerkComponent)
+		|| !IsValid(PerkDefinition)
+		|| !PerkDefinition->IsSellable()
+		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
+	{
+		return;
+	}
+
+	const int32 SellPrice = PerkDefinition->GetSellPrice();
+	if (PerkComponent->TryRemovePerk(PerkInstanceId))
+	{
+		PlayerState->AddCoins(SellPrice);
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("[Perk][Sold] Player=%s PerkId=%s Perk=%s Price=%d"),
+			*GetNameSafe(PlayerState),
+			*PerkInstanceId.ToString(),
+			*GetNameSafe(PerkDefinition),
+			SellPrice);
 	}
 }
 
@@ -294,5 +354,30 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		PerkDefinition->Price,
 		PreviousCoins,
 		PlayerState->GetCoins());
+	return true;
+}
+
+bool UDRShopTransactionComponent::TryPurchaseSkill(
+	ADRPlayerState* PlayerState,
+	const UDRShopComponent* ShopComponent,
+	UDRSkillComponent* SkillComponent,
+	FName RowName) const
+{
+	UDRSkillDefinition* SkillDefinition = nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !IsValid(ShopComponent)
+		|| !IsValid(SkillComponent)
+		|| !ShopComponent->GetSkillDefinition(RowName, SkillDefinition)
+		|| !ShopComponent->CanPurchaseSkill(
+			SkillDefinition,
+			SkillComponent,
+			PlayerState->GetCoins())
+		|| !SkillComponent->EquipSkill(SkillDefinition))
+	{
+		return false;
+	}
+
+	PlayerState->SetCoins(PlayerState->GetCoins() - SkillDefinition->Price);
 	return true;
 }

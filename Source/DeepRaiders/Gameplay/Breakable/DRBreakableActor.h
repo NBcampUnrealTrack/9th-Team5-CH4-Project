@@ -65,7 +65,7 @@ protected:
 	TObjectPtr<UStaticMeshComponent> BreakableMeshComponent;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Breakable|Health",meta = (ClampMin = "1.0"))
-	float MaxHealth = 50.f;
+	float MaxHealth = 1.f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breakable|Presentation")
 	bool bHideMeshWhenBroken = true;
