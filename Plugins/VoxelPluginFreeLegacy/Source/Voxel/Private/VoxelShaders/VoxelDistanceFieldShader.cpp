@@ -7,11 +7,12 @@
 
 IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FVoxelDistanceFieldParameters, "VoxelDistanceFieldParameters");
 
-FVoxelDistanceFieldBaseCS::FVoxelDistanceFieldBaseCS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
+FVoxelDistanceFieldBaseCS::FVoxelDistanceFieldBaseCS(
+	const ShaderMetaType::CompiledShaderInitializerType& Initializer)
 	: FGlobalShader(Initializer)
 {
-	Src.Bind(Initializer.ParameterMap, TEXT("Src"));
-	Dst.Bind(Initializer.ParameterMap, TEXT("Dst"));
+	Src.Bind(Initializer.ParameterMap, TEXT("RWSrc"));
+	Dst.Bind(Initializer.ParameterMap, TEXT("RWDst"));
 }
 
 void FVoxelDistanceFieldBaseCS::ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
@@ -21,28 +22,32 @@ void FVoxelDistanceFieldBaseCS::ModifyCompilationEnvironment(const FGlobalShader
 }
 
 void FVoxelDistanceFieldBaseCS::SetBuffers(
-		FRHICommandList& RHICmdList,
-		const FRWBuffer& SrcBuffer,
-		const FRWBuffer& DstBuffer) const
+	FRHIBatchedShaderParameters& BatchedParameters,
+	const FRWBuffer& SrcBuffer,
+	const FRWBuffer& DstBuffer) const
 {
-#if VOXEL_ENGINE_VERSION >= 503
-	FRHIBatchedShaderParameters& BatchedParameters = RHICmdList.GetScratchShaderParameters();
 	SetUAVParameter(BatchedParameters, Src, SrcBuffer.UAV);
 	SetUAVParameter(BatchedParameters, Dst, DstBuffer.UAV);
-#else
-	Src.SetBuffer(RHICmdList, RHICmdList.GetBoundComputeShader(), SrcBuffer);
-	Dst.SetBuffer(RHICmdList, RHICmdList.GetBoundComputeShader(), DstBuffer);
-#endif
 }
 
-void FVoxelDistanceFieldBaseCS::SetUniformBuffers(FRHICommandList& RHICmdList, const FVoxelDistanceFieldParameters& Parameters) const
+void FVoxelDistanceFieldBaseCS::SetUniformBuffers(
+	FRHIBatchedShaderParameters& BatchedParameters,
+	const FVoxelDistanceFieldParameters& Parameters) const
 {
-	const FVoxelDistanceFieldParametersRef ParametersBuffer = FVoxelDistanceFieldParametersRef::CreateUniformBufferImmediate(Parameters, UniformBuffer_MultiFrame);
-#if VOXEL_ENGINE_VERSION >= 503
-	SetUniformBufferParameter(RHICmdList.GetScratchShaderParameters(), GetUniformBufferParameter<FVoxelDistanceFieldParameters>(), ParametersBuffer);
-#else
-	SetUniformBufferParameter(RHICmdList, RHICmdList.GetBoundComputeShader(), GetUniformBufferParameter<FVoxelDistanceFieldParameters>(), ParametersBuffer);
-#endif
+	const FVoxelDistanceFieldParametersRef ParametersBuffer =
+		FVoxelDistanceFieldParametersRef::CreateUniformBufferImmediate(
+			Parameters,
+			UniformBuffer_MultiFrame);
+
+	SetUniformBufferParameter(
+		BatchedParameters,
+		GetUniformBufferParameter<FVoxelDistanceFieldParameters>(),
+		ParametersBuffer);
+}
+void FVoxelDistanceFieldBaseCS::UnsetBuffers(FRHIBatchedShaderUnbinds& BatchedUnbinds) const
+{
+	UnsetUAVParameter(BatchedUnbinds, Src);
+	UnsetUAVParameter(BatchedUnbinds, Dst);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -125,9 +130,12 @@ void FVoxelDistanceFieldShaderHelper::Compute_RenderThread(
 		ApplyComputeShader<FVoxelJumpFloodCS>(RHICmdList, Size, Step);
 	}
 
-	// To copy data
-	RHICmdList.Transition(FRHITransitionInfo(DstBuffer.UAV, ERHIAccess::Unknown, ERHIAccess::UAVCompute)); // TODO not unknown?
-	
+	// The final output is stored in SrcBuffer after the last swap.
+	RHICmdList.Transition(
+		FRHITransitionInfo(
+			SrcBuffer.UAV,
+			ERHIAccess::UAVCompute,
+			ERHIAccess::CopySrc));
 	{
 		VOXEL_RENDER_SCOPE_COUNTER("Copy Data From Buffers");
 		void* BufferData = RHICmdList.LockBuffer(SrcBuffer.Buffer, 0, SrcBuffer.NumBytes, EResourceLockMode::RLM_ReadOnly);
@@ -143,7 +151,6 @@ void FVoxelDistanceFieldShaderHelper::Compute_RenderThread(
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-
 template<typename T>
 void FVoxelDistanceFieldShaderHelper::ApplyComputeShader(
 	FRHICommandListImmediate& RHICmdList,
@@ -151,24 +158,50 @@ void FVoxelDistanceFieldShaderHelper::ApplyComputeShader(
 	int32 Step)
 {
 	check(IsInRenderingThread());
-	
+
 	const TShaderMapRef<T> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-	SetComputePipelineState(RHICmdList, ComputeShader.GetComputeShader());
+	FRHIComputeShader* const ShaderRHI = ComputeShader.GetComputeShader();
+
+	SetComputePipelineState(RHICmdList, ShaderRHI);
 
 	FVoxelDistanceFieldParameters Parameters;
 	Parameters.SizeX = Size.X;
 	Parameters.SizeY = Size.Y;
 	Parameters.SizeZ = Size.Z;
 	Parameters.Step = Step;
-	ComputeShader->SetUniformBuffers(RHICmdList, Parameters);
-	
-	const FIntVector NumThreads = FVoxelUtilities::DivideCeil(Size, VOXEL_DISTANCE_FIELD_NUM_THREADS_CS);
+
+	const FIntVector NumThreads =
+		FVoxelUtilities::DivideCeil(Size, VOXEL_DISTANCE_FIELD_NUM_THREADS_CS);
+
 	check(NumThreads.X > 0 && NumThreads.Y > 0 && NumThreads.Z > 0);
-	
-	RHICmdList.Transition(FRHITransitionInfo(SrcBuffer.UAV, ERHIAccess::UAVCompute, ERHIAccess::UAVCompute));
-	RHICmdList.Transition(FRHITransitionInfo(DstBuffer.UAV, ERHIAccess::UAVCompute, ERHIAccess::UAVCompute));
-	
-	ComputeShader->SetBuffers(RHICmdList, SrcBuffer, DstBuffer);
+
+	RHICmdList.Transition(
+		FRHITransitionInfo(
+			SrcBuffer.UAV,
+			ERHIAccess::UAVCompute,
+			ERHIAccess::UAVCompute));
+
+	RHICmdList.Transition(
+		FRHITransitionInfo(
+			DstBuffer.UAV,
+			ERHIAccess::UAVCompute,
+			ERHIAccess::UAVCompute));
+
+	FRHIBatchedShaderParameters& BatchedParameters = RHICmdList.GetScratchShaderParameters();
+
+	ComputeShader->SetUniformBuffers(BatchedParameters, Parameters);
+	ComputeShader->SetBuffers(BatchedParameters, SrcBuffer, DstBuffer);
+
+	RHICmdList.SetBatchedShaderParameters(ShaderRHI, BatchedParameters);
 	RHICmdList.DispatchComputeShader(NumThreads.X, NumThreads.Y, NumThreads.Z);
+
+	if (RHICmdList.NeedsShaderUnbinds())
+	{
+		FRHIBatchedShaderUnbinds& BatchedUnbinds = RHICmdList.GetScratchShaderUnbinds();
+
+		ComputeShader->UnsetBuffers(BatchedUnbinds);
+		RHICmdList.SetBatchedShaderUnbinds(ShaderRHI, BatchedUnbinds);
+	}
+
 	Swap(SrcBuffer, DstBuffer);
 }
