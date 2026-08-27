@@ -1,4 +1,4 @@
-#include "DRVoxelTerrainAreaSyncActor.h"
+#include "DRVoxelDepositArea.h"
 
 #if ENABLE_DRAW_DEBUG
 #include "DrawDebugHelpers.h"
@@ -10,7 +10,6 @@
 #if ENABLE_DRAW_DEBUG
 namespace
 {
-	// 관리 영역과 검사 영역을 같은 규칙으로 그립니다.
 	void DrawDepositAreaBox(
 		UWorld* World,
 		const FVector& Center,
@@ -38,9 +37,8 @@ namespace
 }
 #endif
 
-ADRVoxelTerrainAreaSyncActor::ADRVoxelTerrainAreaSyncActor()
+ADRVoxelDepositArea::ADRVoxelDepositArea()
 {
-	// Tick은 에디터 영역 표시에서만 사용합니다.
 #if WITH_EDITOR
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
@@ -48,14 +46,13 @@ ADRVoxelTerrainAreaSyncActor::ADRVoxelTerrainAreaSyncActor()
 	PrimaryActorTick.bCanEverTick = false;
 #endif
 
-	// 모든 클라이언트에 반복 Multicast를 보내도록 채널을 유지합니다.
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	NetDormancy = DORM_Never;
 }
 
 #if WITH_EDITOR
-void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
+void ADRVoxelDepositArea::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
@@ -65,7 +62,6 @@ void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
 		return;
 	}
 
-	// 회전 없는 계산 영역을 매 프레임 다시 그립니다.
 	DrawDepositAreaBox(
 		World,
 		GetActorLocation(),
@@ -76,19 +72,17 @@ void ADRVoxelTerrainAreaSyncActor::Tick(float DeltaSeconds)
 		2.f);
 }
 
-bool ADRVoxelTerrainAreaSyncActor::ShouldTickIfViewportsOnly() const
+bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
 {
-	// 게임 전 에디터 뷰포트에서도 영역 표시 Tick을 허용합니다.
 	return true;
 }
 #endif
 
-bool ADRVoxelTerrainAreaSyncActor::MakeDepositCommand(
+bool ADRVoxelDepositArea::MakeDepositCommand(
 	FDRVoxelDepositCommand& OutCommand) const
 {
 	// 실패 시 이전 결과가 남지 않도록 출력을 초기화합니다.
 	OutCommand = FDRVoxelDepositCommand();
-	// RPC 전파 전에 월드와 설정 값을 검증합니다.
 	if (!IsValid(GetWorld()) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
 		GetActorLocation().ContainsNaN() || BoxExtent.ContainsNaN() ||
 		!FMath::IsFinite(RandomScanWorldSize) || RandomScanWorldSize <= 0.f)
@@ -96,7 +90,6 @@ bool ADRVoxelTerrainAreaSyncActor::MakeDepositCommand(
 		return false;
 	}
 
-	// Extent는 절댓값으로 처리하고 빈 축은 거부합니다.
 	const FVector AreaExtent(
 		FMath::Abs(BoxExtent.X),
 		FMath::Abs(BoxExtent.Y),
@@ -109,7 +102,6 @@ bool ADRVoxelTerrainAreaSyncActor::MakeDepositCommand(
 	}
 
 	OutCommand.Settings = DepositSettings;
-	// 명령 시드로 모든 인스턴스의 결과를 일치시킵니다.
 	OutCommand.Settings.RandomSeed = FMath::Rand();
 	// 검사 영역은 X/Y만 줄이고 Z는 관리 영역 전체를 사용합니다.
 	const float RequestedHalfSize = RandomScanWorldSize * 0.5f;
@@ -117,7 +109,6 @@ bool ADRVoxelTerrainAreaSyncActor::MakeDepositCommand(
 		FMath::Min(AreaExtent.X, RequestedHalfSize),
 		FMath::Min(AreaExtent.Y, RequestedHalfSize),
 		AreaExtent.Z);
-	// 검사 위치와 표본 선택에 서로 다른 결정적 난수 흐름을 사용합니다.
 	FRandomStream ScanAreaRandomStream(
 		OutCommand.Settings.RandomSeed ^ 0x27D4EB2D);
 	// 검사 영역이 관리 영역 안에 있도록 중심 이동 범위를 제한합니다.
@@ -138,12 +129,11 @@ bool ADRVoxelTerrainAreaSyncActor::MakeDepositCommand(
 	return true;
 }
 
-void ADRVoxelTerrainAreaSyncActor::BeginPlay()
+void ADRVoxelDepositArea::BeginPlay()
 {
 	Super::BeginPlay();
 
 #if ENABLE_DRAW_DEBUG
-	// 게임에서는 관리 영역을 영구 디버그 박스로 한 번 그립니다.
 	DrawDepositAreaBox(
 		GetWorld(),
 		GetActorLocation(),
@@ -154,16 +144,13 @@ void ADRVoxelTerrainAreaSyncActor::BeginPlay()
 		2.f);
 #endif
 
-	// 런타임에는 디버그 표시용 Tick을 끕니다.
 	SetActorTickEnabled(false);
 
-	// 클라이언트는 RPC를 받을 때만 퇴적을 처리합니다.
 	if (!HasAuthority())
 	{
 		return;
 	}
 
-	// 비활성 상태에서도 타이머를 유지하며 즉시 첫 주기를 시작합니다.
 	if (DepositInterval > 0.f)
 	{
 		GetWorldTimerManager().SetTimer(
@@ -176,26 +163,21 @@ void ADRVoxelTerrainAreaSyncActor::BeginPlay()
 	}
 }
 
-void ADRVoxelTerrainAreaSyncActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void ADRVoxelDepositArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 파괴 전에 예약 작업과 로컬 상태를 정리합니다.
 	CancelDepositPipeline();
 	Super::EndPlay(EndPlayReason);
 }
 
-void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
+void ADRVoxelDepositArea::RequestDepositArea()
 {
-	// 서버만 새 퇴적 명령을 만듭니다.
 	if (!HasAuthority())
 	{
 		return;
 	}
 
-	// 비활성화 시 진행 중인 작업은 유지하고 새 요청만 막습니다.
-	if (!bEnableDepositAccumulation)
-	{
-		return;
-	}
+	//TODO 나중에 들어온 플레이어가 준비가 완료될테까지 요청 중단
+
 	// 이전 명령이 끝날 때까지 새 RPC 생성을 막습니다.
 	if (!PreparedDepositPlan.IsEmpty() || QueuedDepositCommands.Num() > 0 ||
 		DepositPipelineTimerHandle.IsValid())
@@ -203,7 +185,6 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 		return;
 	}
 
-	// VoxelWorld가 준비되지 않으면 다음 주기에 다시 시도합니다.
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("VoxelWorld is not valid."));
@@ -217,15 +198,13 @@ void ADRVoxelTerrainAreaSyncActor::RequestDepositArea()
 		return;
 	}
 
-	// Multicast는 서버와 모든 클라이언트에서 같은 처리 경로를 실행합니다.
 	MulticastPrepareDeposit(Command);
 }
 
-void ADRVoxelTerrainAreaSyncActor::MulticastPrepareDeposit_Implementation(
+void ADRVoxelDepositArea::MulticastPrepareDeposit_Implementation(
 	const FDRVoxelDepositCommand& Command)
 {
 #if ENABLE_DRAW_DEBUG
-	// 수신한 검사 영역을 1초간 표시합니다.
 	DrawDepositAreaBox(
 		GetWorld(),
 		Command.ScanCenter,
@@ -245,9 +224,8 @@ void ADRVoxelTerrainAreaSyncActor::MulticastPrepareDeposit_Implementation(
 	}
 }
 
-void ADRVoxelTerrainAreaSyncActor::PrepareNextQueuedDeposit()
+void ADRVoxelDepositArea::PrepareNextQueuedDeposit()
 {
-	// 실행된 다음 틱 타이머 핸들을 직접 무효화합니다.
 	DepositPipelineTimerHandle.Invalidate();
 	if (!PreparedDepositPlan.IsEmpty() || QueuedDepositCommands.Num() == 0)
 	{
@@ -258,7 +236,6 @@ void ADRVoxelTerrainAreaSyncActor::PrepareNextQueuedDeposit()
 	const FDRVoxelDepositCommand Command = QueuedDepositCommands[0];
 	QueuedDepositCommands.RemoveAt(0, 1, EAllowShrinking::No);
 
-	// 준비 단계는 데이터를 읽기만 합니다.
 	if (!FDRVoxelDepositOperations::PrepareDepositCommand(
 		GetWorld(),
 		VoxelWorld,
@@ -277,7 +254,6 @@ void ADRVoxelTerrainAreaSyncActor::PrepareNextQueuedDeposit()
 		return;
 	}
 
-	// 다음 명령도 다음 프레임부터 순서대로 처리합니다.
 	if (QueuedDepositCommands.Num() > 0)
 	{
 		DepositPipelineTimerHandle = GetWorldTimerManager().SetTimerForNextTick(
@@ -286,16 +262,14 @@ void ADRVoxelTerrainAreaSyncActor::PrepareNextQueuedDeposit()
 	}
 }
 
-void ADRVoxelTerrainAreaSyncActor::ApplyPreparedDeposit()
+void ADRVoxelDepositArea::ApplyPreparedDeposit()
 {
-	// 새 작업을 예약할 수 있도록 실행된 핸들을 비웁니다.
 	DepositPipelineTimerHandle.Invalidate();
 	if (PreparedDepositPlan.IsEmpty())
 	{
 		return;
 	}
 
-	// 적용 결과와 관계없이 계획은 비워집니다.
 	if (!FDRVoxelDepositOperations::ApplyDepositPlan(
 		VoxelWorld,
 		PreparedDepositPlan))
@@ -303,7 +277,6 @@ void ADRVoxelTerrainAreaSyncActor::ApplyPreparedDeposit()
 		UE_LOG(LogTemp, Warning, TEXT("Failed to apply prepared deposit."));
 	}
 
-	// 다음 준비를 다음 프레임으로 미룹니다.
 	if (QueuedDepositCommands.Num() > 0)
 	{
 		DepositPipelineTimerHandle = GetWorldTimerManager().SetTimerForNextTick(
@@ -312,9 +285,8 @@ void ADRVoxelTerrainAreaSyncActor::ApplyPreparedDeposit()
 	}
 }
 
-void ADRVoxelTerrainAreaSyncActor::CancelDepositPipeline()
+void ADRVoxelDepositArea::CancelDepositPipeline()
 {
-	// 다음 틱 작업과 준비된 로컬 상태만 명시적으로 정리합니다.
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(DepositPipelineTimerHandle);

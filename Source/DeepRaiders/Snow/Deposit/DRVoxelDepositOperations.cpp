@@ -10,15 +10,11 @@
 
 namespace
 {
-	// 풋프린트 가장자리의 퇴적량 배율입니다.
 	constexpr float DRDepositFootprintEdgeStrength = 0.55f;
 	// 메시 경계 오차를 줄이기 위한 접촉면 보정값입니다.
 	constexpr float DRStaticMeshContactInsetVoxels = 0.1f;
-	// 복셀 풋프린트가 따라갈 수 있는 최대 경사입니다.
 	constexpr float DRDepositMaximumFootprintSlopeDegrees = 55.f;
-	// 요청당 표면 표본 수의 상한입니다.
 	constexpr int32 DRMaximumRandomSurfaceSamples = 4096;
-	// 요청당 풋프린트 순회 횟수의 상한입니다.
 	constexpr int64 DRMaximumDepositFootprintWorkItems = 4096;
 
 	// 표면 후보를 찾은 방식을 구분합니다.
@@ -30,54 +26,34 @@ namespace
 
 	struct FDRSurfaceCandidate
 	{
-		// 표면 바로 위의 빈 복셀 좌표입니다.
 		FIntVector Position = FIntVector::ZeroValue;
-		// 후보를 찾은 표면 종류입니다.
 		EDRDepositSurfaceSource Source = EDRDepositSurfaceSource::Voxel;
 	};
 
-	// 같은 X/Y의 중복 메시 트레이스를 합친 대상입니다.
 	struct FDRFootprintTraceTarget
 	{
-		// 트레이스할 로컬 복셀 X/Y 좌표입니다.
 		FIntPoint VoxelXY = FIntPoint::ZeroValue;
-		// 겹친 풋프린트의 최대 퇴적량 배율입니다.
 		float AmountScale = 1.f;
-		// 허용할 로컬 표면 Z 범위입니다.
 		float MinLocalSurfaceZ = 0.f;
 		float MaxLocalSurfaceZ = 0.f;
 	};
 
-	// 한 번의 준비 단계에서만 사용하는 작업 상태입니다.
 	struct FDRVoxelDepositBuildContext
 	{
-		// 검사할 복셀 월드입니다.
 		AVoxelWorld* VoxelWorld = nullptr;
-		// 표면을 검사할 양 끝 포함 복셀 범위입니다.
 		FIntVector CoreVoxelMin = FIntVector::ZeroValue;
 		FIntVector CoreVoxelMax = FIntVector::ZeroValue;
-		// 풋프린트 쓰기를 허용할 양 끝 포함 복셀 범위입니다.
 		FIntVector WriteVoxelMin = FIntVector::ZeroValue;
 		FIntVector WriteVoxelMax = FIntVector::ZeroValue;
-		// 검증된 퇴적 설정입니다.
 		FDRVoxelDepositInBoxSettings Settings;
-		// 복셀 단위 풋프린트 반경입니다.
 		int32 DepositFootprintRadius = 0;
-		// 명령 시드 기반 난수 스트림입니다.
 		FRandomStream RandomStream;
-		// 선택된 X/Y 표본입니다.
 		TArray<FIntPoint> ScanSamplePositions;
-		// X/Y 열별 최상단 후보입니다.
 		TMap<FIntPoint, FDRSurfaceCandidate> TopCandidateByColumn;
-		// 최종 풋프린트 중심입니다.
 		TArray<FDRSurfaceCandidate> SelectedCandidates;
-		// X/Y 열별 최상단 복셀 표면 캐시입니다.
 		TMap<FIntPoint, int32> TopSurfaceZByColumn;
-		// 좌표별 최종 쓰기입니다.
 		TMap<FIntVector, FDRVoxelDepositWrite> WritesByPosition;
-		// 메시 천장 검사에 사용할 관리 영역 상단입니다.
 		float WorldBoxTopZ = 0.f;
-		// 메시 트레이스의 복잡 충돌 사용 여부입니다.
 		bool bTraceComplexWorldStatic = false;
 	};
 
@@ -120,7 +96,6 @@ namespace
 		}
 	}
 
-	// 양 끝 포함 복셀 범위에 속하는지 확인합니다.
 	bool IsInsideBounds(
 		const FIntVector& Position,
 		const FIntVector& BoundsMin,
@@ -131,7 +106,6 @@ namespace
 			Position.Z >= BoundsMin.Z && Position.Z <= BoundsMax.Z;
 	}
 
-	// 양 끝 포함 범위 연산이 int32 안에서 안전한지 확인합니다.
 	bool IsSafeInclusiveVoxelBounds(
 		const FIntVector& VoxelMin,
 		const FIntVector& VoxelMax)
@@ -150,7 +124,6 @@ namespace
 			SizeX <= MAX_int32 / SizeY && SizeX * SizeY <= MAX_int32 / SizeZ;
 	}
 
-	// 네트워크 설정을 작업량 제한 안으로 보정합니다.
 	FDRVoxelDepositInBoxSettings SanitizeDepositSettings(
 		const FDRVoxelDepositInBoxSettings& Settings)
 	{
@@ -167,7 +140,6 @@ namespace
 		return Result;
 	}
 
-	// 풋프린트 반경에 맞춰 선택 가능한 중심 수를 제한합니다.
 	bool ApplyFootprintWorkBudget(
 		int32 Radius,
 		FDRVoxelDepositInBoxSettings& InOutSettings)
@@ -187,7 +159,6 @@ namespace
 		return true;
 	}
 
-	// 복셀과 메시가 공유할 무작위 X/Y 표본을 선택합니다.
 	bool BuildSamplePositions(
 		FDRVoxelDepositBuildContext& Context,
 		float VoxelSampleSpacing)
@@ -223,7 +194,8 @@ namespace
 			Context.RandomStream,
 			ColumnOrder);
 
-		// 선형 표본 인덱스를 X/Y 격자 좌표로 변환합니다.
+		//TODO! 격자를 계속 사용할지 확인 필요
+
 		Context.ScanSamplePositions.Reserve(ColumnOrder.Num());
 		for (const int32 LinearIndex : ColumnOrder)
 		{
@@ -238,7 +210,6 @@ namespace
 		return true;
 	}
 
-	// 외부 명령을 검증된 내부 작업 상태로 변환합니다.
 	bool InitializeBuildContext(
 		AVoxelWorld* VoxelWorld,
 		const FDRVoxelDepositCommand& Command,
@@ -274,7 +245,6 @@ namespace
 
 		OutContext.VoxelWorld = VoxelWorld;
 		OutContext.Settings = SanitizeDepositSettings(Command.Settings);
-		// 모든 무작위 선택은 명령 시드 기반 스트림을 공유합니다.
 		OutContext.RandomStream.Initialize(OutContext.Settings.RandomSeed);
 		OutContext.WorldBoxTopZ = Command.AreaCenter.Z + AreaExtent.Z;
 		OutContext.bTraceComplexWorldStatic = Command.bTraceComplexStaticMeshSurfaces;
@@ -285,7 +255,7 @@ namespace
 			ScanExtent,
 			OutContext.CoreVoxelMin,
 			OutContext.CoreVoxelMax);
-		// 표면 경계를 찾으려면 Z축에 최소 두 층이 필요합니다.
+
 		if (static_cast<int64>(OutContext.CoreVoxelMax.Z) - OutContext.CoreVoxelMin.Z < 1)
 		{
 			return false;
@@ -298,7 +268,6 @@ namespace
 			return false;
 		}
 
-		// 월드 반경을 정수 복셀 반경으로 변환합니다.
 		const double RadiusInVoxels =
 			static_cast<double>(OutContext.Settings.DepositSpreadRadius) /
 			static_cast<double>(VoxelWorld->VoxelSize);
@@ -317,7 +286,6 @@ namespace
 			return false;
 		}
 
-		// 풋프린트 범위를 관리 영역 안에서만 확장합니다.
 		FIntVector AreaVoxelMin = FIntVector::ZeroValue;
 		FIntVector AreaVoxelMax = FIntVector::ZeroValue;
 		GetLocalVoxelBoundsForWorldBox(
@@ -343,7 +311,7 @@ namespace
 				static_cast<int64>(AreaVoxelMax.Y),
 				static_cast<int64>(OutContext.CoreVoxelMax.Y) + Radius)),
 			OutContext.CoreVoxelMax.Z);
-		// 관리 영역이 검사 영역을 포함하지 못하면 요청을 거부합니다.
+
 		if (OutContext.WriteVoxelMin.X > OutContext.CoreVoxelMin.X ||
 			OutContext.WriteVoxelMin.Y > OutContext.CoreVoxelMin.Y ||
 			OutContext.WriteVoxelMax.X < OutContext.CoreVoxelMax.X ||
@@ -364,7 +332,7 @@ namespace
 			OutContext.Settings.SurfaceSampleSpacing);
 	}
 
-	// Z축 위에서 아래로 첫 빈 공간-고체 경계를 찾아 고체 Z를 반환합니다.
+	// Z축 위에서 아래로 첫 빈 공간-고체 경계를 찾는 부분
 	int32 FindTopSurfaceZ(
 		FVoxelData& Data,
 		int32 X,
@@ -373,7 +341,6 @@ namespace
 		int32 MaxZ)
 	{
 		float AboveValue = Data.GetValue(FIntVector(X, Y, MaxZ), 0).ToFloat();
-		// 상단이 고체면 천장으로 간주해 더 아래의 표면을 찾지 않습니다.
 		if (AboveValue <= 0.f)
 		{
 			return MaxZ;
@@ -382,7 +349,6 @@ namespace
 		for (int32 Z = MaxZ - 1; Z >= MinZ; --Z)
 		{
 			const float CurrentValue = Data.GetValue(FIntVector(X, Y, Z), 0).ToFloat();
-			// Voxel Plugin은 밀도값 0 이하를 고체로 취급합니다.
 			if (CurrentValue <= 0.f && AboveValue > 0.f)
 			{
 				return Z;
@@ -392,7 +358,6 @@ namespace
 		return MIN_int32;
 	}
 
-	// 표면이 없는 열까지 캐시해 반복 검색을 막습니다.
 	int32 FindTopSurfaceZCached(
 		FDRVoxelDepositBuildContext& Context,
 		FVoxelData& Data,
@@ -415,7 +380,6 @@ namespace
 		return SurfaceZ;
 	}
 
-	// 각 X/Y 열에는 가장 높은 후보만 남기며 같은 높이면 메시를 우선합니다.
 	void OfferSurfaceCandidate(
 		FDRVoxelDepositBuildContext& Context,
 		const FDRSurfaceCandidate& Candidate)
@@ -439,7 +403,6 @@ namespace
 		}
 	}
 
-	// 트레이스 결과에서 월드 Z가 가장 높은 충돌을 선택합니다.
 	const FHitResult* FindTopWorldStaticHit(const TArray<FHitResult>& Hits)
 	{
 		const FHitResult* TopHit = nullptr;
@@ -454,7 +417,6 @@ namespace
 		return TopHit;
 	}
 
-	// 충돌이 퇴적 가능한 고정 메시 표면인지 확인합니다.
 	bool IsEligibleStaticMeshDepositHit(
 		const FHitResult& Hit,
 		float MinimumSurfaceNormalZ,
@@ -476,7 +438,6 @@ namespace
 			(IsValid(HitActor) && HitActor->ActorHasTag(RequiredSurfaceTag));
 	}
 
-	// 모든 메시 트레이스에 공통 필터를 적용하고 소유 액터를 제외합니다.
 	void MakeStaticTraceParameters(
 		AActor* TraceOwner,
 		bool bTraceComplex,
@@ -493,7 +454,6 @@ namespace
 		}
 	}
 
-	// 각 표본 열의 최상단 충돌만 검사해 유효하면 메시 후보로 등록합니다.
 	bool CollectStaticMeshCandidates(
 		UWorld* World,
 		AActor* TraceOwner,
@@ -523,7 +483,6 @@ namespace
 
 		for (const FIntPoint& SamplePosition : Context.ScanSamplePositions)
 		{
-			// 로컬 X/Y를 월드로 변환하고 관리 영역의 전체 Z를 검사합니다.
 			const FVector SampleWorldPosition = Context.VoxelWorld->LocalToGlobalFloatBP(FVector(
 				static_cast<double>(SamplePosition.X),
 				static_cast<double>(SamplePosition.Y),
@@ -551,7 +510,6 @@ namespace
 			{
 				continue;
 			}
-			// 충돌 표면 바로 위의 복셀을 퇴적 후보로 사용합니다.
 			const int64 CandidateZ64 = FMath::FloorToInt64(LocalZ) + 1;
 			if (CandidateZ64 < MIN_int32 || CandidateZ64 > MAX_int32)
 			{
@@ -569,7 +527,6 @@ namespace
 		return true;
 	}
 
-	// 공유 X/Y 표본에서 최상단 복셀 표면을 수집합니다.
 	void CollectVoxelCandidates(FDRVoxelDepositBuildContext& Context)
 	{
 		FVoxelData& Data = Context.VoxelWorld->GetData();
@@ -605,10 +562,8 @@ namespace
 		}
 	}
 
-	// 열별 후보를 최대 풋프린트 중심 수로 줄입니다.
 	void SelectCandidates(FDRVoxelDepositBuildContext& Context)
 	{
-		// 안정 정렬로 같은 Z의 무작위 표본 순서를 보존합니다.
 		for (const FIntPoint& SamplePosition : Context.ScanSamplePositions)
 		{
 			if (const FDRSurfaceCandidate* Candidate =
@@ -629,11 +584,12 @@ namespace
 				Context.Settings.MaxSelectedSurfaceCount,
 				EAllowShrinking::No);
 		}
+
+		// TODO! 한 번더 섞어야 할지 확인 필요
 		// 낮은 후보를 고른 뒤 적용 순서를 다시 섞습니다.
-		DRVoxelDeposit::ShuffleArray(Context.SelectedCandidates, Context.RandomStream);
+		// DRVoxelDeposit::ShuffleArray(Context.SelectedCandidates, Context.RandomStream);
 	}
 
-	// 메시 지지 쓰기는 제외하고 복셀 쓰기 위의 충돌만 천장으로 처리합니다.
 	bool IsCoveredByWorldStatic(
 		const FDRVoxelDepositBuildContext& Context,
 		const FIntVector& Position)
@@ -648,7 +604,6 @@ namespace
 			static_cast<float>(Position.X),
 			static_cast<float>(Position.Y),
 			static_cast<float>(Position.Z)));
-		// 표면과 즉시 재충돌하지 않도록 시작점을 띄웁니다.
 		const float TraceInset = FMath::Max(
 			1.f,
 			FMath::Abs(Context.VoxelWorld->VoxelSize) * 0.1f);
@@ -675,7 +630,6 @@ namespace
 			QueryParams);
 	}
 
-	// 같은 좌표의 쓰기는 가장 강한 퇴적량으로 병합합니다.
 	void AddResolvedWrite(
 		FDRVoxelDepositBuildContext& Context,
 		const FIntVector& Position,
@@ -689,7 +643,6 @@ namespace
 		}
 
 		FDRVoxelDepositWrite* Existing = Context.WritesByPosition.Find(Position);
-		// 메시 지지 쓰기를 우선하고 새 복셀 쓰기만 천장을 검사합니다.
 		if (Existing == nullptr && StaticMeshSurfaceZ == nullptr &&
 			IsCoveredByWorldStatic(Context, Position))
 		{
@@ -723,7 +676,6 @@ namespace
 		}
 	}
 
-	// 공통 원형 풋프린트를 순회하고 표면별 처리를 콜백에 위임합니다.
 	template<typename CallbackType>
 	void ForEachFootprintCell(
 		const FDRVoxelDepositBuildContext& Context,
@@ -815,7 +767,6 @@ namespace
 		const FDRVoxelDepositCommand& Command,
 		FDRVoxelDepositBuildContext& Context)
 	{
-		// 겹친 풋프린트의 X/Y 트레이스는 한 번으로 합칩니다.
 		TMap<FIntPoint, FDRFootprintTraceTarget> UniqueTargets;
 		const float MaximumSlopeTangent = FMath::Tan(FMath::DegreesToRadians(
 			FMath::Clamp(Command.MaxStaticMeshSlopeAngle, 0.f, 89.f)));
@@ -864,7 +815,6 @@ namespace
 			return false;
 		}
 
-		// 좌표순으로 정렬해 모든 인스턴스의 트레이스 순서를 고정합니다.
 		TArray<FDRFootprintTraceTarget> Targets;
 		UniqueTargets.GenerateValueArray(Targets);
 		Targets.Sort([](const FDRFootprintTraceTarget& A, const FDRFootprintTraceTarget& B)
@@ -947,7 +897,6 @@ namespace
 		OutPlan.WriteVoxelMin = Context.WriteVoxelMin;
 		OutPlan.WriteVoxelMax = Context.WriteVoxelMax;
 		Context.WritesByPosition.GenerateValueArray(OutPlan.Writes);
-		// TMap 순회 순서를 제거해 적용 순서를 결정적으로 만듭니다.
 		OutPlan.Writes.Sort([](const FDRVoxelDepositWrite& A, const FDRVoxelDepositWrite& B)
 		{
 			if (A.Position.X != B.Position.X)
@@ -978,6 +927,7 @@ namespace
 		ModifiedBounds += Position;
 	}
 
+	// TODO! 확인 필요
 	// 준비 후 데이터가 바뀔 수 있으므로 적용 직전에 조건을 다시 확인합니다.
 	void TryApplyWrite(
 		const FDRVoxelDepositPlan& Plan,
@@ -1018,7 +968,6 @@ namespace
 		float DepositStartValue = CurrentValue;
 		if (Write.bHasStaticMeshSupport)
 		{
-			// 메시 높이에 맞춰 시작 밀도를 제한합니다.
 			DepositStartValue = FMath::Min(
 				DepositStartValue,
 				FMath::Clamp(
@@ -1026,7 +975,6 @@ namespace
 					0.f,
 					1.f));
 
-			// 메시 아래가 비어 있으면 얇은 접촉 지지층을 만듭니다.
 			if (BelowValue > 0.f &&
 				IsInsideBounds(BelowPosition, Plan.WriteVoxelMin, Plan.WriteVoxelMax) &&
 				!WrittenPositions.Contains(BelowPosition))
@@ -1069,7 +1017,6 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 	const FDRVoxelDepositCommand& Command,
 	FDRVoxelDepositPlan& OutPlan)
 {
-	// 실패 시 이전 결과가 남지 않도록 출력 계획을 먼저 비웁니다.
 	OutPlan.Reset();
 	if (!IsValid(World) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
@@ -1087,7 +1034,6 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 	// 2. 복셀 후보를 합치고 낮은 최상단 후보부터 선택합니다.
 	CollectVoxelCandidates(Context);
 	SelectCandidates(Context);
-	// 표면이 없는 빈 계획도 정상 결과입니다.
 	if (Context.SelectedCandidates.IsEmpty())
 	{
 		return true;
@@ -1109,7 +1055,6 @@ bool FDRVoxelDepositOperations::ApplyDepositPlan(
 	AVoxelWorld* VoxelWorld,
 	FDRVoxelDepositPlan& Plan)
 {
-	// 빈 계획은 정상적으로 완료합니다.
 	if (Plan.IsEmpty())
 	{
 		Plan.Reset();
@@ -1148,7 +1093,6 @@ bool FDRVoxelDepositOperations::ApplyDepositPlan(
 	WrittenPositions.Reserve(Plan.Writes.Num() * 2);
 	FVoxelData& Data = VoxelWorld->GetData();
 	{
-		// 하나의 쓰기 잠금 안에서 계획 전체를 적용합니다.
 		FVoxelWriteScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
 		for (const FDRVoxelDepositWrite& Write : Plan.Writes)
 		{
@@ -1170,7 +1114,6 @@ bool FDRVoxelDepositOperations::ApplyDepositPlan(
 			ModifiedBounds.GetBox().Extend(1));
 	}
 
-	// 재적용을 막기 위해 완료된 계획을 비웁니다.
 	Plan.Reset();
 	return true;
 }
