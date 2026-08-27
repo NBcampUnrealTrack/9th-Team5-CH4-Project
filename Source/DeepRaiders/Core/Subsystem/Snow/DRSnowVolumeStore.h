@@ -20,6 +20,7 @@ public:
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
 	void CopySnapshotData(FDRSnowVolumeSnapshot& OutSnapshot) const;
 	void ReplaceSnapshotData(FDRSnowVolumeSnapshot&& InSnapshot);
+	void Reset() { Chunks.Reset(); }
 
 protected:
 	static int32 FloorDivide(int32 Value, int32 Divisor);

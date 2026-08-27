@@ -1,6 +1,7 @@
 #include "DRPlayerState.h"
 
 #include "DRPlayerCharacter.h"
+#include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
@@ -12,12 +13,15 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
+#include "DeepRaiders/Input/DRInputTypes.h"
 
 ADRPlayerState::ADRPlayerState()
 {
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	AbilitySystemComponent->GenericConfirmInputID = static_cast<int32>(EDRAbilityInputId::Primary);
+	AbilitySystemComponent->GenericCancelInputID = static_cast<int32>(EDRAbilityInputId::Secondary);
 
 	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
@@ -193,6 +197,20 @@ void ADRPlayerState::AddCoins(int32 Amount)
 	// int32 덧셈 전에 int64로 확장해 오버플로를 방지한다.
 	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
 	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
+}
+
+void ADRPlayerState::ResetForGameStart()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	SetCoins(GetClass()->GetDefaultObject<ADRPlayerState>()->GetCoins());
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->ResetPerks();
+	}
 }
 
 void ADRPlayerState::ResetForRespawn()
@@ -592,6 +610,10 @@ void ADRPlayerState::SetTeamId(int32 NewTeamId)
 	{
 		PlayerCharacter->RefreshTeamColor();
 	}
+	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->RefreshTeamSilhouette();
+	}
 	ForceNetUpdate();
 }
 
@@ -600,6 +622,10 @@ void ADRPlayerState::OnRep_TeamId()
 	if (ADRPlayerCharacter* PlayerCharacter = GetPawn<ADRPlayerCharacter>())
 	{
 		PlayerCharacter->RefreshTeamColor();
+	}
+	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->RefreshTeamSilhouette();
 	}
 }
 #pragma endregion

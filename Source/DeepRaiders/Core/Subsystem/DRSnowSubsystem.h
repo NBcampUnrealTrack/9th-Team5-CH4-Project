@@ -51,6 +51,14 @@ public:
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
 	bool GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint);
 	bool GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow|Snapshot")
+	void ResetCheckpoints();
+
+	/** 새 경기용 눈 데이터와 체크포인트를 모두 비운다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow")
+	void ResetSnowState();
+
 	bool ApplyCheckpoint(FName VoxelWorldName, const TArray<uint8>& VoxelSaveData, const TArray<uint8>& SnowVolumeData, const TArray<uint8>& OwnershipData);
 
 private:

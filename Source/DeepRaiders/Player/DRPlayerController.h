@@ -95,6 +95,15 @@ private:
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
+private:
+	/*
+	 * Generaic Confirm/Cancel로 처리된 입력을 Release까지 소비
+	 * Started에서 Generic 입력으로 사용한 뒤 Targeting Task가 즉시 종료되어도,
+	 * 같은 입력에서 발생하는 Triggered가 일반 Ability로 전달되는 것을 방지
+	 * -> 던지기 동작 중 계속 던지기를 시도하지 않도록
+	 */
+	TSet<int32> ConsumedGenericInputIds;
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -140,6 +149,9 @@ protected:
 public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
+
+	/** 인벤토리와 구매한 업그레이드를 지우고 시작 장비를 다시 지급한다. */
+	void ResetForGameStart();
 
 	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
 	UDRStartingSelectionComponent* GetStartingSelectionComponent() const

@@ -3,6 +3,7 @@
 #include "VoxelRendererMixedMeshHandler.h"
 #include "VoxelRendererBasicMeshHandler.h"
 #include "VoxelRendererClusteredMeshHandler.h"
+#include "VoxelRender/VoxelChunkMesh.h"
 #include "VoxelRender/VoxelProcMeshBuffers.h"
 
 FVoxelRendererMixedMeshHandler::FVoxelRendererMixedMeshHandler(IVoxelRenderer& Renderer)
@@ -34,7 +35,10 @@ void FVoxelRendererMixedMeshHandler::ApplyAction(const FAction& Action)
 	{
 		const auto& UpdateChunk = Action.UpdateChunk().InitialCall;
 		const auto ChunkSettings = UpdateChunk.ChunkSettings;
-		const bool bNeedBasicChunk = ChunkSettings.bEnableCollisions || ChunkSettings.bEnableNavmesh;
+		// 전환 메시만 있는 청크는 시각 렌더용이며 충돌용 Basic 청크를 만들 수 없다.
+		const bool bNeedBasicChunk =
+			(ChunkSettings.bEnableCollisions || ChunkSettings.bEnableNavmesh) &&
+			!UpdateChunk.MainChunk->IsEmpty();
 		const bool bNeedClusteredChunk = ChunkSettings.bVisible;
 		auto& ChunkInfo = ChunkInfos[Action.ChunkId];
 

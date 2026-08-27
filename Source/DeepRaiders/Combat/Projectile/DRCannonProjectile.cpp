@@ -6,6 +6,8 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "AbilitySystemComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(CollisionComponentName))
@@ -84,8 +86,32 @@ void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
 	// 폭발 VFX / Sound Cue
 	ExecuteImpactGameplayCue(ImpactResult);
 
+	ExecuteExplosionSoundCue(ImpactResult);
+	
 	// DRSnowProjectile의 눈 생성
 	HandleWorldImpact(ImpactResult);
 
 	Destroy();
+}
+
+void ADRCannonProjectile::ExecuteExplosionSoundCue(const FHitResult& ImpactResult)
+{
+	UAbilitySystemComponent* SourceASC = GetSourceAbilitySystem();
+
+	if (!IsValid(SourceASC))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+
+	Parameters.Location = ImpactResult.ImpactPoint;
+
+	Parameters.Normal = ImpactResult.ImpactNormal;
+
+	Parameters.Instigator = GetInstigator();
+
+	Parameters.EffectCauser = this;
+
+	SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Cannon_Explosion, Parameters);
 }

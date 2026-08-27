@@ -238,6 +238,11 @@ namespace DRGameplayTags
 		"Active snow sprayer loop sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Fire,
+		"GameplayCue.Sound.Weapon.Cannon.Fire",
+		"Cannon fire sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Weapon_Cannon_Explosion,
 		"GameplayCue.Sound.Weapon.Cannon.Explosion",
 		"Cannon explosion sound.");

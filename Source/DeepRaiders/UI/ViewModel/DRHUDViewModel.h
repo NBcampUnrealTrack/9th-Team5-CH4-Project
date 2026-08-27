@@ -10,6 +10,8 @@ class UDRItemDefinition;
 class UDRQuickSlotComponent;
 class AActor;
 class UDRInteractionComponent;
+class ADRGameStartActor;
+class ADRMiningGameStateBase;
 struct FDRInteractionPromptData;
 struct FOnAttributeChangeData;
 
@@ -103,5 +105,56 @@ private:
 	TWeakObjectPtr<UDRInteractionComponent> InteractionComponent;
 	FDelegateHandle InteractionFocusChangedHandle;
 	
+#pragma endregion
+
+#pragma region GameStart
+protected:
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game Start")
+	FText GameStartStatusText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game Start")
+	bool bIsGameStartStatusVisible = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game Start")
+	FText GameEndDebugText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game State")
+	FText GameStateText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game State")
+	bool bIsGameStateTextVisible = false;
+
+private:
+	UFUNCTION()
+	void HandleReadyStateChanged(
+		int32 ReadyPlayerCount,
+		int32 TotalPlayerCount,
+		bool bAllPlayersReady);
+
+	UFUNCTION()
+	void HandleGameStartCountdownChanged(int32 SecondsRemaining);
+
+	UFUNCTION()
+	void HandleAllPlayersReady();
+
+	UFUNCTION()
+	void HandleGameTimerChanged(int32 RemainingSeconds, bool bGameStarted, bool bGameEnded);
+
+	UFUNCTION()
+	void HandleGameEndDebugTextChanged(const FString& DebugText);
+
+	UFUNCTION()
+	void HandleGameResultTextChanged(const FText& ResultText);
+
+	void RefreshGameStartStatus();
+
+	TWeakObjectPtr<ADRGameStartActor> GameStartActor;
+	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
+	int32 ReadyPlayerCount = 0;
+	int32 TotalPlayerCount = 0;
+	int32 GameStartCountdown = 0;
+	int32 GameRemainingSeconds = 0;
+	bool bGameStarted = false;
+	bool bGameEnded = false;
 #pragma endregion
 };
