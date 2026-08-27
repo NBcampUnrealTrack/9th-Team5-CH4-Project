@@ -26,6 +26,9 @@ public:
 	virtual void Logout(AController* Exiting) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
+	// 중도 접속자의 눈 스냅샷 적용이 끝난 뒤 실제 플레이어를 생성한다.
+	bool HandleSnowJoinSnapshotApplied(APlayerController* PlayerController);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -51,6 +54,7 @@ protected:
 
 private:
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
+	bool TryStartSnowJoinSnapshot(class ADRPlayerController* PlayerController);
 
 	/** 마지막 처리 회차 이후의 지급액을 합산해 각 플레이어에게 지급한다. */
 	void GrantPassiveCoins();
