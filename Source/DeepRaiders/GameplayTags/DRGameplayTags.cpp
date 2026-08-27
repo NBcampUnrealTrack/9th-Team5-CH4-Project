@@ -50,7 +50,7 @@ namespace DRGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Weapon_Cannon_Explosion,
 		"GameplayCue.Weapon.Cannon.Explosion",
-		"Cannon Explosion.");
+		"Cannon explosion presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
