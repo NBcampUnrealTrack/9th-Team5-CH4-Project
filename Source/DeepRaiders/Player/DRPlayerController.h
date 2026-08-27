@@ -35,6 +35,7 @@ struct FPredictionKey;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRSnowJoinSnapshotApplied, int32, SnapshotId);
 
 UENUM(BlueprintType)
 enum class EDRStorageTransferDirection : uint8
@@ -266,6 +267,9 @@ private:
 	
 #pragma region Snow Join Snapshot
 public:
+	UPROPERTY(BlueprintAssignable, Category = "Snow|Join Snapshot")
+	FDRSnowJoinSnapshotApplied OnSnowJoinSnapshotApplied;
+
 	UFUNCTION(Client, Reliable)
 	void Client_BeginSnowJoinSnapshot(
 		int32 SnapshotId,
@@ -287,6 +291,9 @@ public:
 		int32 SnapshotId,
 		const TArray<FDRSnowOperationRecord>& RecentHistory);
 
+	UFUNCTION(Client, Reliable)
+	void Client_ResumeSnowJoinOperations(int32 SnapshotId);
+
 	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
 	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
 
@@ -294,9 +301,26 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
 
+	UFUNCTION(Server, Reliable)
+	void ServerNotifySnowJoinSnapshotApplied(int32 SnapshotId);
+
+	void SendNextSnowJoinSnapshotChunk();
+	void FinishSnowJoinSnapshotTransfer();
 	bool TryApplyPendingSnowJoinSnapshot();
 	void RetryPendingSnowJoinSnapshot();
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
+
+	int32 OutgoingSnowSnapshotId = INDEX_NONE;
+	int32 OutgoingSnowCheckpointSequence = 0;
+	uint8 OutgoingSnowPayloadType = 0;
+	int32 OutgoingSnowByteOffset = 0;
+	TArray<uint8> OutgoingSnowVoxelSaveData;
+	TArray<uint8> OutgoingSnowVolumeData;
+	TArray<uint8> OutgoingSnowOwnershipData;
+	TArray<FDRSnowOperationRecord> OutgoingSnowHistory;
+	FTimerHandle SnowJoinSnapshotSendTimer;
+	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
+	bool bSnowSnapshotTransferFinished = false;
 
 	int32 PendingSnowSnapshotId = INDEX_NONE;
 	int32 PendingSnowCheckpointSequence = 0;
@@ -305,6 +329,7 @@ private:
 	int32 PendingSnowVolumeByteCount = 0;
 	int32 PendingSnowOwnershipByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
+	bool bPendingSnowCheckpointApplied = false;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
 	TArray<uint8> PendingSnowOwnershipData;

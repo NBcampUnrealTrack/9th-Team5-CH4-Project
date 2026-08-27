@@ -13,6 +13,7 @@
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
+	bStartPlayersAsSpectators = true;
 }
 
 void ADRMiningGameModeBase::BeginPlay()
@@ -214,10 +215,10 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	{
 		return;
 	}
-	
-	// =============================
-	// Existing terrain sync
-	// =============================
+
+	// 스냅샷 적용 전에는 Pawn을 생성하지 않고 관전 상태로 대기한다.
+	PlayerController->ChangeState(NAME_Spectating);
+	PlayerController->ClientGotoState(NAME_Spectating);
 
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
@@ -225,28 +226,10 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>();
-	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
-	if (IsValid(MiningGameState) && IsValid(SnowSubsystem))
+	if (!TryStartSnowJoinSnapshot(PlayerController))
 	{
-		FDRSnowJoinCheckpoint Checkpoint;
-		if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
-			SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
-		{
-			SnowSubsystem->GetLatestCheckpoint(Checkpoint);
-			MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
-		}
-
-		if (SnowSubsystem->GetLatestCheckpoint(Checkpoint))
-		{
-			PlayerController->Client_BeginSnowJoinSnapshot(
-				Checkpoint.SnapshotId,
-				Checkpoint.OperationSequence,
-				Checkpoint.VoxelWorldName,
-				Checkpoint.VoxelSaveData.Num(),
-				Checkpoint.SnowVolumeData.Num(),
-				Checkpoint.OwnershipData.Num());
-		}
+		// 저장된 눈 상태가 없으면 대기하지 않고 바로 플레이를 시작한다.
+		HandleSnowJoinSnapshotApplied(PlayerController);
 	}
 	
 	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
@@ -265,6 +248,54 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 
 	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
 	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
+}
+
+bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* PlayerController)
+{
+	UWorld* World = GetWorld();
+	ADRMiningGameStateBase* MiningGameState = IsValid(World)
+		? World->GetGameState<ADRMiningGameStateBase>()
+		: nullptr;
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(PlayerController) || !IsValid(MiningGameState) || !IsValid(SnowSubsystem))
+	{
+		return false;
+	}
+
+	FDRSnowJoinCheckpoint Checkpoint;
+	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
+		SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
+	{
+		SnowSubsystem->GetLatestCheckpoint(Checkpoint);
+		MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
+	}
+
+	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint))
+	{
+		return false;
+	}
+
+	PlayerController->Client_BeginSnowJoinSnapshot(
+		Checkpoint.SnapshotId,
+		Checkpoint.OperationSequence,
+		Checkpoint.VoxelWorldName,
+		Checkpoint.VoxelSaveData.Num(),
+		Checkpoint.SnowVolumeData.Num(),
+		Checkpoint.OwnershipData.Num());
+	return true;
+}
+
+bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(APlayerController* PlayerController)
+{
+	if (!IsValid(PlayerController) || IsValid(PlayerController->GetPawn()))
+	{
+		return false;
+	}
+
+	PlayerController->ChangeState(NAME_Playing);
+	PlayerController->ClientGotoState(NAME_Playing);
+	RestartPlayer(PlayerController);
+	return IsValid(PlayerController->GetPawn());
 }
 
 void ADRMiningGameModeBase::Logout(AController* Exiting)
