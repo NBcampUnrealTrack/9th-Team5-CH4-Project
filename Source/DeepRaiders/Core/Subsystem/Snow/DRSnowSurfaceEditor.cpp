@@ -3,6 +3,7 @@
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "DeepRaiders/Snow/DRDirectionalSurfaceTool.h"
+#include "DeepRaiders/Snow/DRSnowAbsorbTool.h"
 #include "EngineUtils.h"
 #include "VoxelTools/Gen/VoxelBoxTools.h"
 #include "VoxelTools/Gen/VoxelSphereTools.h"
@@ -444,6 +445,31 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
 	// 모든 제거는 공통 brush 경로에서 mode와 shape만 바꾼다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	FVoxelIntBox EditedBounds;
+	if (Request.RemovalMode == EDRSnowRemovalMode::AbsorbTool)
+	{
+		const float ModifiedValueAmount = UDRSnowAbsorbTool::RemoveSnowFromFrustum(
+			VoxelWorld,
+			Request.BrushOrigin,
+			Request.WorldLocation,
+			Request.Radius,
+			FMath::Clamp(Request.AbsorbInnerRadiusRatio, 0.f, 1.f),
+			0.2f,
+			Request.RequestedAmount,
+			SnowSurfaceDistanceDivisor,
+			ModifiedValues,
+			EditedBounds);
+
+		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+		if (Result.AppliedAmount > 0.f)
+		{
+			Result.VoxelWorld = VoxelWorld;
+			Result.EditedBounds = EditedBounds;
+			Result.ModifiedValues = MoveTemp(ModifiedValues);
+			Result.bUseModifiedValuesForVolume = true;
+		}
+		return Result;
+	}
+
 	FVector BrushCenter = Request.WorldLocation;
 	if (Request.RemovalMode == EDRSnowRemovalMode::ContactBrush)
 	{

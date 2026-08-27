@@ -235,6 +235,7 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 	Request.RequestedAmount = Operation.RequestedAmount;
 	Request.RemovalBrushShape = Operation.RemovalBrushShape;
 	Request.RemovalMode = Operation.RemovalMode;
+	Request.AbsorbInnerRadiusRatio = Operation.AbsorbInnerRadiusRatio;
 	Request.Context.TeamId = Operation.TeamId;
 
 	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();

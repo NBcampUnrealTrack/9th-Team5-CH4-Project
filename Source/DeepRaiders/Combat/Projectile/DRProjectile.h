@@ -61,6 +61,11 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UShapeComponent> CollisionComponent;
+
+	UAbilitySystemComponent* GetSourceAbilitySystem() const
+	{
+		return SourceAbilitySystem.Get();
+	}
 	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))

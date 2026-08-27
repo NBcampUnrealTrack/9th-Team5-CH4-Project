@@ -50,7 +50,7 @@ namespace DRGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Weapon_Cannon_Explosion,
 		"GameplayCue.Weapon.Cannon.Explosion",
-		"Cannon Explosion.");
+		"Cannon explosion presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
@@ -236,6 +236,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Sprayer_Active,
 		"GameplayCue.Sound.Weapon.Sprayer.Active",
 		"Active snow sprayer loop sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Fire,
+		"GameplayCue.Sound.Weapon.Cannon.Fire",
+		"Cannon fire sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Weapon_Cannon_Explosion,
