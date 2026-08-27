@@ -33,8 +33,6 @@ private:
 	float CalculateFallDamage(float LandingSpeed) const;
 	void ApplyFallDamage(float LandingSpeed);
 
-	UFUNCTION(Client, Unreliable)
-	void ClientPlayFallFeedback(bool bTookFallDamage, bool bDied);
 	void PlayLocalCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, float Scale = 1.f);
 
 	// Death
