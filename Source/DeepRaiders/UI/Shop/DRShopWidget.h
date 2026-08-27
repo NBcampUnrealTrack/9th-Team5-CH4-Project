@@ -11,7 +11,6 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopBuyPanelWidget;
 class UDRShopSellPanelWidget;
-class UWidget;
 class UWidgetSwitcher;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
@@ -72,10 +71,6 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> SellPanelButton;
 
-	/** 기존 WBP 호환용이며 시작 선택 화면 분리 후 표시하지 않는다. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWidget> StartingWeaponPanelButton;
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 
@@ -87,9 +82,5 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRShopSellPanelWidget> SellPanel;
-
-	/** 기존 WBP 호환용이며 시작 선택 화면 분리 후 표시하지 않는다. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWidget> StartingWeaponPanel;
 
 };

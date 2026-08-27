@@ -1,7 +1,6 @@
 #include "DRShopWidget.h"
 
 #include "Components/Button.h"
-#include "Components/Widget.h"
 #include "Components/WidgetSwitcher.h"
 #include "DRShopBuyPanelWidget.h"
 #include "DRShopSellPanelWidget.h"
@@ -38,16 +37,6 @@ void UDRShopWidget::NativeOnInitialized()
 	if (IsValid(SellPanelButton))
 	{
 		SellPanelButton->OnClicked.AddDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
-	}
-
-	if (IsValid(StartingWeaponPanelButton))
-	{
-		StartingWeaponPanelButton->SetVisibility(ESlateVisibility::Collapsed);
-	}
-
-	if (IsValid(StartingWeaponPanel))
-	{
-		StartingWeaponPanel->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	if (IsValid(CloseButton))
