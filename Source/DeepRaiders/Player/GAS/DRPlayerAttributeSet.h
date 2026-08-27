@@ -29,9 +29,6 @@ public:
 
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowGauge)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
-	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowAbsorbPower)
-	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowAbsorbRadius)
-	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowAbsorbSpeed)
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
@@ -49,13 +46,6 @@ protected:
 	FGameplayAttributeData SnowGauge;
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxSnowGauge, Category = "Player|Snow")
 	FGameplayAttributeData MaxSnowGauge;
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_SnowAbsorbPower, Category = "Player|Snow|Absorb")
-	FGameplayAttributeData SnowAbsorbPower;
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_SnowAbsorbRadius, Category = "Player|Snow|Absorb")
-	FGameplayAttributeData SnowAbsorbRadius;
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_SnowAbsorbSpeed, Category = "Player|Snow|Absorb")
-	FGameplayAttributeData SnowAbsorbSpeed;
-
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingDamage;
 
@@ -77,13 +67,6 @@ protected:
 	void OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge);
 	UFUNCTION()
 	void OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge);
-	UFUNCTION()
-	void OnRep_SnowAbsorbPower(const FGameplayAttributeData& OldSnowAbsorbPower);
-	UFUNCTION()
-	void OnRep_SnowAbsorbRadius(const FGameplayAttributeData& OldSnowAbsorbRadius);
-	UFUNCTION()
-	void OnRep_SnowAbsorbSpeed(const FGameplayAttributeData& OldSnowAbsorbSpeed);
-
 	UFUNCTION()
 	void OnRep_MoveSpeedMultiplier(
 		const FGameplayAttributeData& OldMoveSpeedMultiplier);

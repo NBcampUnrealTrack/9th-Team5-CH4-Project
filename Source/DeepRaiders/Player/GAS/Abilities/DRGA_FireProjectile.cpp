@@ -2,6 +2,8 @@
 #include "DRGA_FireProjectile.h"
 
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
+#include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -259,6 +261,19 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	}
 
 	const FTransform SpawnTransform(SafeDirection.Rotation(), SpawnLocation);
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	if (!IsValid(WeaponDefinition))
+	{
+		return false;
+	}
+
+	const FDRProjectileWeaponSnowAddSettings& SnowAddSettings = WeaponDefinition->SnowAddSettings;
+	FDRProjectileWorldImpactData WorldImpactData;
+	WorldImpactData.bAddSnow = SnowAddSettings.bEnabled;
+	WorldImpactData.SnowRadius = SnowAddSettings.Radius;
+	WorldImpactData.SnowAmount = SnowAddSettings.Amount;
+	WorldImpactData.SnowEditTool = SnowAddSettings.EditTool;
+	WorldImpactData.bAllowVirtualSurfaceFallback = SnowAddSettings.bAllowVirtualSurfaceFallback;
 
 	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(ProjectileClass, SpawnTransform, AvatarActor, Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 

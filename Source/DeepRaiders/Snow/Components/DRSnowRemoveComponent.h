@@ -11,7 +11,7 @@ struct DEEPRAIDERS_API FDRSnowRemovalSpec
 {
 	GENERATED_BODY()
 
-	// 제거 brush 반경이다. GAS Attribute, 퍽, 장비 효과가 계산한 최종 값을 전달한다.
+	// 제거 brush 반경이다. 무기 정의가 계산한 최종 값을 전달한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (ClampMin = "0.0", Units = "cm"))
 	float SnowAbsorbRadius = 100.f;
 
