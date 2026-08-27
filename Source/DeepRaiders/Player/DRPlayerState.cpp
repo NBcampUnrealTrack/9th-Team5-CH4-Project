@@ -211,13 +211,11 @@ void ADRPlayerState::ResetForRespawn()
 
 	ClearFrozenState();
 	
-	// 이전 생명주기의 Dead 상태 Effect 제거
-	{
-		FGameplayTagContainer TempTags;
-		TempTags.AddTag(DRGameplayTags::State_Dead);
-
-		AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(TempTags);
-	}
+	FGameplayTagContainer PersistThroughDeathTags;
+	PersistThroughDeathTags.AddTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
+	
+	const FGameplayEffectQuery RemoveOnRespawnQuery = FGameplayEffectQuery::MakeQuery_MatchNoEffectTags(PersistThroughDeathTags);
+	AbilitySystemComponent->RemoveActiveEffects(RemoveOnRespawnQuery);
 
 	// Respawn Attribute 초기화
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), Attributes->GetMaxHealth());

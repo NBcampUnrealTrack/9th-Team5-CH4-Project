@@ -68,6 +68,16 @@ namespace DRGameplayTags
 		"Cooldown for the second character skill slot.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Effect_Policy_PersistThroughDeath,
+		"Effect.Policy.PersistThroghDeath",
+		"Active GameplayEffect persists through death and respawn.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX,
+		"GameplayCue.VFX",
+		"Parent GameplayCue tag for data-driven visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
 		"Snow amount passed through GAS.");

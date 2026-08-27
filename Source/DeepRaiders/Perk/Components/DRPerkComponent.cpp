@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
@@ -117,7 +118,17 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 	{
 		return FActiveGameplayEffectHandle();
 	}
-
+	
+	/* 퍽을 통해 적용되는 모든 GE는 사망과 리스폰을 통과한다.
+	 * 
+	 * GE 에셋 자체가 아니라 현재 Spec에만 추가하므로,
+	 * 동일한 GE 클래스를 다른 시스템에서 사용해도 해당 효과에는 적용되지 않는다.
+	 */
+	if (PerkDefinition->bPersistThroughDeath)
+	{
+		EffectSpec.Data->AddDynamicAssetTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
+	}
+	
 	for (const TPair<FGameplayTag, float>& EffectValue
 		: PerkDefinition->EffectValues)
 	{
