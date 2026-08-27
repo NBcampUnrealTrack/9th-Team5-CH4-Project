@@ -48,10 +48,10 @@ void UDRStartingSelectionUIComponent::ShowStartingSelection(
 	StartingSelectionWidget->OnSelectionCompleted.AddDynamic(
 		this,
 		&ThisClass::HideStartingSelection);
-	StartingSelectionWidget->InitializeSelection(InSelectionComponent);
 	PlayerController->FlushPressedKeys();
 	PlayerController->SetIgnoreMoveInput(true);
 	IsMoveInputBlocked = true;
+	StartingSelectionWidget->InitializeSelection(InSelectionComponent);
 }
 
 void UDRStartingSelectionUIComponent::EndPlay(

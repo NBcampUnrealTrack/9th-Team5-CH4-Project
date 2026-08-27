@@ -56,6 +56,16 @@ void UDRStartingWeaponSelectWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	if (!IsValid(WeaponListView) || !IsValid(ConfirmButton))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("Starting weapon widget requires WeaponListView and ConfirmButton. Widget=%s"),
+			*GetName());
+		return;
+	}
+
 	const TSubclassOf<UUserWidget> EntryWidgetClass = WeaponListView->GetEntryWidgetClass();
 	if (!EntryWidgetClass
 		|| !EntryWidgetClass->IsChildOf(UDRStartingWeaponEntryWidget::StaticClass()))
@@ -73,8 +83,15 @@ void UDRStartingWeaponSelectWidget::NativeConstruct()
 
 void UDRStartingWeaponSelectWidget::NativeDestruct()
 {
-	WeaponListView->OnItemClicked().RemoveAll(this);
-	ConfirmButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmClicked);
+	if (IsValid(WeaponListView))
+	{
+		WeaponListView->OnItemClicked().RemoveAll(this);
+	}
+
+	if (IsValid(ConfirmButton))
+	{
+		ConfirmButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmClicked);
+	}
 
 	DeinitializeSelection();
 	Super::NativeDestruct();

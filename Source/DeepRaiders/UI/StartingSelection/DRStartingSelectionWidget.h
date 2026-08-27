@@ -7,6 +7,7 @@
 class UDRStartingSkillSelectWidget;
 class UDRStartingWeaponSelectWidget;
 class UDRStartingSelectionComponent;
+class UWidgetSwitcher;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRStartingSelectionCompletedSignature);
 
@@ -27,7 +28,7 @@ protected:
 	virtual void NativeDestruct() override;
 
 private:
-	void HandleSelectionAvailabilityChanged(bool IsAvailable);
+	void HandleSelectionAvailabilityChanged(bool);
 	void DeinitializeSelection();
 
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -35,6 +36,9 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UDRStartingSkillSelectWidget> SkillPanel;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidgetSwitcher> SelectionPanelSwitcher;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRStartingSelectionComponent> SelectionComponent;

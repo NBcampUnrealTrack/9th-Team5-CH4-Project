@@ -53,14 +53,33 @@ void UDRStartingSkillSelectWidget::DeinitializeSelection()
 void UDRStartingSkillSelectWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (!IsValid(SkillListView) || !IsValid(ConfirmButton))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("Starting skill widget requires SkillListView and ConfirmButton. Widget=%s"),
+			*GetName());
+		return;
+	}
+
 	SkillListView->OnItemClicked().AddUObject(this, &ThisClass::HandleSkillClicked);
 	ConfirmButton->OnClicked.AddDynamic(this, &ThisClass::HandleConfirmClicked);
 }
 
 void UDRStartingSkillSelectWidget::NativeDestruct()
 {
-	SkillListView->OnItemClicked().RemoveAll(this);
-	ConfirmButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmClicked);
+	if (IsValid(SkillListView))
+	{
+		SkillListView->OnItemClicked().RemoveAll(this);
+	}
+
+	if (IsValid(ConfirmButton))
+	{
+		ConfirmButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConfirmClicked);
+	}
+
 	DeinitializeSelection();
 	Super::NativeDestruct();
 }
