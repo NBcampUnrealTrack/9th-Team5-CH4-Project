@@ -1,0 +1,40 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "DRStartingSelectionUIComponent.generated.h"
+
+class ADRPlayerController;
+class UDRStartingSelectionWidget;
+class UDRStartingSelectionComponent;
+class UDRUIManagerSubsystem;
+
+UCLASS(ClassGroup = (DeepRaiders))
+class DEEPRAIDERS_API UDRStartingSelectionUIComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	UDRStartingSelectionUIComponent();
+
+	void ShowStartingSelection(
+		UDRStartingSelectionComponent* InSelectionComponent);
+
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	UFUNCTION()
+	void HideStartingSelection();
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRPlayerController> PlayerController;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRStartingSelectionWidget> StartingSelectionWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRUIManagerSubsystem> UIManager;
+
+	bool IsMoveInputBlocked = false;
+};

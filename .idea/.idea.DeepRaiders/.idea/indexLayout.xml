@@ -18,6 +18,7 @@
       <Path>Source/DeepRaiders/Item/GAS</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.cpp</Path>
       <Path>Source/DeepRaiders/Item/GAS/DRItemAbilitySet.h</Path>
+      <Path>Source/DeepRaiders/LootBox</Path>
       <Path>Source/DeepRaiders/MessageSystem</Path>
       <Path>Source/DeepRaiders/Perk</Path>
       <Path>Source/DeepRaiders/Player/Animation/DRAnimationTypes.cpp</Path>
@@ -44,6 +45,7 @@
       <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_DropSelectedItem.h</Path>
       <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_Interact.cpp</Path>
       <Path>Source/DeepRaiders/Player/GAS/Abilities/DRGA_Interact.h</Path>
+      <Path>Source/DeepRaiders/Skill</Path>
       <Path>Source/DeepRaiders/Snow</Path>
       <Path>Source/DeepRaiders/Storage</Path>
       <Path>Source/DeepRaiders/Storage/DRStorage.cpp</Path>
@@ -70,6 +72,7 @@
       <Path>Source/DeepRaiders/UI/ViewModel/DRShopSellViewModel.h</Path>
       <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.cpp</Path>
       <Path>Source/DeepRaiders/UI/ViewModel/DRShopViewModel.h</Path>
+      <Path>Source/DeepRaiders/VFX</Path>
       <Path>Source/DeepRaidersEditor</Path>
     </explicitIncludes>
     <explicitExcludes />

@@ -5,7 +5,9 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -44,15 +46,14 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 
 	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	UDRSnowRemoveComponent* SnowRemoveComponent =
+		IsValid(AvatarActor) ? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>() : nullptr;
 
-	if (!IsValid(ASC) ||
-		!IsValid(AvatarActor) ||
-		!IsValid(AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>()))
+	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(SnowRemoveComponent))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-
 	PerformAbsorbTick();
 }
 
@@ -89,7 +90,7 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	}
 
 	FDRSnowRemovalSpec RemovalSpec;
-	if (!BuildRemovalSpec(ASC, RemovalSpec))
+	if (!BuildRemovalSpec(RemovalSpec))
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 		return;
@@ -102,12 +103,31 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		return;
 	}
 
-	FHitResult HitResult;
-	if (TraceSnowTarget(ActorInfo, HitResult))
+	FVector AbsorbOrigin = AvatarActor->GetActorLocation();
+	if (const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(AvatarActor))
 	{
-		const float RemovedAmount = SnowRemoveComponent->TryRemoveSnowFromHit(HitResult, RemovalSpec);
-		ApplySnowGaugeGain(ASC, RemovedAmount);
+		if (const UStaticMeshComponent* WeaponMesh = Character->GetWorldHandEquipmentMesh())
+		{
+			AbsorbOrigin = WeaponMesh->GetComponentLocation();
+		}
 	}
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	if (AController* Controller = ActorInfo->PlayerController.Get())
+	{
+		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
+	}
+	else
+	{
+		AvatarActor->GetActorEyesViewPoint(ViewLocation, ViewRotation);
+	}
+
+	const float RemovedAmount = SnowRemoveComponent->TryRemoveSnowAlongDirection(
+		AbsorbOrigin,
+		ViewRotation.Vector(),
+		RemovalSpec);
+	ApplySnowGaugeGain(ASC, RemovedAmount);
 
 	ScheduleNextAbsorbTick();
 }
@@ -124,7 +144,7 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 	}
 
 	FDRSnowRemovalSpec RemovalSpec;
-	if (!BuildRemovalSpec(ASC, RemovalSpec))
+	if (!BuildRemovalSpec(RemovalSpec))
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 		return;
@@ -149,75 +169,33 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 	AbsorbDelayTask->ReadyForActivation();
 }
 
-bool UDRGA_AbsorbSnow::BuildRemovalSpec(
-	UAbilitySystemComponent* AbilitySystemComponent,
-	FDRSnowRemovalSpec& OutRemovalSpec) const
+bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const
 {
-	if (!IsValid(AbilitySystemComponent))
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
+		Cast<UDRProjectileWeaponItemDefinition>(
+			GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
+	if (!IsValid(WeaponDefinition) || !WeaponDefinition->SnowAbsorbSettings.bEnabled)
 	{
 		return false;
 	}
 
-	OutRemovalSpec.SnowAbsorbPower = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbPowerAttribute());
-	OutRemovalSpec.SnowAbsorbRadius = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbRadiusAttribute());
-	OutRemovalSpec.SnowAbsorbSpeed = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbSpeedAttribute());
+	const FDRProjectileWeaponSnowAbsorbSettings& SnowAbsorbSettings = WeaponDefinition->SnowAbsorbSettings;
+	OutRemovalSpec.SnowAbsorbPower = SnowAbsorbSettings.Power;
+	OutRemovalSpec.SnowAbsorbRadius = SnowAbsorbSettings.Radius;
+	OutRemovalSpec.SnowAbsorbSpeed = SnowAbsorbSettings.Speed;
+	OutRemovalSpec.SnowAbsorbRange = SnowAbsorbSettings.Range;
+	OutRemovalSpec.SnowAbsorbStartOffset = SnowAbsorbSettings.StartOffset;
+	OutRemovalSpec.SnowAbsorbSweepRadius = SnowAbsorbSettings.SweepRadius;
+	OutRemovalSpec.SnowAbsorbMaxSweepsPerTick = SnowAbsorbSettings.MaxSweepsPerTick;
+	OutRemovalSpec.bUseAdaptiveAbsorbQuery = SnowAbsorbSettings.bUseAdaptiveQuery;
+	OutRemovalSpec.SnowAbsorbInnerRadiusRatio = SnowAbsorbSettings.InnerRadiusRatio;
+	OutRemovalSpec.RemovalBrushShape = SnowAbsorbSettings.BrushShape;
+	OutRemovalSpec.RemovalMode = SnowAbsorbSettings.RemovalMode;
 
 	return OutRemovalSpec.SnowAbsorbPower > 0.f &&
 		OutRemovalSpec.SnowAbsorbRadius > 0.f &&
-		OutRemovalSpec.SnowAbsorbSpeed > 0.f;
-}
-
-bool UDRGA_AbsorbSnow::TraceSnowTarget(
-	const FGameplayAbilityActorInfo* ActorInfo,
-	FHitResult& OutHitResult) const
-{
-	if (ActorInfo == nullptr)
-	{
-		return false;
-	}
-
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	if (!IsValid(AvatarActor))
-	{
-		return false;
-	}
-
-	UWorld* World = AvatarActor->GetWorld();
-	if (!IsValid(World))
-	{
-		return false;
-	}
-
-	FVector ViewLocation;
-	FRotator ViewRotation;
-
-	if (AController* Controller = ActorInfo->PlayerController.Get())
-	{
-		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
-	}
-	else
-	{
-		AvatarActor->GetActorEyesViewPoint(ViewLocation, ViewRotation);
-	}
-
-	constexpr float TraceDistance = 1000.f;
-	constexpr ECollisionChannel TraceChannel = ECC_Visibility;
-	constexpr bool bTraceComplex = false;
-
-	const FVector TraceEnd = ViewLocation + ViewRotation.Vector() * TraceDistance;
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRGA_AbsorbSnow), bTraceComplex);
-	QueryParams.AddIgnoredActor(AvatarActor);
-
-	return World->LineTraceSingleByChannel(
-		OutHitResult,
-		ViewLocation,
-		TraceEnd,
-		TraceChannel,
-		QueryParams);
+		OutRemovalSpec.SnowAbsorbSpeed > 0.f &&
+		OutRemovalSpec.SnowAbsorbRange > 0.f;
 }
 
 void UDRGA_AbsorbSnow::ApplySnowGaugeGain(

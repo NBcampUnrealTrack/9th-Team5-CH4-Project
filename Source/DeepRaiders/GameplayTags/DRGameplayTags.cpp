@@ -43,6 +43,16 @@ namespace DRGameplayTags
 		"Ranged attack ability.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Attack_Ranged_Sprayer,
+		"Ability.Attack.Ranged.Sprayer",
+		"Continuous snow sprayer attack ability.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Cannon_Explosion,
+		"GameplayCue.Weapon.Cannon.Explosion",
+		"Cannon explosion presentation.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
 		"Ability.Attack.Melee",
 		"Melee attack ability.");
@@ -68,6 +78,31 @@ namespace DRGameplayTags
 		"Cooldown for the second character skill slot.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Effect_Policy_PersistThroughDeath,
+		"Effect.Policy.PersistThroghDeath",
+		"Active GameplayEffect persists through death and respawn.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX,
+		"GameplayCue.VFX",
+		"Parent GameplayCue tag for data-driven visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_Heal,
+		"GameplayCue.VFX.Effect.Heal",
+		"Heal effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_MoveSpeed,
+		"GameplayCue.VFX.Effect.MoveSpeed",
+		"MoveSpeed effect visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Sprayer_Active,
+		"GameplayCue.Weapon.Sprayer.Active",
+		"Active snow sprayer presentation.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
 		"Snow amount passed through GAS.");
@@ -91,6 +126,11 @@ namespace DRGameplayTags
 		Data_Cooldown_Duration,
 		"Data.Cooldown.Duration",
 		"Cooldown duration passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Effect_MoveSpeed,
+		"Data.Effect.MoveSpeed",
+		"Effect MoveSpeed passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
@@ -121,6 +161,11 @@ namespace DRGameplayTags
 		UI_Screen_Shop,
 		"UI.Screen.Shop",
 		"Shop screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_StartingSelection,
+		"UI.Screen.StartingSelection",
+		"Starting weapon and skill selection screen.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_Scoreboard,
@@ -186,4 +231,19 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Rifle_Fire,
 		"GameplayCue.Sound.Weapon.Rifle.Fire",
 		"Rifle fired.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Sprayer_Active,
+		"GameplayCue.Sound.Weapon.Sprayer.Active",
+		"Active snow sprayer loop sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Fire,
+		"GameplayCue.Sound.Weapon.Cannon.Fire",
+		"Cannon fire sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Explosion,
+		"GameplayCue.Sound.Weapon.Cannon.Explosion",
+		"Cannon explosion sound.");
 }

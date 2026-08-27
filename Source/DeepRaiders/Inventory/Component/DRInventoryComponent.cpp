@@ -496,6 +496,18 @@ void UDRInventoryComponent::OnRep_Slots()
 	BroadcastInventoryChanged();
 }
 
+void UDRInventoryComponent::ResetInventory()
+{
+	if (!HasInventoryAuthority())
+	{
+		return;
+	}
+
+	Slots.Reset();
+	Slots.SetNum(MaxSlots);
+	HandleInventoryChangedOnServer();
+}
+
 void UDRInventoryComponent::HandleInventoryChangedOnServer()
 {
 	BroadcastInventoryChanged();

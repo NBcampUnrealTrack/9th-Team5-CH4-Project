@@ -34,9 +34,14 @@ public:
 
 	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
 	FDRSnowRemoveResult RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request);
+	// 눈총 frustum 전용 제거 경로다.
+	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	// Multicast 수신용 제거 경로다. 일반 제거와 달리 서버가 확정한 양을 Volume에 반영한다.
 	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
-	bool RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request);
+	bool ApplyReplicatedSnowAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
+	bool RepaintSnowMaterialsAtArea(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult);
 
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
@@ -46,6 +51,14 @@ public:
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
 	bool GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint);
 	bool GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow|Snapshot")
+	void ResetCheckpoints();
+
+	/** 새 경기용 눈 데이터와 체크포인트를 모두 비운다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow")
+	void ResetSnowState();
+
 	bool ApplyCheckpoint(FName VoxelWorldName, const TArray<uint8>& VoxelSaveData, const TArray<uint8>& SnowVolumeData, const TArray<uint8>& OwnershipData);
 
 private:

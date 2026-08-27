@@ -347,7 +347,12 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 
 FString ADRSnowControlZone::BuildSnowCountDebugText() const
 {
-	const FDRSnowVoxelMaterialScanResult MaterialScan = ScanVoxelMaterials();
+	return BuildSnowCountDebugTextFromScan(ScanVoxelMaterials());
+}
+
+FString ADRSnowControlZone::BuildSnowCountDebugTextFromScan(
+	const FDRSnowVoxelMaterialScanResult& MaterialScan) const
+{
 	FString TeamText;
 	for (const FDRSnowVoxelMaterialTeamCount& Team : MaterialScan.Teams)
 	{

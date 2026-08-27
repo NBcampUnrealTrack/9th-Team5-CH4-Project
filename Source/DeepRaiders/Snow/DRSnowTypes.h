@@ -35,7 +35,10 @@ enum class EDRSnowRemovalMode : uint8
 	ContactBrush UMETA(DisplayName = "Contact Brush"),
 
 	// 폭탄처럼 히트 지점을 중심으로 shape 전체를 한 번에 제거한다.
-	InstantVolume UMETA(DisplayName = "Instant Volume")
+	InstantVolume UMETA(DisplayName = "Instant Volume"),
+
+	// 흡수구에서 멀어질수록 약해지는 frustum 범위로 표면 눈을 조금씩 제거한다.
+	AbsorbTool UMETA(DisplayName = "Absorb Tool")
 };
 
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.
@@ -133,6 +136,22 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AbsorbInnerRadiusRatio = 0.45f;
+
+	// Adaptive 거리 필드 slab의 최소 절반 깊이다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "1.0", Units = "cm"))
+	float AbsorbSweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "1"))
+	int32 AbsorbMaxSweepsPerTick = 32;
+
+	// 무기 설정에서 선택한 Absorb Tool surface query 방식이다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	bool bUseAdaptiveAbsorbQuery = true;
+
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
 };
@@ -203,6 +222,21 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AbsorbInnerRadiusRatio = 0.45f;
+
+	// Adaptive 거리 필드 slab의 최소 절반 깊이다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "1.0", Units = "cm"))
+	float AbsorbSweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "1"))
+	int32 AbsorbMaxSweepsPerTick = 32;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bUseAdaptiveAbsorbQuery = true;
+
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	int32 TeamId = INDEX_NONE;

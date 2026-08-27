@@ -7,21 +7,258 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/DRTeamPlayerStart.h"
 #include "DeepRaiders/Gameplay/Team/DRTeamMovingActor.h"
+#include "DeepRaiders/Gameplay/DRGameStartActor.h"
 #include "DeepRaiders/Snow/DRSnowControlZone.h"
+#include "GameFramework/PawnMovementComponent.h"
 #include "EngineUtils.h"
+#include "VoxelWorld.h"
+#include "VoxelTools/VoxelBlueprintLibrary.h"
 
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
+	bStartPlayersAsSpectators = true;
 }
 
 void ADRMiningGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
+	bIsGameStart = false;
+	bIsGameEnd = false;
+}
 
-	// 현재는 맵 시작과 동시에 지급하며, 추후 실제 경기 시작 지점으로 이동할 수 있다.
+bool ADRMiningGameModeBase::StartGame()
+{
+	if (!HasAuthority() || bIsGameStart)
+	{
+		return false;
+	}
+
+	ResetGameState();
+	bIsGameStart = true;
+	bIsGameEnd = false;
 	StartTimer();
 	StartTeamSwitchTimer();
+	GameRemainingSeconds = FMath::Max(1, FMath::CeilToInt(GameDuration));
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameEndDebugText(FString());
+		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
+	}
+	GetWorldTimerManager().SetTimer(
+		GameTimerHandle,
+		this,
+		&ThisClass::TickGameTimer,
+		1.f,
+		true);
+	return true;
+}
+
+void ADRMiningGameModeBase::TickGameTimer()
+{
+	if (!bIsGameStart || bIsGameEnd)
+	{
+		return;
+	}
+
+	--GameRemainingSeconds;
+	if (GameRemainingSeconds <= 0)
+	{
+		EndGame();
+		return;
+	}
+
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
+	}
+}
+
+void ADRMiningGameModeBase::EndGame()
+{
+	if (!HasAuthority() || !bIsGameStart || bIsGameEnd)
+	{
+		return;
+	}
+
+	bIsGameStart = false;
+	bIsGameEnd = true;
+	EndTimer();
+	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
+	GetWorldTimerManager().ClearTimer(GameTimerHandle);
+	GameRemainingSeconds = 0;
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameTimerState(0, false, true);
+	}
+
+	float TeamAmounts[2] = {0.f, 0.f};
+	float TotalAmount = 0.f;
+	int64 TeamMaterialVoxelCounts[2] = {0, 0};
+	TArray<FString> ZoneDebugTexts;
+	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		const FDRSnowVoxelMaterialScanResult MaterialScan = Iterator->ScanVoxelMaterials();
+		const FString ZoneDebugText = Iterator->BuildSnowCountDebugTextFromScan(MaterialScan);
+		ZoneDebugTexts.Add(FString::Printf(TEXT("[%s]\n%s"), *Iterator->GetName(), *ZoneDebugText));
+		UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Zone=%s]\n%s"), *Iterator->GetName(), *ZoneDebugText);
+		for (const FDRSnowVoxelMaterialTeamCount& Team : MaterialScan.Teams)
+		{
+			if (Team.TeamId == 0 || Team.TeamId == 1)
+			{
+				TeamMaterialVoxelCounts[Team.TeamId] += Team.VoxelCount;
+			}
+		}
+
+		Iterator->RefreshControlRatio();
+		const FDRSnowControlRatio Ratio = Iterator->GetControlRatio();
+		float ZoneTeamAmounts[2] = {0.f, 0.f};
+		TotalAmount += Ratio.TotalAmount;
+		for (const FDRSnowTeamAmount& Team : Ratio.Teams)
+		{
+			if (Team.TeamId == 0 || Team.TeamId == 1)
+			{
+				TeamAmounts[Team.TeamId] += Team.Amount;
+				ZoneTeamAmounts[Team.TeamId] += Team.Amount;
+			}
+		}
+
+		const float ZoneTeam0Percent =
+			Ratio.TotalAmount > 0.f ? ZoneTeamAmounts[0] / Ratio.TotalAmount * 100.f : 0.f;
+		const float ZoneTeam1Percent =
+			Ratio.TotalAmount > 0.f ? ZoneTeamAmounts[1] / Ratio.TotalAmount * 100.f : 0.f;
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[GameEnd][Zone=%s] Team 0=%.2f%% Team 1=%.2f%%"),
+			*Iterator->GetName(),
+			ZoneTeam0Percent,
+			ZoneTeam1Percent);
+	}
+
+	const float Team0Percent = TotalAmount > 0.f ? TeamAmounts[0] / TotalAmount * 100.f : 0.f;
+	const float Team1Percent = TotalAmount > 0.f ? TeamAmounts[1] / TotalAmount * 100.f : 0.f;
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[GameEnd] 게임 끝! Team 0=%.2f%% Team 1=%.2f%%"),
+		Team0Percent,
+		Team1Percent);
+
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameEndDebugText(FString::Join(ZoneDebugTexts, TEXT("\n\n")));
+		const int64 TeamVoxelTotal = TeamMaterialVoxelCounts[0] + TeamMaterialVoxelCounts[1];
+		const int32 RedPercent = TeamVoxelTotal > 0
+			? FMath::RoundToInt(static_cast<double>(TeamMaterialVoxelCounts[0]) / TeamVoxelTotal * 100.0)
+			: 0;
+		const int32 BluePercent = TeamVoxelTotal > 0 ? 100 - RedPercent : 0;
+		MiningGameState->SetGameResultText(FText::FromString(FString::Printf(
+			TEXT("[Red] %d : %d [Blue]"),
+			RedPercent,
+			BluePercent)));
+		GetWorldTimerManager().SetTimer(
+			GameResultTimerHandle,
+			this,
+			&ThisClass::ClearGameResultText,
+			GameResultDisplayDuration,
+			false);
+	}
+
+	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->ResetForNextGame();
+	}
+}
+
+void ADRMiningGameModeBase::ClearGameResultText()
+{
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameResultText(FText::GetEmpty());
+	}
+}
+
+void ADRMiningGameModeBase::ResetGameState()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
+	{
+		SnowSubsystem->ResetSnowState();
+	}
+
+	if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->ResetSnowOperationState();
+	}
+
+	if (UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>())
+	{
+		TerrainSubsystem->ResetTerrainState();
+	}
+
+	for (TActorIterator<AVoxelWorld> Iterator(World); Iterator; ++Iterator)
+	{
+		if (Iterator->IsCreated())
+		{
+			UVoxelBlueprintLibrary::ClearAllData(*Iterator, true);
+		}
+	}
+
+	if (!IsValid(GameState))
+	{
+		return;
+	}
+
+	for (APlayerState* PlayerState : GameState->PlayerArray)
+	{
+		if (ADRPlayerState* DRPlayerState = Cast<ADRPlayerState>(PlayerState))
+		{
+			DRPlayerState->ResetForGameStart();
+		}
+	}
+
+	for (
+		FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator();
+		Iterator;
+		++Iterator)
+	{
+		if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(Iterator->Get()))
+		{
+			PlayerController->ResetForGameStart();
+
+			APawn* Pawn = PlayerController->GetPawn();
+			if (!IsValid(Pawn))
+			{
+				RestartPlayer(PlayerController);
+				continue;
+			}
+
+			// 준비 중 팀이 바뀔 수 있으므로 기존 StartSpot 캐시 대신 현재 팀으로 다시 선택한다.
+			AActor* PlayerStart = ChoosePlayerStart(PlayerController);
+			if (!IsValid(PlayerStart))
+			{
+				continue;
+			}
+
+			if (UPawnMovementComponent* MovementComponent = Pawn->GetMovementComponent())
+			{
+				MovementComponent->StopMovementImmediately();
+			}
+
+			Pawn->TeleportTo(
+				PlayerStart->GetActorLocation(),
+				PlayerStart->GetActorRotation(),
+				false,
+				true);
+		}
+	}
 }
 
 void ADRMiningGameModeBase::StartTimer()
@@ -57,6 +294,8 @@ void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	EndTimer();
 	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
+	GetWorldTimerManager().ClearTimer(GameTimerHandle);
+	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -215,9 +454,9 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	// =============================
-	// Existing terrain sync
-	// =============================
+	// 스냅샷 적용 전에는 Pawn을 생성하지 않고 관전 상태로 대기한다.
+	PlayerController->ChangeState(NAME_Spectating);
+	PlayerController->ClientGotoState(NAME_Spectating);
 
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
@@ -225,28 +464,10 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>();
-	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
-	if (IsValid(MiningGameState) && IsValid(SnowSubsystem))
+	if (!TryStartSnowJoinSnapshot(PlayerController))
 	{
-		FDRSnowJoinCheckpoint Checkpoint;
-		if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
-			SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
-		{
-			SnowSubsystem->GetLatestCheckpoint(Checkpoint);
-			MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
-		}
-
-		if (SnowSubsystem->GetLatestCheckpoint(Checkpoint))
-		{
-			PlayerController->Client_BeginSnowJoinSnapshot(
-				Checkpoint.SnapshotId,
-				Checkpoint.OperationSequence,
-				Checkpoint.VoxelWorldName,
-				Checkpoint.VoxelSaveData.Num(),
-				Checkpoint.SnowVolumeData.Num(),
-				Checkpoint.OwnershipData.Num());
-		}
+		// 저장된 눈 상태가 없으면 대기하지 않고 바로 플레이를 시작한다.
+		HandleSnowJoinSnapshotApplied(PlayerController);
 	}
 	
 	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
@@ -265,6 +486,54 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 
 	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
 	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
+}
+
+bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* PlayerController)
+{
+	UWorld* World = GetWorld();
+	ADRMiningGameStateBase* MiningGameState = IsValid(World)
+		? World->GetGameState<ADRMiningGameStateBase>()
+		: nullptr;
+	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(PlayerController) || !IsValid(MiningGameState) || !IsValid(SnowSubsystem))
+	{
+		return false;
+	}
+
+	FDRSnowJoinCheckpoint Checkpoint;
+	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
+		SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
+	{
+		SnowSubsystem->GetLatestCheckpoint(Checkpoint);
+		MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
+	}
+
+	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint))
+	{
+		return false;
+	}
+
+	PlayerController->Client_BeginSnowJoinSnapshot(
+		Checkpoint.SnapshotId,
+		Checkpoint.OperationSequence,
+		Checkpoint.VoxelWorldName,
+		Checkpoint.VoxelSaveData.Num(),
+		Checkpoint.SnowVolumeData.Num(),
+		Checkpoint.OwnershipData.Num());
+	return true;
+}
+
+bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(APlayerController* PlayerController)
+{
+	if (!IsValid(PlayerController) || IsValid(PlayerController->GetPawn()))
+	{
+		return false;
+	}
+
+	PlayerController->ChangeState(NAME_Playing);
+	PlayerController->ClientGotoState(NAME_Playing);
+	RestartPlayer(PlayerController);
+	return IsValid(PlayerController->GetPawn());
 }
 
 void ADRMiningGameModeBase::Logout(AController* Exiting)

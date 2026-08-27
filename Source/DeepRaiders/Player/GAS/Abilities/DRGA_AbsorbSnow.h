@@ -41,7 +41,6 @@ private:
 	void PerformAbsorbTick();
 	void ScheduleNextAbsorbTick();
 
-	bool BuildRemovalSpec(UAbilitySystemComponent* AbilitySystemComponent, FDRSnowRemovalSpec& OutRemovalSpec) const;
-	bool TraceSnowTarget(const FGameplayAbilityActorInfo* ActorInfo, FHitResult& OutHitResult) const;
+	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
 	void ApplySnowGaugeGain(UAbilitySystemComponent* AbilitySystemComponent, float RemovedAmount) const;
 };

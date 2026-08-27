@@ -13,6 +13,65 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ADRMiningGameStateBase, TeamRegisteredTeleports);
+	DOREPLIFETIME(ADRMiningGameStateBase, GameRemainingSeconds);
+	DOREPLIFETIME(ADRMiningGameStateBase, bGameStarted);
+	DOREPLIFETIME(ADRMiningGameStateBase, bGameEnded);
+	DOREPLIFETIME(ADRMiningGameStateBase, GameEndDebugText);
+	DOREPLIFETIME(ADRMiningGameStateBase, GameResultText);
+}
+
+void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GameRemainingSeconds = FMath::Max(0, RemainingSeconds);
+	bGameStarted = bStarted;
+	bGameEnded = bEnded;
+	OnRep_GameTimerState();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_GameTimerState()
+{
+	OnGameTimerChanged.Broadcast(GameRemainingSeconds, bGameStarted, bGameEnded);
+}
+
+void ADRMiningGameStateBase::SetGameEndDebugText(const FString& DebugText)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GameEndDebugText = DebugText;
+	OnRep_GameEndDebugText();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_GameEndDebugText()
+{
+	OnGameEndDebugTextChanged.Broadcast(GameEndDebugText);
+	UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Replicated]\n%s"), *GameEndDebugText);
+}
+
+void ADRMiningGameStateBase::SetGameResultText(const FText& ResultText)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GameResultText = ResultText;
+	OnRep_GameResultText();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_GameResultText()
+{
+	OnGameResultTextChanged.Broadcast(GameResultText);
 }
 
 #pragma region Terrain Dig
@@ -112,6 +171,17 @@ void ADRMiningGameStateBase::DiscardSnowOperationsThrough(int32 Sequence)
 	{
 		return Record.Sequence <= Sequence;
 	});
+}
+
+void ADRMiningGameStateBase::ResetSnowOperationState()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	NextSnowOperationSequence = 0;
+	SnowOperationHistory.Reset();
 }
 
 void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
@@ -235,6 +305,10 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 	Request.RequestedAmount = Operation.RequestedAmount;
 	Request.RemovalBrushShape = Operation.RemovalBrushShape;
 	Request.RemovalMode = Operation.RemovalMode;
+	Request.AbsorbInnerRadiusRatio = Operation.AbsorbInnerRadiusRatio;
+	Request.AbsorbSweepRadius = Operation.AbsorbSweepRadius;
+	Request.AbsorbMaxSweepsPerTick = Operation.AbsorbMaxSweepsPerTick;
+	Request.bUseAdaptiveAbsorbQuery = Operation.bUseAdaptiveAbsorbQuery;
 	Request.Context.TeamId = Operation.TeamId;
 
 	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
@@ -245,7 +319,9 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-	return SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
+	return Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool
+		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(Request, Operation.AppliedAmount)
+		: SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
 }
 
 AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const

@@ -49,15 +49,14 @@ void UDRPlayerLifecycleComponent::HandleLanded(float LandingSpeed)
 		return;
 	}
 
-	const float CalculatedFallDamage = CalculateFallDamage(LandingSpeed);
-
-	ApplyFallDamage(LandingSpeed);
-
-	const bool bTookFallDamage = CalculatedFallDamage > KINDA_SMALL_NUMBER;
-	const bool bDied = Character->IsDead();
-
-	ExecuteFallSoundCueFromServer(bTookFallDamage, bDied);
-	ClientPlayFallFeedback(bTookFallDamage, bDied);
+	// const float CalculatedFallDamage = CalculateFallDamage(LandingSpeed);
+	//
+	// ApplyFallDamage(LandingSpeed);
+	//
+	// const bool bTookFallDamage = CalculatedFallDamage > KINDA_SMALL_NUMBER;
+	// const bool bDied = Character->IsDead();
+	//
+	// ExecuteFallSoundCueFromServer(bTookFallDamage, bDied);
 }
 
 float UDRPlayerLifecycleComponent::CalculateFallDamage(float LandingSpeed) const
@@ -114,16 +113,6 @@ void UDRPlayerLifecycleComponent::ApplyFallDamage(float LandingSpeed)
 		*GetNameSafe(Character), LandingSpeed, AppliedDamage, HealthBeforeDamage, Character->GetCurrentHealth());
 }
 
-void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(
-		bool bTookFallDamage,
-		bool bDied)
-{
-	if (bTookFallDamage || bDied)
-	{
-		// 카메라 쉐이크 이후에 따로 분리해서 구현
-	}
-}
-
 void UDRPlayerLifecycleComponent::PlayLocalCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, float Scale)
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
@@ -175,7 +164,7 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 	ApplyDeathRagdoll();
 
 	Character->GetWorldTimerManager().SetTimer(
-		RespawnTimerHandle, this, &ThisClass::RespawnAtRagdollLocation, RespawnDelay, false);
+		RespawnTimerHandle, this, &ThisClass::RespawnAtPlayerStart, RespawnDelay, false);
 
 	/*
 	 * 기존 외부 참조를 깨지 않기 위해
@@ -281,6 +270,74 @@ void UDRPlayerLifecycleComponent::ClearDeathRagdollPresentation()
 	}
 
 	bDeathRagdollApplied = false;
+}
+
+void UDRPlayerLifecycleComponent::RespawnAtPlayerStart()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+
+	if (!IsValid(Character) || !Character->HasAuthority())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	AController* RespawnController = Character->GetController();
+	AGameModeBase* GameMode = World->GetAuthGameMode();
+
+	if (!IsValid(RespawnController) || !IsValid(GameMode))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Respawn] Invalid Controller or GameMode. Character=%s Controller=%s GameMode=%s"),
+			*GetNameSafe(Character), *GetNameSafe(RespawnController), *GetNameSafe(GameMode));
+
+		return;
+	}
+
+	/*
+	 * 이전 Pawn의 래그돌 표현을 정리한다.
+	 * ASC 초기화는 새 Pawn의 PossessedBy()에서 수행한다.
+	 */
+	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+
+	if (IsValid(CharacterMesh))
+	{
+		CharacterMesh->SetAllBodiesSimulatePhysics(false);
+		CharacterMesh->SetSimulatePhysics(false);
+		CharacterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CharacterMesh->SetVisibility(false, true);
+	}
+
+	RespawnController->UnPossess();
+
+	/*
+	 * RestartPlayer()가 현재 GameMode의
+	 * ChoosePlayerStart_Implementation()을 호출한다.
+	 */
+	GameMode->RestartPlayer(RespawnController);
+
+	APawn* NewPawn = RespawnController->GetPawn();
+
+	if (!IsValid(NewPawn) || NewPawn == Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Respawn] PlayerStart respawn failed. Controller=%s"),
+			*GetNameSafe(RespawnController));
+
+		/*
+		 * 새 Pawn 생성에 실패한 경우 이전 Pawn을 파괴하지 않는다.
+		 * Controller는 UnPossess 상태이므로 실패 원인을 로그에서 확인해야 한다.
+		 */
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Respawn] OldPawn=%s NewPawn=%s Location=%s"),
+		*GetNameSafe(Character), *GetNameSafe(NewPawn), *NewPawn->GetActorLocation().ToString());
+
+	Character->Destroy();
 }
 
 void UDRPlayerLifecycleComponent::RespawnAtRagdollLocation()

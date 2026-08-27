@@ -12,8 +12,7 @@ enum class EDRShopOfferType : uint8
 {
 	Purchase,
 	Upgrade,
-	Perk,
-	Skill
+	Perk
 };
 
 UENUM(BlueprintType)
@@ -22,8 +21,7 @@ enum class EDRShopOfferSection : uint8
 	Equipment,
 	Consumable,
 	Upgrade,
-	Perk,
-	Skill
+	Perk
 };
 
 USTRUCT(BlueprintType)

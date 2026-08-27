@@ -34,10 +34,13 @@ public:
 	bool AddDirectionalSnowAtAreaAsync(
 		const FDRSnowSurfaceAddRequest& Request,
 		TFunction<void(FDRSnowSurfaceEditResult&&)> Completion);
+	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
+	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
 	// ownership을 우선하고, ownership이 없는 표면만 Volume의 우세 팀으로 다시 칠한다.
 	bool RepaintSnowMaterialsAtArea(
 		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult,
 		const FDRSnowOwnershipStore& OwnershipStore,
 		const FDRSnowVolumeStore& VolumeStore);
 

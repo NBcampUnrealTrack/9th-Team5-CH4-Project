@@ -9,7 +9,6 @@ class ADRPlayerState;
 class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
-class UDRSkillComponent;
 class UDRUpgradeComponent;
 class USoundBase;
 
@@ -83,12 +82,6 @@ private:
 		ADRPlayerState* PlayerState,
 		const UDRShopComponent* ShopComponent,
 		UDRPerkComponent* PerkComponent,
-		FName RowName) const;
-
-	bool TryPurchaseSkill(
-		ADRPlayerState* PlayerState,
-		const UDRShopComponent* ShopComponent,
-		UDRSkillComponent* SkillComponent,
 		FName RowName) const;
 
 };

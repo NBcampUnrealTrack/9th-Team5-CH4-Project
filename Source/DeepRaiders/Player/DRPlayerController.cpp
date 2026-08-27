@@ -15,6 +15,7 @@
 #include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
+#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
@@ -26,7 +27,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
-#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
@@ -35,6 +36,7 @@
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/StartingSelection/DRStartingSelectionUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -46,6 +48,12 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
 
+namespace DRSnowSnapshotTransfer
+{
+	constexpr int32 ChunkByteSize = 48 * 1024;
+	constexpr float ChunkSendInterval = 0.05f;
+}
+
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
 {
@@ -54,7 +62,8 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
-	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
+	StartingSelectionComponent = CreateDefaultSubobject<UDRStartingSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
+	StartingSelectionUIComponent = CreateDefaultSubobject<UDRStartingSelectionUIComponent>(TEXT("StartingSelectionUIComponent"));
 
 	// Interaction Initialize
 	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
@@ -101,10 +110,13 @@ void ADRPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
-	StartingWeaponSelectionComponent->Initialize(
+	StartingSelectionComponent->Initialize(
 		StartingRifle,
 		InventoryComponent,
 		QuickSlotComponent);
+
+	StartingSelectionUIComponent->ShowStartingSelection(
+		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
 	
@@ -238,16 +250,22 @@ void ADRPlayerController::SetupGASInputComponent()
 
 	if (IsValid(PrimaryAction))
 	{
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Primary));
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Primary));
-		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Primary));
+		const int32 InputId = static_cast<int32>(EDRAbilityInputId::Primary);
+		
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, InputId);
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, InputId);
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, InputId);
+		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Canceled, this, &ThisClass::HandleGASInputReleased, InputId);
 	}
 
 	if (IsValid(SecondaryAction))
 	{
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Secondary));
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, static_cast<int32>(EDRAbilityInputId::Secondary));
-		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, static_cast<int32>(EDRAbilityInputId::Secondary));
+		const int32 InputId = static_cast<int32>(EDRAbilityInputId::Secondary);
+		
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, InputId);
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, InputId);
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, InputId);
+		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Canceled, this, &ThisClass::HandleGASInputReleased, InputId);
 	}
 
 	if (IsValid(Skill1Action))
@@ -394,8 +412,8 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(StartingShovelDefinition) ||
 		!IsValid(StartingRifle) ||
 		!IsValid(StartingShotgun) ||
-		// !IsValid(StartingSprayer) ||
-		// !IsValid(StartingCannon) ||
+		!IsValid(StartingSprayer) ||
+		!IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
 		return;
@@ -416,15 +434,15 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
 	
-	// if (!InventoryComponent->GetItemAtSlot(3))
-	// {
-	// 	InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
-	// }
-	//
-	// if (!InventoryComponent->GetItemAtSlot(4))
-	// {
-	// 	InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
-	// }
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
+	}
+	
+	if (!InventoryComponent->GetItemAtSlot(4))
+	{
+		InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
+	}
 	
 #if WITH_EDITOR
 	
@@ -441,6 +459,17 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 #endif
 	
 	QuickSlotComponent->RequestSelectSlot(0);	
+}
+
+void ADRPlayerController::ResetForGameStart()
+{
+	if (!HasAuthority() || !IsValid(InventoryComponent))
+	{
+		return;
+	}
+
+	InventoryComponent->ResetInventory();
+	InitializeStartingQuickSlot();
 }
 
 void ADRPlayerController::ApplyViewPitchLimits()
@@ -483,42 +512,23 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 	{
 		return;
 	}
-
-	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
-	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	
+	const bool bConsumedAsGenericInput = ASC->IsGenericConfirmInputBound(InputId) || ASC->IsGenericCancelInputBound(InputId);
+	if (bConsumedAsGenericInput)
 	{
-		if (Spec.InputID == InputId)
-		{
-			MatchingHandles.Add(Spec.Handle);
-		}
+		ConsumedGenericInputIds.Add(InputId);
 	}
-
-	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
-	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
-		if (!Spec)
-		{
-			continue;
-		}
-
-		Spec->InputPressed = true;
-		if (Spec->IsActive())
-		{
-			ASC->AbilitySpecInputPressed(*Spec);
-			ASC->InvokeReplicatedEvent(
-				EAbilityGenericReplicatedEvent::InputPressed,
-				Spec->Handle,
-				GetAbilityActivationPredictionKey(*Spec));
-		}
-		else
-		{
-			ASC->TryActivateAbility(Spec->Handle);
-		}
-	}
+	
+	ASC->AbilityLocalInputPressed(InputId);
 }
 
 void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 {
+	if (ConsumedGenericInputIds.Contains(InputId))
+	{
+		return;
+	}	
+	
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (!IsValid(ASC))
 	{
@@ -553,39 +563,15 @@ void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 
 void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 {
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
-	if (!IsValid(ASC))
+	if (ConsumedGenericInputIds.Remove(InputId) > 0)
 	{
 		return;
 	}
-
-	TArray<FGameplayAbilitySpecHandle> MatchingHandles;
-	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (IsValid(ASC))
 	{
-		if (Spec.InputID == InputId)
-		{
-			MatchingHandles.Add(Spec.Handle);
-		}
-	}
-
-	for (const FGameplayAbilitySpecHandle& Handle : MatchingHandles)
-	{
-		FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(Handle);
-		if (!Spec)
-		{
-			continue;
-		}
-
-		const bool bWasActive = Spec->IsActive();
-		Spec->InputPressed = false;
-		if (bWasActive)
-		{
-			ASC->AbilitySpecInputReleased(*Spec);
-			ASC->InvokeReplicatedEvent(
-				EAbilityGenericReplicatedEvent::InputReleased,
-				Spec->Handle,
-				GetAbilityActivationPredictionKey(*Spec));
-		}
+		ASC->AbilityLocalInputReleased(InputId);
 	}
 }
 
@@ -664,12 +650,6 @@ ADRShop* ADRPlayerController::FindInteractableShop() const
 void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
-	if (!IsShopInteractionAvailable()
-		&& IsValid(StartingWeaponSelectionComponent))
-	{
-		StartingWeaponSelectionComponent->ExpireSelection();
-	}
-
 	if (IsLocalController()
 		&& IsValid(ShopUIComponent))
 	{
@@ -737,6 +717,7 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
 	PendingSnowOwnershipByteCount = OwnershipByteCount;
 	bPendingSnowSnapshotFinished = false;
+	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	PendingSnowOwnershipData.Reset();
@@ -762,29 +743,110 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 		return;
 	}
 
-	constexpr int32 ChunkByteSize = 48 * 1024;
-	auto SendData = [this, SnapshotId](uint8 PayloadType, const TArray<uint8>& Data)
+	World->GetTimerManager().ClearTimer(SnowJoinSnapshotSendTimer);
+	OutgoingSnowSnapshotId = SnapshotId;
+	OutgoingSnowCheckpointSequence = Checkpoint.OperationSequence;
+	ExpectedAppliedSnowSnapshotId = SnapshotId;
+	bSnowSnapshotTransferFinished = false;
+	OutgoingSnowPayloadType = 0;
+	OutgoingSnowByteOffset = 0;
+	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
+	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
+	OutgoingSnowOwnershipData = MoveTemp(Checkpoint.OwnershipData);
+	MiningGameState->GetSnowOperationsAfter(OutgoingSnowCheckpointSequence, OutgoingSnowHistory);
+
+	// 한 프레임에 모든 RPC를 쌓지 않고 일정 간격으로 청크 하나씩 전송한다.
+	World->GetTimerManager().SetTimer(
+		SnowJoinSnapshotSendTimer,
+		this,
+		&ADRPlayerController::SendNextSnowJoinSnapshotChunk,
+		DRSnowSnapshotTransfer::ChunkSendInterval,
+		true);
+}
+
+void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
+{
+	if (OutgoingSnowSnapshotId == INDEX_NONE)
 	{
-		for (int32 Offset = 0; Offset < Data.Num(); Offset += ChunkByteSize)
+		return;
+	}
+
+	const TArray<uint8>* Payload = nullptr;
+	switch (OutgoingSnowPayloadType)
+	{
+	case 0:
+		Payload = &OutgoingSnowVoxelSaveData;
+		break;
+	case 1:
+		Payload = &OutgoingSnowVolumeData;
+		break;
+	case 2:
+		Payload = &OutgoingSnowOwnershipData;
+		break;
+	default:
+		FinishSnowJoinSnapshotTransfer();
+		return;
+	}
+
+	if (OutgoingSnowByteOffset >= Payload->Num())
+	{
+		++OutgoingSnowPayloadType;
+		OutgoingSnowByteOffset = 0;
+		SendNextSnowJoinSnapshotChunk();
+		return;
+	}
+
+	const int32 ChunkSize = FMath::Min(
+		DRSnowSnapshotTransfer::ChunkByteSize,
+		Payload->Num() - OutgoingSnowByteOffset);
+	TArray<uint8> ChunkData;
+	ChunkData.Append(Payload->GetData() + OutgoingSnowByteOffset, ChunkSize);
+	Client_ReceiveSnowJoinSnapshotChunk(
+		OutgoingSnowSnapshotId,
+		OutgoingSnowPayloadType,
+		OutgoingSnowByteOffset,
+		ChunkData);
+	OutgoingSnowByteOffset += ChunkSize;
+}
+
+void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	World->GetTimerManager().ClearTimer(SnowJoinSnapshotSendTimer);
+
+	Client_FinishSnowJoinSnapshot(OutgoingSnowSnapshotId, OutgoingSnowHistory);
+	bSnowSnapshotTransferFinished = true;
+	OutgoingSnowSnapshotId = INDEX_NONE;
+	OutgoingSnowCheckpointSequence = 0;
+	OutgoingSnowPayloadType = 0;
+	OutgoingSnowByteOffset = 0;
+	OutgoingSnowVoxelSaveData.Reset();
+	OutgoingSnowVolumeData.Reset();
+	OutgoingSnowOwnershipData.Reset();
+	OutgoingSnowHistory.Reset();
+}
+
+void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
+{
+	if (!bSnowSnapshotTransferFinished || SnapshotId != ExpectedAppliedSnowSnapshotId)
+	{
+		return;
+	}
+
+	bSnowSnapshotTransferFinished = false;
+	ExpectedAppliedSnowSnapshotId = INDEX_NONE;
+	if (ADRMiningGameModeBase* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>() : nullptr)
+	{
+		if (GameMode->HandleSnowJoinSnapshotApplied(this))
 		{
-			const int32 Size = FMath::Min(ChunkByteSize, Data.Num() - Offset);
-			TArray<uint8> ChunkData;
-			ChunkData.Append(Data.GetData() + Offset, Size);
-			Client_ReceiveSnowJoinSnapshotChunk(
-				SnapshotId,
-				PayloadType,
-				Offset,
-				ChunkData);
+			Client_ResumeSnowJoinOperations(SnapshotId);
 		}
-	};
-
-	SendData(0, Checkpoint.VoxelSaveData);
-	SendData(1, Checkpoint.SnowVolumeData);
-	SendData(2, Checkpoint.OwnershipData);
-
-	TArray<FDRSnowOperationRecord> RecentHistory;
-	MiningGameState->GetSnowOperationsAfter(Checkpoint.OperationSequence, RecentHistory);
-	Client_FinishSnowJoinSnapshot(SnapshotId, RecentHistory);
+	}
 }
 
 void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
@@ -858,6 +920,11 @@ bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& R
 
 bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 {
+	if (bPendingSnowCheckpointApplied)
+	{
+		return true;
+	}
+
 	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
 		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
 		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount ||
@@ -884,6 +951,19 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 				false);
 		}
 		return false;
+	}
+
+	bPendingSnowCheckpointApplied = true;
+	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
+	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
+	return true;
+}
+
+void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 SnapshotId)
+{
+	if (!bPendingSnowCheckpointApplied || SnapshotId != PendingSnowSnapshotId)
+	{
+		return;
 	}
 
 	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
@@ -915,6 +995,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	const int32 AppliedOwnershipByteCount = PendingSnowOwnershipByteCount;
 	PendingSnowSnapshotId = INDEX_NONE;
 	PendingSnowCheckpointSequence = 0;
+	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	PendingSnowOwnershipData.Reset();
@@ -932,7 +1013,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		AppliedOwnershipByteCount,
 		Operations.Num());
 	
-	return true;
+	return;
 }
 
 void ADRPlayerController::RetryPendingSnowJoinSnapshot()

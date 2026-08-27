@@ -10,6 +10,25 @@ class ADRTeleportPoint;
 class AVoxelWorld;
 class FLifetimeProperty;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FDRGameTimerChanged,
+	int32,
+	RemainingSeconds,
+	bool,
+	bGameStarted,
+	bool,
+	bGameEnded);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameEndDebugTextChanged,
+	const FString&,
+	DebugText);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameResultTextChanged,
+	const FText&,
+	ResultText);
+
 USTRUCT()
 struct FDRTeamRegisteredTeleportPoint
 {
@@ -30,6 +49,53 @@ class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	void SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded);
+	void SetGameEndDebugText(const FString& DebugText);
+	void SetGameResultText(const FText& ResultText);
+
+	int32 GetGameRemainingSeconds() const { return GameRemainingSeconds; }
+	bool IsGameStarted() const { return bGameStarted; }
+	bool IsGameEnded() const { return bGameEnded; }
+	UFUNCTION(BlueprintPure, Category = "Game")
+	FString GetGameEndDebugText() const { return GameEndDebugText; }
+
+	UFUNCTION(BlueprintPure, Category = "Game")
+	FText GetGameResultText() const { return GameResultText; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Game")
+	FDRGameTimerChanged OnGameTimerChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Game")
+	FDRGameEndDebugTextChanged OnGameEndDebugTextChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Game")
+	FDRGameResultTextChanged OnGameResultTextChanged;
+
+private:
+	UFUNCTION()
+	void OnRep_GameTimerState();
+
+	UFUNCTION()
+	void OnRep_GameEndDebugText();
+
+	UFUNCTION()
+	void OnRep_GameResultText();
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
+	int32 GameRemainingSeconds = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
+	bool bGameStarted = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
+	bool bGameEnded = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameEndDebugText)
+	FString GameEndDebugText;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameResultText)
+	FText GameResultText;
+
 #pragma region TerrainDig
 public:
 	void RegisterTerrainDig(const FDRTerrainDigOperation& Operation);
@@ -48,6 +114,7 @@ public:
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const;
 	void DiscardSnowOperationsThrough(int32 Sequence);
+	void ResetSnowOperationState();
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
 
 	UFUNCTION(NetMulticast, Reliable)

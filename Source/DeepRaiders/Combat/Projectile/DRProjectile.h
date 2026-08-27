@@ -9,7 +9,7 @@
 
 class UAbilitySystemComponent;
 class UProjectileMovementComponent;
-class USphereComponent;
+class UShapeComponent;
 class UStaticMeshComponent;
 
 UCLASS(Blueprintable)
@@ -18,7 +18,7 @@ class DEEPRAIDERS_API ADRProjectile : public AActor
 	GENERATED_BODY()
 	
 public:
-	ADRProjectile();
+	ADRProjectile(const FObjectInitializer& ObjectInitializer);
 	
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
 	void InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem
@@ -34,6 +34,10 @@ protected:
 	// ProjectileMovement가 Blocking Hit로 정지했을 때
 	UFUNCTION()
 	void HandleProjectileStop(const FHitResult& ImpactResult);
+	
+	// 실제 Projectile 충돌 처리.
+	// Cannon은 override해서 Explosion 처리.
+	virtual void HandleImpact(const FHitResult& ImpactResult);
 	
 	// 플레이어 적중 Effect를 서버에서 적용
 	void ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
@@ -53,10 +57,17 @@ protected:
 	void RefreshFriendlyCollisionIgnores();
 	void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
 	
-private:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
-	TObjectPtr<USphereComponent> CollisionComponent;
+	static const FName CollisionComponentName;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
+	TObjectPtr<UShapeComponent> CollisionComponent;
+
+	UAbilitySystemComponent* GetSourceAbilitySystem() const
+	{
+		return SourceAbilitySystem.Get();
+	}
+	
+private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 	

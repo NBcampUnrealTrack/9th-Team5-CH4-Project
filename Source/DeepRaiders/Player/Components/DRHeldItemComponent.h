@@ -9,6 +9,7 @@ class ADRPlayerCharacter;
 class UDRItemDefinition;
 class USoundBase;
 class UDRMiningComponent;
+class UDRSnowRemoveComponent;
 class UAnimInstance;
 
 UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
@@ -40,6 +41,7 @@ private:
 	void RefreshHeldItemState();
 	void RefreshVisual();
 	void RefreshMiningSettings();
+	void RefreshSnowComponents();
 
 	void PlayEquipSound();
 
@@ -50,6 +52,9 @@ private:
 
 	UPROPERTY(Transient)
 	TSubclassOf<UAnimInstance> LinkedAnimLayerClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
 	
 private:
 	UPROPERTY(ReplicatedUsing = OnRep_HeldItemDefinition)

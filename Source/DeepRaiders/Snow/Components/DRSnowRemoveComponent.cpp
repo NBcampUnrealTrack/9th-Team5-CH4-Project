@@ -1,6 +1,8 @@
 #include "DRSnowRemoveComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DrawDebugHelpers.h"
+#include "HAL/IConsoleManager.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
@@ -62,6 +64,35 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 	return ExecuteRemoveRequest(Request);
 }
 
+float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
+	FVector BrushOrigin,
+	FVector Direction,
+	const FDRSnowRemovalSpec& RemovalSpec)
+{
+	AActor* Owner = GetOwner();
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !CanRemoveNow(RemovalSpec))
+	{
+		return 0.f;
+	}
+
+	const FVector NormalizedDirection = Direction.GetSafeNormal();
+	if (NormalizedDirection.IsNearlyZero() || RemovalSpec.SnowAbsorbRange <= 0.f)
+	{
+		return 0.f;
+	}
+
+	LastRemoveTime = GetWorld()->GetTimeSeconds();
+
+	const FVector FrustumOrigin = BrushOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbStartOffset;
+	const FVector FrustumEnd = FrustumOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbRange;
+	const FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(
+		FrustumEnd,
+		-NormalizedDirection,
+		FrustumOrigin,
+		RemovalSpec);
+	return ExecuteRemoveRequest(Request, nullptr, true);
+}
+
 FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	FVector WorldLocation,
 	FVector SurfaceNormal,
@@ -76,18 +107,27 @@ FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	Request.RequestedAmount = FMath::Max(0.f, RemovalSpec.SnowAbsorbPower);
 	Request.RemovalBrushShape = RemovalSpec.RemovalBrushShape;
 	Request.RemovalMode = RemovalSpec.RemovalMode;
+	Request.AbsorbInnerRadiusRatio = FMath::Clamp(RemovalSpec.SnowAbsorbInnerRadiusRatio, 0.f, 1.f);
+	Request.AbsorbSweepRadius = FMath::Max(1.f, RemovalSpec.SnowAbsorbSweepRadius);
+	Request.AbsorbMaxSweepsPerTick = FMath::Max(1, RemovalSpec.SnowAbsorbMaxSweepsPerTick);
+	Request.bUseAdaptiveAbsorbQuery = RemovalSpec.bUseAdaptiveAbsorbQuery;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }
 
-float UDRSnowRemoveComponent::ExecuteRemoveRequest(const FDRSnowSurfaceRemoveRequest& Request, AActor* FallbackTarget)
+float UDRSnowRemoveComponent::ExecuteRemoveRequest(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	AActor* FallbackTarget,
+	const bool bUseAbsorbTool)
 {
 	float RemovedAmount = 0.f;
 	if (UWorld* World = GetWorld())
 	{
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			RemovedAmount = SnowSubsystem->RemoveSnow(Request).RemovedAmount;
+			RemovedAmount = bUseAbsorbTool
+				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request).RemovedAmount
+				: SnowSubsystem->RemoveSnow(Request).RemovedAmount;
 			if (RemovedAmount > 0.f)
 			{
 				if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
@@ -101,6 +141,10 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(const FDRSnowSurfaceRemoveReq
 					Operation.AppliedAmount = RemovedAmount;
 					Operation.RemovalBrushShape = Request.RemovalBrushShape;
 					Operation.RemovalMode = Request.RemovalMode;
+					Operation.AbsorbInnerRadiusRatio = Request.AbsorbInnerRadiusRatio;
+					Operation.AbsorbSweepRadius = Request.AbsorbSweepRadius;
+					Operation.AbsorbMaxSweepsPerTick = Request.AbsorbMaxSweepsPerTick;
+					Operation.bUseAdaptiveAbsorbQuery = Request.bUseAdaptiveAbsorbQuery;
 					Operation.TeamId = Request.Context.TeamId;
 					Operation.VoxelWorldName =
 						IsValid(Request.TargetVoxelWorld.Get())

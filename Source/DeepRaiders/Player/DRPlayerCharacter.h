@@ -20,7 +20,6 @@ class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
-class UDRSnowRemoveComponent;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class USpringArmComponent;
@@ -76,6 +75,9 @@ public:
 
 	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
 	void RefreshTeamColor();
+
+	/** 로컬 플레이어의 팀원이라면 지속 실루엣을 적용한다. */
+	void RefreshTeamSilhouette();
 
 	void ApplyHandEquipmentVisual(
 		UStaticMesh* WorldMesh,
@@ -175,9 +177,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Snow", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;

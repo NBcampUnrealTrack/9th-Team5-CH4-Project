@@ -114,6 +114,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Debug")
 	FString BuildSnowCountDebugText() const;
 
+	FString BuildSnowCountDebugTextFromScan(const FDRSnowVoxelMaterialScanResult& MaterialScan) const;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug")
 	TObjectPtr<AVoxelWorld> TargetVoxelWorld = nullptr;

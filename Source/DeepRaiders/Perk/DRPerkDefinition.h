@@ -22,4 +22,7 @@ public:
 	/** 퍽 획득 시 직접 적용할 GameplayEffect다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
 	TSubclassOf<UGameplayEffect> PerkEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
+	uint8 bPersistThroughDeath:1 = true;
 };

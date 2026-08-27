@@ -3,11 +3,15 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRSprayerWeaponDefinition.h"
+#include "DeepRaiders/Gameplay/DRGameStartActor.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Components/DRInteractionComponent.h"
+#include "EngineUtils.h"
 
 void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 {
@@ -64,12 +68,59 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 			.AddUObject(this, &ThisClass::HandleFocusedInteractableChanged);
 	}
 
+	for (
+		TActorIterator<ADRGameStartActor> Iterator(InPlayerCharacter->GetWorld());
+		Iterator;
+		++Iterator)
+	{
+		GameStartActor = *Iterator;
+		break;
+	}
+
+	if (GameStartActor.IsValid())
+	{
+		GameStartActor->OnReadyStateChanged.AddDynamic(
+			this,
+			&ThisClass::HandleReadyStateChanged);
+		GameStartActor->OnGameStartCountdownChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGameStartCountdownChanged);
+		GameStartActor->OnAllPlayersReady.AddDynamic(
+			this,
+			&ThisClass::HandleAllPlayersReady);
+		ReadyPlayerCount = GameStartActor->GetReadyPlayerCount();
+		TotalPlayerCount = GameStartActor->GetTotalPlayerCount();
+		GameStartCountdown = GameStartActor->GetCountdownSecondsRemaining();
+	}
+
+	MiningGameState = InPlayerCharacter->GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	if (MiningGameState.IsValid())
+	{
+		MiningGameState->OnGameTimerChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGameEndDebugTextChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGameEndDebugTextChanged);
+		MiningGameState->OnGameResultTextChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGameResultTextChanged);
+		GameRemainingSeconds = MiningGameState->GetGameRemainingSeconds();
+		bGameStarted = MiningGameState->IsGameStarted();
+		bGameEnded = MiningGameState->IsGameEnded();
+		UE_MVVM_SET_PROPERTY_VALUE(
+			GameEndDebugText,
+			FText::FromString(MiningGameState->GetGameEndDebugText()));
+		HandleGameResultTextChanged(MiningGameState->GetGameResultText());
+	}
+
 	// 최초 리프레쉬
 	RefreshHealth();
 	RefreshSnowGauge();
 	RefreshFreezeGauge();
 	RefreshAmmoVisibility();
 	RefreshInteractionPrompt();
+	RefreshGameStartStatus();
 }
 
 void UDRHUDViewModel::Deinitialize()
@@ -90,6 +141,32 @@ void UDRHUDViewModel::Deinitialize()
 		InteractionComponent->OnFocusedInteractableChanged.Remove(InteractionFocusChangedHandle);
 	}
 
+	if (GameStartActor.IsValid())
+	{
+		GameStartActor->OnReadyStateChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleReadyStateChanged);
+		GameStartActor->OnGameStartCountdownChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameStartCountdownChanged);
+		GameStartActor->OnAllPlayersReady.RemoveDynamic(
+			this,
+			&ThisClass::HandleAllPlayersReady);
+	}
+
+	if (MiningGameState.IsValid())
+	{
+		MiningGameState->OnGameTimerChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGameEndDebugTextChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameEndDebugTextChanged);
+		MiningGameState->OnGameResultTextChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameResultTextChanged);
+	}
+
 	if (AbilitySystemComponent.IsValid())
 	{
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
@@ -107,6 +184,8 @@ void UDRHUDViewModel::Deinitialize()
 	AbilitySystemComponent.Reset();
 	QuickSlotComponent.Reset();
 	InteractionComponent.Reset();
+	GameStartActor.Reset();
+	MiningGameState.Reset();
 	
 	HealthChangedHandle.Reset();
 	MaxHealthChangedHandle.Reset();
@@ -114,6 +193,12 @@ void UDRHUDViewModel::Deinitialize()
 	MaxSnowGaugeChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
 	InteractionFocusChangedHandle.Reset();
+	ReadyPlayerCount = 0;
+	TotalPlayerCount = 0;
+	GameStartCountdown = 0;
+	GameRemainingSeconds = 0;
+	bGameStarted = false;
+	bGameEnded = false;
 }
 
 void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
@@ -211,13 +296,16 @@ void UDRHUDViewModel::RefreshAmmoVisibility()
 		: INDEX_NONE;
 	const bool bHasSelectedItem = QuickSlotComponent.IsValid()
 		&& QuickSlotComponent->GetQuickSlot(SelectedSlotIndex, SelectedItem);
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = bHasSelectedItem
+	const UDRProjectileWeaponItemDefinition* ProjectileWeapon = bHasSelectedItem
 		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem.Definition)
+		: nullptr;
+	const UDRSprayerWeaponDefinition* SprayerWeapon = bHasSelectedItem
+		? Cast<UDRSprayerWeaponDefinition>(SelectedItem.Definition)
 		: nullptr;
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAmmoVisible,
-		IsValid(WeaponDefinition));
+		IsValid(ProjectileWeapon) || IsValid(SprayerWeapon));
 }
 
 void UDRHUDViewModel::HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData)
@@ -238,4 +326,79 @@ void UDRHUDViewModel::RefreshInteractionPrompt()
 	UE_MVVM_SET_PROPERTY_VALUE(InteractionActionText, PromptData.ActionText);
 	UE_MVVM_SET_PROPERTY_VALUE(InteractionTitleText, PromptData.TitleText);
 	UE_MVVM_SET_PROPERTY_VALUE(InteractionDetailText, PromptData.DetailText);
+}
+
+void UDRHUDViewModel::HandleReadyStateChanged(
+	int32 InReadyPlayerCount,
+	int32 InTotalPlayerCount,
+	bool)
+{
+	ReadyPlayerCount = InReadyPlayerCount;
+	TotalPlayerCount = InTotalPlayerCount;
+	RefreshGameStartStatus();
+}
+
+void UDRHUDViewModel::HandleGameStartCountdownChanged(int32 SecondsRemaining)
+{
+	GameStartCountdown = SecondsRemaining;
+	RefreshGameStartStatus();
+}
+
+void UDRHUDViewModel::HandleAllPlayersReady()
+{
+	RefreshGameStartStatus();
+}
+
+void UDRHUDViewModel::HandleGameTimerChanged(
+	int32 RemainingSeconds,
+	bool bInGameStarted,
+	bool bInGameEnded)
+{
+	GameRemainingSeconds = RemainingSeconds;
+	bGameStarted = bInGameStarted;
+	bGameEnded = bInGameEnded;
+	RefreshGameStartStatus();
+}
+
+void UDRHUDViewModel::HandleGameEndDebugTextChanged(const FString& DebugText)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(GameEndDebugText, FText::FromString(DebugText));
+}
+
+void UDRHUDViewModel::HandleGameResultTextChanged(const FText& ResultText)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(GameStateText, ResultText);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsGameStateTextVisible, !ResultText.IsEmpty());
+}
+
+void UDRHUDViewModel::RefreshGameStartStatus()
+{
+	FText NewStatusText;
+	const bool bShowReadyState = GameStartActor.IsValid() && !GameStartActor->IsGameStarted();
+	if (bShowReadyState && GameStartCountdown > 0)
+	{
+		NewStatusText = FText::AsNumber(GameStartCountdown);
+	}
+	else if (bShowReadyState)
+	{
+		NewStatusText = FText::Format(
+			NSLOCTEXT("DRGameStart", "ReadyCount", "{0} / {1}"),
+			FText::AsNumber(ReadyPlayerCount),
+			FText::AsNumber(TotalPlayerCount));
+	}
+	else if (bGameStarted)
+	{
+		const int32 Minutes = GameRemainingSeconds / 60;
+		const int32 Seconds = GameRemainingSeconds % 60;
+		NewStatusText = FText::FromString(FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds));
+	}
+	else
+	{
+		NewStatusText = NSLOCTEXT("DRGameStart", "GameEnded", "게임 끝!");
+	}
+
+	UE_MVVM_SET_PROPERTY_VALUE(GameStartStatusText, NewStatusText);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		bIsGameStartStatusVisible,
+		GameStartActor.IsValid() || MiningGameState.IsValid());
 }

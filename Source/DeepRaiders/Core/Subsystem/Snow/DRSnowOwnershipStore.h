@@ -15,9 +15,17 @@ public:
 	void RemoveClearedVoxels(AVoxelWorld* VoxelWorld, const TArray<FModifiedVoxelValue>& ModifiedValues);
 	// 표면 보간으로 정확한 위치에 기록이 없을 때, 가까운 기록을 제한된 반경에서 찾는다.
 	bool GetNearestTeamAtVoxel(AVoxelWorld* VoxelWorld, const FIntVector& VoxelPosition, int32 SearchRadius, int32& OutTeamId) const;
+	// 같은 영역의 다수 voxel을 조회할 때 좌표별 결과를 dense cache해 중복 hash lookup을 제거한다.
+	void ResolveNearestTeamsAtVoxels(
+		AVoxelWorld* VoxelWorld,
+		TConstArrayView<FIntVector> VoxelPositions,
+		int32 SearchRadius,
+		TArray<int32>& OutTeamIds,
+		TBitArray<>& OutFoundTeams) const;
 	// checkpoint serializer만 사용하는 복사/복원 경계다.
 	void CopySnapshotData(AVoxelWorld* VoxelWorld, TMap<FIntVector, int32>& OutTeamByVoxel) const;
 	void ReplaceSnapshotData(AVoxelWorld* VoxelWorld, TMap<FIntVector, int32>&& InTeamByVoxel);
+	void Reset() { WorldData.Reset(); }
 
 private:
 	struct FWorldData

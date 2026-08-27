@@ -23,7 +23,6 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
-#include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -52,7 +51,6 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
-	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
 	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
 	
 	bUseControllerRotationPitch = false;
@@ -258,6 +256,7 @@ void ADRPlayerCharacter::PossessedBy(AController* NewController)
 	 */
 	InitializeAbilitySystem();
 	RefreshTeamColor();
+	RefreshTeamSilhouette();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][PossessedBy] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), 
 		*GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe( GetAbilitySystemComponent()));
@@ -284,6 +283,7 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 
 	InitializeAbilitySystem();
 	RefreshTeamColor();
+	RefreshTeamSilhouette();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[GAS][OnRep_PlayerState] " "Character=%s " "Authority=%d " "Local=%d " "LocalRole=%d " "PlayerState=%s " "ASC=%s"), *GetNameSafe(this), HasAuthority(), IsLocallyControlled(), static_cast<int32>(GetLocalRole()), *GetNameSafe(GetPlayerState()), *GetNameSafe(GetAbilitySystemComponent()));
 }
@@ -310,6 +310,26 @@ void ADRPlayerCharacter::RefreshTeamColor()
 			Material->SetVectorParameterValue(TeamColorParameterName, TeamColor);
 		}
 	}
+}
+
+void ADRPlayerCharacter::RefreshTeamSilhouette()
+{
+	const APlayerController* LocalController = GetWorld()->GetFirstPlayerController();
+	const ADRPlayerState* LocalPlayerState =
+		IsValid(LocalController) ? LocalController->GetPlayerState<ADRPlayerState>() : nullptr;
+	const ADRPlayerState* TargetPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(LocalPlayerState) || !IsValid(TargetPlayerState) || !IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	const bool IsTeammate =
+		!IsLocallyControlled() &&
+		LocalPlayerState->GetTeamId() == TargetPlayerState->GetTeamId();
+
+	GetMesh()->SetCustomDepthStencilValue(IsTeammate ? 2 : 0);
+	GetMesh()->SetRenderCustomDepth(IsTeammate);
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)
@@ -416,6 +436,7 @@ float ADRPlayerCharacter::GetAimPitchDegrees() const
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	RefreshTeamSilhouette();
 
 	if (HasAuthority())
 	{
