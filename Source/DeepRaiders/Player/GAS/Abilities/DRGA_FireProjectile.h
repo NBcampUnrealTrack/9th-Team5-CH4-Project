@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "DRGA_RangedWeaponAttack.h"
 #include "DRGA_FireProjectile.generated.h"
 
@@ -38,9 +37,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess, ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
 	float SpreadHalfAngleDegrees = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
-	FDRProjectileWorldImpactData WorldImpactData;
 
 	FDelegateHandle ServerShotDelegateHandle;
 };

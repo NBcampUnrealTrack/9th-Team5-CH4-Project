@@ -5,7 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -89,7 +89,7 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	}
 
 	FDRSnowRemovalSpec RemovalSpec;
-	if (!BuildRemovalSpec(ASC, RemovalSpec))
+	if (!BuildRemovalSpec(RemovalSpec))
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 		return;
@@ -124,7 +124,7 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 	}
 
 	FDRSnowRemovalSpec RemovalSpec;
-	if (!BuildRemovalSpec(ASC, RemovalSpec))
+	if (!BuildRemovalSpec(RemovalSpec))
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 		return;
@@ -149,21 +149,22 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 	AbsorbDelayTask->ReadyForActivation();
 }
 
-bool UDRGA_AbsorbSnow::BuildRemovalSpec(
-	UAbilitySystemComponent* AbilitySystemComponent,
-	FDRSnowRemovalSpec& OutRemovalSpec) const
+bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const
 {
-	if (!IsValid(AbilitySystemComponent))
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
+		Cast<UDRProjectileWeaponItemDefinition>(
+			GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
+	if (!IsValid(WeaponDefinition) || !WeaponDefinition->SnowAbsorbSettings.bEnabled)
 	{
 		return false;
 	}
 
-	OutRemovalSpec.SnowAbsorbPower = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbPowerAttribute());
-	OutRemovalSpec.SnowAbsorbRadius = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbRadiusAttribute());
-	OutRemovalSpec.SnowAbsorbSpeed = AbilitySystemComponent->GetNumericAttribute(
-		UDRPlayerAttributeSet::GetSnowAbsorbSpeedAttribute());
+	const FDRProjectileWeaponSnowAbsorbSettings& SnowAbsorbSettings = WeaponDefinition->SnowAbsorbSettings;
+	OutRemovalSpec.SnowAbsorbPower = SnowAbsorbSettings.Power;
+	OutRemovalSpec.SnowAbsorbRadius = SnowAbsorbSettings.Radius;
+	OutRemovalSpec.SnowAbsorbSpeed = SnowAbsorbSettings.Speed;
+	OutRemovalSpec.RemovalBrushShape = SnowAbsorbSettings.BrushShape;
+	OutRemovalSpec.RemovalMode = SnowAbsorbSettings.RemovalMode;
 
 	return OutRemovalSpec.SnowAbsorbPower > 0.f &&
 		OutRemovalSpec.SnowAbsorbRadius > 0.f &&

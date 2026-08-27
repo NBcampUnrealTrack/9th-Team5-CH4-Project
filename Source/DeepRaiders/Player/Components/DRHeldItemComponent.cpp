@@ -2,8 +2,10 @@
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
+#include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -126,6 +128,7 @@ void UDRHeldItemComponent::RefreshHeldItemState()
 {
 	RefreshVisual();
 	RefreshMiningSettings();
+	RefreshSnowComponents();
 	RefreshAnimationLayer();
 	PlayEquipSound();
 }
@@ -156,6 +159,37 @@ void UDRHeldItemComponent::RefreshMiningSettings()
 	{
 		Mining->ApplyItemDefinition(HeldItemDefinition);
 	}
+}
+
+void UDRHeldItemComponent::RefreshSnowComponents()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	const UDRProjectileWeaponItemDefinition* ProjectileWeaponDefinition =
+		Cast<UDRProjectileWeaponItemDefinition>(HeldItemDefinition);
+
+	if (!IsValid(Character) || !IsValid(ProjectileWeaponDefinition))
+	{
+		if (IsValid(SnowRemoveComponent))
+		{
+			SnowRemoveComponent->DestroyComponent();
+			SnowRemoveComponent = nullptr;
+		}
+
+		return;
+	}
+
+	if (ProjectileWeaponDefinition->SnowAbsorbSettings.bEnabled && !IsValid(SnowRemoveComponent))
+	{
+		SnowRemoveComponent = NewObject<UDRSnowRemoveComponent>(Character);
+		SnowRemoveComponent->SetIsReplicated(false);
+		SnowRemoveComponent->RegisterComponent();
+	}
+	else if (!ProjectileWeaponDefinition->SnowAbsorbSettings.bEnabled && IsValid(SnowRemoveComponent))
+	{
+		SnowRemoveComponent->DestroyComponent();
+		SnowRemoveComponent = nullptr;
+	}
+
 }
 
 void UDRHeldItemComponent::PlayEquipSound()

@@ -71,6 +71,7 @@ protected:
 		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 
 	float GetBreakableDamageAmount() const;
+	const UDRProjectileWeaponItemDefinition* GetCurrentWeaponDefinition() const;
 	
 	bool TryApplyBreakableDamage(const FHitResult& HitResult) const;
 	
