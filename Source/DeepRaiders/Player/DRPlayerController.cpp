@@ -400,7 +400,7 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(StartingRifle) ||
 		!IsValid(StartingShotgun) ||
 		!IsValid(StartingSprayer) ||
-		// !IsValid(StartingCannon) ||
+		!IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
 		return;
@@ -426,10 +426,10 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
 	}
 	
-	// if (!InventoryComponent->GetItemAtSlot(4))
-	// {
-	// 	InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
-	// }
+	if (!InventoryComponent->GetItemAtSlot(4))
+	{
+		InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
+	}
 	
 #if WITH_EDITOR
 	

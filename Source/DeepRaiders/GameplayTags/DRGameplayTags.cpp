@@ -48,6 +48,11 @@ namespace DRGameplayTags
 		"Continuous snow sprayer attack ability.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Cannon_Explosion,
+		"GameplayCue.Weapon.Cannon.Explosion",
+		"Cannon Explosion.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
 		"Ability.Attack.Melee",
 		"Melee attack ability.");
@@ -226,4 +231,14 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Rifle_Fire,
 		"GameplayCue.Sound.Weapon.Rifle.Fire",
 		"Rifle fired.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Sprayer_Active,
+		"GameplayCue.Sound.Weapon.Sprayer.Active",
+		"Active snow sprayer loop sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Explosion,
+		"GameplayCue.Sound.Weapon.Cannon.Explosion",
+		"Cannon explosion sound.");
 }
