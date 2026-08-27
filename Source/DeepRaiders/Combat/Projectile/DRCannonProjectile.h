@@ -18,4 +18,6 @@ protected:
 private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cannon|Explosion", meta = ( AllowPrivateAccess, ClampMin = "1.0", Units = "cm"))
 	float ExplosionRadius = 350.f;
+	
+	void ExecuteExplosionSoundCue(const FHitResult& ImpactResult);
 };
