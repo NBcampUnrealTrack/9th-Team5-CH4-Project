@@ -35,6 +35,8 @@ namespace DRGameplayTags
 	
 	// Gameplay Cue - VFX
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);

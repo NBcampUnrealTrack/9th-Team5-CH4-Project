@@ -78,6 +78,16 @@ namespace DRGameplayTags
 		"Parent GameplayCue tag for data-driven visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_Heal,
+		"GameplayCue.VFX.Effect.Heal",
+		"Heal effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_MoveSpeed,
+		"GameplayCue.VFX.Effect.MoveSpeed",
+		"MoveSpeed effect visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
 		"Snow amount passed through GAS.");
