@@ -9,7 +9,7 @@
 class AVoxelWorld;
 
 // 청소기 흡수 범위처럼 시작점은 좁고 끝점은 넓은 frustum 형태로 표면의 눈을 점진적으로 제거한다.
-// 게임플레이에서는 RemoveSnowFromFrustum을 사용하고, Voxel Tool 목록에서는 형태/감쇠를 직접 확인할 수 있다.
+// 게임플레이에서는 Adaptive slab 경로를 사용하고, Voxel Tool 목록에서는 전체 형태/감쇠를 직접 확인할 수 있다.
 UCLASS()
 class DEEPRAIDERS_API UDRSnowAbsorbTool : public UVoxelToolBase
 {
@@ -48,26 +48,21 @@ public:
 		FVoxelIntBox& OutEditedBounds,
 		bool bUpdateRender = true);
 
-	// 런타임 흡수는 거대한 frustum 편집 대신 이 작은 Volume 샘플 하나만 사용한다.
-	static float RemoveSnowAtSample(
+	// frustum을 깊이 방향의 얇은 slab으로 나눠 조회하고, 모든 후보를 합쳐 한 번만
+	// 편집한다. 전체 frustum과 같은 결과를 유지하면서 빈 외곽 AABB 계산을 줄인다.
+	static float RemoveSnowFromFrustumAdaptive(
 		AVoxelWorld* VoxelWorld,
-		const FVector& SampleLocation,
-		float Radius,
+		const FVector& BrushOrigin,
+		const FVector& TargetLocation,
+		float OuterRadius,
+		float InnerRadiusRatio,
+		float FarStrengthRatio,
+		float Strength,
+		float DistanceDivisor,
+		float SweepRadius,
+		int32 MaxSweepsPerTick,
 		TArray<FModifiedVoxelValue>& OutModifiedValues,
 		FVoxelIntBox& OutEditedBounds,
 		bool bUpdateRender = true);
 
-	static float RemoveSnowFromFrustumSlice(
-		AVoxelWorld* VoxelWorld,
-		const FVector& FrustumOrigin,
-		const FVector& FrustumDirection,
-		float FrustumRange,
-		float OuterRadius,
-		float SliceStart,
-		float SliceLength,
-		float Strength,
-		float DistanceDivisor,
-		TArray<FModifiedVoxelValue>& OutModifiedValues,
-		FVoxelIntBox& OutEditedBounds,
-		bool bUpdateRender = true);
 };

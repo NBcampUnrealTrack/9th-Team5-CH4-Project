@@ -185,6 +185,9 @@ bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) cons
 	OutRemovalSpec.SnowAbsorbSpeed = SnowAbsorbSettings.Speed;
 	OutRemovalSpec.SnowAbsorbRange = SnowAbsorbSettings.Range;
 	OutRemovalSpec.SnowAbsorbStartOffset = SnowAbsorbSettings.StartOffset;
+	OutRemovalSpec.SnowAbsorbSweepRadius = SnowAbsorbSettings.SweepRadius;
+	OutRemovalSpec.SnowAbsorbMaxSweepsPerTick = SnowAbsorbSettings.MaxSweepsPerTick;
+	OutRemovalSpec.bUseAdaptiveAbsorbQuery = SnowAbsorbSettings.bUseAdaptiveQuery;
 	OutRemovalSpec.SnowAbsorbInnerRadiusRatio = SnowAbsorbSettings.InnerRadiusRatio;
 	OutRemovalSpec.RemovalBrushShape = SnowAbsorbSettings.BrushShape;
 	OutRemovalSpec.RemovalMode = SnowAbsorbSettings.RemovalMode;

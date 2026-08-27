@@ -40,6 +40,7 @@ public:
 	// ownership을 우선하고, ownership이 없는 표면만 Volume의 우세 팀으로 다시 칠한다.
 	bool RepaintSnowMaterialsAtArea(
 		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult,
 		const FDRSnowOwnershipStore& OwnershipStore,
 		const FDRSnowVolumeStore& VolumeStore);
 

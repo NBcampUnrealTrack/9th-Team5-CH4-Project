@@ -57,6 +57,17 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float Range = 300.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
+	float SweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다. 전체 range가 이 예산 안에 들어오도록 slab 깊이를 자동 조절한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "1", UIMin = "1"))
+	int32 MaxSweepsPerTick = 32;
+
+	// Full frustum 전체 스캔 대신 slab 기반 query를 사용한다. 무기별 성능/호환성 선택값이다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (DisplayName = "Use Adaptive Query"))
+	bool bUseAdaptiveQuery = true;
+
 	// 무기 중심에서 조준 방향으로 시작점을 이동한다. 음수면 무기 중심 뒤에서 시작한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (Units = "cm"))
 	float StartOffset = -50.f;

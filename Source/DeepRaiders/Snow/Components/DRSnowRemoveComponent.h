@@ -30,6 +30,18 @@ struct DEEPRAIDERS_API FDRSnowRemovalSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (Units = "cm"))
 	float SnowAbsorbStartOffset = 75.f;
 
+	// Adaptive 거리 필드 slab의 최소 절반 깊이다. 기존 데이터 호환을 위해 이름을 유지한다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (ClampMin = "1.0", Units = "cm"))
+	float SnowAbsorbSweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (ClampMin = "1"))
+	int32 SnowAbsorbMaxSweepsPerTick = 32;
+
+	// Absorb Tool의 slab 기반 surface query 사용 여부다.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove")
+	bool bUseAdaptiveAbsorbQuery = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float SnowAbsorbInnerRadiusRatio = 0.45f;
 	
@@ -69,7 +81,7 @@ public:
 		FVector SurfaceNormal,
 		const FDRSnowRemovalSpec& RemovalSpec);
 
-	// LineTrace 없이 흡수 축 위의 Volume 샘플을 앞에서부터 하나씩 제거한다.
+	// frustum을 slab 단위로 조회한 뒤 전체 후보를 합쳐 흡수한다.
 	UFUNCTION(BlueprintCallable, Category = "Snow|Remove")
 	float TryRemoveSnowAlongDirection(
 		FVector BrushOrigin,

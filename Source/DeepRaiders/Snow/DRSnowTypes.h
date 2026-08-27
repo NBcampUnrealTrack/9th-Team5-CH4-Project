@@ -139,6 +139,18 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AbsorbInnerRadiusRatio = 0.45f;
 
+	// Adaptive 거리 필드 slab의 최소 절반 깊이다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "1.0", Units = "cm"))
+	float AbsorbSweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "1"))
+	int32 AbsorbMaxSweepsPerTick = 32;
+
+	// 무기 설정에서 선택한 Absorb Tool surface query 방식이다.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	bool bUseAdaptiveAbsorbQuery = true;
+
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
@@ -213,6 +225,17 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AbsorbInnerRadiusRatio = 0.45f;
+
+	// Adaptive 거리 필드 slab의 최소 절반 깊이다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "1.0", Units = "cm"))
+	float AbsorbSweepRadius = 50.f;
+
+	// 한 흡수 틱에 허용할 최대 거리 필드 slab 조회 수다.
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network", meta = (ClampMin = "1"))
+	int32 AbsorbMaxSweepsPerTick = 32;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	bool bUseAdaptiveAbsorbQuery = true;
 
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")

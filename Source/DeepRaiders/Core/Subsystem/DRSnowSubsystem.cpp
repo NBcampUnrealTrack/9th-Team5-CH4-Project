@@ -1,6 +1,7 @@
 #include "DRSnowSubsystem.h"
 
 #include "Engine/World.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "VoxelRender/IVoxelLODManager.h"
 #include "VoxelWorld.h"
 
@@ -156,12 +157,13 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveReque
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	RepaintSnowMaterialsAtArea(Request);
+	RepaintSnowMaterialsAtArea(Request, EditResult);
 	return Result;
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Pipeline_Total);
 	FDRSnowRemoveResult Result;
 	Result.TeamId = Request.Context.TeamId;
 	UWorld* World = GetWorld();
@@ -177,7 +179,7 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurf
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	RepaintSnowMaterialsAtArea(Request);
+	RepaintSnowMaterialsAtArea(Request, EditResult);
 	return Result;
 }
 
@@ -200,7 +202,7 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 
 	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
 
-	return RepaintSnowMaterialsAtArea(Request);
+	return RepaintSnowMaterialsAtArea(Request, EditResult);
 }
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
@@ -219,14 +221,17 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 		return false;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
-	return RepaintSnowMaterialsAtArea(Request);
+	return RepaintSnowMaterialsAtArea(Request, EditResult);
 }
 
-bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(const FDRSnowSurfaceRemoveRequest& Request)
+bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& EditResult)
 {
 	SurfaceEditor.SetWorld(GetWorld());
 	return SurfaceEditor.RepaintSnowMaterialsAtArea(
 		Request,
+		EditResult,
 		OwnershipStore,
 		VolumeStore);
 }
@@ -297,6 +302,7 @@ void UDRSnowSubsystem::ApplyRemovedSurfaceEdit(
 	const FDRSnowSurfaceEditResult& EditResult,
 	float VolumeAmount)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_ApplyRemovedSurfaceEdit);
 	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
 	if (!EditResult.bUseModifiedValuesForVolume || !IsValid(VoxelWorld))
 	{
@@ -348,6 +354,7 @@ void UDRSnowSubsystem::RemoveVolumeFromModifiedValues(
 	const TArray<FModifiedVoxelValue>& ModifiedValues,
 	float MaxRemovedAmount)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_RemoveVolumeFromModifiedValues);
 	float RemovedAmount = 0.f;
 	const float VoxelRadius = FMath::Max(1.f, VoxelWorld.VoxelSize * 0.75f);
 	for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)

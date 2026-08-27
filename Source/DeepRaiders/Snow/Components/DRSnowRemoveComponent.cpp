@@ -108,6 +108,9 @@ FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	Request.RemovalBrushShape = RemovalSpec.RemovalBrushShape;
 	Request.RemovalMode = RemovalSpec.RemovalMode;
 	Request.AbsorbInnerRadiusRatio = FMath::Clamp(RemovalSpec.SnowAbsorbInnerRadiusRatio, 0.f, 1.f);
+	Request.AbsorbSweepRadius = FMath::Max(1.f, RemovalSpec.SnowAbsorbSweepRadius);
+	Request.AbsorbMaxSweepsPerTick = FMath::Max(1, RemovalSpec.SnowAbsorbMaxSweepsPerTick);
+	Request.bUseAdaptiveAbsorbQuery = RemovalSpec.bUseAdaptiveAbsorbQuery;
 	Request.Context = MakeInteractionContext();
 	return Request;
 }
@@ -139,6 +142,9 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 					Operation.RemovalBrushShape = Request.RemovalBrushShape;
 					Operation.RemovalMode = Request.RemovalMode;
 					Operation.AbsorbInnerRadiusRatio = Request.AbsorbInnerRadiusRatio;
+					Operation.AbsorbSweepRadius = Request.AbsorbSweepRadius;
+					Operation.AbsorbMaxSweepsPerTick = Request.AbsorbMaxSweepsPerTick;
+					Operation.bUseAdaptiveAbsorbQuery = Request.bUseAdaptiveAbsorbQuery;
 					Operation.TeamId = Request.Context.TeamId;
 					Operation.VoxelWorldName =
 						IsValid(Request.TargetVoxelWorld.Get())
