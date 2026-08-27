@@ -145,6 +145,13 @@ bool UDRVoxelTerrainSubsystem::ApplyOrQueueDig(
 	return false;
 }
 
+void UDRVoxelTerrainSubsystem::ResetTerrainState()
+{
+	DigHistory.Reset();
+	AppliedDigOperationIds.Reset();
+	PendingDigs.Reset();
+}
+
 void UDRVoxelTerrainSubsystem::HandleVoxelWorldGenerated()
 {
 	// OnGenerateWorld는 VoxelWorld 생성 직후 호출되므로 pending 지형 변경을 적용하기 충분하다.

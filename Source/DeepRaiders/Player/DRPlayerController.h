@@ -150,6 +150,9 @@ public:
 	UDRInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
 
+	/** 인벤토리와 구매한 업그레이드를 지우고 시작 장비를 다시 지급한다. */
+	void ResetForGameStart();
+
 	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
 	UDRStartingSelectionComponent* GetStartingSelectionComponent() const
 	{

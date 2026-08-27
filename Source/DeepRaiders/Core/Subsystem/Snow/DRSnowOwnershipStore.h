@@ -18,6 +18,7 @@ public:
 	// checkpoint serializer만 사용하는 복사/복원 경계다.
 	void CopySnapshotData(AVoxelWorld* VoxelWorld, TMap<FIntVector, int32>& OutTeamByVoxel) const;
 	void ReplaceSnapshotData(AVoxelWorld* VoxelWorld, TMap<FIntVector, int32>&& InTeamByVoxel);
+	void Reset() { WorldData.Reset(); }
 
 private:
 	struct FWorldData

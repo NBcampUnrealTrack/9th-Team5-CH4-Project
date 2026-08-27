@@ -461,6 +461,17 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
+void ADRPlayerController::ResetForGameStart()
+{
+	if (!HasAuthority() || !IsValid(InventoryComponent))
+	{
+		return;
+	}
+
+	InventoryComponent->ResetInventory();
+	InitializeStartingQuickSlot();
+}
+
 void ADRPlayerController::ApplyViewPitchLimits()
 {
 	if (!IsLocalController() || !IsValid(PlayerCameraManager))

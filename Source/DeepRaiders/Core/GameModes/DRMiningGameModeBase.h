@@ -14,6 +14,19 @@ class DEEPRAIDERS_API ADRMiningGameModeBase : public AGameModeBase
 public:
 	ADRMiningGameModeBase();
 
+	/** 모든 경기 데이터를 초기화한 뒤 경기를 시작한다. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
+	bool StartGame();
+
+	UFUNCTION(BlueprintPure, Category = "Game")
+	bool IsGameStarted() const { return bIsGameStart; }
+
+	UFUNCTION(BlueprintPure, Category = "Game")
+	bool IsGameEnded() const { return bIsGameEnd; }
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
+	void EndGame();
+
 	/** 서버 경기 시간을 기준으로 패시브 코인 지급을 시작한다. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
 	void StartTimer();
@@ -52,7 +65,24 @@ protected:
 		meta = (ClampMin = "0.01", Units = "s"))
 	float TeamSwitchInterval = 10.f;
 
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Game",
+		meta = (ClampMin = "1.0", Units = "s"))
+	float GameDuration = 180.f;
+
+	UPROPERTY(
+		EditDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Game",
+		meta = (ClampMin = "0.1", Units = "s"))
+	float GameResultDisplayDuration = 5.f;
+
 private:
+	void ResetGameState();
+	void TickGameTimer();
+	void ClearGameResultText();
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
 	bool TryStartSnowJoinSnapshot(class ADRPlayerController* PlayerController);
 
@@ -64,6 +94,9 @@ private:
 
 	FTimerHandle PassiveCoinTimerHandle;
 	FTimerHandle TeamSwitchTimerHandle;
+	FTimerHandle GameTimerHandle;
+	FTimerHandle GameResultTimerHandle;
+	int32 GameRemainingSeconds = 0;
 	int32 ActiveTeamId = INDEX_NONE;
 
 	void StartTeamSwitchTimer();
@@ -75,4 +108,18 @@ private:
 
 	/** 중복 지급을 방지하기 위해 마지막으로 처리한 지급 회차를 저장한다. */
 	int64 LastProcessedGrantIndex = 0;
+
+	UPROPERTY(
+		VisibleAnywhere,
+		BlueprintReadOnly,
+		Category = "Game",
+		meta = (AllowPrivateAccess = "true"))
+	bool bIsGameStart = false;
+
+	UPROPERTY(
+		VisibleAnywhere,
+		BlueprintReadOnly,
+		Category = "Game",
+		meta = (AllowPrivateAccess = "true"))
+	bool bIsGameEnd = false;
 };

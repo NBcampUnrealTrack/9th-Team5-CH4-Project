@@ -122,6 +122,7 @@ public:
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
 	bool GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint) const;
 	bool GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint) const;
+	void ResetCheckpoints();
 
 	// 클라이언트가 받은 checkpoint를 적용한다. VoxelWorld 생성 전이면 false를 반환한다.
 	bool ApplyCheckpoint(

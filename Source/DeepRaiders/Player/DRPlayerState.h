@@ -159,6 +159,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
 	void ResetForRespawn();
+
+	/** 새 경기용 코인과 퍽 상태를 기본값으로 되돌린다. */
+	void ResetForGameStart();
 	
 	UFUNCTION(BlueprintPure, Category = "GAS|Status")
 	bool IsFrozen() const;

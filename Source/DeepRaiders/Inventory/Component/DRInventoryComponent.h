@@ -46,6 +46,9 @@ public:
 	// 아이템을 지정 위치에 새 인스턴스를 생성, ex) 시작 아이템
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	bool TryAddItemToSlot(int32 SlotIndex, UDRItemDefinition* Definition, int32 Quantity);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
+	void ResetInventory();
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryReplaceItemDefinition(

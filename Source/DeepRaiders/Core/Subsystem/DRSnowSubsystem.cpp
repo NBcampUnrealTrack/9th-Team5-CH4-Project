@@ -213,6 +213,32 @@ bool UDRSnowSubsystem::CreateCheckpoint(int32 Sequence, AVoxelWorld* Target)
 	return SnapshotSerializer->CreateCheckpoint(Sequence, Target);
 }
 
+void UDRSnowSubsystem::ResetCheckpoints()
+{
+	if (SnapshotSerializer)
+	{
+		SnapshotSerializer->ResetCheckpoints();
+	}
+}
+
+void UDRSnowSubsystem::ResetSnowState()
+{
+	ResetCheckpoints();
+	VolumeStore.Reset();
+	OwnershipStore.Reset();
+	PendingRenderUpdates.Reset();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(RenderUpdateTimerHandle);
+	}
+
+	FDRSnowSurfaceAddRequest PendingRequest;
+	while (DirectionalAddQueue.Dequeue(PendingRequest))
+	{
+	}
+}
+
 bool UDRSnowSubsystem::GetLatestCheckpoint(FDRSnowJoinCheckpoint& Out)
 {
 	SnapshotSerializer->SetWorld(GetWorld());
