@@ -8,7 +8,7 @@
 class AActor;
 class UNiagaraComponent;
 class UNiagaraSystem;
-class SceneComponent;
+class USceneComponent;
 class UDRVFXLibrary;
 struct FDRVFXDefinition;
 
