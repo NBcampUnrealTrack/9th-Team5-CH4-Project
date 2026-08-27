@@ -12,12 +12,15 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
+#include "DeepRaiders/Input/DRInputTypes.h"
 
 ADRPlayerState::ADRPlayerState()
 {
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	AbilitySystemComponent->GenericConfirmInputID = static_cast<int32>(EDRAbilityInputId::Primary);
+	AbilitySystemComponent->GenericCancelInputID = static_cast<int32>(EDRAbilityInputId::Secondary);
 
 	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
