@@ -209,6 +209,13 @@ bool FDRSnowSnapshotSerializer::GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheck
 	return true;
 }
 
+void FDRSnowSnapshotSerializer::ResetCheckpoints()
+{
+	LatestCheckpoint = {};
+	CheckpointsById.Reset();
+	NextSnapshotId = 1;
+}
+
 bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 	FName VoxelWorldName,
 	const TArray<uint8>& VoxelSaveData,

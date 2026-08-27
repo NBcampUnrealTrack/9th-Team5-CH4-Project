@@ -199,6 +199,20 @@ void ADRPlayerState::AddCoins(int32 Amount)
 	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
 }
 
+void ADRPlayerState::ResetForGameStart()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	SetCoins(GetClass()->GetDefaultObject<ADRPlayerState>()->GetCoins());
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->ResetPerks();
+	}
+}
+
 void ADRPlayerState::ResetForRespawn()
 {
 	if (!HasAuthority() || !IsValid(AbilitySystemComponent))

@@ -71,6 +71,7 @@ public:
 	// VoxelWorld actor 또는 voxel data 생성이 아직 끝나지 않았으면 pending으로 보관한다.
 	bool ApplyOrQueueDig(const FDRTerrainDigOperation& Operation);
 	const TArray<FDRTerrainDigOperation>& GetDigHistory() const { return DigHistory; }
+	void ResetTerrainState();
 
 private:
 	UFUNCTION()
