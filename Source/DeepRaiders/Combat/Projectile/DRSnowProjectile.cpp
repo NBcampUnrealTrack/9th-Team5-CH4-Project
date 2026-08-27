@@ -2,7 +2,8 @@
 
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 
-ADRSnowProjectile::ADRSnowProjectile()
+ADRSnowProjectile::ADRSnowProjectile(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
 {
 	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
 }
