@@ -53,6 +53,6 @@ void ADRTitleGameMode::BeginPlay()
 
 	if (UDRSessionSubsystem* SessionSubsystem = GetGameInstance()->GetSubsystem<UDRSessionSubsystem>())
 	{
-		SessionSubsystem->CreateServerSession();
+		SessionSubsystem->CreateDedicatedServerSession();
 	}
 }

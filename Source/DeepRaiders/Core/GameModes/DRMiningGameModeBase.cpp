@@ -214,7 +214,7 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	{
 		return;
 	}
-
+	
 	// =============================
 	// Existing terrain sync
 	// =============================

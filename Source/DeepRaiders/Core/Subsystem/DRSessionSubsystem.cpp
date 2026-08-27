@@ -5,7 +5,9 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
+#include "SNegativeActionButton.h"
 #include "SocketSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDRSession, Log, All);
 
@@ -65,7 +67,7 @@ void UDRSessionSubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
-void UDRSessionSubsystem::CreateServerSession()
+void UDRSessionSubsystem::CreateDedicatedServerSession()
 {
 	const UWorld* World = GetWorld();
 
@@ -110,6 +112,19 @@ void UDRSessionSubsystem::CreateServerSession()
 		DRSessionKeys::DefaultMaxPlayers,
 		DRSessionKeys::DefaultServerName,
 		DRSessionKeys::DefaultMatchType);
+}
+
+void UDRSessionSubsystem::CreateListenServerSession(TSoftObjectPtr<UWorld> InPlayMap)
+{
+	const UWorld* World = GetWorld();
+	if (!IsValid(World) || World->GetNetMode() == NM_DedicatedServer || InPlayMap.IsNull())
+	{
+		UE_LOG(LogDRSession, Warning, TEXT("[Session] 리슨 서버 생성 실패: 월드 또는 맵이 유효하지 않음"));
+		OnCreateSessionComplete.Broadcast(false);
+		return;
+	}
+
+	UGameplayStatics::OpenLevelBySoftObjectPtr(this, InPlayMap, true, TEXT("listen"));
 }
 
 void UDRSessionSubsystem::CreateSessionInternal(const UWorld* ServerWorld, int32 MaxPlayers, const FString& ServerName,

@@ -24,7 +24,11 @@ public:
 
 	// Dedicated Server에서만 로컬/LAN 세션을 등록합니다.
 	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
-	void CreateServerSession();
+	void CreateDedicatedServerSession();
+
+	// Listen Server 생성
+	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")
+	void CreateListenServerSession(TSoftObjectPtr<UWorld> InPlayMap);
 
 	// IP:Port 또는 Domain:Port 주소로 리슨 서버에 직접 접속합니다.
 	UFUNCTION(BlueprintCallable, Category = "Online|Sessions")

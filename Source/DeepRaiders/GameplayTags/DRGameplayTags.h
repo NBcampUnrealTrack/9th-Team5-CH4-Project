@@ -30,6 +30,12 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 
+	// Effect Policy
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);
+	
+	// Gameplay Cue - VFX
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
+	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_QuickSlot);

@@ -394,7 +394,7 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(StartingShovelDefinition) ||
 		!IsValid(StartingRifle) ||
 		!IsValid(StartingShotgun) ||
-		// !IsValid(StartingSprayer) ||
+		!IsValid(StartingSprayer) ||
 		// !IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
@@ -416,11 +416,11 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
 	
-	// if (!InventoryComponent->GetItemAtSlot(3))
-	// {
-	// 	InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
-	// }
-	//
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
+	}
+	
 	// if (!InventoryComponent->GetItemAtSlot(4))
 	// {
 	// 	InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);

@@ -114,7 +114,20 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 	}
 
 	PrivateCreate->SetIsEnabled(false);
-	UGameplayStatics::OpenLevelBySoftObjectPtr(this, PlayMap, true, TEXT("listen"));
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!IsValid(GameInstance))
+	{
+		PrivateCreate->SetIsEnabled(true);
+		return;
+	}
+
+	if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
+	{
+		SessionSubsystem->CreateListenServerSession(PlayMap);
+		return;
+	}
+
+	PrivateCreate->SetIsEnabled(true);
 }
 
 void UHostOrJoinWidget::HandlePrivateMatchClicked()
