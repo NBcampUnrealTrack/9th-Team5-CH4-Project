@@ -211,4 +211,9 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Rifle_Fire,
 		"GameplayCue.Sound.Weapon.Rifle.Fire",
 		"Rifle fired.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Sprayer_Active,
+		"GameplayCue.Sound.Weapon.Sprayer.Active",
+		"Active snow sprayer loop sound.");
 }
