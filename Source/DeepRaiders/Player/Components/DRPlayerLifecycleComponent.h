@@ -45,6 +45,7 @@ private:
 	FDelegateHandle DeadTagChangedHandle;
 	
 	// Respawn
+	void RespawnAtPlayerStart();
 	void RespawnAtRagdollLocation();
 	bool TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const;
 	bool bDeathRagdollApplied = false;
