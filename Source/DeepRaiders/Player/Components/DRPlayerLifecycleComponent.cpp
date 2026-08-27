@@ -49,15 +49,14 @@ void UDRPlayerLifecycleComponent::HandleLanded(float LandingSpeed)
 		return;
 	}
 
-	const float CalculatedFallDamage = CalculateFallDamage(LandingSpeed);
-
-	ApplyFallDamage(LandingSpeed);
-
-	const bool bTookFallDamage = CalculatedFallDamage > KINDA_SMALL_NUMBER;
-	const bool bDied = Character->IsDead();
-
-	ExecuteFallSoundCueFromServer(bTookFallDamage, bDied);
-	ClientPlayFallFeedback(bTookFallDamage, bDied);
+	// const float CalculatedFallDamage = CalculateFallDamage(LandingSpeed);
+	//
+	// ApplyFallDamage(LandingSpeed);
+	//
+	// const bool bTookFallDamage = CalculatedFallDamage > KINDA_SMALL_NUMBER;
+	// const bool bDied = Character->IsDead();
+	//
+	// ExecuteFallSoundCueFromServer(bTookFallDamage, bDied);
 }
 
 float UDRPlayerLifecycleComponent::CalculateFallDamage(float LandingSpeed) const
@@ -112,16 +111,6 @@ void UDRPlayerLifecycleComponent::ApplyFallDamage(float LandingSpeed)
 
 	UE_LOG(LogTemp, Warning, TEXT( "[FallDamage] " "Applied Character=%s " "LandingSpeed=%.1f " "Damage=%.1f " "Health=%.1f->%.1f"), 
 		*GetNameSafe(Character), LandingSpeed, AppliedDamage, HealthBeforeDamage, Character->GetCurrentHealth());
-}
-
-void UDRPlayerLifecycleComponent::ClientPlayFallFeedback_Implementation(
-		bool bTookFallDamage,
-		bool bDied)
-{
-	if (bTookFallDamage || bDied)
-	{
-		// 카메라 쉐이크 이후에 따로 분리해서 구현
-	}
 }
 
 void UDRPlayerLifecycleComponent::PlayLocalCameraShake(TSubclassOf<UCameraShakeBase> ShakeClass, float Scale)
