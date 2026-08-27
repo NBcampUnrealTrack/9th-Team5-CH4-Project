@@ -15,13 +15,14 @@
 #include "Engine/OverlapResult.h"
 #include "DeepRaiders/Item/DRSprayerWeaponDefinition.h"
 #include "DrawDebugHelpers.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
+#include "Animation/AnimMontage.h"
 
 UDRGA_SpraySnow::UDRGA_SpraySnow()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 }
-
 
 bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
@@ -55,7 +56,6 @@ bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle
 	return CurrentSnow + KINDA_SMALL_NUMBER >= TickCost;
 }
 
-
 void UDRGA_SpraySnow::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
@@ -78,12 +78,9 @@ void UDRGA_SpraySnow::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 		ReleaseTask->ReadyForActivation();
 	}
 
-	/*
-	 * 실제 판정 Timer는 서버에서만 돈다.
-	 *
-	 * 클라이언트는 추후
-	 * Niagara / Loop Sound Presentation만 담당.
-	 */
+	StartSprayMontage();
+	StartSprayGameplayCue();
+
 	if (ActorInfo->IsNetAuthority())
 	{
 		StartServerSpray();
@@ -99,18 +96,28 @@ void UDRGA_SpraySnow::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 #endif
 }
 
-
-void UDRGA_SpraySnow::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+void UDRGA_SpraySnow::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled)
 {
-	StopServerSpray();
+	StopSprayMontage();
+	StopSprayGameplayCue();
 
-#if ENABLE_DRAW_DEBUG
-	StopLocalDebugDraw();
-#endif
+	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
+	{
+		StopServerSpray();
+	}
 	
-	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		bReplicateEndAbility,
+		bWasCancelled);
 }
-
 
 void UDRGA_SpraySnow::HandleInputReleased(float /*TimeHeld*/)
 {
@@ -121,7 +128,6 @@ void UDRGA_SpraySnow::HandleInputReleased(float /*TimeHeld*/)
 
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, false);
 }
-
 
 void UDRGA_SpraySnow::StartServerSpray()
 {
@@ -149,7 +155,6 @@ void UDRGA_SpraySnow::StartServerSpray()
 	World->GetTimerManager().SetTimer(SprayTimerHandle, this, &ThisClass::HandleSprayTick, SprayTickInterval, true, SprayTickInterval);
 }
 
-
 void UDRGA_SpraySnow::StopServerSpray()
 {
 	UWorld* World = GetWorld();
@@ -161,7 +166,6 @@ void UDRGA_SpraySnow::StopServerSpray()
 
 	World->GetTimerManager().ClearTimer(SprayTimerHandle);
 }
-
 
 void UDRGA_SpraySnow::HandleSprayTick()
 {
@@ -193,7 +197,6 @@ void UDRGA_SpraySnow::HandleSprayTick()
 
 	ApplySprayToTargets(Origin, Direction);
 }
-
 
 bool UDRGA_SpraySnow::ResolveSprayOriginAndDirection(FVector& OutOrigin, FVector& OutDirection) const
 {
@@ -243,7 +246,6 @@ bool UDRGA_SpraySnow::ResolveSprayOriginAndDirection(FVector& OutOrigin, FVector
 
 	return true;
 }
-
 
 void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& Direction)
 {
@@ -408,7 +410,6 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 	}
 }
 
-
 bool UDRGA_SpraySnow::HasLineOfSightToTarget(const FVector& Origin, const AActor* TargetActor, const FCollisionQueryParams& QueryParams) const
 {
 	if (!IsValid(TargetActor))
@@ -445,7 +446,6 @@ bool UDRGA_SpraySnow::HasLineOfSightToTarget(const FVector& Origin, const AActor
 	 */
 	return HitResult.GetActor() == TargetActor;
 }
-
 
 bool UDRGA_SpraySnow::TryConsumeSnowCost()
 {
@@ -509,7 +509,6 @@ bool UDRGA_SpraySnow::TryConsumeSnowCost()
 	return true;
 }
 
-
 void UDRGA_SpraySnow::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
 {
 	OutEffectSpecs.Reset();
@@ -563,7 +562,6 @@ void UDRGA_SpraySnow::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& 
 	}
 }
 
-
 bool UDRGA_SpraySnow::IsFriendlyTarget(const AActor* TargetActor) const
 {
 	/*
@@ -579,7 +577,6 @@ bool UDRGA_SpraySnow::IsFriendlyTarget(const AActor* TargetActor) const
 
 	return DRCombatTeam::IsFriendlyTarget(SourceTeamId, TargetActor);
 }
-
 
 int32 UDRGA_SpraySnow::GetSourceTeamId() const
 {
@@ -605,6 +602,119 @@ const UDRSprayerWeaponDefinition* UDRGA_SpraySnow::GetSprayerDefinition() const
 	return Cast<UDRSprayerWeaponDefinition>(GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
 }
 
+void UDRGA_SpraySnow::StartSprayGameplayCue()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active);
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Sprayer_Active);
+}
+
+void UDRGA_SpraySnow::StopSprayGameplayCue()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active);
+	ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Sprayer_Active);
+}
+
+void UDRGA_SpraySnow::StartSprayMontage()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	const UDRSprayerWeaponDefinition* WeaponDefinition =
+		GetSprayerDefinition();
+
+	if (!IsValid(ASC)
+		|| !IsValid(WeaponDefinition)
+		|| !IsValid(WeaponDefinition->ItemAnimationSet))
+	{
+		return;
+	}
+
+	UAnimMontage* SprayMontage =
+		WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
+
+	if (!IsValid(SprayMontage))
+	{
+		return;
+	}
+
+	ASC->PlayMontage(
+		this,
+		GetCurrentActivationInfo(),
+		SprayMontage,
+		1.f);
+}
+
+void UDRGA_SpraySnow::StopSprayMontage()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	const UDRSprayerWeaponDefinition* WeaponDefinition =
+		GetSprayerDefinition();
+
+	if (!IsValid(WeaponDefinition)
+		|| !IsValid(WeaponDefinition->ItemAnimationSet))
+	{
+		return;
+	}
+
+	UAnimMontage* SprayMontage =
+		WeaponDefinition->ItemAnimationSet->PrimaryActionMontage;
+
+	if (ASC->GetCurrentMontage() == SprayMontage)
+	{
+		MontageStop(0.15f);
+	}
+}
 
 #if ENABLE_DRAW_DEBUG
 
@@ -633,7 +743,6 @@ void UDRGA_SpraySnow::StartLocalDebugDraw()
 		0.05f);
 }
 
-
 void UDRGA_SpraySnow::StopLocalDebugDraw()
 {
 	if (UWorld* World = GetWorld())
@@ -642,7 +751,6 @@ void UDRGA_SpraySnow::StopLocalDebugDraw()
 			DebugDrawTimerHandle);
 	}
 }
-
 
 void UDRGA_SpraySnow::HandleDebugDrawTick()
 {
@@ -665,7 +773,6 @@ void UDRGA_SpraySnow::HandleDebugDrawTick()
 		Origin,
 		Direction);
 }
-
 
 void UDRGA_SpraySnow::DrawDebugSpray(
 	const FVector& Origin,

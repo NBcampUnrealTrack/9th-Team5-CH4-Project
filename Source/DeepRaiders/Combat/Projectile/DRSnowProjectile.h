@@ -14,7 +14,7 @@ class DEEPRAIDERS_API ADRSnowProjectile : public ADRProjectile
 	GENERATED_BODY()
 
 public:
-	ADRSnowProjectile();
+	ADRSnowProjectile(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override;

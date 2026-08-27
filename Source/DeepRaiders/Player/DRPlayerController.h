@@ -14,7 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
-class UDRStartingWeaponSelectionComponent;
+class UDRStartingSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
@@ -28,12 +28,14 @@ class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRScoreboardUIComponent;
+class UDRStartingSelectionUIComponent;
 class UDRInteractionComponent;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRSnowJoinSnapshotApplied, int32, SnapshotId);
 
 UENUM(BlueprintType)
 enum class EDRStorageTransferDirection : uint8
@@ -140,9 +142,9 @@ public:
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
 
 	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
-	UDRStartingWeaponSelectionComponent* GetStartingWeaponSelectionComponent() const
+	UDRStartingSelectionComponent* GetStartingSelectionComponent() const
 	{
-		return StartingWeaponSelectionComponent;
+		return StartingSelectionComponent;
 	}
 
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
@@ -201,10 +203,10 @@ public:
 		return InventoryUIComponent;
 	}
 	
-	/** 상점 영역 이탈에 따른 선택 만료와 UI 종료를 처리한다. */
+	/** 상점 영역 이탈에 따른 상점 UI 종료를 처리한다. */
 	void NotifyShopAreaExited(ADRShop* Shop);
 
-	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
+	/** 현재 상점 상호작용이 가능한지 확인한다. */
 	bool IsShopInteractionAvailable() const;
 
 private:
@@ -225,8 +227,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Weapon")
-	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Selection")
+	TObjectPtr<UDRStartingSelectionComponent> StartingSelectionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRStartingSelectionUIComponent> StartingSelectionUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
@@ -262,6 +267,9 @@ private:
 	
 #pragma region Snow Join Snapshot
 public:
+	UPROPERTY(BlueprintAssignable, Category = "Snow|Join Snapshot")
+	FDRSnowJoinSnapshotApplied OnSnowJoinSnapshotApplied;
+
 	UFUNCTION(Client, Reliable)
 	void Client_BeginSnowJoinSnapshot(
 		int32 SnapshotId,
@@ -283,6 +291,9 @@ public:
 		int32 SnapshotId,
 		const TArray<FDRSnowOperationRecord>& RecentHistory);
 
+	UFUNCTION(Client, Reliable)
+	void Client_ResumeSnowJoinOperations(int32 SnapshotId);
+
 	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
 	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
 
@@ -290,9 +301,26 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
 
+	UFUNCTION(Server, Reliable)
+	void ServerNotifySnowJoinSnapshotApplied(int32 SnapshotId);
+
+	void SendNextSnowJoinSnapshotChunk();
+	void FinishSnowJoinSnapshotTransfer();
 	bool TryApplyPendingSnowJoinSnapshot();
 	void RetryPendingSnowJoinSnapshot();
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
+
+	int32 OutgoingSnowSnapshotId = INDEX_NONE;
+	int32 OutgoingSnowCheckpointSequence = 0;
+	uint8 OutgoingSnowPayloadType = 0;
+	int32 OutgoingSnowByteOffset = 0;
+	TArray<uint8> OutgoingSnowVoxelSaveData;
+	TArray<uint8> OutgoingSnowVolumeData;
+	TArray<uint8> OutgoingSnowOwnershipData;
+	TArray<FDRSnowOperationRecord> OutgoingSnowHistory;
+	FTimerHandle SnowJoinSnapshotSendTimer;
+	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
+	bool bSnowSnapshotTransferFinished = false;
 
 	int32 PendingSnowSnapshotId = INDEX_NONE;
 	int32 PendingSnowCheckpointSequence = 0;
@@ -301,6 +329,7 @@ private:
 	int32 PendingSnowVolumeByteCount = 0;
 	int32 PendingSnowOwnershipByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
+	bool bPendingSnowCheckpointApplied = false;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
 	TArray<uint8> PendingSnowOwnershipData;

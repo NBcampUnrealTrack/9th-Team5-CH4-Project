@@ -17,6 +17,9 @@ class DEEPRAIDERS_API UDRGA_SpraySnow : public UGameplayAbility
 public:
 	UDRGA_SpraySnow();
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sprayer|Presentation")
+	FGameplayTag SprayGameplayCueTag;
+	
 protected:
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
@@ -91,23 +94,28 @@ private:
 
 	FTimerHandle SprayTimerHandle;
 
-#if ENABLE_DRAW_DEBUG
+	// Cue
+	void StartSprayGameplayCue();
+	void StopSprayGameplayCue();
+	
+	// Monatage
+	void StartSprayMontage();
+	void StopSprayMontage();
+	
 public:
+	UPROPERTY(EditDefaultsOnly, Category = "Sprayer|Debug")
+	bool bDrawDebugSpray = false;
+
+	FTimerHandle DebugDrawTimerHandle;
+	
+#if ENABLE_DRAW_DEBUG
 	void StartLocalDebugDraw();
 	void StopLocalDebugDraw();
 	void HandleDebugDrawTick();
 	void DrawDebugSpray(
 		const FVector& Origin,
 		const FVector& Direction) const;
-
-
 #endif
 	
-	UPROPERTY(
-		EditDefaultsOnly,
-		Category = "Sprayer|Debug")
-	bool bDrawDebugSpray = false;
-
-	FTimerHandle DebugDrawTimerHandle;
 };
 

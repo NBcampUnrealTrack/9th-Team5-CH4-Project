@@ -54,9 +54,6 @@ private:
 	void HandlePerkButtonClicked();
 
 	UFUNCTION()
-	void HandleSkillButtonClicked();
-
-	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
 
 	UPROPERTY(meta = (BindWidget))
@@ -70,9 +67,6 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PerkButton;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> SkillButton;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;

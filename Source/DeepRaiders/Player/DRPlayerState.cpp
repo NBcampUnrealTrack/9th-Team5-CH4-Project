@@ -337,10 +337,6 @@ void ADRPlayerState::GrantDefaultAbilities()
 		DefaultAbilitySet->GiveToAbilitySystem(AbilitySystemComponent, &GrantedHandles, this);
 	}
 
-	if (IsValid(SkillComponent))
-	{
-		SkillComponent->GrantDefaultSkills();
-	}
 }
 
 void ADRPlayerState::BindStatusPolicy()

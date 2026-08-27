@@ -7,7 +7,7 @@
 
 class UDRGA_CharacterSkillBase;
 
-/** 상점에서 구매해 지정된 슬롯에 장착할 스킬 정의다. */
+/** 지정된 슬롯에 장착할 스킬 정의다. */
 UCLASS(
 	BlueprintType,
 	AutoExpandCategories = ("Skill"),
@@ -23,7 +23,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	EDRSkillSlot SkillSlot = EDRSkillSlot::One;
 
-	/** 구매 시 지정된 슬롯 입력에 지급할 스킬 Ability다. */
+	/** 지정된 슬롯 입력에 지급할 스킬 Ability다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	TSubclassOf<UDRGA_CharacterSkillBase> SkillAbility;
 };

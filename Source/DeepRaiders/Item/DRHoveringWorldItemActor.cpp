@@ -242,7 +242,7 @@ void ADRHoveringWorldItemActor::ApplyPresentationState()
 	}
 	else
 	{
-		SpawnTrailVFXComponent->Deactivate();
+		IdleAuraVFXComponent->Deactivate();
 	}
 }
 
@@ -273,15 +273,9 @@ void ADRHoveringWorldItemActor::RefreshRarityPresentation()
 	SpawnTrailVFXComponent->SetAsset(SpawnTrailSystem);
 	IdleAuraVFXComponent->SetAsset(IdleAuraSystem);
 	
-	// 테스트 신다인
-	// 사용할 VFX에 맞춰 수정 필요
-	SpawnTrailVFXComponent->SetVariableLinearColor(TEXT("User.RarityColor"), RarityVisual.RarityColor);
-	SpawnTrailVFXComponent->SetVariableFloat(TEXT("User.Intensity"), RarityVisual.Intensity);
-	SpawnTrailVFXComponent->SetVariableFloat(TEXT("User.EffectScale"), RarityVisual.EffectScale);
+	Profile->ApplyRarityParameters(SpawnTrailVFXComponent, Definition->Rarity);	
+	Profile->ApplyRarityParameters(IdleAuraVFXComponent, Definition->Rarity);
 	
-	IdleAuraVFXComponent->SetVariableLinearColor(TEXT("User.RarityColor"), RarityVisual.RarityColor);
-	IdleAuraVFXComponent->SetVariableFloat(TEXT("User.Intensity"), RarityVisual.Intensity);
-	IdleAuraVFXComponent->SetVariableFloat(TEXT("User.EffectScale"), RarityVisual.EffectScale);
 	IdleAuraVFXComponent->SetVariableFloat(TEXT("User.InteractionRadius"), InteractionRadius);
 }
 

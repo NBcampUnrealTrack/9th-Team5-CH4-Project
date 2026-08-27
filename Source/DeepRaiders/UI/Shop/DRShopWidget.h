@@ -11,8 +11,6 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopBuyPanelWidget;
 class UDRShopSellPanelWidget;
-class UDRStartingWeaponSelectWidget;
-class UDRStartingWeaponSelectionComponent;
 class UWidgetSwitcher;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRShopWidgetClosedSignature);
@@ -38,13 +36,6 @@ public:
 	/** 판매 패널에 로컬 플레이어 인벤토리를 연결한다. */
 	void InitializeSellPanel(UDRInventoryComponent* InventoryComponent, UDRPerkComponent* PerkComponent);
 
-	/** 최초 무기 선택 탭을 초기화하고 표시 여부를 설정한다. */
-	void InitializeStartingWeaponPanel(
-		UDRStartingWeaponSelectionComponent* StartingWeaponSelectionComponent);
-
-	/** 최초 무기 선택 탭을 비활성화하고 구매 탭으로 전환한다. */
-	void DisableStartingWeaponPanel();
-
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;
 
@@ -66,9 +57,6 @@ private:
 	void HandleSellPanelButtonClicked();
 
 	UFUNCTION()
-	void HandleStartingWeaponPanelButtonClicked();
-
-	UFUNCTION()
 	void HandleCloseButtonClicked();
 
 	UFUNCTION()
@@ -84,9 +72,6 @@ private:
 	TObjectPtr<UButton> SellPanelButton;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> StartingWeaponPanelButton;
-
-	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 
 	UPROPERTY(meta = (BindWidget))
@@ -97,8 +82,5 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRShopSellPanelWidget> SellPanel;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UDRStartingWeaponSelectWidget> StartingWeaponPanel;
 
 };

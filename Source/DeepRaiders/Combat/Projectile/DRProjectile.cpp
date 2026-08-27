@@ -1,6 +1,7 @@
 
 #include "DRProjectile.h"
 
+#include "Components/ShapeComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -13,32 +14,45 @@
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "Kismet/GameplayStatics.h"
 
-ADRProjectile::ADRProjectile()
+const FName ADRProjectile::CollisionComponentName(TEXT("CollisionComponent"));
+
+ADRProjectile::ADRProjectile(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = false;
-	
-	bReplicates=  true;
+
+	bReplicates = true;
 	SetReplicateMovement(true);
 	InitialLifeSpan = 5.0f;
-	
-	CollisionComponent=  CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComponent"));
+
+	CollisionComponent = ObjectInitializer.CreateDefaultSubobject<UShapeComponent, USphereComponent>(this, CollisionComponentName, false);
+
 	SetRootComponent(CollisionComponent);
-	
-	CollisionComponent->InitSphereRadius(12.0f);
+
+	if (USphereComponent* Sphere = Cast<USphereComponent>(CollisionComponent))
+	{
+		Sphere->InitSphereRadius(12.0f);
+	}
+
 	CollisionComponent->SetCollisionProfileName(TEXT("DRProjectile"));
+
 	CollisionComponent->SetCanEverAffectNavigation(false);
-	
+
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+
 	MeshComponent->SetupAttachment(CollisionComponent);
+
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	
+
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
+
 	ProjectileMovement->UpdatedComponent = CollisionComponent;
-	ProjectileMovement->InitialSpeed = 3000.0f;
-	ProjectileMovement->MaxSpeed = 3000.0f;
+
+	ProjectileMovement->InitialSpeed = 3000.f;
+	ProjectileMovement->MaxSpeed = 3000.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = false;
-	ProjectileMovement->ProjectileGravityScale = 0.0f;
+	ProjectileMovement->ProjectileGravityScale = 0.f;
 }
 
 void ADRProjectile::BeginPlay()
@@ -96,49 +110,57 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 	{
 		return;
 	}
-	
+
 	AActor* HitActor = ImpactResult.GetActor();
-	
-	// 아군과 충돌 시 무시하고 다시 전진시킨다.
+
+	// 아군과 충돌하면 무시하고 계속 진행
 	if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
 	{
 		CollisionComponent->IgnoreActorWhenMoving(HitActor, true);
 		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
-		
+
 		ProjectileMovement->Activate(true);
 		ProjectileMovement->UpdateComponentVelocity();
-		
+
 		return;
 	}
-	
+
 	bImpactHandled = true;
-	
-	if (IsValid(HitActor)
-		&& HitActor != GetOwner()
-		&& HitActor != GetInstigator())
+
+	HandleImpact(ImpactResult);
+}
+
+void ADRProjectile::HandleImpact(const FHitResult& ImpactResult)
+{
+	AActor* HitActor = ImpactResult.GetActor();
+	if (IsValid(HitActor) && HitActor != GetOwner() && HitActor != GetInstigator())
 	{
+		// Breakable
 		if (ApplyBreakableDamage(ImpactResult))
 		{
 			ExecuteImpactGameplayCue(ImpactResult);
+
 			Destroy();
 			return;
 		}
-				
-		UAbilitySystemComponent* TargetAbilitySystem = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
-		
-		// ASC가 있는 Actor와 충돌
-		if (IsValid(TargetAbilitySystem))
+
+		// GAS Actor
+		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
+
+		if (IsValid(TargetASC))
 		{
-			ApplyImpactEffect(TargetAbilitySystem, ImpactResult);
-			
+			ApplyImpactEffect(TargetASC, ImpactResult);
 			ExecuteImpactGameplayCue(ImpactResult);
+
 			Destroy();
 			return;
 		}
 	}
-	
+
+	// 일반 World
 	ExecuteImpactGameplayCue(ImpactResult);
 	HandleWorldImpact(ImpactResult);
+
 	Destroy();
 }
 
