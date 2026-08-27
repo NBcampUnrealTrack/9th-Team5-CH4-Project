@@ -1,19 +1,39 @@
-#include "DRStartingWeaponSelectionComponent.h"
+#include "DRStartingSelectionComponent.h"
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRStartingWeaponTable.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
+#include "DeepRaiders/Skill/DRStartingSkillTable.h"
 #include "Engine/DataTable.h"
+#include "Net/UnrealNetwork.h"
 
-UDRStartingWeaponSelectionComponent::UDRStartingWeaponSelectionComponent()
+UDRStartingSelectionComponent::UDRStartingSelectionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(true);
 }
 
-void UDRStartingWeaponSelectionComponent::Initialize(
+void UDRStartingSelectionComponent::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(
+		UDRStartingSelectionComponent,
+		IsWeaponSelected,
+		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(
+		UDRStartingSelectionComponent,
+		IsSkillSelected,
+		COND_OwnerOnly);
+}
+
+void UDRStartingSelectionComponent::Initialize(
 	UDRItemDefinition* InStartingWeaponDefinition,
 	UDRInventoryComponent* InInventoryComponent,
 	UDRQuickSlotComponent* InQuickSlotComponent)
@@ -23,11 +43,10 @@ void UDRStartingWeaponSelectionComponent::Initialize(
 	QuickSlotComponent = InQuickSlotComponent;
 }
 
-void UDRStartingWeaponSelectionComponent::RequestSelection(FName RowName)
+void UDRStartingSelectionComponent::RequestWeaponSelection(FName RowName)
 {
 	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
 
-	// UI 요청은 로컬 소유자만 서버 RPC로 전달할 수 있다.
 	if (IsValid(PlayerController)
 		&& PlayerController->IsLocalController()
 		&& !RowName.IsNone())
@@ -36,25 +55,24 @@ void UDRStartingWeaponSelectionComponent::RequestSelection(FName RowName)
 	}
 }
 
-void UDRStartingWeaponSelectionComponent::ExpireSelection()
-{
-	if (IsSelectionExpired)
-	{
-		return;
-	}
-
-	IsSelectionExpired = true;
-	OnSelectionAvailabilityChanged.Broadcast(false);
-}
-
-void UDRStartingWeaponSelectionComponent::ServerSelectWeapon_Implementation(FName RowName)
+void UDRStartingSelectionComponent::RequestSkillSelection(FName RowName)
 {
 	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
 
-	// 클라이언트 요청을 신뢰하지 않고 선택 기회와 상점 범위를 서버에서 다시 확인한다.
-	if (!IsSelectionAvailable()
+	if (IsValid(PlayerController)
+		&& PlayerController->IsLocalController()
+		&& !RowName.IsNone())
+	{
+		ServerSelectSkill(RowName);
+	}
+}
+
+void UDRStartingSelectionComponent::ServerSelectWeapon_Implementation(FName RowName)
+{
+	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
+
+	if (!IsWeaponSelectionAvailable()
 		|| !IsValid(PlayerController)
-		|| !PlayerController->IsShopInteractionAvailable()
 		|| RowName.IsNone()
 		|| !IsValid(WeaponTable)
 		|| !IsValid(CurrentWeaponDefinition)
@@ -72,11 +90,57 @@ void UDRStartingWeaponSelectionComponent::ServerSelectWeapon_Implementation(FNam
 
 	if (IsValid(SelectedWeapon))
 	{
-		TryApplySelection(SelectedWeapon);
+		IsWeaponSelected = TryApplySelection(SelectedWeapon);
+
+		if (IsWeaponSelected)
+		{
+			NotifySelectionStateChanged();
+		}
 	}
 }
 
-bool UDRStartingWeaponSelectionComponent::TryApplySelection(
+void UDRStartingSelectionComponent::ServerSelectSkill_Implementation(FName RowName)
+{
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
+	ADRPlayerState* PlayerState = IsValid(PlayerController)
+		? PlayerController->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+	UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+	const FDRStartingSkillTableRow* Row = IsValid(SkillTable)
+		? SkillTable->FindRow<FDRStartingSkillTableRow>(RowName, TEXT("StartingSkillSelection"))
+		: nullptr;
+	UDRSkillDefinition* SkillDefinition = Row
+		? Row->SkillDefinition.LoadSynchronous()
+		: nullptr;
+
+	if (!IsSkillSelectionAvailable()
+		|| !IsValid(SkillDefinition)
+		|| !IsValid(SkillComponent))
+	{
+		return;
+	}
+
+	IsSkillSelected = SkillComponent->EquipSkill(SkillDefinition);
+
+	if (IsSkillSelected)
+	{
+		NotifySelectionStateChanged();
+	}
+}
+
+void UDRStartingSelectionComponent::OnRep_SelectionState()
+{
+	NotifySelectionStateChanged();
+}
+
+void UDRStartingSelectionComponent::NotifySelectionStateChanged()
+{
+	OnSelectionAvailabilityChanged.Broadcast(IsSelectionAvailable());
+}
+
+bool UDRStartingSelectionComponent::TryApplySelection(
 	UDRItemDefinition* SelectedWeapon)
 {
 	int32 WeaponSlotIndex = INDEX_NONE;
@@ -86,7 +150,6 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 	{
 		const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
 
-		// 직전에 선택한 무기를 같은 슬롯에서 다시 교체한다.
 		if (ItemInstance
 			&& ItemInstance->Definition.Get() == CurrentWeaponDefinition)
 		{
@@ -120,7 +183,6 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 		return false;
 	}
 
-	// 기본 총을 그대로 선택한 경우에는 불필요한 인벤토리 변경을 생략한다.
 	const bool IsApplied = CurrentWeaponDefinition == SelectedWeapon
 		|| InventoryComponent->TryReplaceItemDefinition(
 			CurrentWeapon->InstanceId,
@@ -133,8 +195,6 @@ bool UDRStartingWeaponSelectionComponent::TryApplySelection(
 	}
 
 	CurrentWeaponDefinition = SelectedWeapon;
-
-	// UI상의 슬롯 위치가 바뀌지 않도록 교체가 발생한 기존 슬롯을 그대로 선택한다.
 	QuickSlotComponent->RequestSelectSlot(WeaponSlotIndex);
 	return true;
 }

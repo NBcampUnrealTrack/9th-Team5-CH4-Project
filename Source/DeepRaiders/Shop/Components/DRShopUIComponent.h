@@ -13,8 +13,6 @@ class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
 class UDRShopTransactionComponent;
-class UDRSkillComponent;
-class UDRStartingWeaponSelectionComponent;
 class UDRUIManagerSubsystem;
 class UDRShopWidget;
 class UDRUpgradeComponent;
@@ -76,15 +74,9 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
-	UFUNCTION()
-	void HandleSkillChanged();
-
 	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
 	UFUNCTION()
 	void HandleCoinsChanged(int32 NewCoins);
-
-	/** 선택 완료 또는 만료 시 열려 있는 무기 선택 탭을 비활성화한다. */
-	void HandleStartingWeaponSelectionAvailabilityChanged(bool IsAvailable);
 
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();
@@ -119,16 +111,10 @@ private:
 	TObjectPtr<UDRPerkComponent> PerkComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDRSkillComponent> SkillComponent;
-
-	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerState> PlayerState;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;
