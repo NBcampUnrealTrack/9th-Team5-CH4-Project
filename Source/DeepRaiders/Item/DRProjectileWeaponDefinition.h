@@ -22,10 +22,10 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAddSettings
 	GENERATED_BODY()
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add")
-	bool bEnabled = false;
+	bool bEnabled = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float Radius = 50.f;
+	float Radius = 150.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float Amount = 1.f;
@@ -46,19 +46,30 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	bool bEnabled = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float Radius = 100.f;
+	float Radius = 150.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float Power = 1.f;
+	float Power = 10.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float Speed = 10.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float Range = 300.f;
+
+	// 무기 중심에서 조준 방향으로 시작점을 이동한다. 음수면 무기 중심 뒤에서 시작한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (Units = "cm"))
+	float StartOffset = -50.f;
+
+	// frustum 시작 원의 반경 비율이다. 1이면 끝 원과 같은 크기다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float InnerRadiusRatio = 0.3f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
 	EDRSnowRemovalBrushShape BrushShape = EDRSnowRemovalBrushShape::Sphere;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
-	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
+	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::AbsorbTool;
 };
 
 UCLASS(BlueprintType)
