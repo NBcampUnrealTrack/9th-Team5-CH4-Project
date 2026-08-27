@@ -2,7 +2,6 @@
 
 #include "Components/Button.h"
 #include "Components/ScrollBox.h"
-#include "Components/Widget.h"
 #include "DeepRaiders/UI/ViewModel/DRShopViewModel.h"
 #include "DRShopItemWidget.h"
 #include "MVVMSubsystem.h"
@@ -82,11 +81,6 @@ void UDRShopBuyPanelWidget::NativeOnInitialized()
 	if (IsValid(PerkButton))
 	{
 		PerkButton->OnClicked.AddDynamic(this, &ThisClass::HandlePerkButtonClicked);
-	}
-
-	if (IsValid(SkillButton))
-	{
-		SkillButton->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	SelectSection(SelectedSection);

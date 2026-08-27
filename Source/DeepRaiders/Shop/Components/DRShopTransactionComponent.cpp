@@ -105,8 +105,6 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 		}
 		break;
 
-	case EDRShopOfferType::Skill:
-		break;
 	}
 }
 
