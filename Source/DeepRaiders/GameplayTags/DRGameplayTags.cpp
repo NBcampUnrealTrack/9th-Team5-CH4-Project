@@ -113,6 +113,11 @@ namespace DRGameplayTags
 		"Cooldown duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Effect_MoveSpeed,
+		"Data.Effect.MoveSpeed",
+		"Effect MoveSpeed passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
 		"UI.Screen.HUD",
 		"Main HUD screen.");
