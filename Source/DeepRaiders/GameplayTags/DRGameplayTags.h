@@ -15,6 +15,8 @@ namespace DRGameplayTags
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
+	// UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Projectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Sprayer);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
 
@@ -35,6 +37,9 @@ namespace DRGameplayTags
 	
 	// Gameplay Cue - VFX
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
+	
+	// Weapon Effect
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);

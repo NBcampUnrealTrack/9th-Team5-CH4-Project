@@ -43,6 +43,11 @@ namespace DRGameplayTags
 		"Ranged attack ability.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Attack_Ranged_Sprayer,
+		"Ability.Attack.Ranged.Sprayer",
+		"Continuous snow sprayer attack ability.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
 		"Ability.Attack.Melee",
 		"Melee attack ability.");
@@ -76,6 +81,11 @@ namespace DRGameplayTags
 		GameplayCue_VFX,
 		"GameplayCue.VFX",
 		"Parent GameplayCue tag for data-driven visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Sprayer_Active,
+		"GameplayCue.Weapon.Sprayer.Active",
+		"Active snow sprayer presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
