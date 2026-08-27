@@ -76,6 +76,9 @@ public:
 	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
 	void RefreshTeamColor();
 
+	/** 로컬 플레이어의 팀원이라면 지속 실루엣을 적용한다. */
+	void RefreshTeamSilhouette();
+
 	void ApplyHandEquipmentVisual(
 		UStaticMesh* WorldMesh,
 		const FTransform& WorldTransform);

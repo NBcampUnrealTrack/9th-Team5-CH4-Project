@@ -1,6 +1,7 @@
 #include "DRPlayerState.h"
 
 #include "DRPlayerCharacter.h"
+#include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
@@ -592,6 +593,10 @@ void ADRPlayerState::SetTeamId(int32 NewTeamId)
 	{
 		PlayerCharacter->RefreshTeamColor();
 	}
+	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->RefreshTeamSilhouette();
+	}
 	ForceNetUpdate();
 }
 
@@ -600,6 +605,10 @@ void ADRPlayerState::OnRep_TeamId()
 	if (ADRPlayerCharacter* PlayerCharacter = GetPawn<ADRPlayerCharacter>())
 	{
 		PlayerCharacter->RefreshTeamColor();
+	}
+	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->RefreshTeamSilhouette();
 	}
 }
 #pragma endregion
