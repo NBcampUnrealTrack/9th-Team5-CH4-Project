@@ -246,7 +246,9 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-	return SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
+	return Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool
+		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(Request, Operation.AppliedAmount)
+		: SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
 }
 
 AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const

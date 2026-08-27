@@ -160,6 +160,27 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveReque
 	return Result;
 }
 
+FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request)
+{
+	FDRSnowRemoveResult Result;
+	Result.TeamId = Request.Context.TeamId;
+	UWorld* World = GetWorld();
+	SurfaceEditor.SetWorld(World);
+	if (!IsValid(World))
+	{
+		return Result;
+	}
+	const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.RemoveSnowWithAbsorbTool(Request);
+	Result.RemovedAmount = EditResult.AppliedAmount;
+	if (Result.RemovedAmount <= 0.f)
+	{
+		return Result;
+	}
+	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
+	RepaintSnowMaterialsAtArea(Request);
+	return Result;
+}
+
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	float AppliedAmount)
@@ -179,6 +200,25 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 
 	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
 
+	return RepaintSnowMaterialsAtArea(Request);
+}
+
+bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	float AppliedAmount)
+{
+	UWorld* World = GetWorld();
+	SurfaceEditor.SetWorld(World);
+	if (!IsValid(World) || AppliedAmount <= 0.f)
+	{
+		return false;
+	}
+	const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.RemoveSnowWithAbsorbTool(Request);
+	if (EditResult.AppliedAmount <= 0.f)
+	{
+		return false;
+	}
+	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
 	return RepaintSnowMaterialsAtArea(Request);
 }
 

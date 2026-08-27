@@ -84,7 +84,10 @@ protected:
 		FVector BrushOrigin,
 		const FDRSnowRemovalSpec& RemovalSpec);
 
-	float ExecuteRemoveRequest(const FDRSnowSurfaceRemoveRequest& Request, AActor* FallbackTarget = nullptr);
+	float ExecuteRemoveRequest(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		AActor* FallbackTarget = nullptr,
+		bool bUseAbsorbTool = false);
 
 	// 입력 유지 중 호출자가 반복 요청할 때 서버가 너무 자주 Voxel 편집하지 않도록 제한한다.
 	bool CanRemoveNow(const FDRSnowRemovalSpec& RemovalSpec) const;

@@ -90,7 +90,7 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 		-NormalizedDirection,
 		FrustumOrigin,
 		RemovalSpec);
-	return ExecuteRemoveRequest(Request);
+	return ExecuteRemoveRequest(Request, nullptr, true);
 }
 
 FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
@@ -112,14 +112,19 @@ FDRSnowSurfaceRemoveRequest UDRSnowRemoveComponent::MakeRemoveRequest(
 	return Request;
 }
 
-float UDRSnowRemoveComponent::ExecuteRemoveRequest(const FDRSnowSurfaceRemoveRequest& Request, AActor* FallbackTarget)
+float UDRSnowRemoveComponent::ExecuteRemoveRequest(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	AActor* FallbackTarget,
+	const bool bUseAbsorbTool)
 {
 	float RemovedAmount = 0.f;
 	if (UWorld* World = GetWorld())
 	{
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			RemovedAmount = SnowSubsystem->RemoveSnow(Request).RemovedAmount;
+			RemovedAmount = bUseAbsorbTool
+				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request).RemovedAmount
+				: SnowSubsystem->RemoveSnow(Request).RemovedAmount;
 			if (RemovedAmount > 0.f)
 			{
 				if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())

@@ -427,11 +427,12 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 		});
 }
 
-FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
+FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 	const FDRSnowSurfaceRemoveRequest& Request)
 {
 	FDRSnowSurfaceEditResult Result;
-	if (Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
+	if (Request.RemovalMode != EDRSnowRemovalMode::AbsorbTool ||
+		Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
 	{
 		return Result;
 	}
@@ -442,33 +443,50 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
 		return Result;
 	}
 
-	// 모든 제거는 공통 brush 경로에서 mode와 shape만 바꾼다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	FVoxelIntBox EditedBounds;
-	if (Request.RemovalMode == EDRSnowRemovalMode::AbsorbTool)
-	{
-		const float ModifiedValueAmount = UDRSnowAbsorbTool::RemoveSnowFromFrustum(
-			VoxelWorld,
-			Request.BrushOrigin,
-			Request.WorldLocation,
-			Request.Radius,
-			FMath::Clamp(Request.AbsorbInnerRadiusRatio, 0.f, 1.f),
-			0.2f,
-			Request.RequestedAmount,
-			SnowSurfaceDistanceDivisor,
-			ModifiedValues,
-			EditedBounds);
+	const float ModifiedValueAmount = UDRSnowAbsorbTool::RemoveSnowFromFrustum(
+		VoxelWorld,
+		Request.BrushOrigin,
+		Request.WorldLocation,
+		Request.Radius,
+		FMath::Clamp(Request.AbsorbInnerRadiusRatio, 0.f, 1.f),
+		0.2f,
+		Request.RequestedAmount,
+		SnowSurfaceDistanceDivisor,
+		ModifiedValues,
+		EditedBounds);
 
-		Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
-		if (Result.AppliedAmount > 0.f)
-		{
-			Result.VoxelWorld = VoxelWorld;
-			Result.EditedBounds = EditedBounds;
-			Result.ModifiedValues = MoveTemp(ModifiedValues);
-			Result.bUseModifiedValuesForVolume = true;
-		}
+	Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+	if (Result.AppliedAmount > 0.f)
+	{
+		Result.VoxelWorld = VoxelWorld;
+		Result.EditedBounds = EditedBounds;
+		Result.ModifiedValues = MoveTemp(ModifiedValues);
+		Result.bUseModifiedValuesForVolume = true;
+	}
+	return Result;
+}
+
+FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
+	const FDRSnowSurfaceRemoveRequest& Request)
+{
+	FDRSnowSurfaceEditResult Result;
+	if (Request.RemovalMode == EDRSnowRemovalMode::AbsorbTool ||
+		Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
+	{
 		return Result;
 	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return Result;
+	}
+
+	// 일반 아이템과 상호작용은 Sphere/Box 기반 제거만 처리한다.
+	TArray<FModifiedVoxelValue> ModifiedValues;
+	FVoxelIntBox EditedBounds;
 
 	FVector BrushCenter = Request.WorldLocation;
 	if (Request.RemovalMode == EDRSnowRemovalMode::ContactBrush)
