@@ -622,6 +622,11 @@ bool UDRGA_RangedWeaponAttack::TryApplyBreakableDamage(const FHitResult& HitResu
 	return AppliedDamage > KINDA_SMALL_NUMBER;	
 }
 
+const UDRProjectileWeaponItemDefinition* UDRGA_RangedWeaponAttack::GetCurrentWeaponDefinition() const
+{
+	return GetWeaponDefinition(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo());
+}
+
 void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* TargetAbilitySystem,
                                                       const FHitResult& HitResult, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const
 {

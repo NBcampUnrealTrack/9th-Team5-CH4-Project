@@ -15,6 +15,8 @@ namespace DRGameplayTags
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
+	// UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Projectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Sprayer);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
 
@@ -39,6 +41,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	
+	// Weapon Effect
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
+	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_QuickSlot);
@@ -46,6 +51,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Inventory_Storage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Teleport);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Shop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_StartingSelection);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Scoreboard);
 	
 	// Gameplay Cue - Sound

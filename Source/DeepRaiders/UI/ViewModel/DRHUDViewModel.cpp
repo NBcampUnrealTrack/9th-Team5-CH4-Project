@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRSprayerWeaponDefinition.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -211,13 +212,16 @@ void UDRHUDViewModel::RefreshAmmoVisibility()
 		: INDEX_NONE;
 	const bool bHasSelectedItem = QuickSlotComponent.IsValid()
 		&& QuickSlotComponent->GetQuickSlot(SelectedSlotIndex, SelectedItem);
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = bHasSelectedItem
+	const UDRProjectileWeaponItemDefinition* ProjectileWeapon = bHasSelectedItem
 		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem.Definition)
+		: nullptr;
+	const UDRSprayerWeaponDefinition* SprayerWeapon = bHasSelectedItem
+		? Cast<UDRSprayerWeaponDefinition>(SelectedItem.Definition)
 		: nullptr;
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAmmoVisible,
-		IsValid(WeaponDefinition));
+		IsValid(ProjectileWeapon) || IsValid(SprayerWeapon));
 }
 
 void UDRHUDViewModel::HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData)

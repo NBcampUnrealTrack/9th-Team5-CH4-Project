@@ -9,10 +9,7 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
-#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
-#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
-#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Shop/DRShopWidget.h"
@@ -39,16 +36,6 @@ void UDRShopUIComponent::BeginPlay()
 		UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
 	}
 
-	StartingWeaponSelectionComponent =
-		PlayerController->GetStartingWeaponSelectionComponent();
-
-	// 게임플레이 컴포넌트가 UI를 직접 참조하지 않도록 상태 이벤트만 구독한다.
-	if (IsValid(StartingWeaponSelectionComponent))
-	{
-		StartingWeaponSelectionComponent->OnSelectionAvailabilityChanged.AddUObject(
-			this,
-			&ThisClass::HandleStartingWeaponSelectionAvailabilityChanged);
-	}
 }
 
 void UDRShopUIComponent::EndPlay(
@@ -56,12 +43,6 @@ void UDRShopUIComponent::EndPlay(
 {
 	HideShopWidget();
 
-	if (IsValid(StartingWeaponSelectionComponent))
-	{
-		StartingWeaponSelectionComponent->OnSelectionAvailabilityChanged.RemoveAll(this);
-	}
-
-	StartingWeaponSelectionComponent = nullptr;
 	PlayerController = nullptr;
 	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
@@ -95,7 +76,6 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 
 	if (!IsValid(PlayerController)
 		|| !PlayerController->IsLocalController()
-		|| !IsValid(StartingWeaponSelectionComponent)
 		|| !IsValid(UIManager))
 	{
 		return;
@@ -117,14 +97,9 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	PerkComponent = IsValid(PlayerState)
 		? PlayerState->GetPerkComponent()
 		: nullptr;
-	SkillComponent = IsValid(PlayerState)
-		? PlayerState->GetSkillComponent()
-		: nullptr;
-
 	if (!IsValid(ShopTransactionComponent)
 		|| !IsValid(InventoryComponent)
-		|| !IsValid(PerkComponent)
-		|| !IsValid(SkillComponent))
+		|| !IsValid(PerkComponent))
 	{
 		return;
 	}
@@ -140,12 +115,9 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
 	ShopWidget->InitializeSellPanel(InventoryComponent, PerkComponent);
-	// 선택 가능 상태라면 상점이 열릴 때 최초 무기 탭을 우선 표시한다.
-	ShopWidget->InitializeStartingWeaponPanel(StartingWeaponSelectionComponent);
 	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
 	RefreshOffers(EDRShopOfferType::Perk);
-	RefreshOffers(EDRShopOfferType::Skill);
 	BindShopEvents();
 	// 상점 UI를 조작하는 동안 캐릭터 이동만 차단한다.
 	PlayerController->FlushPressedKeys();
@@ -183,7 +155,6 @@ void UDRShopUIComponent::HideShopWidget()
 	ShopComponent = nullptr;
 	UpgradeComponent = nullptr;
 	PerkComponent = nullptr;
-	SkillComponent = nullptr;
 	PlayerState = nullptr;
 
 	if (IsValid(PlayerController))
@@ -231,13 +202,6 @@ void UDRShopUIComponent::BindShopEvents()
 			&ThisClass::HandlePerksChanged);
 	}
 
-	if (IsValid(SkillComponent))
-	{
-		SkillComponent->OnSkillChanged.AddDynamic(
-			this,
-			&ThisClass::HandleSkillChanged);
-	}
-
 	if (IsValid(PlayerState))
 	{
 		PlayerState->OnCoinsChanged.AddDynamic(
@@ -273,13 +237,6 @@ void UDRShopUIComponent::UnbindShopEvents()
 		PerkComponent->OnPerksChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandlePerksChanged);
-	}
-
-	if (IsValid(SkillComponent))
-	{
-		SkillComponent->OnSkillChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandleSkillChanged);
 	}
 
 	if (IsValid(PlayerState))
@@ -341,26 +298,11 @@ void UDRShopUIComponent::HandlePerksChanged()
 	RefreshOffers(EDRShopOfferType::Perk);
 }
 
-void UDRShopUIComponent::HandleSkillChanged()
-{
-	RefreshOffers(EDRShopOfferType::Skill);
-}
-
 void UDRShopUIComponent::HandleCoinsChanged(int32)
 {
 	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
 	RefreshOffers(EDRShopOfferType::Perk);
-	RefreshOffers(EDRShopOfferType::Skill);
-}
-
-void UDRShopUIComponent::HandleStartingWeaponSelectionAvailabilityChanged(
-	bool IsAvailable)
-{
-	if (!IsAvailable && IsValid(ShopWidget))
-	{
-		ShopWidget->DisableStartingWeaponPanel();
-	}
 }
 
 void UDRShopUIComponent::RefreshOffers(EDRShopOfferType OfferType)
@@ -413,18 +355,8 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		UDRPerkDefinition* PerkDefinition = OfferType == EDRShopOfferType::Perk
 			? Cast<UDRPerkDefinition>(Offer.ItemDefinition)
 			: nullptr;
-		UDRSkillDefinition* SkillDefinition = OfferType == EDRShopOfferType::Skill
-			? Cast<UDRSkillDefinition>(Offer.ItemDefinition)
-			: nullptr;
-
 		if (OfferType == EDRShopOfferType::Perk
 			&& !IsValid(PerkDefinition))
-		{
-			continue;
-		}
-
-		if (OfferType == EDRShopOfferType::Skill
-			&& !IsValid(SkillDefinition))
 		{
 			continue;
 		}
@@ -439,12 +371,6 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			OfferView.DisplayName = FText::Format(
 				FText::FromString(TEXT("{0} 퍽")),
 				PerkDefinition->DisplayName);
-		}
-		else if (IsValid(SkillDefinition))
-		{
-			OfferView.DisplayName = FText::Format(
-				FText::FromString(TEXT("{0} 스킬")),
-				SkillDefinition->DisplayName);
 		}
 		else if (OfferType == EDRShopOfferType::Upgrade
 			&& IsValid(Offer.UpgradeSourceDefinition))
@@ -481,13 +407,6 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 				PlayerState->GetCoins());
 			break;
 
-		case EDRShopOfferType::Skill:
-			OfferView.IsPurchasable = ShopComponent->CanPurchaseSkill(
-				SkillDefinition,
-				SkillComponent,
-				PlayerState->GetCoins());
-			break;
-
 		default:
 			OfferView.IsPurchasable = ShopComponent->CanAfford(
 				Offer.ItemDefinition,
@@ -509,9 +428,6 @@ EDRShopOfferSection UDRShopUIComponent::ResolveOfferSection(
 
 	case EDRShopOfferType::Perk:
 		return EDRShopOfferSection::Perk;
-
-	case EDRShopOfferType::Skill:
-		return EDRShopOfferSection::Skill;
 
 	default:
 		return IsValid(Offer.ItemDefinition)

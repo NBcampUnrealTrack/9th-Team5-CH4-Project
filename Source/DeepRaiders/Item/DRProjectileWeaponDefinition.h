@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRItemDefinition.h"
 #include "DRProjectileWeaponDefinition.generated.h"
 
@@ -13,6 +14,51 @@ enum class EDRProjectileWeaponResourceType : uint8
 {
 	SnowGauge UMETA(DisplayName = "Snow Gauge"),
 	InstanceAmmo UMETA(DisplayName = "Instance Ammo")
+};
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRProjectileWeaponSnowAddSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add")
+	bool bEnabled = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float Radius = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float Amount = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add")
+	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::DirectionalSurfaceTool;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Add")
+	bool bAllowVirtualSurfaceFallback = true;
+};
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
+	bool bEnabled = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float Radius = 100.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float Power = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float Speed = 10.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
+	EDRSnowRemovalBrushShape BrushShape = EDRSnowRemovalBrushShape::Sphere;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
+	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::ContactBrush;
 };
 
 UCLASS(BlueprintType)
@@ -42,4 +88,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Ammo", meta = (
 	EditCondition = "ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo", ClampMin = "1", UIMin = "1"))
 	int32 InitialAmmo = 1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Add"))
+	FDRProjectileWeaponSnowAddSettings SnowAddSettings;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Absorb"))
+	FDRProjectileWeaponSnowAbsorbSettings SnowAbsorbSettings;
 };

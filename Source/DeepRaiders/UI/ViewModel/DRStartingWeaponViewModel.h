@@ -6,7 +6,7 @@
 
 class UTexture2D;
 class UDRProjectileWeaponItemDefinition;
-class UDRStartingWeaponSelectionComponent;
+class UDRStartingSelectionComponent;
 class UDRStartingWeaponViewModel;
 
 /** ListView 한 항목에 표시할 무기 정보와 선택 상태다. */
@@ -54,7 +54,7 @@ class DEEPRAIDERS_API UDRStartingWeaponViewModel : public UMVVMViewModelBase
 
 public:
 	/** 선택 컴포넌트의 DT를 읽어 ListView 항목을 생성한다. */
-	void Initialize(UDRStartingWeaponSelectionComponent* InSelectionComponent);
+	void Initialize(UDRStartingSelectionComponent* InSelectionComponent);
 
 	void Deinitialize();
 
@@ -75,5 +75,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UDRStartingWeaponEntryViewModel> SelectedWeapon;
 
-	TWeakObjectPtr<UDRStartingWeaponSelectionComponent> SelectionComponent;
+	TWeakObjectPtr<UDRStartingSelectionComponent> SelectionComponent;
 };

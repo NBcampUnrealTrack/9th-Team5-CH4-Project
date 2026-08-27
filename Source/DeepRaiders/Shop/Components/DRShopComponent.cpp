@@ -5,8 +5,6 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
-#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
-#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Pawn.h"
 
@@ -59,22 +57,6 @@ bool UDRShopComponent::GetPerkDefinition(
 	return IsValid(OutPerkDefinition);
 }
 
-bool UDRShopComponent::GetSkillDefinition(
-	FName RowName,
-	UDRSkillDefinition*& OutSkillDefinition) const
-{
-	FDRShopItemTableRow ItemRow;
-	OutSkillDefinition = nullptr;
-
-	if (!GetItemRow(RowName, ItemRow))
-	{
-		return false;
-	}
-
-	OutSkillDefinition = Cast<UDRSkillDefinition>(ItemRow.ItemDefinition);
-	return IsValid(OutSkillDefinition);
-}
-
 bool UDRShopComponent::CanPurchasePerk(
 	const UDRPerkDefinition* PerkDefinition,
 	const UDRPerkComponent* PerkComponent,
@@ -84,18 +66,6 @@ bool UDRShopComponent::CanPurchasePerk(
 		&& IsValid(PerkDefinition)
 		&& PerkComponent->CanAddPerk(PerkDefinition)
 		&& CanAfford(PerkDefinition, AvailableCoins);
-}
-
-bool UDRShopComponent::CanPurchaseSkill(
-	const UDRSkillDefinition* SkillDefinition,
-	const UDRSkillComponent* SkillComponent,
-	int32 AvailableCoins) const
-{
-	return IsValid(SkillComponent)
-		&& SkillComponent->CanEquipSkill(SkillDefinition)
-		&& SkillComponent->GetCurrentSkill(SkillDefinition->SkillSlot)
-			!= SkillDefinition
-		&& CanAfford(SkillDefinition, AvailableCoins);
 }
 
 bool UDRShopComponent::CanAfford(
@@ -167,16 +137,16 @@ void UDRShopComponent::AddItemOffers(
 	FName RowName,
 	const FDRShopItemTableRow& ItemRow)
 {
-	if (IsValid(Cast<UDRSkillDefinition>(ItemRow.ItemDefinition)))
-	{
-		AddOffer(RowName, EDRShopOfferType::Skill, ItemRow.ItemDefinition);
-		return;
-	}
-
 	// PerkDefinition은 일반 구매나 장비 업그레이드가 아닌 퍽 Offer로 등록한다.
 	if (IsValid(Cast<UDRPerkDefinition>(ItemRow.ItemDefinition)))
 	{
 		AddOffer(RowName, EDRShopOfferType::Perk, ItemRow.ItemDefinition);
+		return;
+	}
+
+	if (ItemRow.ItemDefinition->Category != EDRItemCategory::Equipment
+		&& ItemRow.ItemDefinition->Category != EDRItemCategory::Consumable)
+	{
 		return;
 	}
 

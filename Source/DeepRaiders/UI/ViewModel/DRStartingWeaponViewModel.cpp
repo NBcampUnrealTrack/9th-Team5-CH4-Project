@@ -2,7 +2,7 @@
 
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRStartingWeaponTable.h"
-#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
 #include "Engine/DataTable.h"
 
 void UDRStartingWeaponEntryViewModel::Select()
@@ -38,7 +38,7 @@ void UDRStartingWeaponEntryViewModel::SetSelected(bool IsNewSelected)
 }
 
 void UDRStartingWeaponViewModel::Initialize(
-	UDRStartingWeaponSelectionComponent* InSelectionComponent)
+	UDRStartingSelectionComponent* InSelectionComponent)
 {
 	Deinitialize();
 	SelectionComponent = InSelectionComponent;
@@ -87,7 +87,7 @@ void UDRStartingWeaponViewModel::ConfirmSelection()
 {
 	if (SelectionComponent.IsValid() && IsValid(SelectedWeapon))
 	{
-		SelectionComponent->RequestSelection(SelectedWeapon->RowName);
+		SelectionComponent->RequestWeaponSelection(SelectedWeapon->RowName);
 	}
 }
 

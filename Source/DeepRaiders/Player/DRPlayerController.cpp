@@ -26,7 +26,7 @@
 #include "DeepRaiders/Shop/DRShop.h"
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
-#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
@@ -35,6 +35,7 @@
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryUIComponent.h"
+#include "DeepRaiders/UI/StartingSelection/DRStartingSelectionUIComponent.h"
 
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 
@@ -54,7 +55,8 @@ ADRPlayerController::ADRPlayerController()
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
 	ShopTransactionComponent = CreateDefaultSubobject<UDRShopTransactionComponent>(TEXT("ShopTransactionComponent"));
 	ShopUIComponent = CreateDefaultSubobject<UDRShopUIComponent>(TEXT("ShopUIComponent"));
-	StartingWeaponSelectionComponent = CreateDefaultSubobject<UDRStartingWeaponSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
+	StartingSelectionComponent = CreateDefaultSubobject<UDRStartingSelectionComponent>(TEXT("StartingWeaponSelectionComponent"));
+	StartingSelectionUIComponent = CreateDefaultSubobject<UDRStartingSelectionUIComponent>(TEXT("StartingSelectionUIComponent"));
 
 	// Interaction Initialize
 	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
@@ -101,10 +103,13 @@ void ADRPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	// 시작 무기 선택에 필요한 기본 무기와 장비 컴포넌트를 연결한다.
-	StartingWeaponSelectionComponent->Initialize(
+	StartingSelectionComponent->Initialize(
 		StartingRifle,
 		InventoryComponent,
 		QuickSlotComponent);
+
+	StartingSelectionUIComponent->ShowStartingSelection(
+		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
 	
@@ -394,7 +399,7 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		!IsValid(StartingShovelDefinition) ||
 		!IsValid(StartingRifle) ||
 		!IsValid(StartingShotgun) ||
-		// !IsValid(StartingSprayer) ||
+		!IsValid(StartingSprayer) ||
 		// !IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
@@ -416,11 +421,11 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
 	
-	// if (!InventoryComponent->GetItemAtSlot(3))
-	// {
-	// 	InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
-	// }
-	//
+	if (!InventoryComponent->GetItemAtSlot(3))
+	{
+		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
+	}
+	
 	// if (!InventoryComponent->GetItemAtSlot(4))
 	// {
 	// 	InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
@@ -664,12 +669,6 @@ ADRShop* ADRPlayerController::FindInteractableShop() const
 void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
-	if (!IsShopInteractionAvailable()
-		&& IsValid(StartingWeaponSelectionComponent))
-	{
-		StartingWeaponSelectionComponent->ExpireSelection();
-	}
-
 	if (IsLocalController()
 		&& IsValid(ShopUIComponent))
 	{

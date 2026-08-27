@@ -20,7 +20,6 @@ class UDRMeleeCombatComponent;
 class UDRJetpackComponent;
 class UDRPlayerLifecycleComponent;
 class UDRHeldItemComponent;
-class UDRSnowRemoveComponent;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class USpringArmComponent;
@@ -175,9 +174,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Snow", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UDRSnowRemoveComponent> SnowRemoveComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;
