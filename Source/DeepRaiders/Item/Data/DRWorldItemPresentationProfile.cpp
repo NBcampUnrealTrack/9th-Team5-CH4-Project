@@ -1,5 +1,7 @@
 ﻿#include "DRWorldItemPresentationProfile.h"
 
+#include "NiagaraComponent.h"
+
 const FDRWorldItemRarityVisual& UDRWorldItemPresentationProfile::GetRarityVisual(EDRItemRarity Rarity) const
 {
 	if (const FDRWorldItemRarityVisual* Visual = RarityVisuals.Find(Rarity))
@@ -8,4 +10,22 @@ const FDRWorldItemRarityVisual& UDRWorldItemPresentationProfile::GetRarityVisual
 	}
 	
 	return DefaultRarityVisual;
+}
+
+void UDRWorldItemPresentationProfile::ApplyRarityParameters(UNiagaraComponent* NiagaraComponent,
+	EDRItemRarity Rarity) const
+{
+	if (!IsValid(NiagaraComponent))
+	{
+		return;
+	}
+	
+	const FDRWorldItemRarityVisual& RarityVisual = GetRarityVisual(Rarity);
+	
+
+	NiagaraComponent->SetVariableLinearColor(TEXT("User.RarityColor"), RarityVisual.RarityColor);
+
+	NiagaraComponent->SetVariableFloat(TEXT("User.Intensity"), RarityVisual.Intensity);
+
+	NiagaraComponent->SetVariableFloat(TEXT("User.EffectScale"), RarityVisual.EffectScale);
 }

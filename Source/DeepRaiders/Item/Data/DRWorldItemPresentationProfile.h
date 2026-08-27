@@ -7,6 +7,7 @@
 
 class UCurveFloat;
 class UNiagaraSystem;
+class UNiagaraComponent;
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRWorldItemRarityVisual
@@ -29,6 +30,10 @@ struct DEEPRAIDERS_API FDRWorldItemRarityVisual
 	// 비어 있으면 공통 IdleAuraOverride 사용
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Rarity")
 	TObjectPtr<UNiagaraSystem> IdleAuraOverride = nullptr;
+	
+	// 비어 있으면 공통 PickupBurstOverride 사용
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Rarity")
+	TObjectPtr<UNiagaraSystem> PickupBurstOverride = nullptr;
 };
 
 UCLASS(BlueprintType)
@@ -39,11 +44,16 @@ class UDRWorldItemPresentationProfile : public UPrimaryDataAsset
 public:
 	const FDRWorldItemRarityVisual& GetRarityVisual(EDRItemRarity Rarity) const;
 	
+	void ApplyRarityParameters(UNiagaraComponent* NiagaraComponent, EDRItemRarity Rarity) const;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Emergence")
 	TObjectPtr<UNiagaraSystem> SpawnTrailSystem = nullptr;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Emergence")
 	TObjectPtr<UNiagaraSystem> IdleAuraSystem = nullptr;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Pickup")
+	TObjectPtr<UNiagaraSystem> PickupBurstSystem = nullptr;
 	
 	// 입력 0~1을 메시 이동 Alpha로 변환
 	// 비어 있으면 EaseOut 보간 사용

@@ -12,6 +12,7 @@ enum class EDRItemCategory : uint8
 	Consumable,
 	Perk,
 	Skill,
+	Pickup,
 	End,
 };
 

@@ -83,6 +83,16 @@ namespace DRGameplayTags
 		"Parent GameplayCue tag for data-driven visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_Heal,
+		"GameplayCue.VFX.Effect.Heal",
+		"Heal effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_MoveSpeed,
+		"GameplayCue.VFX.Effect.MoveSpeed",
+		"MoveSpeed effect visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Weapon_Sprayer_Active,
 		"GameplayCue.Weapon.Sprayer.Active",
 		"Active snow sprayer presentation.");
@@ -111,6 +121,11 @@ namespace DRGameplayTags
 		Data_Cooldown_Duration,
 		"Data.Cooldown.Duration",
 		"Cooldown duration passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Effect_MoveSpeed,
+		"Data.Effect.MoveSpeed",
+		"Effect MoveSpeed passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

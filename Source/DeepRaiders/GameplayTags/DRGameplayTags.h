@@ -31,12 +31,15 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
 
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);
 	
 	// Gameplay Cue - VFX
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	
 	// Weapon Effect
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
