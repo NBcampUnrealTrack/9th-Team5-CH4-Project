@@ -131,6 +131,11 @@ namespace DRGameplayTags
 		UI_Screen_Shop,
 		"UI.Screen.Shop",
 		"Shop screen.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		UI_Screen_StartingSelection,
+		"UI.Screen.StartingSelection",
+		"Starting weapon and skill selection screen.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_Scoreboard,

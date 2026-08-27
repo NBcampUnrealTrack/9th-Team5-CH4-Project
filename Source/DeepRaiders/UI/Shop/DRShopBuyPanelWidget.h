@@ -10,6 +10,7 @@ class UDRShopItemWidget;
 class UDRShopOfferEntryViewModel;
 class UDRShopViewModel;
 class UScrollBox;
+class UWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRShopBuyPanelOfferRequestedSignature,
@@ -54,9 +55,6 @@ private:
 	void HandlePerkButtonClicked();
 
 	UFUNCTION()
-	void HandleSkillButtonClicked();
-
-	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
 
 	UPROPERTY(meta = (BindWidget))
@@ -71,8 +69,9 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PerkButton;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> SkillButton;
+	/** 기존 WBP 호환용이며 시작 선택 화면 분리 후 표시하지 않는다. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> SkillButton;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;

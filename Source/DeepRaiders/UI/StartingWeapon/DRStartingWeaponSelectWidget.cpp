@@ -1,7 +1,8 @@
 #include "DRStartingWeaponSelectWidget.h"
 
+#include "DRStartingWeaponEntryWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRStartingWeaponViewModel.h"
-#include "DeepRaiders/Player/Components/DRStartingWeaponSelectionComponent.h"
+#include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
 #include "Components/Button.h"
 #include "Components/ListView.h"
 #include "MVVMSubsystem.h"
@@ -15,7 +16,7 @@ UDRStartingWeaponSelectWidget::UDRStartingWeaponSelectWidget(
 }
 
 void UDRStartingWeaponSelectWidget::InitializeSelection(
-	UDRStartingWeaponSelectionComponent* InSelectionComponent)
+	UDRStartingSelectionComponent* InSelectionComponent)
 {
 	DeinitializeSelection();
 	ViewModel = NewObject<UDRStartingWeaponViewModel>(this);
@@ -54,6 +55,17 @@ void UDRStartingWeaponSelectWidget::DeinitializeSelection()
 void UDRStartingWeaponSelectWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	const TSubclassOf<UUserWidget> EntryWidgetClass = WeaponListView->GetEntryWidgetClass();
+	if (!EntryWidgetClass
+		|| !EntryWidgetClass->IsChildOf(UDRStartingWeaponEntryWidget::StaticClass()))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("WeaponListView EntryWidgetClass must derive from DRStartingWeaponEntryWidget. Widget=%s"),
+			*GetName());
+	}
 
 	WeaponListView->OnItemClicked().AddUObject(this, &ThisClass::HandleWeaponClicked);
 	ConfirmButton->OnClicked.AddDynamic(this, &ThisClass::HandleConfirmClicked);

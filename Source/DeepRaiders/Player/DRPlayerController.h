@@ -14,7 +14,7 @@ class UInputAction;
 class UInputMappingContext;
 class UDRInventoryComponent;
 class UDRQuickSlotComponent;
-class UDRStartingWeaponSelectionComponent;
+class UDRStartingSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
@@ -28,6 +28,7 @@ class UDRUIConfig;
 class UGameplayAbility;
 class UUserWidget;
 class UDRScoreboardUIComponent;
+class UDRStartingSelectionUIComponent;
 class UDRInteractionComponent;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
@@ -140,9 +141,9 @@ public:
 	UDRQuickSlotComponent* GetQuickSlotComponent() { return QuickSlotComponent; }
 
 	/** 시작 무기 선택 기능을 사용하는 UI와 ViewModel에 컴포넌트를 제공한다. */
-	UDRStartingWeaponSelectionComponent* GetStartingWeaponSelectionComponent() const
+	UDRStartingSelectionComponent* GetStartingSelectionComponent() const
 	{
-		return StartingWeaponSelectionComponent;
+		return StartingSelectionComponent;
 	}
 
 	UDRShopTransactionComponent* GetShopTransactionComponent() const
@@ -201,10 +202,10 @@ public:
 		return InventoryUIComponent;
 	}
 	
-	/** 상점 영역 이탈에 따른 선택 만료와 UI 종료를 처리한다. */
+	/** 상점 영역 이탈에 따른 상점 UI 종료를 처리한다. */
 	void NotifyShopAreaExited(ADRShop* Shop);
 
-	/** 서버의 시작 무기 선택 요청 검증에 사용할 유효 상점 존재 여부다. */
+	/** 현재 상점 상호작용이 가능한지 확인한다. */
 	bool IsShopInteractionAvailable() const;
 
 private:
@@ -225,8 +226,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Weapon")
-	TObjectPtr<UDRStartingWeaponSelectionComponent> StartingWeaponSelectionComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Starting Selection")
+	TObjectPtr<UDRStartingSelectionComponent> StartingSelectionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRStartingSelectionUIComponent> StartingSelectionUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
