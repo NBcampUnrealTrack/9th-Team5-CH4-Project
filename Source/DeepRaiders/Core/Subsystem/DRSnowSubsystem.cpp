@@ -5,6 +5,11 @@
 #include "VoxelRender/IVoxelLODManager.h"
 #include "VoxelWorld.h"
 
+namespace
+{
+	constexpr float AbsorbRepaintIntervalSeconds = 0.25f;
+}
+
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
 	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(
@@ -140,6 +145,62 @@ void UDRSnowSubsystem::FlushRenderUpdates()
 	PendingRenderUpdates.Reset();
 }
 
+void UDRSnowSubsystem::QueueAbsorbRepaint(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& EditResult)
+{
+	if (!EditResult.EditedBounds.IsValid() || EditResult.ModifiedValues.IsEmpty())
+	{
+		return;
+	}
+
+	AVoxelWorld* const VoxelWorld = EditResult.VoxelWorld.Get();
+	FDRSnowPendingAbsorbRepaint* PendingRepaint = PendingAbsorbRepaints.FindByPredicate(
+		[VoxelWorld](const FDRSnowPendingAbsorbRepaint& Entry)
+		{
+			return Entry.EditResult.VoxelWorld == VoxelWorld;
+		});
+	if (!PendingRepaint)
+	{
+		PendingRepaint = &PendingAbsorbRepaints.AddDefaulted_GetRef();
+		PendingRepaint->Request = Request;
+		PendingRepaint->EditResult.VoxelWorld = EditResult.VoxelWorld;
+		PendingRepaint->EditResult.EditedBounds = EditResult.EditedBounds;
+	}
+	else
+	{
+		PendingRepaint->EditResult.EditedBounds =
+			PendingRepaint->EditResult.EditedBounds + EditResult.EditedBounds;
+	}
+
+	PendingRepaint->EditResult.ModifiedValues.Append(EditResult.ModifiedValues);
+
+	UWorld* const World = GetWorld();
+	if (IsValid(World) && !World->GetTimerManager().IsTimerActive(AbsorbRepaintTimerHandle))
+	{
+		World->GetTimerManager().SetTimer(
+			AbsorbRepaintTimerHandle,
+			this,
+			&ThisClass::FlushPendingAbsorbRepaints,
+			AbsorbRepaintIntervalSeconds,
+			false);
+	}
+}
+
+void UDRSnowSubsystem::FlushPendingAbsorbRepaints()
+{
+	for (const FDRSnowPendingAbsorbRepaint& PendingRepaint : PendingAbsorbRepaints)
+	{
+		RepaintSnowMaterialsAtArea(PendingRepaint.Request, PendingRepaint.EditResult);
+	}
+	PendingAbsorbRepaints.Reset();
+
+	if (UWorld* const World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AbsorbRepaintTimerHandle);
+	}
+}
+
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request)
 {
 	FDRSnowRemoveResult Result;
@@ -179,7 +240,7 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurf
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	RepaintSnowMaterialsAtArea(Request, EditResult);
+	QueueAbsorbRepaint(Request, EditResult);
 	return Result;
 }
 
@@ -221,7 +282,8 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 		return false;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
-	return RepaintSnowMaterialsAtArea(Request, EditResult);
+	QueueAbsorbRepaint(Request, EditResult);
+	return true;
 }
 
 bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(
@@ -278,10 +340,12 @@ void UDRSnowSubsystem::ResetSnowState()
 	VolumeStore.Reset();
 	OwnershipStore.Reset();
 	PendingRenderUpdates.Reset();
+	PendingAbsorbRepaints.Reset();
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(RenderUpdateTimerHandle);
+		World->GetTimerManager().ClearTimer(AbsorbRepaintTimerHandle);
 	}
 
 	FDRSnowSurfaceAddRequest PendingRequest;

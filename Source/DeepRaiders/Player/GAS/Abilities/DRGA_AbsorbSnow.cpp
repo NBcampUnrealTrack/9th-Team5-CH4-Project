@@ -4,6 +4,7 @@
 
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
@@ -70,6 +71,29 @@ void UDRGA_AbsorbSnow::InputReleased(
 	Super::InputReleased(Handle, ActorInfo, ActivationInfo);
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+void UDRGA_AbsorbSnow::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	const bool bReplicateEndAbility,
+	const bool bWasCancelled)
+{
+	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
+	{
+		if (UWorld* const World = ActorInfo->AvatarActor.IsValid()
+			? ActorInfo->AvatarActor->GetWorld()
+			: nullptr)
+		{
+			if (UDRSnowSubsystem* const SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
+			{
+				SnowSubsystem->FlushPendingAbsorbRepaints();
+			}
+		}
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 void UDRGA_AbsorbSnow::PerformAbsorbTick()
