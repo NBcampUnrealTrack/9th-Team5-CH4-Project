@@ -11,7 +11,7 @@ FVoxelDistanceFieldBaseCS::FVoxelDistanceFieldBaseCS(
 	const ShaderMetaType::CompiledShaderInitializerType& Initializer)
 	: FGlobalShader(Initializer)
 {
-	Src.Bind(Initializer.ParameterMap, TEXT("RWSrc"));
+	Src.Bind(Initializer.ParameterMap, TEXT("Src"));
 	Dst.Bind(Initializer.ParameterMap, TEXT("RWDst"));
 }
 
@@ -26,7 +26,10 @@ void FVoxelDistanceFieldBaseCS::SetBuffers(
 	const FRWBuffer& SrcBuffer,
 	const FRWBuffer& DstBuffer) const
 {
-	SetUAVParameter(BatchedParameters, Src, SrcBuffer.UAV);
+	// JumpFlood는 ping-pong 방식이다. Src는 이전 pass 결과를 읽기만 하므로
+	// UAV로 묶지 않는다. SRV/UAV를 구분해야 AMD/NVIDIA가 동일한 resource
+	// hazard 및 cache visibility 규칙으로 다음 pass를 실행한다.
+	SetSRVParameter(BatchedParameters, Src, SrcBuffer.SRV);
 	SetUAVParameter(BatchedParameters, Dst, DstBuffer.UAV);
 }
 
@@ -46,7 +49,7 @@ void FVoxelDistanceFieldBaseCS::SetUniformBuffers(
 }
 void FVoxelDistanceFieldBaseCS::UnsetBuffers(FRHIBatchedShaderUnbinds& BatchedUnbinds) const
 {
-	UnsetUAVParameter(BatchedUnbinds, Src);
+	UnsetSRVParameter(BatchedUnbinds, Src);
 	UnsetUAVParameter(BatchedUnbinds, Dst);
 }
 
@@ -175,11 +178,13 @@ void FVoxelDistanceFieldShaderHelper::ApplyComputeShader(
 
 	check(NumThreads.X > 0 && NumThreads.Y > 0 && NumThreads.Z > 0);
 
+	// SrcBuffer는 직전 pass에서 UAV로 기록되었을 수 있다. 다음 dispatch에서
+	// SRV로 읽기 전에 명시적으로 전환해 UAV write가 모든 GPU에서 보이도록 한다.
 	RHICmdList.Transition(
 		FRHITransitionInfo(
 			SrcBuffer.UAV,
 			ERHIAccess::UAVCompute,
-			ERHIAccess::UAVCompute));
+			ERHIAccess::SRVCompute));
 
 	RHICmdList.Transition(
 		FRHITransitionInfo(

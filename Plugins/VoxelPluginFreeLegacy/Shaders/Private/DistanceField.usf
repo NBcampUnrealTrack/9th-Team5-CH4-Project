@@ -14,16 +14,18 @@ struct FConstants
 FConstants VoxelDistanceFieldParameters;
 #endif
 
-RWBuffer<float> RWSrc;
+// Src is the previous JumpFlood pass and is read-only. Keeping it as an SRV
+// avoids relying on UAV read-after-write behavior that differs by driver.
+Buffer<float> Src;
 RWBuffer<float> RWDst;
 
 float3 GetCoord(uint3 Position)
 {
 	const int Index = Position.x + VoxelDistanceFieldParameters.SizeX * Position.y + VoxelDistanceFieldParameters.SizeX * VoxelDistanceFieldParameters.SizeY * Position.z;
 	return float3(
-		RWSrc[3 * Index + 0],
-		RWSrc[3 * Index + 1],
-		RWSrc[3 * Index + 2]);
+		Src[3 * Index + 0],
+		Src[3 * Index + 1],
+		Src[3 * Index + 2]);
 }
 void SetCoord(uint3 Position, float3 Coord)
 {
