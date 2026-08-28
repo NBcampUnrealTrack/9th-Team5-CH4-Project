@@ -328,8 +328,13 @@ void ADRPlayerCharacter::RefreshTeamSilhouette()
 		!IsLocallyControlled() &&
 		LocalPlayerState->GetTeamId() == TargetPlayerState->GetTeamId();
 
+	const bool IsLocalPlayer = IsLocallyControlled();
 	GetMesh()->SetCustomDepthStencilValue(IsTeammate ? 2 : 0);
 	GetMesh()->SetRenderCustomDepth(IsTeammate);
+
+	const int32 EquipmentStencilValue = IsLocalPlayer ? 3 : (IsTeammate ? 2 : 0);
+	WorldHandEquipmentMesh->SetCustomDepthStencilValue(EquipmentStencilValue);
+	WorldHandEquipmentMesh->SetRenderCustomDepth(IsLocalPlayer || IsTeammate);
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)
