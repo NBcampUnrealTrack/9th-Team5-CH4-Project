@@ -6,10 +6,9 @@
 
 class UEditableTextBox;
 class UOverlay;
-class USlider;
+class UDRTitleSettingRowWidget;
 class USoundClass;
 class USoundMix;
-class UTextBlock;
 class UWorld;
 
 UCLASS()
@@ -63,35 +62,20 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_Settings;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<USlider> Slider_MasterVolume;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleSettingRowWidget> Settings_MasterVolume;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<USlider> Slider_MusicVolume;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleSettingRowWidget> Settings_SFXVolume;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<USlider> Slider_SFXVolume;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleSettingRowWidget> Settings_MusicVolume;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<USlider> Slider_MouseSensitivityX;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleSettingRowWidget> Settings_MouseSensitivityX;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<USlider> Slider_MouseSensitivityY;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> MasterVolumn;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> MusicVolumn;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> SFXVolumn;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> MouseXAxis;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> MouseYAxis;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleSettingRowWidget> Settings_MouseSensitivityY;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
 	FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
@@ -109,13 +93,27 @@ protected:
 	TObjectPtr<USoundClass> SFXSoundClass;
 
 private:
-	UFUNCTION()
-	void HandleSettingSliderChanged(float Value);
-
+	void CacheSettingRows();
 	void LoadSettingsIntoSliders();
-	void RefreshSettingValueTexts();
 	void ApplyAudioSettings(float MasterVolume, float MusicVolume, float SFXVolume);
+	bool HasAllSettingRows() const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRTitleSettingRowWidget> MasterVolumeRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRTitleSettingRowWidget> MusicVolumeRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRTitleSettingRowWidget> SFXVolumeRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRTitleSettingRowWidget> MouseSensitivityXRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRTitleSettingRowWidget> MouseSensitivityYRow;
 
 	UPROPERTY(Transient)
 	TObjectPtr<USoundMix> RuntimeSoundMix;
+
 };
