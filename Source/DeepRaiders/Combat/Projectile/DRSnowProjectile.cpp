@@ -2,11 +2,6 @@
 
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 
-namespace
-{
-DEFINE_LOG_CATEGORY_STATIC(LogDRSnowProjectile, Log, All);
-}
-
 ADRSnowProjectile::ADRSnowProjectile(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
 {
@@ -24,15 +19,8 @@ void ADRSnowProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 	const FDRProjectileWorldImpactData& ImpactData = GetWorldImpactData();
 	if (!ImpactData.bAddSnow)
 	{
-		UE_LOG(LogDRSnowProjectile, Warning, TEXT("World impact ignored: bAddSnow=0 Actor=%s Component=%s Point=%s"),
-			*GetNameSafe(ImpactResult.GetActor()), *GetNameSafe(ImpactResult.GetComponent()),
-			*ImpactResult.ImpactPoint.ToString());
 		return;
 	}
-
-	UE_LOG(LogDRSnowProjectile, Log, TEXT("World impact: Actor=%s Component=%s Point=%s Normal=%s Blocking=%d"),
-		*GetNameSafe(ImpactResult.GetActor()), *GetNameSafe(ImpactResult.GetComponent()),
-		*ImpactResult.ImpactPoint.ToString(), *ImpactResult.ImpactNormal.ToString(), ImpactResult.bBlockingHit);
 
 	SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
 	SnowAddComponent->SetAddSettings(ImpactData.SnowRadius, ImpactData.SnowAmount);

@@ -7,11 +7,6 @@
 #include "EngineUtils.h"
 #include "VoxelWorld.h"
 
-namespace
-{
-DEFINE_LOG_CATEGORY_STATIC(LogDRSnowAdd, Log, All);
-}
-
 bool UDRSnowAddComponent::TryAddSnowFromHit(
 	const FHitResult& HitResult)
 {
@@ -24,24 +19,16 @@ bool UDRSnowAddComponent::TryAddSnowFromHit(
 
 	if (!HitResult.bBlockingHit)
 	{
-		UE_LOG(LogDRSnowAdd, Warning, TEXT("Rejected non-blocking hit: Owner=%s TraceStart=%s TraceEnd=%s"),
-			*GetNameSafe(Owner), *HitResult.TraceStart.ToString(), *HitResult.TraceEnd.ToString());
 		return false;
 	}
 
 	FDRSnowSurfaceAddRequest Request = MakeAddRequest(HitResult.ImpactPoint, HitResult.ImpactNormal);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
-	const bool bHitVoxelWorld = IsValid(Request.TargetVoxelWorld.Get());
 	if (!IsValid(Request.TargetVoxelWorld.Get()))
 	{
 		Request.TargetVoxelWorld = ResolveFallbackVoxelWorld();
 		Request.bUseVirtualSurface = Request.bAllowVirtualSurfaceFallback;
 	}
-	UE_LOG(LogDRSnowAdd, Log, TEXT("Hit: Actor=%s Component=%s Point=%s Normal=%s HitVoxel=%d TargetVoxel=%s Virtual=%d Fallback=%d Tool=%d Radius=%.1f Amount=%.3f"),
-		*GetNameSafe(HitResult.GetActor()), *GetNameSafe(HitResult.GetComponent()),
-		*HitResult.ImpactPoint.ToString(), *HitResult.ImpactNormal.ToString(), bHitVoxelWorld,
-		*GetNameSafe(Request.TargetVoxelWorld.Get()), Request.bUseVirtualSurface,
-		Request.bAllowVirtualSurfaceFallback, static_cast<int32>(Request.EditTool), Request.Radius, Request.Amount);
 
 	return ExecuteAddRequest(Request, GetInteractableActorFromHit(HitResult));
 }
@@ -89,8 +76,6 @@ bool UDRSnowAddComponent::ExecuteAddRequest(
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
 			bHandled = SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
-			UE_LOG(LogDRSnowAdd, Log, TEXT("Subsystem result: Handled=%d TargetVoxel=%s Location=%s"),
-				bHandled, *GetNameSafe(Request.TargetVoxelWorld.Get()), *Request.WorldLocation.ToString());
 		}
 
 		if (bHandled)
