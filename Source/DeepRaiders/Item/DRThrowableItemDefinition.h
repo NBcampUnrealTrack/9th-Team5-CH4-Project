@@ -5,6 +5,8 @@
 #include "DRThrowableItemTypes.h"
 #include "DRThrowableItemDefinition.generated.h"
 
+class ADRThrowableProjectile;
+
 /* 
  * 투척하여 충돌 지점 주변 대상에게 효과를 적용하는 소모성 아이템 Definition
  */
@@ -17,5 +19,8 @@ public:
 	UDRThrowableItemDefinition();
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable", meta = (ShowOnlyInnerProperties))
-	FDRThrowableItemSettings ThrowSettings;	
+	FDRThrowableItemSettings ThrowSettings;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable")
+	TSubclassOf<ADRThrowableProjectile> ProjectileClass;
 };
