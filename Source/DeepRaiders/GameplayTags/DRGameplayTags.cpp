@@ -41,11 +41,6 @@ namespace DRGameplayTags
 		Ability_Attack_Ranged,
 		"Ability.Attack.Ranged",
 		"Ranged attack ability.");
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Ability_Attack_Ranged_Sprayer,
-		"Ability.Attack.Ranged.Sprayer",
-		"Continuous snow sprayer attack ability.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Weapon_Projectile_Fire,

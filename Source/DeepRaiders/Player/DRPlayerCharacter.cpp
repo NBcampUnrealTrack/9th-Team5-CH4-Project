@@ -11,6 +11,7 @@
 #include "AbilitySystemComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/SceneComponent.h"
+#include "NiagaraFunctionLibrary.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRPlayerState.h"
@@ -26,6 +27,8 @@
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -443,6 +446,62 @@ bool ADRPlayerCharacter::CalculateGameplayFireOrigin(const FVector& AimDirection
 	OutFireOrigin = AnchorLocation + SafeAimDirection * GameplayFireForwardDistance;
 
 	return !OutFireOrigin.ContainsNaN();
+}
+
+void ADRPlayerCharacter::PlayProjectileFireVFXFromNotify()
+{
+	if (GetNetMode() == NM_DedicatedServer
+		|| !IsValid(HeldItemComponent)
+		|| !IsValid(WorldHandEquipmentMesh))
+	{
+		return;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
+		Cast<UDRProjectileWeaponItemDefinition>(
+			HeldItemComponent->GetHeldItemDefinition());
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
+
+	const FDRWeaponPresentationData& Presentation =
+		WeaponDefinition->FirePresentation;
+
+	if (!IsValid(Presentation.VFX))
+	{
+		return;
+	}
+
+	const FName SocketName =
+		Presentation.AttachSocketName.IsNone()
+			? TEXT("VFXPoint")
+			: Presentation.AttachSocketName;
+
+	if (!WorldHandEquipmentMesh->DoesSocketExist(SocketName))
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[WeaponFireVFX] Socket missing. Weapon=%s Socket=%s"),
+			*GetNameSafe(WeaponDefinition),
+			*SocketName.ToString());
+
+		return;
+	}
+
+	UNiagaraFunctionLibrary::SpawnSystemAttached(
+		Presentation.VFX,
+		WorldHandEquipmentMesh,
+		SocketName,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		EAttachLocation::SnapToTarget,
+		true,
+		true,
+		ENCPoolMethod::AutoRelease,
+		true);
 }
 
 void ADRPlayerCharacter::BeginPlay()

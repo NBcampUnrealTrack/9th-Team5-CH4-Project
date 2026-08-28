@@ -161,6 +161,8 @@ public:
 	
 	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
 	
+	void PlayProjectileFireVFXFromNotify();
+	
 protected:
 	virtual void BeginPlay() override;
 	
