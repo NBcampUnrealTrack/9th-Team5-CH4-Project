@@ -20,6 +20,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
 	
+	// Event
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
+	
 	// Cooldown
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_One);

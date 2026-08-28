@@ -10,6 +10,7 @@ class ADRThrowTargetActor;
 class UAbilityTask_WaitTargetData;
 class UDRInventoryComponent;
 class UDRThrowableItemDefinition;
+class UAbilityTask_WaitGameplayEvent;
 
 UCLASS()
 class DEEPRAIDERS_API UDRGA_ThrowItem : public UGameplayAbility
@@ -57,6 +58,17 @@ private:
 	UFUNCTION()
 	void HandleBlockingStateAdded();
 	
+	void StartThrowMontage();
+	
+	UFUNCTION()
+	void HandleThrowReleaseEvent(FGameplayEventData Payload);
+	
+	UFUNCTION()
+	void HandleMontageCompleted();
+	
+	UFUNCTION()
+	void HandleMontageInterrupted();
+	
 	UPROPERTY(EditDefaultsOnly, Category = "Throw")
 	TSubclassOf<ADRThrowTargetActor> TargetActorClass;
 	
@@ -68,6 +80,11 @@ private:
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UDRThrowableItemDefinition> ActiveDefinition;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ReleaseEventTask;
+	
+	bool bReleaseEventReceived = false;
 	
 	FGameplayAbilityTargetDataHandle ConfirmedTargetData;
 	FGuid ActiveInstanceId;	

@@ -18,6 +18,10 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
+
 UDRGA_ThrowItem::UDRGA_ThrowItem()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -84,6 +88,8 @@ void UDRGA_ThrowItem::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		CancelThrow();
 		return;
 	}
+	
+	bReleaseEventReceived = false;
 	
 	StartBlockingStateTasks();
 	StartTargeting(ResolveInputId(Handle, ActorInfo));	
@@ -167,7 +173,7 @@ void UDRGA_ThrowItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHand
 	}
 	
 	ConfirmedTargetData = TargetData;
-	ExecuteConfirmedThrow();
+	StartThrowMontage();
 }
 
 void UDRGA_ThrowItem::ExecuteConfirmedThrow()
@@ -468,6 +474,77 @@ void UDRGA_ThrowItem::HandleBlockingStateAdded()
 	CancelThrow();
 }
 
+void UDRGA_ThrowItem::StartThrowMontage()
+{
+	if (!IsValid(ActiveDefinition)
+	|| !IsValid(ActiveDefinition->ItemAnimationSet)
+	|| !IsValid(ActiveDefinition->ItemAnimationSet->PrimaryActionMontage))
+	{
+		CancelThrow();
+		return;
+	}
+
+	ReleaseEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, 
+		DRGameplayTags::Event_Ability_Throw_Release,nullptr,true,true);
+
+	if (!IsValid(ReleaseEventTask))
+	{
+		CancelThrow();
+		return;
+	}
+
+	ReleaseEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleThrowReleaseEvent);
+
+	ReleaseEventTask->ReadyForActivation();
+
+	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+				this,TEXT("ThrowMontage"),
+				ActiveDefinition->ItemAnimationSet->PrimaryActionMontage, 1.f,
+				NAME_None,false);
+
+	if (!IsValid(MontageTask))
+	{
+		CancelThrow();
+		return;
+	}
+
+	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleMontageCompleted);
+	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleMontageInterrupted);
+
+	MontageTask->ReadyForActivation();
+}
+
+void UDRGA_ThrowItem::HandleThrowReleaseEvent(FGameplayEventData Payload)
+{
+	if (!IsActive() || bReleaseEventReceived)
+	{
+		return;
+	}
+
+	bReleaseEventReceived = true;
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
+	{
+		ExecuteConfirmedThrow();
+	}	
+}
+
+void UDRGA_ThrowItem::HandleMontageCompleted()
+{
+	if (!bReleaseEventReceived)
+	{
+		CancelThrow();
+	}
+}
+
+void UDRGA_ThrowItem::HandleMontageInterrupted()
+{
+	CancelThrow();
+}
+
 void UDRGA_ThrowItem::HandleTargetDataCancelled(const FGameplayAbilityTargetDataHandle& TargetData)
 {
 	CancelThrow();
@@ -493,9 +570,16 @@ void UDRGA_ThrowItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const 
 		TargetDataTask = nullptr;
 	}
 
+	if (IsValid(ReleaseEventTask))
+	{
+		ReleaseEventTask->EndTask();
+		ReleaseEventTask = nullptr;
+	}
+	
 	ConfirmedTargetData.Clear();
 	ActiveDefinition = nullptr;
 	ActiveInstanceId.Invalidate();
+	bReleaseEventReceived = false;
 	
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

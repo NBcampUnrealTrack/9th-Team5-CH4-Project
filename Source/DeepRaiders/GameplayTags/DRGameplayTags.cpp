@@ -78,6 +78,11 @@ namespace DRGameplayTags
 		"Item-based throwable ability.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Event_Ability_Throw_Release,
+		"Event.Ability.Throw.Release",
+		"Throwable montage release point.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Weapon_Ranged,
 		"Cooldown.Weapon.Ranged",
 		"Shared fire interval cooldown for ranged weapons.");
