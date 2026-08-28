@@ -11,6 +11,7 @@ class UAbilityTask_WaitTargetData;
 class UDRInventoryComponent;
 class UDRThrowableItemDefinition;
 class UAbilityTask_WaitGameplayEvent;
+class UAbilityTask_WaitInputRelease;
 
 UCLASS()
 class DEEPRAIDERS_API UDRGA_ThrowItem : public UGameplayAbility
@@ -40,6 +41,8 @@ private:
 	
 	bool SpawnServerProjectile(const FVector& LaunchLocation, const FVector& LaunchDirection);
 	
+	void ExecuteThrowGameplayCue(const FVector& LaunchLocation, const FVector& LaunchDirection);
+	
 	void BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 	
 	int32 GetSourceTeamId() const;
@@ -47,13 +50,13 @@ private:
 	void CancelThrow();
 	
 	UFUNCTION()
-	void HandleAimReleased(float TimeHeld);
+	void HandleAimInputReleased(float TimeHeld);
 	
 	UFUNCTION()
 	void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
 	
 	UFUNCTION()
-	void HandleTargetDataCancelled(const FGameplayAbilityTargetDataHandle& TargetData);
+	void HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData);
 	
 	UFUNCTION()
 	void HandleBlockingStateAdded();
@@ -83,6 +86,9 @@ private:
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ReleaseEventTask;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitInputRelease> AimReleaseTask;
 	
 	bool bReleaseEventReceived = false;
 	

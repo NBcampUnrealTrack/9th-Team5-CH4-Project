@@ -31,9 +31,4 @@ struct DEEPRAIDERS_API FDRThrowableItemSettings
 	// 최대 거리
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable|Aim")
 	float MaxAimDistance = 3000.f;
-	
-	// 충돌 시 실행할 일회성 GameplayCue
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable|Presentation",
-		meta = (GameplayTagFilter = "GameplayCue"))
-	FGameplayTag ImpactGameplayCueTag;	
 };

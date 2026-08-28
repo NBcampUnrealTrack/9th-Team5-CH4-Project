@@ -99,7 +99,7 @@ void UDRGA_ThrowItem::StartTargeting(int32 InputId)
 {
 	const bool bQuickThrow = InputId == static_cast<int32>(EDRAbilityInputId::Primary);
 	const EGameplayTargetingConfirmation::Type ConfirmationType = bQuickThrow ?
-		EGameplayTargetingConfirmation::Instant : EGameplayTargetingConfirmation::Custom;
+		EGameplayTargetingConfirmation::Instant : EGameplayTargetingConfirmation::UserConfirmed;
 	
 	TargetDataTask = UAbilityTask_WaitTargetData::WaitTargetData(this, TEXT("ThrowTargetData"),
 	 	ConfirmationType, TargetActorClass);
@@ -111,7 +111,7 @@ void UDRGA_ThrowItem::StartTargeting(int32 InputId)
 	}
 	
 	TargetDataTask->ValidData.AddDynamic(this, &ThisClass::HandleTargetDataReady);
-	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCancelled);
+	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCanceled);
 	TargetDataTask->ReadyForActivation();
 	
 	AGameplayAbilityTargetActor* SpawnedTargetActor = nullptr;
@@ -134,33 +134,29 @@ void UDRGA_ThrowItem::StartTargeting(int32 InputId)
 	
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	
-	if (!bQuickThrow
-		&& ActorInfo != nullptr
-		&& ActorInfo->IsLocallyControlled())
+	if (bQuickThrow
+		|| ActorInfo == nullptr
+		|| !ActorInfo->IsLocallyControlled())
 	{
-		UAbilityTask_WaitInputRelease* ReleaseTask = 
-			UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
-		
-		if (!IsValid(ReleaseTask))
-		{
-			CancelThrow();
-			return;
-		}
-		
-		ReleaseTask->OnRelease.AddDynamic(this, &ThisClass::HandleAimReleased);
-		
-		ReleaseTask->ReadyForActivation();
+		return;
 	}
-	
+
+	AimReleaseTask = UAbilityTask_WaitInputRelease::WaitInputRelease(this, true);
+
+	if (!IsValid(AimReleaseTask))
+	{
+		CancelThrow();
+		return;
+	}
+
+	AimReleaseTask->OnRelease.AddDynamic(this, &ThisClass::HandleAimInputReleased);
+
+	AimReleaseTask->ReadyForActivation();
 }
 
-void UDRGA_ThrowItem::HandleAimReleased(float TimeHeld)
+void UDRGA_ThrowItem::HandleAimInputReleased(float TimeHeld)
 {
-	if (IsActive()
-		&& IsValid(TargetDataTask))
-	{
-		TargetDataTask->ExternalConfirm(true);
-	}
+	CancelThrow();
 }
 
 void UDRGA_ThrowItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
@@ -170,6 +166,16 @@ void UDRGA_ThrowItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHand
 	{
 		CancelThrow();
 		return;
+	}
+	
+	/*
+	 * Primary로 투척을 확정한 뒤 Secondary를 놓더라도
+	 * 진행 중인 Montage가 취소되지 않도록 조준 해제 대기를 종료한다.
+	 */
+	if (IsValid(AimReleaseTask))
+	{
+		AimReleaseTask->EndTask();
+		AimReleaseTask = nullptr;
 	}
 	
 	ConfirmedTargetData = TargetData;
@@ -339,7 +345,42 @@ bool UDRGA_ThrowItem::SpawnServerProjectile(const FVector& LaunchLocation, const
 
 	Projectile->FinishSpawning(SpawnTransform);
 	
+	ExecuteThrowGameplayCue(LaunchLocation, LaunchDirection);
+	
 	return true;
+}
+
+void UDRGA_ThrowItem::ExecuteThrowGameplayCue(const FVector& LaunchLocation, const FVector& LaunchDirection)
+{
+	if (!IsValid(ActiveDefinition)
+		|| !ActiveDefinition->ThrowGameplayCueTag.IsValid())
+	{
+		return;
+	}
+	
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+	
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	
+	if (!IsValid(ASC)
+		|| !IsValid(AvatarActor))
+	{
+		return;
+	}
+	
+	FGameplayCueParameters Parameters;
+	Parameters.Location = LaunchLocation;
+	Parameters.Normal = LaunchDirection;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = ActiveDefinition;
+	
+	ASC->ExecuteGameplayCue(ActiveDefinition->ThrowGameplayCueTag, Parameters);	
 }
 
 void UDRGA_ThrowItem::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
@@ -545,7 +586,7 @@ void UDRGA_ThrowItem::HandleMontageInterrupted()
 	CancelThrow();
 }
 
-void UDRGA_ThrowItem::HandleTargetDataCancelled(const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_ThrowItem::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
 {
 	CancelThrow();
 }
@@ -568,6 +609,12 @@ void UDRGA_ThrowItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const 
 	{
 		TargetDataTask->EndTask();
 		TargetDataTask = nullptr;
+	}
+	
+	if (IsValid(AimReleaseTask))
+	{
+		AimReleaseTask->EndTask();
+		AimReleaseTask = nullptr;
 	}
 
 	if (IsValid(ReleaseEventTask))

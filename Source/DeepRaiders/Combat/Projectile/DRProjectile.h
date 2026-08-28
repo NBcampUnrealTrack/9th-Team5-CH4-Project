@@ -68,6 +68,11 @@ protected:
 		return SourceAbilitySystem.Get();
 	}
 	
+	UObject* GetPresentationSourceObject() const
+	{
+		return PresentationSourceObject.Get();
+	}
+	
 	void ConfigureProjectileMovement(float InitialSpeed, float GravityScale);
 	
 	virtual bool ShouldIgnoreFriendlyBlockingHit() const
