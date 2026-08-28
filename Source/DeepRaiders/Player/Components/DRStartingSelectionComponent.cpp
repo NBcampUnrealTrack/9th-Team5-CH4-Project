@@ -29,8 +29,24 @@ void UDRStartingSelectionComponent::GetLifetimeReplicatedProps(
 		COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(
 		UDRStartingSelectionComponent,
-		IsSkillSelected,
+		IsSkillOneSelected,
 		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(
+		UDRStartingSelectionComponent,
+		IsSkillTwoSelected,
+		COND_OwnerOnly);
+}
+
+EDRSkillSlot UDRStartingSelectionComponent::GetPendingSkillSlot() const
+{
+	if (!IsSkillOneSelected)
+	{
+		return EDRSkillSlot::One;
+	}
+
+	return !IsSkillTwoSelected
+		? EDRSkillSlot::Two
+		: EDRSkillSlot::Count;
 }
 
 void UDRStartingSelectionComponent::Initialize(
@@ -117,15 +133,25 @@ void UDRStartingSelectionComponent::ServerSelectSkill_Implementation(FName RowNa
 
 	if (!IsSkillSelectionAvailable()
 		|| !IsValid(SkillDefinition)
-		|| !IsValid(SkillComponent))
+		|| !IsValid(SkillComponent)
+		|| SkillDefinition->SkillSlot != GetPendingSkillSlot())
 	{
 		return;
 	}
 
-	IsSkillSelected = SkillComponent->EquipSkill(SkillDefinition);
+	const bool IsSkillEquipped = SkillComponent->EquipSkill(SkillDefinition);
 
-	if (IsSkillSelected)
+	if (IsSkillEquipped)
 	{
+		if (SkillDefinition->SkillSlot == EDRSkillSlot::One)
+		{
+			IsSkillOneSelected = true;
+		}
+		else
+		{
+			IsSkillTwoSelected = true;
+		}
+
 		NotifySelectionStateChanged();
 	}
 }

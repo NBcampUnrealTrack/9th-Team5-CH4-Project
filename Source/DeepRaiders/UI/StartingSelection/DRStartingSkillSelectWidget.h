@@ -7,6 +7,7 @@
 
 class UButton;
 class UListView;
+class UTextBlock;
 class UDRStartingSkillViewModel;
 class UDRStartingSelectionComponent;
 
@@ -38,7 +39,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Starting Skill|Widget", meta = (BindWidget))
 	TObjectPtr<UButton> ConfirmButton;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Starting Skill|Widget", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> SelectionText;
+
 private:
+	void HandleSelectionGuideTextChanged(const FText& SelectionGuideText);
 	void HandleSkillClicked(UObject* Item);
 
 	UFUNCTION()

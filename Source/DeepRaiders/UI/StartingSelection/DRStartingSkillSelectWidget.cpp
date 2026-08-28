@@ -2,6 +2,7 @@
 
 #include "Components/Button.h"
 #include "Components/ListView.h"
+#include "Components/TextBlock.h"
 #include "DeepRaiders/UI/ViewModel/DRStartingSkillViewModel.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
@@ -18,6 +19,9 @@ void UDRStartingSkillSelectWidget::InitializeSelection(
 {
 	DeinitializeSelection();
 	ViewModel = NewObject<UDRStartingSkillViewModel>(this);
+	ViewModel->OnSelectionGuideTextChanged.AddUObject(
+		this,
+		&ThisClass::HandleSelectionGuideTextChanged);
 
 	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(this);
 	if (!IsValid(View))
@@ -44,6 +48,7 @@ void UDRStartingSkillSelectWidget::DeinitializeSelection()
 {
 	if (IsValid(ViewModel))
 	{
+		ViewModel->OnSelectionGuideTextChanged.RemoveAll(this);
 		ViewModel->Deinitialize();
 	}
 
@@ -82,6 +87,15 @@ void UDRStartingSkillSelectWidget::NativeDestruct()
 
 	DeinitializeSelection();
 	Super::NativeDestruct();
+}
+
+void UDRStartingSkillSelectWidget::HandleSelectionGuideTextChanged(
+	const FText& SelectionGuideText)
+{
+	if (IsValid(SelectionText))
+	{
+		SelectionText->SetText(SelectionGuideText);
+	}
 }
 
 void UDRStartingSkillSelectWidget::HandleSkillClicked(UObject* Item)

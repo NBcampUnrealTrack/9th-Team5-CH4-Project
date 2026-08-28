@@ -9,6 +9,10 @@ class UDRStartingSkillViewModel;
 class UDRStartingSelectionComponent;
 class UTexture2D;
 
+DECLARE_MULTICAST_DELEGATE_OneParam(
+	FDRStartingSkillGuideTextChanged,
+	const FText&);
+
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRStartingSkillEntryViewModel : public UMVVMViewModelBase
 {
@@ -55,11 +59,13 @@ class DEEPRAIDERS_API UDRStartingSkillViewModel : public UMVVMViewModelBase
 public:
 	void Initialize(UDRStartingSelectionComponent* InSelectionComponent);
 	TArray<UDRStartingSkillEntryViewModel*> GetSkillEntries() const;
+	const FText& GetSelectionGuideText() const { return SelectionGuideText; }
 
 	UFUNCTION(BlueprintCallable, Category = "Starting Skill")
 	void ConfirmSelection();
 
 	void Deinitialize();
+	FDRStartingSkillGuideTextChanged OnSelectionGuideTextChanged;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Skill")
@@ -68,9 +74,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Skill")
 	bool IsConfirmEnabled = false;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Starting Skill")
+	FText SelectionGuideText;
+
 private:
 	friend class UDRStartingSkillEntryViewModel;
 
+	void RefreshSelection();
+	void HandleSelectionStateChanged(bool IsSelectionAvailable);
 	void SelectSkill(UDRStartingSkillEntryViewModel* SkillEntry);
 
 	UPROPERTY(Transient)

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "DRStartingSelectionComponent.generated.h"
 
 class UDataTable;
@@ -41,12 +42,14 @@ public:
 
 	bool IsSkillSelectionAvailable() const
 	{
-		return !IsSkillSelected;
+		return !IsSkillOneSelected || !IsSkillTwoSelected;
 	}
+
+	EDRSkillSlot GetPendingSkillSlot() const;
 
 	bool IsSelectionComplete() const
 	{
-		return IsWeaponSelected && IsSkillSelected;
+		return IsWeaponSelected && !IsSkillSelectionAvailable();
 	}
 
 	bool IsSelectionAvailable() const
@@ -97,5 +100,8 @@ private:
 	bool IsWeaponSelected = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_SelectionState)
-	bool IsSkillSelected = false;
+	bool IsSkillOneSelected = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_SelectionState)
+	bool IsSkillTwoSelected = false;
 };

@@ -41,9 +41,28 @@ void UDRStartingSkillViewModel::Initialize(
 {
 	Deinitialize();
 	SelectionComponent = InSelectionComponent;
-	UDataTable* SkillTable = IsValid(InSelectionComponent)
-		? InSelectionComponent->GetSkillTable()
+
+	if (SelectionComponent.IsValid())
+	{
+		SelectionComponent->OnSelectionAvailabilityChanged.AddUObject(
+			this,
+			&ThisClass::HandleSelectionStateChanged);
+	}
+
+	RefreshSelection();
+}
+
+void UDRStartingSkillViewModel::RefreshSelection()
+{
+	SelectedSkill = nullptr;
+	UE_MVVM_SET_PROPERTY_VALUE(IsConfirmEnabled, false);
+
+	UDataTable* SkillTable = SelectionComponent.IsValid()
+		? SelectionComponent->GetSkillTable()
 		: nullptr;
+	const EDRSkillSlot PendingSkillSlot = SelectionComponent.IsValid()
+		? SelectionComponent->GetPendingSkillSlot()
+		: EDRSkillSlot::Count;
 	TArray<TObjectPtr<UDRStartingSkillEntryViewModel>> NewEntries;
 
 	if (IsValid(SkillTable))
@@ -56,7 +75,8 @@ void UDRStartingSkillViewModel::Initialize(
 				? Row->SkillDefinition.LoadSynchronous()
 				: nullptr;
 
-			if (!IsValid(SkillDefinition))
+			if (!IsValid(SkillDefinition)
+				|| SkillDefinition->SkillSlot != PendingSkillSlot)
 			{
 				continue;
 			}
@@ -69,6 +89,17 @@ void UDRStartingSkillViewModel::Initialize(
 	}
 
 	UE_MVVM_SET_PROPERTY_VALUE(SkillEntries, MoveTemp(NewEntries));
+
+	const FText NewSelectionGuideText = PendingSkillSlot == EDRSkillSlot::One
+		? NSLOCTEXT("StartingSkill", "SelectSkillOne", "스킬 1 선택 (Shift)")
+		: NSLOCTEXT("StartingSkill", "SelectSkillTwo", "스킬 2 선택 (C)");
+	UE_MVVM_SET_PROPERTY_VALUE(SelectionGuideText, NewSelectionGuideText);
+	OnSelectionGuideTextChanged.Broadcast(SelectionGuideText);
+}
+
+void UDRStartingSkillViewModel::HandleSelectionStateChanged(bool)
+{
+	RefreshSelection();
 }
 
 TArray<UDRStartingSkillEntryViewModel*> UDRStartingSkillViewModel::GetSkillEntries() const
@@ -94,6 +125,11 @@ void UDRStartingSkillViewModel::ConfirmSelection()
 
 void UDRStartingSkillViewModel::Deinitialize()
 {
+	if (SelectionComponent.IsValid())
+	{
+		SelectionComponent->OnSelectionAvailabilityChanged.RemoveAll(this);
+	}
+
 	SelectionComponent.Reset();
 	SelectedSkill = nullptr;
 	UE_MVVM_SET_PROPERTY_VALUE(IsConfirmEnabled, false);
