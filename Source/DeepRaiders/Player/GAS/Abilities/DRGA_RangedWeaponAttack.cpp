@@ -17,11 +17,11 @@
 #include "Kismet/GameplayStatics.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "AbilitySystemComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameplayPrediction.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
@@ -423,42 +423,25 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 	return true;
 }
 
-bool UDRGA_RangedWeaponAttack::ResolveMuzzleLocation(const FVector& ViewDirection, FVector& OutMuzzleLocation) const
+bool UDRGA_RangedWeaponAttack::ResolveGameplayFireOrigin(
+	const FVector& AimDirection,
+	FVector& OutFireOrigin) const
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
 	if (ActorInfo == nullptr)
 	{
 		return false;
 	}
-	
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	if (!IsValid(AvatarActor))
+
+	const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+
+	if (!IsValid(Character))
 	{
 		return false;
 	}
-	
-	const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(AvatarActor);
-	if (IsValid(Character))
-	{
-		const UStaticMeshComponent* EquipmentMesh = Character->GetWorldHandEquipmentMesh();
-		
-		if (IsValid(EquipmentMesh)
-			&& EquipmentMesh->DoesSocketExist(MuzzleSocketName))
-		{
-			OutMuzzleLocation = EquipmentMesh->GetSocketLocation(MuzzleSocketName);
-			
-			return true;
-		}
-	}
-	
-	// MuzzlePoint 소켓이 없는 경우
-	//
-	FVector SafeDirection = AvatarActor->GetActorForwardVector();
-	
-	OutMuzzleLocation = AvatarActor->GetActorLocation() + FVector::UpVector * MuzzleHeightOffset + 
-		SafeDirection * MuzzleForwardOffset;
-	
-	return true;	
+
+	return Character->CalculateGameplayFireOrigin(AimDirection, OutFireOrigin);
 }
 
 void UDRGA_RangedWeaponAttack::BuildWeaponTraceQueryParams(FCollisionQueryParams& OutQueryParams) const
@@ -660,7 +643,7 @@ void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* T
 }
 
 void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
-	const FVector& MuzzleLocation,
+	const FVector& FireOrigin,
 	const FVector& TargetLocation)
 {
 	const FGameplayAbilityActorInfo* ActorInfo =
@@ -674,11 +657,11 @@ void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
 	}
 
 	PlayFireMontage();
-	ExecuteFireGameplayCue(MuzzleLocation);
+	ExecuteFireGameplayCue(FireOrigin);
 }
 
 void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
-	const FVector& MuzzleLocation,
+	const FVector& FireOrigin,
 	const FVector& TargetLocation)
 {
 	const FGameplayAbilityActorInfo* ActorInfo =
@@ -691,7 +674,7 @@ void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
 	}
 
 	PlayFireMontage();
-	ExecuteFireGameplayCue(MuzzleLocation);
+	ExecuteFireGameplayCue(FireOrigin);
 }
 
 bool UDRGA_RangedWeaponAttack::ResolveSelectedWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo,
@@ -752,7 +735,7 @@ void UDRGA_RangedWeaponAttack::HandleInputReleased(float TimeHeld)
 		true, false);
 }
 
-void UDRGA_RangedWeaponAttack::ExecuteFireGameplayCue(const FVector& MuzzleLocation) const
+void UDRGA_RangedWeaponAttack::ExecuteFireGameplayCue(const FVector& FireOrigin) const
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 
@@ -771,7 +754,7 @@ void UDRGA_RangedWeaponAttack::ExecuteFireGameplayCue(const FVector& MuzzleLocat
 
 	FGameplayCueParameters Parameters;
 
-	Parameters.Location = MuzzleLocation;
+	Parameters.Location = FireOrigin;
 	Parameters.Instigator = AvatarActor;
 	Parameters.EffectCauser = AvatarActor;
 

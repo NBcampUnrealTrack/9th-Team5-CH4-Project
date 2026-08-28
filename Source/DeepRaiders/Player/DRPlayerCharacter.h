@@ -161,6 +161,8 @@ public:
 		return AimPitchMaxDegrees;
 	}
 	
+	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -197,9 +199,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat")
+	TObjectPtr<USceneComponent> GameplayFireAnchor;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float GameplayFireForwardDistance = 50.f;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
-
 	
 private:
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;

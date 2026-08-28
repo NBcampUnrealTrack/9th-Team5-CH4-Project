@@ -57,27 +57,24 @@ bool UDRGA_FireHitScan::SendLocalShotRequest()
 
 	const FVector CameraAimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 
-	FVector MuzzleLocation;
-
-	if (!ResolveMuzzleLocation(ViewRotation.Vector(),MuzzleLocation))
+	FVector GameplayFireOrigin;
+	if (!ResolveGameplayFireOrigin(ViewRotation.Vector(),GameplayFireOrigin))
 	{
 		return false;
 	}
-	
-	FVector TraceDirection = CameraAimPoint - MuzzleLocation;
+
+	FVector TraceDirection = CameraAimPoint - GameplayFireOrigin;
 	if (!TraceDirection.Normalize())
 	{
 		TraceDirection = ViewRotation.Vector();
 	}
-	
-	const FVector TraceEnd = MuzzleLocation + TraceDirection * GetMaxAttackDistance();
+
+	const FVector TraceEnd = GameplayFireOrigin + TraceDirection * GetMaxAttackDistance();
 	const TArray<FGameplayEffectSpecHandle> EmptyEffectSpecs;
-	
-	const FVector PresentationTarget = TraceHitScan(MuzzleLocation, TraceEnd, false, EmptyEffectSpecs);
-	
+	const FVector PresentationTarget = TraceHitScan(GameplayFireOrigin, TraceEnd, false, EmptyEffectSpecs);
 	if (!ActorInfo->IsNetAuthority())
 	{
-		PlayLocalFirePresentation(MuzzleLocation, PresentationTarget);
+		PlayLocalFirePresentation(GameplayFireOrigin, PresentationTarget);
 	}
 	
 	FGameplayAbilityTargetDataHandle TargetData(new FGameplayAbilityTargetData_SingleTargetHit(CameraHit));
@@ -186,29 +183,29 @@ void UDRGA_FireHitScan::HandleServerTargetData(const FGameplayAbilityTargetDataH
 	}
 	
 	const FVector CameraAimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
+	FVector GameplayFireOrigin;
 
-	FVector MuzzleLocation;
-
-	if (!ResolveMuzzleLocation(ValidatedAimDirection,MuzzleLocation))
+	if (!ResolveGameplayFireOrigin(ValidatedAimDirection,GameplayFireOrigin))
 	{
 		return;
 	}
 
-	FVector TraceDirection = CameraAimPoint - MuzzleLocation;
+	FVector TraceDirection = CameraAimPoint - GameplayFireOrigin;
 
 	if (!TraceDirection.Normalize())
 	{
 		TraceDirection = ValidatedAimDirection;
 	}
 
-	const FVector TraceEnd = MuzzleLocation + TraceDirection * GetMaxAttackDistance();
-	
+	const FVector TraceEnd = GameplayFireOrigin + TraceDirection * GetMaxAttackDistance();
+
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
+
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 
-	const FVector PresentationTarget = TraceHitScan(MuzzleLocation, TraceEnd, true, ImpactEffectSpecs);
-	
-	PlayServerFirePresentation(MuzzleLocation, PresentationTarget);
+	const FVector PresentationTarget = TraceHitScan(GameplayFireOrigin, TraceEnd, true, ImpactEffectSpecs);
+
+	PlayServerFirePresentation(GameplayFireOrigin, PresentationTarget);
 }
 
 bool UDRGA_FireHitScan::ValidateTargetData(const FGameplayAbilityTargetDataHandle& TargetData,

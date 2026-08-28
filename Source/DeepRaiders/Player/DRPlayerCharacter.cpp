@@ -10,6 +10,7 @@
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/SceneComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRPlayerState.h"
@@ -85,11 +86,10 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldHandEquipmentMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WorldHandEquipmentMesh->SetGenerateOverlapEvents(false);
 
-	// 자기 화면에서는 1인칭 장비를 별도로 사용하므로 숨김
-	WorldHandEquipmentMesh->SetOwnerNoSee(false);
-	WorldHandEquipmentMesh->SetCastHiddenShadow(true);
-	WorldHandEquipmentMesh->SetIsReplicated(false);
-
+	GameplayFireAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("GameplayFireAnchor"));
+	GameplayFireAnchor->SetupAttachment(GetCapsuleComponent());
+	GameplayFireAnchor->SetRelativeLocation(FVector(0.f, 10.f, 55.f));
+	
 	// 등 뒤에 달릴 장비 - 제트팩
 	WorldBackEquipmentMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WorldBackEquipmentMesh"));
 	WorldBackEquipmentMesh->SetupAttachment(GetMesh(), TEXT("S_Back"));
@@ -413,6 +413,26 @@ float ADRPlayerCharacter::GetAimPitchDegrees() const
 		(BaseAimRotation - ActorRotation).GetNormalized();
 
 	return DeltaRotation.Pitch;
+}
+
+bool ADRPlayerCharacter::CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const
+{
+	if (!IsValid(GameplayFireAnchor))
+	{
+		return false;
+	}
+
+	const FVector SafeAimDirection = AimDirection.GetSafeNormal();
+
+	if (SafeAimDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const FVector AnchorLocation = GameplayFireAnchor->GetComponentLocation();
+	OutFireOrigin = AnchorLocation + SafeAimDirection * GameplayFireForwardDistance;
+
+	return !OutFireOrigin.ContainsNaN();
 }
 
 void ADRPlayerCharacter::BeginPlay()
