@@ -48,9 +48,19 @@ namespace DRGameplayTags
 		"Continuous snow sprayer attack ability.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Weapon_Cannon_Explosion,
-		"GameplayCue.Weapon.Cannon.Explosion",
-		"Cannon explosion presentation.");
+		GameplayCue_Weapon_Projectile_Fire,
+		"GameplayCue.Weapon.Projectile.Fire",
+		"Data-driven projectile weapon fire presentation.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Projectile_Impact,
+		"GameplayCue.Weapon.Projectile.Impact",
+		"Data-driven projectile weapon impact presentation.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Sprayer_Active,
+		"GameplayCue.Weapon.Sprayer.Active",
+		"Data-driven active sprayer presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
@@ -96,11 +106,6 @@ namespace DRGameplayTags
 		GameplayCue_VFX_Effect_MoveSpeed,
 		"GameplayCue.VFX.Effect.MoveSpeed",
 		"MoveSpeed effect visual effects");
-	
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Weapon_Sprayer_Active,
-		"GameplayCue.Weapon.Sprayer.Active",
-		"Active snow sprayer presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
@@ -227,23 +232,41 @@ namespace DRGameplayTags
 		"GameplayCue.Sound.Player.FallDeath",
 		"Player died from fall damage.");
 	
+	// =====================================================
+	// Gameplay Cue - Sound - Weapon
+	// =====================================================
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Weapon_Rifle_Fire,
 		"GameplayCue.Sound.Weapon.Rifle.Fire",
-		"Rifle fired.");
-	
+		"Rifle fire sound.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Weapon_Sprayer_Active,
-		"GameplayCue.Sound.Weapon.Sprayer.Active",
-		"Active snow sprayer loop sound.");
-	
+		GameplayCue_Sound_Weapon_Rifle_Impact,
+		"GameplayCue.Sound.Weapon.Rifle.Impact",
+		"Rifle impact sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Shotgun_Fire,
+		"GameplayCue.Sound.Weapon.Shotgun.Fire",
+		"Shotgun fire sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Shotgun_Impact,
+		"GameplayCue.Sound.Weapon.Shotgun.Impact",
+		"Shotgun impact sound.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Weapon_Cannon_Fire,
 		"GameplayCue.Sound.Weapon.Cannon.Fire",
 		"Cannon fire sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Cannon_Impact,
+		"GameplayCue.Sound.Weapon.Cannon.Impact",
+		"Cannon impact sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Weapon_Cannon_Explosion,
-		"GameplayCue.Sound.Weapon.Cannon.Explosion",
-		"Cannon explosion sound.");
+		GameplayCue_Sound_Weapon_Sprayer_Active,
+		"GameplayCue.Sound.Weapon.Sprayer.Active",
+		"Active sprayer loop sound.");
 }
