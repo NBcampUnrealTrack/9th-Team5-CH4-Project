@@ -1,6 +1,6 @@
 #include "DRStartingWeaponViewModel.h"
 
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRStartingWeaponTable.h"
 #include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
 #include "Engine/DataTable.h"
@@ -16,7 +16,7 @@ void UDRStartingWeaponEntryViewModel::Select()
 void UDRStartingWeaponEntryViewModel::Initialize(
 	UDRStartingWeaponViewModel* InOwnerViewModel,
 	FName InRowName,
-	UDRProjectileWeaponItemDefinition* InWeaponDefinition,
+	UDRItemDefinition* InWeaponDefinition,
 	const FText& InDescription)
 {
 	OwnerViewModel = InOwnerViewModel;
@@ -54,7 +54,7 @@ void UDRStartingWeaponViewModel::Initialize(
 		{
 			const FDRStartingWeaponTableRow* Row =
 				WeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponViewModel"));
-			UDRProjectileWeaponItemDefinition* WeaponDefinition = Row
+			UDRItemDefinition* WeaponDefinition = Row
 				? Row->WeaponDefinition.LoadSynchronous()
 				: nullptr;
 

@@ -100,7 +100,7 @@ void UDRStartingSelectionComponent::ServerSelectWeapon_Implementation(FName RowN
 
 	const FDRStartingWeaponTableRow* Row =
 		WeaponTable->FindRow<FDRStartingWeaponTableRow>(RowName, TEXT("StartingWeaponSelection"));
-	UDRProjectileWeaponItemDefinition* SelectedWeapon = Row
+	UDRItemDefinition* SelectedWeapon = Row
 		? Row->WeaponDefinition.LoadSynchronous()
 		: nullptr;
 

@@ -5,7 +5,7 @@
 #include "DRStartingWeaponViewModel.generated.h"
 
 class UTexture2D;
-class UDRProjectileWeaponItemDefinition;
+class UDRItemDefinition;
 class UDRStartingSelectionComponent;
 class UDRStartingWeaponViewModel;
 
@@ -39,7 +39,7 @@ private:
 	void Initialize(
 		UDRStartingWeaponViewModel* InOwnerViewModel,
 		FName InRowName,
-		UDRProjectileWeaponItemDefinition* InWeaponDefinition,
+		UDRItemDefinition* InWeaponDefinition,
 		const FText& InDescription);
 	void SetSelected(bool IsNewSelected);
 
