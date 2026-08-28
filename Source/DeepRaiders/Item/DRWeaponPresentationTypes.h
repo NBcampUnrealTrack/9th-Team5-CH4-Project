@@ -18,5 +18,5 @@ struct DEEPRAIDERS_API FDRWeaponPresentationData
 	FGameplayTag SoundCueTag;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
-	FName AttachSocketName = TEXT("MuzzlePoint");
+	FName AttachSocketName = TEXT("VFXPoint");
 };
