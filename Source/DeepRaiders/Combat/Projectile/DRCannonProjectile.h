@@ -4,6 +4,8 @@
 #include "DRProjectile.h"
 #include "DRCannonProjectile.generated.h"
 
+class UDRSnowAddComponent;
+
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRCannonProjectile : public ADRProjectile
 {
@@ -19,5 +21,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cannon|Explosion", meta = ( AllowPrivateAccess, ClampMin = "1.0", Units = "cm"))
 	float ExplosionRadius = 350.f;
 	
-	void ExecuteExplosionSoundCue(const FHitResult& ImpactResult);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Snow", meta = (AllowPrivateAccess = true))
+	TObjectPtr<UDRSnowAddComponent> SnowAddComponent;
 };

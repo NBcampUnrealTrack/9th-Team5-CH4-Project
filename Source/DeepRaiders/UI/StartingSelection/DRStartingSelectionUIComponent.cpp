@@ -1,6 +1,7 @@
 #include "DRStartingSelectionUIComponent.h"
 
 #include "DRStartingSelectionWidget.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
@@ -13,15 +14,39 @@ UDRStartingSelectionUIComponent::UDRStartingSelectionUIComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UDRStartingSelectionUIComponent::ShowStartingSelection(
+void UDRStartingSelectionUIComponent::InitializeStartingSelection(
 	UDRStartingSelectionComponent* InSelectionComponent)
 {
 	PlayerController = Cast<ADRPlayerController>(GetOwner());
 
 	if (!IsValid(PlayerController)
 		|| !PlayerController->IsLocalController()
-		|| !IsValid(InSelectionComponent)
-		|| InSelectionComponent->IsSelectionComplete()
+		|| !IsValid(InSelectionComponent))
+	{
+		return;
+	}
+
+	SelectionComponent = InSelectionComponent;
+	MiningGameState = PlayerController->GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	if (!IsValid(MiningGameState))
+	{
+		return;
+	}
+
+	MiningGameState->OnGameTimerChanged.AddDynamic(
+		this,
+		&ThisClass::HandleGameTimerChanged);
+
+	if (MiningGameState->IsGameStarted())
+	{
+		ShowStartingSelection();
+	}
+}
+
+void UDRStartingSelectionUIComponent::ShowStartingSelection()
+{
+	if (!IsValid(SelectionComponent)
+		|| SelectionComponent->IsSelectionComplete()
 		|| IsValid(StartingSelectionWidget))
 	{
 		return;
@@ -51,14 +76,34 @@ void UDRStartingSelectionUIComponent::ShowStartingSelection(
 	PlayerController->FlushPressedKeys();
 	PlayerController->SetIgnoreMoveInput(true);
 	IsMoveInputBlocked = true;
-	StartingSelectionWidget->InitializeSelection(InSelectionComponent);
+	StartingSelectionWidget->InitializeSelection(SelectionComponent);
+}
+
+void UDRStartingSelectionUIComponent::HandleGameTimerChanged(
+	int32,
+	bool IsGameStarted,
+	bool)
+{
+	if (IsGameStarted)
+	{
+		ShowStartingSelection();
+	}
 }
 
 void UDRStartingSelectionUIComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsValid(MiningGameState))
+	{
+		MiningGameState->OnGameTimerChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameTimerChanged);
+	}
+
 	HideStartingSelection();
 	PlayerController = nullptr;
+	SelectionComponent = nullptr;
+	MiningGameState = nullptr;
 	UIManager = nullptr;
 	Super::EndPlay(EndPlayReason);
 }

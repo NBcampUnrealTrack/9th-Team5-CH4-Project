@@ -305,8 +305,6 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 			if (bApplyServerEffects)
 			{
 				ApplyImpactEffectSpecs(TargetAbilitySystem,	HitResult, ImpactEffectSpecs);
-
-				ExecuteImpactGameplayCue(HitResult);
 			}
 
 			// 관통에 대한 처리
@@ -322,7 +320,6 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 		if (bApplyServerEffects)
 		{
 			TryApplyBreakableDamage(HitResult);
-			ExecuteImpactGameplayCue(HitResult);
 		}
 
 		return PresentationTarget;

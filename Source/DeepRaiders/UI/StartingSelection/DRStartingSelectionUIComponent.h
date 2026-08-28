@@ -5,6 +5,7 @@
 #include "DRStartingSelectionUIComponent.generated.h"
 
 class ADRPlayerController;
+class ADRMiningGameStateBase;
 class UDRStartingSelectionWidget;
 class UDRStartingSelectionComponent;
 class UDRUIManagerSubsystem;
@@ -17,13 +18,21 @@ class DEEPRAIDERS_API UDRStartingSelectionUIComponent : public UActorComponent
 public:
 	UDRStartingSelectionUIComponent();
 
-	void ShowStartingSelection(
+	void InitializeStartingSelection(
 		UDRStartingSelectionComponent* InSelectionComponent);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void ShowStartingSelection();
+
+	UFUNCTION()
+	void HandleGameTimerChanged(
+		int32 RemainingSeconds,
+		bool IsGameStarted,
+		bool IsGameEnded);
+
 	UFUNCTION()
 	void HideStartingSelection();
 
@@ -32,6 +41,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRStartingSelectionWidget> StartingSelectionWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDRStartingSelectionComponent> SelectionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADRMiningGameStateBase> MiningGameState;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;

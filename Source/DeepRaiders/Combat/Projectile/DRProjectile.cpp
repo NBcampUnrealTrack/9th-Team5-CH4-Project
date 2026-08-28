@@ -13,6 +13,7 @@
 
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "Kismet/GameplayStatics.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 const FName ADRProjectile::CollisionComponentName(TEXT("CollisionComponent"));
 
@@ -85,23 +86,28 @@ void ADRProjectile::BeginPlay()
 	ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
 }
 
-void ADRProjectile::InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem,
+void ADRProjectile::InitializeProjectile(
+	UAbilitySystemComponent* InSourceAbilitySystem,
 	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
 	float InBreakableDamageAmount,
 	const FDRProjectileWorldImpactData& InWorldImpactData,
-	FGameplayTag InImpactGameplayCueTag, int32 InSourceTeamId)
+	int32 InSourceTeamId,
+	const UObject* InPresentationSourceObject)
 {
 	if (!HasAuthority())
 	{
 		return;
 	}
-	
+
 	SourceAbilitySystem = InSourceAbilitySystem;
 	ImpactEffectSpecs = InImpactEffectSpecs;
 	BreakableDamageAmount = FMath::Max(0.f, InBreakableDamageAmount);
+
 	WorldImpactData = InWorldImpactData;
-	ImpactGameplayCueTag = InImpactGameplayCueTag;
-	SourceTeamId = InSourceTeamId;	
+	SourceTeamId = InSourceTeamId;
+
+	// UObject API가 const-correct하지 않은 경계에서만 해제.
+	PresentationSourceObject = const_cast<UObject*>(InPresentationSourceObject);
 }
 
 void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
@@ -258,36 +264,22 @@ void ADRProjectile::RefreshFriendlyCollisionIgnores()
 void ADRProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
 {
 	UAbilitySystemComponent* SourceASC = SourceAbilitySystem.Get();
-	
-	if (!HasAuthority()
-		|| !IsValid(SourceASC)
-		|| !ImpactGameplayCueTag.IsValid())
+
+	if (!HasAuthority() || !IsValid(SourceASC))
 	{
 		return;
 	}
-	
+
 	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+
 	EffectContext.AddHitResult(ImpactResult, true);
-	
-	FGameplayCueParameters CueParameters(EffectContext);
-	CueParameters.Location = ImpactResult.Location;
-	CueParameters.Normal = ImpactResult.ImpactNormal;
-	CueParameters.Instigator = GetInstigator();
-	CueParameters.EffectCauser = this;
-	
-	SourceASC->ExecuteGameplayCue(ImpactGameplayCueTag, CueParameters);	
+
+	FGameplayCueParameters Parameters(EffectContext);
+	Parameters.Location = ImpactResult.Location;
+	Parameters.Normal = ImpactResult.ImpactNormal;
+	Parameters.Instigator = GetInstigator();
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject = PresentationSourceObject.Get();
+
+	SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Weapon_Projectile_Impact, Parameters);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
