@@ -294,5 +294,6 @@ void ADRProjectile::ConfigureProjectileMovement(float InitialSpeed, float Gravit
 	ProjectileMovement->MaxSpeed = SafeSpeed;
 	ProjectileMovement->ProjectileGravityScale = FMath::Max(GravityScale, 0.f);
 	
+	ProjectileMovement->bInitialVelocityInLocalSpace = false;
 	ProjectileMovement->Velocity = GetActorForwardVector() * SafeSpeed;
 }

@@ -11,14 +11,15 @@ void ADRThrowableProjectile::InitializeThrowable(
 	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
 	const FDRThrowableItemSettings& InItemSettings,
 	const FDRThrowActionSettings& InActionSettings,
-	int32 InSourceTeamId)
+	int32 InSourceTeamId,
+	const UObject* InPresentationSourceObject)
 {
 	FDRProjectileWorldImpactData TempWorldImpactData;
 	TempWorldImpactData.bAddSnow = false;
 
 	ExplosionRadius = FMath::Max(InItemSettings.ExplosionRadius, 1.f);
 
-	OcclusionTraceChannel = InActionSettings.ExplosionOcclusionTraceChannel1;
+	OcclusionTraceChannel = InActionSettings.ExplosionOcclusionTraceChannel;
 
 	ImpactGameplayCueTag = InItemSettings.ImpactGameplayCueTag;
 
@@ -30,7 +31,7 @@ void ADRThrowableProjectile::InitializeThrowable(
 		0.f,
 		TempWorldImpactData,
 		InSourceTeamId,
-		nullptr);
+		InPresentationSourceObject);
 }
 
 void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)

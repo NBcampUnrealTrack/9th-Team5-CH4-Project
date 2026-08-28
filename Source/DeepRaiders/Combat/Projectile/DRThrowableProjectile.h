@@ -16,7 +16,8 @@ public:
 		const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
 		const FDRThrowableItemSettings& InItemSettings, 
 		const FDRThrowActionSettings& InActionSettings,
-		int32 InSourceTeamId);
+		int32 InSourceTeamId,
+		const UObject* InPresentationSourceObject);
 	
 protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;

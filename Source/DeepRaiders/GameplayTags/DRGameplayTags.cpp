@@ -73,6 +73,11 @@ namespace DRGameplayTags
 		"Snow absorption ability.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Item_Throw,
+		"Ability.Item.Throw",
+		"Item-based throwable ability.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Weapon_Ranged,
 		"Cooldown.Weapon.Ranged",
 		"Shared fire interval cooldown for ranged weapons.");

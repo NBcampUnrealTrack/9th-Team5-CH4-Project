@@ -74,7 +74,7 @@ bool ADRThrowTargetActor::UpdateTargeting()
 	
 	FHitResult AimHit;
 	const bool bBlockingHit = World->LineTraceSingleByChannel(AimHit, ViewLocation, TraceEnd,
-		ActionSettings.AimTraceChannel1, QueryParams);
+		ActionSettings.AimTraceChannel, QueryParams);
 	
 	if (!bBlockingHit)
 	{
@@ -88,8 +88,10 @@ bool ADRThrowTargetActor::UpdateTargeting()
 	bHasValidAimData = true;
 	
 	// 이하부터 투척물 예상 경로
-	if (!bShowTrajectory
-		|| !IsValid(ActionSettings.TrajectoryPreviewSystem))
+	// 테스트 신다인, VFX 추가 전까지 주석
+	if (!bShowTrajectory)
+	// if (!bShowTrajectory
+	// 	|| !IsValid(ActionSettings.TrajectoryPreviewSystem))
 	{
 		return true;
 	}
@@ -105,7 +107,7 @@ bool ADRThrowTargetActor::UpdateTargeting()
 	
 	FPredictProjectilePathParams PredictParams(ActionSettings.PreviewProjectileRadius,
 		LaunchLocation,	LaunchDirection * ItemSettings.InitialSpeed,
-		ActionSettings.MaxSimulationTime, ActionSettings.AimTraceChannel1,SourceActor);
+		ActionSettings.MaxSimulationTime, ActionSettings.AimTraceChannel,SourceActor);
 	
 	PredictParams.SimFrequency = ActionSettings.SimulationFrequency;
 	PredictParams.OverrideGravityZ = World->GetGravityZ() * ItemSettings.GravityScale;
@@ -151,6 +153,13 @@ void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints)
 		TrajectoryComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			this, ActionSettings.TrajectoryPreviewSystem,
 			FVector::ZeroVector, FRotator::ZeroRotator, FVector::OneVector, false);
+	}
+	
+	// 테스트 신다인
+	// 일단 VFX 디버그로 처리
+	for (FVector Point : PathPoints)
+	{
+		DrawDebugSphere(GetWorld(), Point, 12.f, 16, FColor::Green, false, 0.0f);
 	}
 	
 	if (!IsValid(TrajectoryComponent))

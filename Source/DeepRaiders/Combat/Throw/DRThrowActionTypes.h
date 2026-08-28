@@ -25,10 +25,10 @@ struct DEEPRAIDERS_API FDRThrowActionSettings
 	float FallbackHeightOffset = 50.f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Collision")
-	TEnumAsByte<ECollisionChannel> AimTraceChannel1 = ECC_GameTraceChannel1;
+	TEnumAsByte<ECollisionChannel> AimTraceChannel = ECC_GameTraceChannel1;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Collsion")
-	TEnumAsByte<ECollisionChannel> ExplosionOcclusionTraceChannel1 = ECC_Visibility;
+	TEnumAsByte<ECollisionChannel> ExplosionOcclusionTraceChannel = ECC_Visibility;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Preview", meta = (ClampMin = "0.0", Units = "cm"))
 	float PreviewProjectileRadius = 12.f;

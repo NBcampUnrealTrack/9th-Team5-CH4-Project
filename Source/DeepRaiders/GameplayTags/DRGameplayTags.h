@@ -18,7 +18,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Sprayer);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
-
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
+	
 	// Cooldown
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_One);
