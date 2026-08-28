@@ -2,8 +2,6 @@
 
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
-#include "DeepRaiders/Item/DRSprayerWeaponDefinition.h"
 #include "DeepRaiders/Gameplay/DRGameStartActor.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
@@ -12,6 +10,7 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Components/DRInteractionComponent.h"
 #include "EngineUtils.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 
 void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 {
@@ -291,21 +290,27 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 void UDRHUDViewModel::RefreshAmmoVisibility()
 {
 	FDRItemInstance SelectedItem;
-	const int32 SelectedSlotIndex = QuickSlotComponent.IsValid()
-		? QuickSlotComponent->GetSelectedSlotIndex()
-		: INDEX_NONE;
-	const bool bHasSelectedItem = QuickSlotComponent.IsValid()
-		&& QuickSlotComponent->GetQuickSlot(SelectedSlotIndex, SelectedItem);
-	const UDRProjectileWeaponItemDefinition* ProjectileWeapon = bHasSelectedItem
-		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem.Definition)
-		: nullptr;
-	const UDRSprayerWeaponDefinition* SprayerWeapon = bHasSelectedItem
-		? Cast<UDRSprayerWeaponDefinition>(SelectedItem.Definition)
-		: nullptr;
+
+	const int32 SelectedSlotIndex =
+		QuickSlotComponent.IsValid()
+			? QuickSlotComponent->GetSelectedSlotIndex()
+			: INDEX_NONE;
+
+	const bool bHasSelectedItem =
+		QuickSlotComponent.IsValid()
+		&& QuickSlotComponent->GetQuickSlot(
+			SelectedSlotIndex,
+			SelectedItem);
+
+	const UDRRangedWeaponDefinition* RangedWeapon =
+		bHasSelectedItem
+			? Cast<UDRRangedWeaponDefinition>(
+				SelectedItem.Definition)
+			: nullptr;
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAmmoVisible,
-		IsValid(ProjectileWeapon) || IsValid(SprayerWeapon));
+		IsValid(RangedWeapon));
 }
 
 void UDRHUDViewModel::HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData)

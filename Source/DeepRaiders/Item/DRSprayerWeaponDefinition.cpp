@@ -1,8 +1,5 @@
 ﻿#include "DRSprayerWeaponDefinition.h"
 
-UDRSprayerWeaponDefinition::
-	UDRSprayerWeaponDefinition()
+UDRSprayerWeaponDefinition::UDRSprayerWeaponDefinition()
 {
-	Category = EDRItemCategory::Equipment;
-	MaxStackSize = 1;
 }

@@ -2,7 +2,7 @@
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 
 #include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
@@ -164,10 +164,10 @@ void UDRHeldItemComponent::RefreshMiningSettings()
 void UDRHeldItemComponent::RefreshSnowComponents()
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
-	const UDRProjectileWeaponItemDefinition* ProjectileWeaponDefinition =
-		Cast<UDRProjectileWeaponItemDefinition>(HeldItemDefinition);
 
-	if (!IsValid(Character) || !IsValid(ProjectileWeaponDefinition))
+	const UDRRangedWeaponDefinition* RangedWeaponDefinition = Cast<UDRRangedWeaponDefinition>(HeldItemDefinition);
+
+	if (!IsValid(Character) || !IsValid(RangedWeaponDefinition))
 	{
 		if (IsValid(SnowRemoveComponent))
 		{
@@ -178,18 +178,18 @@ void UDRHeldItemComponent::RefreshSnowComponents()
 		return;
 	}
 
-	if (ProjectileWeaponDefinition->SnowAbsorbSettings.bEnabled && !IsValid(SnowRemoveComponent))
+	if (RangedWeaponDefinition->SnowAbsorbSettings.bEnabled && !IsValid(SnowRemoveComponent))
 	{
 		SnowRemoveComponent = NewObject<UDRSnowRemoveComponent>(Character);
+
 		SnowRemoveComponent->SetIsReplicated(false);
 		SnowRemoveComponent->RegisterComponent();
 	}
-	else if (!ProjectileWeaponDefinition->SnowAbsorbSettings.bEnabled && IsValid(SnowRemoveComponent))
+	else if (!RangedWeaponDefinition->SnowAbsorbSettings.bEnabled && IsValid(SnowRemoveComponent))
 	{
 		SnowRemoveComponent->DestroyComponent();
 		SnowRemoveComponent = nullptr;
 	}
-
 }
 
 void UDRHeldItemComponent::PlayEquipSound()
