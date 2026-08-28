@@ -83,6 +83,7 @@ private:
 	void ResetGameState();
 	void TickGameTimer();
 	void ClearGameResultText();
+	void RefreshGameStartPlayerRoster();
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
 	bool TryStartSnowJoinSnapshot(class ADRPlayerController* PlayerController);
 

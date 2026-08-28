@@ -32,6 +32,11 @@ void ADRGameStartActor::BeginPlay()
 {
 	Super::BeginPlay();
 	RefreshLocalReadyColor();
+
+	if (HasAuthority())
+	{
+		RefreshPlayerRoster();
+	}
 }
 
 void ADRGameStartActor::GetLifetimeReplicatedProps(
@@ -41,6 +46,7 @@ void ADRGameStartActor::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ThisClass, ReadyPlayers);
 	DOREPLIFETIME(ThisClass, bGameStarted);
 	DOREPLIFETIME(ThisClass, CountdownSecondsRemaining);
+	DOREPLIFETIME(ThisClass, TotalPlayerCount);
 }
 
 bool ADRGameStartActor::CanInteract_Implementation(APawn* Interactor) const
@@ -113,7 +119,17 @@ int32 ADRGameStartActor::GetReadyPlayerCount() const
 
 int32 ADRGameStartActor::GetTotalPlayerCount() const
 {
-	return GetEligiblePlayerCount();
+	return TotalPlayerCount;
+}
+
+void ADRGameStartActor::RefreshPlayerRoster()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	RefreshReadyState();
 }
 
 void ADRGameStartActor::OnRep_ReadyPlayers()
@@ -136,14 +152,22 @@ void ADRGameStartActor::OnRep_CountdownSecondsRemaining()
 	BroadcastReadyStatus();
 }
 
+void ADRGameStartActor::OnRep_TotalPlayerCount()
+{
+	BroadcastReadyStatus();
+}
+
 void ADRGameStartActor::RefreshReadyState()
 {
-	ReadyPlayers.RemoveAll([](const TObjectPtr<APlayerState>& PlayerState)
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
+	ReadyPlayers.RemoveAll([GameState](const TObjectPtr<APlayerState>& PlayerState)
 	{
-		return !IsValid(PlayerState) || PlayerState->IsOnlyASpectator();
+		return !IsValid(PlayerState) || !IsValid(GameState) || PlayerState->IsOnlyASpectator() ||
+			!GameState->PlayerArray.Contains(PlayerState);
 	});
 
-	const int32 TotalPlayerCount = GetEligiblePlayerCount();
+	TotalPlayerCount = GetEligiblePlayerCount();
 	const bool bAllPlayersReady = TotalPlayerCount > 0 && ReadyPlayers.Num() >= TotalPlayerCount;
 	BroadcastReadyStatus();
 	ForceNetUpdate();
@@ -174,7 +198,6 @@ void ADRGameStartActor::RefreshReadyState()
 
 void ADRGameStartActor::BroadcastReadyStatus()
 {
-	const int32 TotalPlayerCount = GetEligiblePlayerCount();
 	const bool bAllPlayersReady = TotalPlayerCount > 0 && ReadyPlayers.Num() >= TotalPlayerCount;
 	OnReadyStateChanged.Broadcast(ReadyPlayers.Num(), TotalPlayerCount, bAllPlayersReady);
 	OnGameStartCountdownChanged.Broadcast(CountdownSecondsRemaining);
@@ -182,12 +205,15 @@ void ADRGameStartActor::BroadcastReadyStatus()
 
 void ADRGameStartActor::HandleGameStartCountdown()
 {
-	ReadyPlayers.RemoveAll([](const TObjectPtr<APlayerState>& PlayerState)
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
+	ReadyPlayers.RemoveAll([GameState](const TObjectPtr<APlayerState>& PlayerState)
 	{
-		return !IsValid(PlayerState) || PlayerState->IsOnlyASpectator();
+		return !IsValid(PlayerState) || !IsValid(GameState) || PlayerState->IsOnlyASpectator() ||
+			!GameState->PlayerArray.Contains(PlayerState);
 	});
 
-	const int32 TotalPlayerCount = GetEligiblePlayerCount();
+	TotalPlayerCount = GetEligiblePlayerCount();
 	if (TotalPlayerCount <= 0 || ReadyPlayers.Num() < TotalPlayerCount)
 	{
 		GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
