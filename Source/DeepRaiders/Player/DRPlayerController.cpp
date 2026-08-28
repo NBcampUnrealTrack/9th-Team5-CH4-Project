@@ -12,7 +12,6 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
-#include "DeepRaiders/Core/Interface/DRThrowableItemInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"

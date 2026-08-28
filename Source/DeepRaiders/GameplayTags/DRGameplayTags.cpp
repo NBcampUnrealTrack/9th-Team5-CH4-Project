@@ -58,6 +58,16 @@ namespace DRGameplayTags
 		"Data-driven active sprayer presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Item_Throwable_Throw,
+		"GameplayCue.Item.Throwable.Throw",
+		"Throwable release presentation.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Item_Throwable_Impact,
+		"GameplayCue.Item.Throwable.Impact",
+		"Throwable impact presentation.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack_Melee,
 		"Ability.Attack.Melee",
 		"Melee attack ability.");
@@ -236,6 +246,16 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Player_FallDeath,
 		"GameplayCue.Sound.Player.FallDeath",
 		"Player died from fall damage.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Item_Throwable_Throw,
+		"GameplayCue.Sound.Item.Throwable.Throw",
+		"Throwable release sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Item_Throwable_Impact,
+		"GameplayCue.Sound.Item.Throwable.Impact",
+		"Throwable impact sound.");
 	
 	// =====================================================
 	// Gameplay Cue - Sound - Weapon

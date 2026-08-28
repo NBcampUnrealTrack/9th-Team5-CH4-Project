@@ -11,6 +11,7 @@ class UAbilityTask_WaitTargetData;
 class UDRInventoryComponent;
 class UDRThrowableItemDefinition;
 class UAbilityTask_WaitGameplayEvent;
+class UAbilityTask_WaitInputRelease;
 
 UCLASS()
 class DEEPRAIDERS_API UDRGA_ThrowItem : public UGameplayAbility
@@ -36,9 +37,12 @@ private:
 	void StartBlockingStateTasks();
 	void ExecuteConfirmedThrow();
 	
-	bool ValidateServerTargetData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const;
+	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutAimDirection) const;
+	bool ResolveServerLaunchData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const;
 	
 	bool SpawnServerProjectile(const FVector& LaunchLocation, const FVector& LaunchDirection);
+	
+	void ExecuteThrowGameplayCue(const FVector& LaunchLocation, const FVector& LaunchDirection);
 	
 	void BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 	
@@ -47,13 +51,13 @@ private:
 	void CancelThrow();
 	
 	UFUNCTION()
-	void HandleAimReleased(float TimeHeld);
+	void HandleAimInputReleased(float TimeHeld);
 	
 	UFUNCTION()
 	void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
 	
 	UFUNCTION()
-	void HandleTargetDataCancelled(const FGameplayAbilityTargetDataHandle& TargetData);
+	void HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData);
 	
 	UFUNCTION()
 	void HandleBlockingStateAdded();
@@ -69,6 +73,7 @@ private:
 	UFUNCTION()
 	void HandleMontageInterrupted();
 	
+private:
 	UPROPERTY(EditDefaultsOnly, Category = "Throw")
 	TSubclassOf<ADRThrowTargetActor> TargetActorClass;
 	
@@ -84,8 +89,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ReleaseEventTask;
 	
+	UPROPERTY(Transient)
+	TObjectPtr<UAbilityTask_WaitInputRelease> AimReleaseTask;
+	
 	bool bReleaseEventReceived = false;
 	
-	FGameplayAbilityTargetDataHandle ConfirmedTargetData;
 	FGuid ActiveInstanceId;	
+	
+	FVector ValidatedAimDirection = FVector::ZeroVector;	
 };

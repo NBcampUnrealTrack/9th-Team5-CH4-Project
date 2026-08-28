@@ -1,6 +1,7 @@
 ﻿
 #include "DRThrowableProjectile.h"
 
+#include "DeepRaiders/Item/DRThrowableItemDefinition.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/OverlapResult.h"
@@ -21,7 +22,11 @@ void ADRThrowableProjectile::InitializeThrowable(
 
 	OcclusionTraceChannel = InActionSettings.ExplosionOcclusionTraceChannel;
 
-	ImpactGameplayCueTag = InItemSettings.ImpactGameplayCueTag;
+	const UDRThrowableItemDefinition* ThrowableItemDefinition = Cast<UDRThrowableItemDefinition>(InPresentationSourceObject);
+	if (IsValid(ThrowableItemDefinition))
+	{
+		ImpactGameplayCueTag = ThrowableItemDefinition->ImpactGameplayCueTag;
+	}
 
 	ConfigureProjectileMovement(InItemSettings.InitialSpeed, InItemSettings.GravityScale);
 
@@ -146,6 +151,7 @@ void ADRThrowableProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactRe
 	Parameters.Normal = ImpactResult.ImpactNormal;
 	Parameters.Instigator = GetInstigator();
 	Parameters.EffectCauser = this;
+	Parameters.SourceObject = GetPresentationSourceObject();
 
 	SourceASC->ExecuteGameplayCue(ImpactGameplayCueTag, Parameters);
 }
