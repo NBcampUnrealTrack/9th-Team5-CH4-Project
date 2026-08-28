@@ -115,7 +115,7 @@ void ADRPlayerController::BeginPlay()
 		InventoryComponent,
 		QuickSlotComponent);
 
-	StartingSelectionUIComponent->ShowStartingSelection(
+	StartingSelectionUIComponent->InitializeStartingSelection(
 		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
