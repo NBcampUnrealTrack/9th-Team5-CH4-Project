@@ -79,7 +79,10 @@ void ADRProjectile::BeginPlay()
 		CollisionComponent->IgnoreActorWhenMoving(GetInstigator(), true);
 	}
 	
-	RefreshFriendlyCollisionIgnores();
+	if (ShouldIgnoreFriendlyBlockingHit())
+	{
+		RefreshFriendlyCollisionIgnores();
+	}
 	
 	ProjectileMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleProjectileStop);
 	

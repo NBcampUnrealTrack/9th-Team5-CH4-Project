@@ -88,10 +88,8 @@ bool ADRThrowTargetActor::UpdateTargeting()
 	bHasValidAimData = true;
 	
 	// 이하부터 투척물 예상 경로
-	// 테스트 신다인, VFX 추가 전까지 주석
-	if (!bShowTrajectory)
-	// if (!bShowTrajectory
-	// 	|| !IsValid(ActionSettings.TrajectoryPreviewSystem))
+	if (!bShowTrajectory
+		|| !IsValid(ActionSettings.TrajectoryPreviewSystem))
 	{
 		return true;
 	}
@@ -153,13 +151,6 @@ void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints)
 		TrajectoryComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			this, ActionSettings.TrajectoryPreviewSystem,
 			FVector::ZeroVector, FRotator::ZeroRotator, FVector::OneVector, false);
-	}
-	
-	// 테스트 신다인
-	// 일단 VFX 디버그로 처리
-	for (FVector Point : PathPoints)
-	{
-		DrawDebugSphere(GetWorld(), Point, 12.f, 16, FColor::Green, false, 0.0f);
 	}
 	
 	if (!IsValid(TrajectoryComponent))

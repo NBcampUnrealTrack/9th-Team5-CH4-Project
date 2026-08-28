@@ -385,7 +385,7 @@ bool UDRGA_ThrowItem::SpawnServerProjectile(const FVector& LaunchLocation, const
 
 	ADRThrowableProjectile* Projectile = World->SpawnActorDeferred<ADRThrowableProjectile>(
 			ActiveDefinition->ProjectileClass, SpawnTransform, AvatarActor, AvatarPawn,
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 
 	if (!IsValid(Projectile))
 	{
