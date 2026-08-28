@@ -60,7 +60,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 			this,
 			&ThisClass::HandleSelectedQuickSlotItemChanged);
 	}
-	
+
 	if (InteractionComponent.IsValid())
 	{
 		InteractionFocusChangedHandle = InteractionComponent->OnFocusedInteractableChanged
@@ -134,7 +134,7 @@ void UDRHUDViewModel::Deinitialize()
 			this,
 			&ThisClass::HandleSelectedQuickSlotItemChanged);
 	}
-	
+
 	if (InteractionComponent.IsValid()
 		&& InteractionFocusChangedHandle.IsValid())
 	{
@@ -350,27 +350,16 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 void UDRHUDViewModel::RefreshAmmoVisibility()
 {
 	FDRItemInstance SelectedItem;
+	const int32 SelectedSlotIndex = QuickSlotComponent.IsValid()
+		? QuickSlotComponent->GetSelectedSlotIndex()
+		: INDEX_NONE;
+	const bool bHasSelectedItem = QuickSlotComponent.IsValid()
+		&& QuickSlotComponent->GetQuickSlot(SelectedSlotIndex, SelectedItem);
+	const UDRRangedWeaponDefinition* RangedWeapon = bHasSelectedItem
+		? Cast<UDRRangedWeaponDefinition>(SelectedItem.Definition)
+		: nullptr;
 
-	const int32 SelectedSlotIndex =
-		QuickSlotComponent.IsValid()
-			? QuickSlotComponent->GetSelectedSlotIndex()
-			: INDEX_NONE;
-
-	const bool bHasSelectedItem =
-		QuickSlotComponent.IsValid()
-		&& QuickSlotComponent->GetQuickSlot(
-			SelectedSlotIndex,
-			SelectedItem);
-
-	const UDRRangedWeaponDefinition* RangedWeapon =
-		bHasSelectedItem
-			? Cast<UDRRangedWeaponDefinition>(
-				SelectedItem.Definition)
-			: nullptr;
-
-	UE_MVVM_SET_PROPERTY_VALUE(
-		bIsAmmoVisible,
-		IsValid(RangedWeapon));
+	UE_MVVM_SET_PROPERTY_VALUE(bIsAmmoVisible, IsValid(RangedWeapon));
 }
 
 void UDRHUDViewModel::HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData)

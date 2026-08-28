@@ -1,9 +1,9 @@
 #include "HostOrJoinWidget.h"
 
+#include "DRTitleSettingRowWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Overlay.h"
-#include "Components/Slider.h"
-#include "Components/TextBlock.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/Subsystem/DRSessionSubsystem.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,8 +14,6 @@
 namespace DRTitleSettings
 {
 	constexpr float MaxVolumeDisplay = 100.f;
-	constexpr float MinMouseSensitivity = 0.001f;
-	constexpr float MaxMouseSensitivity = 5.f;
 	constexpr TCHAR MasterSoundClassPath[] =
 		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Master.SC_Master");
 	constexpr TCHAR MusicSoundClassPath[] =
@@ -37,15 +35,10 @@ bool UHostOrJoinWidget::Initialize()
 		return true;
 	}
 
-	Slider_MasterVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
-	Slider_MusicVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
-	Slider_SFXVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
-	Slider_MouseSensitivityX->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
-	Slider_MouseSensitivityY->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
-
 	Overlay_Join->SetVisibility(ESlateVisibility::Collapsed);
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
 
+	CacheSettingRows();
 	LoadSettingsIntoSliders();
 	if (const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
 	{
@@ -139,33 +132,50 @@ void UHostOrJoinWidget::HandleSettingsClicked()
 
 void UHostOrJoinWidget::HandleSettingsApplyClicked()
 {
+	UE_LOG(LogTemp, Log, TEXT("Title settings apply clicked."));
+
 	UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
 	if (!IsValid(UserSettings))
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Title settings apply failed: DRGameUserSettings is not active."));
 		return;
 	}
 
-	const float MouseX = FMath::Lerp(
-		DRTitleSettings::MinMouseSensitivity,
-		DRTitleSettings::MaxMouseSensitivity,
-		Slider_MouseSensitivityX->GetValue());
-	const float MouseY = FMath::Lerp(
-		DRTitleSettings::MinMouseSensitivity,
-		DRTitleSettings::MaxMouseSensitivity,
-		Slider_MouseSensitivityY->GetValue());
+	CacheSettingRows();
+	if (!HasAllSettingRows())
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Title settings apply failed: setting rows were not found."));
+		return;
+	}
 
 	UserSettings->SetTitleSettings(
-		Slider_MasterVolume->GetValue(),
-		Slider_MusicVolume->GetValue(),
-		Slider_SFXVolume->GetValue(),
-		MouseX,
-		MouseY);
+		MasterVolumeRow->GetSettingValue() / DRTitleSettings::MaxVolumeDisplay,
+		MusicVolumeRow->GetSettingValue() / DRTitleSettings::MaxVolumeDisplay,
+		SFXVolumeRow->GetSettingValue() / DRTitleSettings::MaxVolumeDisplay,
+		MouseSensitivityXRow->GetSettingValue(),
+		MouseSensitivityYRow->GetSettingValue());
 	UserSettings->ApplySettings(false);
 	UserSettings->SaveSettings();
 	ApplyAudioSettings(
 		UserSettings->GetMasterVolume(),
 		UserSettings->GetMusicVolume(),
 		UserSettings->GetSFXVolume());
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Title settings applied: Master=%.2f Music=%.2f SFX=%.2f ")
+		TEXT("MouseX=%.3f MouseY=%.3f"),
+		UserSettings->GetMasterVolume(),
+		UserSettings->GetMusicVolume(),
+		UserSettings->GetSFXVolume(),
+		UserSettings->GetMouseSensitivityX(),
+		UserSettings->GetMouseSensitivityY());
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -175,62 +185,121 @@ void UHostOrJoinWidget::HandleSettingsCancelClicked()
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
 }
 
-void UHostOrJoinWidget::HandleSettingSliderChanged(float)
-{
-	RefreshSettingValueTexts();
-}
-
 void UHostOrJoinWidget::HandleExitGameClicked()
 {
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
 }
 
-void UHostOrJoinWidget::LoadSettingsIntoSliders()
+void UHostOrJoinWidget::CacheSettingRows()
 {
-	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
-	if (!IsValid(UserSettings))
+	if (!IsValid(WidgetTree))
 	{
 		return;
 	}
 
-	Slider_MasterVolume->SetValue(UserSettings->GetMasterVolume());
-	Slider_MusicVolume->SetValue(UserSettings->GetMusicVolume());
-	Slider_SFXVolume->SetValue(UserSettings->GetSFXVolume());
-	const FVector2D SensitivityRange(
-		DRTitleSettings::MinMouseSensitivity,
-		DRTitleSettings::MaxMouseSensitivity);
-	Slider_MouseSensitivityX->SetValue(FMath::GetMappedRangeValueClamped(
-		SensitivityRange,
-		FVector2D(0.f, 1.f),
-		UserSettings->GetMouseSensitivityX()));
-	Slider_MouseSensitivityY->SetValue(FMath::GetMappedRangeValueClamped(
-		SensitivityRange,
-		FVector2D(0.f, 1.f),
-		UserSettings->GetMouseSensitivityY()));
-	RefreshSettingValueTexts();
+	MasterVolumeRow = nullptr;
+	MusicVolumeRow = nullptr;
+	SFXVolumeRow = nullptr;
+	MouseSensitivityXRow = nullptr;
+	MouseSensitivityYRow = nullptr;
+
+	MasterVolumeRow = Cast<UDRTitleSettingRowWidget>(
+		GetWidgetFromName(TEXT("Settings_MasterVolume")));
+	SFXVolumeRow = Cast<UDRTitleSettingRowWidget>(
+		GetWidgetFromName(TEXT("Settings_SFXVolume")));
+	MusicVolumeRow = Cast<UDRTitleSettingRowWidget>(
+		GetWidgetFromName(TEXT("Settings_MusicVolume")));
+	MouseSensitivityXRow = Cast<UDRTitleSettingRowWidget>(
+		GetWidgetFromName(TEXT("Settings_MouseSensitivityX")));
+	MouseSensitivityYRow = Cast<UDRTitleSettingRowWidget>(
+		GetWidgetFromName(TEXT("Settings_MouseSensitivityY")));
+	if (HasAllSettingRows())
+	{
+		return;
+	}
+
+	// WBP_Title의 현재 세로 배치 순서로 직접 연결한다.
+	if (IsValid(Settings_MasterVolume)
+		&& IsValid(Settings_SFXVolume)
+		&& IsValid(Settings_MusicVolume)
+		&& IsValid(Settings_MouseSensitivityX)
+		&& IsValid(Settings_MouseSensitivityY))
+	{
+		MasterVolumeRow = Settings_MasterVolume;
+		SFXVolumeRow = Settings_SFXVolume;
+		MusicVolumeRow = Settings_MusicVolume;
+		MouseSensitivityXRow = Settings_MouseSensitivityX;
+		MouseSensitivityYRow = Settings_MouseSensitivityY;
+		return;
+	}
+
+	TArray<UDRTitleSettingRowWidget*> SettingRows;
+	WidgetTree->ForEachWidgetAndDescendants([&SettingRows, this](UWidget* Widget)
+	{
+		UDRTitleSettingRowWidget* Row = Cast<UDRTitleSettingRowWidget>(Widget);
+		if (!IsValid(Row))
+		{
+			return;
+		}
+		SettingRows.Add(Row);
+
+		switch (Row->GetSettingType())
+		{
+		case EDRTitleSettingType::MasterVolume:
+			MasterVolumeRow = Row;
+			break;
+		case EDRTitleSettingType::MusicVolume:
+			MusicVolumeRow = Row;
+			break;
+		case EDRTitleSettingType::SFXVolume:
+			SFXVolumeRow = Row;
+			break;
+		case EDRTitleSettingType::MouseSensitivityX:
+			MouseSensitivityXRow = Row;
+			break;
+		case EDRTitleSettingType::MouseSensitivityY:
+			MouseSensitivityYRow = Row;
+			break;
+		default:
+			break;
+		}
+	});
+
+	// 타입 설정이 빠진 경우 디자이너의 세로 배치 순서로 연결한다.
+	if (!HasAllSettingRows() && SettingRows.Num() >= 5)
+	{
+		MasterVolumeRow = SettingRows[0];
+		SFXVolumeRow = SettingRows[1];
+		MusicVolumeRow = SettingRows[2];
+		MouseSensitivityXRow = SettingRows[3];
+		MouseSensitivityYRow = SettingRows[4];
+	}
 }
 
-void UHostOrJoinWidget::RefreshSettingValueTexts()
+void UHostOrJoinWidget::LoadSettingsIntoSliders()
 {
-	MasterVolumn->SetText(FText::AsNumber(FMath::RoundToInt(
-		Slider_MasterVolume->GetValue() * DRTitleSettings::MaxVolumeDisplay)));
-	MusicVolumn->SetText(FText::AsNumber(FMath::RoundToInt(
-		Slider_MusicVolume->GetValue() * DRTitleSettings::MaxVolumeDisplay)));
-	SFXVolumn->SetText(FText::AsNumber(FMath::RoundToInt(
-		Slider_SFXVolume->GetValue() * DRTitleSettings::MaxVolumeDisplay)));
-	FNumberFormattingOptions SensitivityFormat;
-	SensitivityFormat.MinimumFractionalDigits = 3;
-	SensitivityFormat.MaximumFractionalDigits = 3;
-	const float MouseX = FMath::Lerp(
-		DRTitleSettings::MinMouseSensitivity,
-		DRTitleSettings::MaxMouseSensitivity,
-		Slider_MouseSensitivityX->GetValue());
-	const float MouseY = FMath::Lerp(
-		DRTitleSettings::MinMouseSensitivity,
-		DRTitleSettings::MaxMouseSensitivity,
-		Slider_MouseSensitivityY->GetValue());
-	MouseXAxis->SetText(FText::AsNumber(MouseX, &SensitivityFormat));
-	MouseYAxis->SetText(FText::AsNumber(MouseY, &SensitivityFormat));
+	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
+	if (!IsValid(UserSettings) || !HasAllSettingRows())
+	{
+		return;
+	}
+
+	MasterVolumeRow->SetSettingValue(
+		UserSettings->GetMasterVolume() * DRTitleSettings::MaxVolumeDisplay);
+	MusicVolumeRow->SetSettingValue(
+		UserSettings->GetMusicVolume() * DRTitleSettings::MaxVolumeDisplay);
+	SFXVolumeRow->SetSettingValue(UserSettings->GetSFXVolume() * DRTitleSettings::MaxVolumeDisplay);
+	MouseSensitivityXRow->SetSettingValue(UserSettings->GetMouseSensitivityX());
+	MouseSensitivityYRow->SetSettingValue(UserSettings->GetMouseSensitivityY());
+}
+
+bool UHostOrJoinWidget::HasAllSettingRows() const
+{
+	return IsValid(MasterVolumeRow)
+		&& IsValid(MusicVolumeRow)
+		&& IsValid(SFXVolumeRow)
+		&& IsValid(MouseSensitivityXRow)
+		&& IsValid(MouseSensitivityYRow);
 }
 
 void UHostOrJoinWidget::ApplyAudioSettings(float MasterVolume, float MusicVolume, float SFXVolume)
@@ -252,19 +321,44 @@ void UHostOrJoinWidget::ApplyAudioSettings(float MasterVolume, float MusicVolume
 	if (!IsValid(RuntimeSoundMix))
 	{
 		RuntimeSoundMix = NewObject<USoundMix>(this);
+		RuntimeSoundMix->InitialDelay = 0.f;
+		RuntimeSoundMix->FadeInTime = 0.f;
+		RuntimeSoundMix->Duration = -1.f;
+		RuntimeSoundMix->FadeOutTime = 0.f;
 		UGameplayStatics::PushSoundMixModifier(this, RuntimeSoundMix);
 	}
 
 	if (IsValid(MasterSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(this, RuntimeSoundMix, MasterSoundClass, MasterVolume);
+		UGameplayStatics::SetSoundMixClassOverride(
+			this,
+			RuntimeSoundMix,
+			MasterSoundClass,
+			MasterVolume,
+			1.f,
+			0.f,
+			true);
 	}
 	if (IsValid(MusicSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(this, RuntimeSoundMix, MusicSoundClass, MusicVolume);
+		UGameplayStatics::SetSoundMixClassOverride(
+			this,
+			RuntimeSoundMix,
+			MusicSoundClass,
+			MusicVolume,
+			1.f,
+			0.f,
+			true);
 	}
 	if (IsValid(SFXSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(this, RuntimeSoundMix, SFXSoundClass, SFXVolume);
+		UGameplayStatics::SetSoundMixClassOverride(
+			this,
+			RuntimeSoundMix,
+			SFXSoundClass,
+			SFXVolume,
+			1.f,
+			0.f,
+			true);
 	}
 }
