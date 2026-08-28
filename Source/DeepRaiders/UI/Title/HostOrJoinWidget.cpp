@@ -1,12 +1,12 @@
 #include "HostOrJoinWidget.h"
 
+#include "AudioDevice.h"
 #include "DRTitleSettingRowWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Overlay.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/Subsystem/DRSessionSubsystem.h"
-#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
@@ -318,47 +318,44 @@ void UHostOrJoinWidget::ApplyAudioSettings(float MasterVolume, float MusicVolume
 		SFXSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::SFXSoundClassPath);
 	}
 
-	if (!IsValid(RuntimeSoundMix))
+	const bool bNeedsSoundMixPush = !IsValid(RuntimeSoundMix);
+	if (bNeedsSoundMixPush)
 	{
 		RuntimeSoundMix = NewObject<USoundMix>(this);
 		RuntimeSoundMix->InitialDelay = 0.f;
 		RuntimeSoundMix->FadeInTime = 0.f;
 		RuntimeSoundMix->Duration = -1.f;
 		RuntimeSoundMix->FadeOutTime = 0.f;
-		UGameplayStatics::PushSoundMixModifier(this, RuntimeSoundMix);
+	}
+
+	FAudioDevice* AudioDevice = GetWorld() ? GetWorld()->GetAudioDeviceRaw() : nullptr;
+	if (!AudioDevice)
+	{
+		return;
 	}
 
 	if (IsValid(MasterSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(
-			this,
-			RuntimeSoundMix,
-			MasterSoundClass,
-			MasterVolume,
-			1.f,
-			0.f,
-			true);
+		AudioDevice->SetSoundMixClassOverride(
+			RuntimeSoundMix, MasterSoundClass, MasterVolume, 1.f, 0.f, true);
 	}
 	if (IsValid(MusicSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(
-			this,
-			RuntimeSoundMix,
-			MusicSoundClass,
-			MusicVolume,
-			1.f,
-			0.f,
-			true);
+		AudioDevice->SetSoundMixClassOverride(
+			RuntimeSoundMix, MusicSoundClass, MusicVolume, 1.f, 0.f, true);
 	}
 	if (IsValid(SFXSoundClass))
 	{
-		UGameplayStatics::SetSoundMixClassOverride(
-			this,
-			RuntimeSoundMix,
-			SFXSoundClass,
-			SFXVolume,
-			1.f,
-			0.f,
-			true);
+		AudioDevice->SetSoundMixClassOverride(
+			RuntimeSoundMix, SFXSoundClass, SFXVolume, 1.f, 0.f, true);
 	}
+	if (bNeedsSoundMixPush)
+	{
+		AudioDevice->PushSoundMixModifier(RuntimeSoundMix);
+	}
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("Title audio settings applied to world audio device."));
 }
