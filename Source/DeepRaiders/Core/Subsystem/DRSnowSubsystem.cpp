@@ -258,6 +258,12 @@ bool UDRSnowSubsystem::CreateCheckpoint(int32 Sequence, AVoxelWorld* Target)
 	return SnapshotSerializer->CreateCheckpoint(Sequence, Target);
 }
 
+bool UDRSnowSubsystem::GetLatestCheckpointOperationSequence(int32& OutOperationSequence)
+{
+	SnapshotSerializer->SetWorld(GetWorld());
+	return SnapshotSerializer->GetLatestCheckpointOperationSequence(OutOperationSequence);
+}
+
 void UDRSnowSubsystem::ResetCheckpoints()
 {
 	if (SnapshotSerializer)

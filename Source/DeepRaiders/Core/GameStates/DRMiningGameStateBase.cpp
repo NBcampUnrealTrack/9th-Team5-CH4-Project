@@ -6,7 +6,17 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "VoxelWorld.h"
+
+void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopPendingSnowRetry();
+	PendingSnowOperations.Reset();
+	AppliedSnowOperationSequences.Reset();
+
+	Super::EndPlay(EndPlayReason);
+}
 
 void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -182,6 +192,34 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 
 	NextSnowOperationSequence = 0;
 	SnowOperationHistory.Reset();
+	AppliedSnowCheckpointSequence = 0;
+	AppliedSnowOperationSequences.Reset();
+	PendingSnowOperations.Reset();
+	StopPendingSnowRetry();
+}
+
+void ADRMiningGameStateBase::ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence)
+{
+	if (HasAuthority())
+	{
+		return;
+	}
+
+	AppliedSnowCheckpointSequence = FMath::Max(0, CheckpointSequence);
+	AppliedSnowOperationSequences.Reset();
+	PendingSnowOperations.RemoveAll([this](const FDRSnowOperationRecord& Record)
+	{
+		return Record.Sequence > 0 && Record.Sequence <= AppliedSnowCheckpointSequence;
+	});
+
+	if (PendingSnowOperations.IsEmpty())
+	{
+		StopPendingSnowRetry();
+	}
+	else
+	{
+		StartPendingSnowRetry();
+	}
 }
 
 void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
@@ -198,11 +236,11 @@ void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
 		return;
 	}
 
-	FDRSnowJoinCheckpoint Checkpoint;
 	constexpr int32 CheckpointInterval = 250;
+	int32 LatestCheckpointSequence = INDEX_NONE;
 	const bool bNeedsCheckpoint =
-		!SnowSubsystem->GetLatestCheckpoint(Checkpoint) ||
-		NextSnowOperationSequence - Checkpoint.OperationSequence >= CheckpointInterval;
+		!SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence) ||
+		NextSnowOperationSequence - LatestCheckpointSequence >= CheckpointInterval;
 	if (bNeedsCheckpoint && SnowSubsystem->CreateCheckpoint(NextSnowOperationSequence))
 	{
 		DiscardSnowOperationsThrough(NextSnowOperationSequence);
@@ -229,7 +267,143 @@ void ADRMiningGameStateBase::Multicast_ApplySnowOperation_Implementation(const F
 
 bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationRecord& Record)
 {
-	return Record.bIsAddOperation ? ApplySnowAddOnce(Record.AddOperation) : ApplySnowRemoveOnce(Record.RemoveOperation);
+	if (IsSnowOperationApplied(Record.Sequence))
+	{
+		return true;
+	}
+
+	// 먼저 도착한 작업이 VoxelWorld 생성을 기다리고 있으면 이후 작업도 큐에
+	// 넣어 서버 Sequence 순서를 유지한다.
+	if (!PendingSnowOperations.IsEmpty() || !IsSnowOperationReady(Record))
+	{
+		QueuePendingSnowOperation(Record);
+		TryApplyPendingSnowOperations();
+		return IsSnowOperationApplied(Record.Sequence);
+	}
+
+	const bool bChanged = Record.bIsAddOperation
+		? ApplySnowAddOnce(Record.AddOperation)
+		: ApplySnowRemoveOnce(Record.RemoveOperation);
+
+	// 준비된 상태에서 한 번 실행한 작업은 변경량이 0이어도 소비한다.
+	// 재시도하면 비멱등 눈 작업이 중복 적용될 수 있다.
+	if (Record.Sequence > 0)
+	{
+		AppliedSnowOperationSequences.Add(Record.Sequence);
+	}
+
+	return bChanged;
+}
+
+bool ADRMiningGameStateBase::IsSnowOperationReady(const FDRSnowOperationRecord& Record) const
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(World->GetSubsystem<UDRSnowSubsystem>()))
+	{
+		return false;
+	}
+
+	const FName VoxelWorldName = Record.bIsAddOperation
+		? Record.AddOperation.VoxelWorldName
+		: Record.RemoveOperation.VoxelWorldName;
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorldByName(VoxelWorldName);
+	return IsValid(VoxelWorld) && VoxelWorld->IsCreated();
+}
+
+bool ADRMiningGameStateBase::IsSnowOperationApplied(int32 Sequence) const
+{
+	return Sequence > 0 &&
+		(Sequence <= AppliedSnowCheckpointSequence || AppliedSnowOperationSequences.Contains(Sequence));
+}
+
+bool ADRMiningGameStateBase::HasPendingSnowOperation(int32 Sequence) const
+{
+	if (Sequence <= 0)
+	{
+		return false;
+	}
+
+	return PendingSnowOperations.ContainsByPredicate([Sequence](const FDRSnowOperationRecord& Record)
+	{
+		return Record.Sequence == Sequence;
+	});
+}
+
+void ADRMiningGameStateBase::QueuePendingSnowOperation(const FDRSnowOperationRecord& Record)
+{
+	if (IsSnowOperationApplied(Record.Sequence) || HasPendingSnowOperation(Record.Sequence))
+	{
+		return;
+	}
+
+	PendingSnowOperations.Add(Record);
+	PendingSnowOperations.Sort([](const FDRSnowOperationRecord& A, const FDRSnowOperationRecord& B)
+	{
+		return A.Sequence < B.Sequence;
+	});
+	StartPendingSnowRetry();
+}
+
+void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
+{
+	while (!PendingSnowOperations.IsEmpty())
+	{
+		const FDRSnowOperationRecord Record = PendingSnowOperations[0];
+		if (IsSnowOperationApplied(Record.Sequence))
+		{
+			PendingSnowOperations.RemoveAt(0);
+			continue;
+		}
+
+		if (!IsSnowOperationReady(Record))
+		{
+			break;
+		}
+
+		if (Record.bIsAddOperation)
+		{
+			ApplySnowAddOnce(Record.AddOperation);
+		}
+		else
+		{
+			ApplySnowRemoveOnce(Record.RemoveOperation);
+		}
+		if (Record.Sequence > 0)
+		{
+			AppliedSnowOperationSequences.Add(Record.Sequence);
+		}
+		PendingSnowOperations.RemoveAt(0);
+	}
+
+	if (PendingSnowOperations.IsEmpty())
+	{
+		StopPendingSnowRetry();
+	}
+}
+
+void ADRMiningGameStateBase::StartPendingSnowRetry()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || World->GetTimerManager().IsTimerActive(PendingSnowRetryTimer))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		PendingSnowRetryTimer,
+		this,
+		&ThisClass::TryApplyPendingSnowOperations,
+		0.1f,
+		true);
+}
+
+void ADRMiningGameStateBase::StopPendingSnowRetry()
+{
+	UWorld* World = GetWorld();
+	if (IsValid(World))
+	{
+		World->GetTimerManager().ClearTimer(PendingSnowRetryTimer);
+	}
 }
 
 bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operation)

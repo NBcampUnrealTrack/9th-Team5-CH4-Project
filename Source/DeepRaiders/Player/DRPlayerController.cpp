@@ -960,6 +960,11 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		return false;
 	}
 
+	if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
+	}
+
 	bPendingSnowCheckpointApplied = true;
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);

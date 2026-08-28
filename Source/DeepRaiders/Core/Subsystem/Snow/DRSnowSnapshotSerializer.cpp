@@ -157,13 +157,15 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 		return false;
 	}
 
-	LatestCheckpoint.SnapshotId = NextSnapshotId++;
-	LatestCheckpoint.OperationSequence = OperationSequence;
-	LatestCheckpoint.VoxelWorldName = VoxelWorld->GetFName();
-	LatestCheckpoint.VoxelSaveData = MoveTemp(VoxelArchive);
-	LatestCheckpoint.SnowVolumeData = MoveTemp(SnowVolumeData);
-	LatestCheckpoint.OwnershipData = MoveTemp(OwnershipData);
-	CheckpointsById.Add(LatestCheckpoint.SnapshotId, LatestCheckpoint);
+	FDRSnowJoinCheckpoint NewCheckpoint;
+	NewCheckpoint.SnapshotId = NextSnapshotId++;
+	NewCheckpoint.OperationSequence = OperationSequence;
+	NewCheckpoint.VoxelWorldName = VoxelWorld->GetFName();
+	NewCheckpoint.VoxelSaveData = MoveTemp(VoxelArchive);
+	NewCheckpoint.SnowVolumeData = MoveTemp(SnowVolumeData);
+	NewCheckpoint.OwnershipData = MoveTemp(OwnershipData);
+	LatestCheckpointId = NewCheckpoint.SnapshotId;
+	CheckpointsById.Add(NewCheckpoint.SnapshotId, MoveTemp(NewCheckpoint));
 	while (CheckpointsById.Num() > 4)
 	{
 		int32 OldestSnapshotId = MAX_int32;
@@ -174,26 +176,45 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 		CheckpointsById.Remove(OldestSnapshotId);
 	}
 
+	const FDRSnowJoinCheckpoint* LatestCheckpoint = CheckpointsById.Find(LatestCheckpointId);
+	if (!LatestCheckpoint)
+	{
+		return false;
+	}
+
 	UE_LOG(
 		LogTemp,
 		Log,
 		TEXT("[JoinSnapshot] Created Id=%d Sequence=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=%d bytes"),
-		LatestCheckpoint.SnapshotId,
-		LatestCheckpoint.OperationSequence,
-		LatestCheckpoint.VoxelSaveData.Num(),
-		LatestCheckpoint.SnowVolumeData.Num(),
-		LatestCheckpoint.OwnershipData.Num());
+		LatestCheckpoint->SnapshotId,
+		LatestCheckpoint->OperationSequence,
+		LatestCheckpoint->VoxelSaveData.Num(),
+		LatestCheckpoint->SnowVolumeData.Num(),
+		LatestCheckpoint->OwnershipData.Num());
+	return true;
+}
+
+bool FDRSnowSnapshotSerializer::GetLatestCheckpointOperationSequence(int32& OutOperationSequence) const
+{
+	const FDRSnowJoinCheckpoint* LatestCheckpoint = CheckpointsById.Find(LatestCheckpointId);
+	if (!LatestCheckpoint || !LatestCheckpoint->IsValid())
+	{
+		return false;
+	}
+
+	OutOperationSequence = LatestCheckpoint->OperationSequence;
 	return true;
 }
 
 bool FDRSnowSnapshotSerializer::GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint) const
 {
-	if (!LatestCheckpoint.IsValid())
+	const FDRSnowJoinCheckpoint* LatestCheckpoint = CheckpointsById.Find(LatestCheckpointId);
+	if (!LatestCheckpoint || !LatestCheckpoint->IsValid())
 	{
 		return false;
 	}
 
-	OutCheckpoint = LatestCheckpoint;
+	OutCheckpoint = *LatestCheckpoint;
 	return true;
 }
 
@@ -211,7 +232,7 @@ bool FDRSnowSnapshotSerializer::GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheck
 
 void FDRSnowSnapshotSerializer::ResetCheckpoints()
 {
-	LatestCheckpoint = {};
+	LatestCheckpointId = INDEX_NONE;
 	CheckpointsById.Reset();
 	NextSnapshotId = 1;
 }

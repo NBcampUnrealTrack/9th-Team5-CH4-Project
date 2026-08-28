@@ -47,6 +47,7 @@ class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
 	GENERATED_BODY()
 
 public:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded);
@@ -115,6 +116,7 @@ public:
 	void GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const;
 	void DiscardSnowOperationsThrough(int32 Sequence);
 	void ResetSnowOperationState();
+	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
 
 	UFUNCTION(NetMulticast, Reliable)
@@ -123,11 +125,22 @@ public:
 private:
 	bool ApplySnowAddOnce(const FDRSnowAddOperation& Operation);
 	bool ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation);
+	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
+	bool IsSnowOperationApplied(int32 Sequence) const;
+	bool HasPendingSnowOperation(int32 Sequence) const;
+	void QueuePendingSnowOperation(const FDRSnowOperationRecord& Record);
+	void TryApplyPendingSnowOperations();
+	void StartPendingSnowRetry();
+	void StopPendingSnowRetry();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
 	void TryCreateSnowCheckpoint();
 
 	int32 NextSnowOperationSequence = 0;
 	TArray<FDRSnowOperationRecord> SnowOperationHistory;
+	int32 AppliedSnowCheckpointSequence = 0;
+	TSet<int32> AppliedSnowOperationSequences;
+	TArray<FDRSnowOperationRecord> PendingSnowOperations;
+	FTimerHandle PendingSnowRetryTimer;
 #pragma endregion
 	
 #pragma region Teleport

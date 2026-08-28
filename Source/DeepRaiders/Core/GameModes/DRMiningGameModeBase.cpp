@@ -501,14 +501,17 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 		return false;
 	}
 
-	FDRSnowJoinCheckpoint Checkpoint;
-	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint) &&
+	int32 LatestCheckpointSequence = INDEX_NONE;
+	if (!SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence) &&
 		SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
 	{
-		SnowSubsystem->GetLatestCheckpoint(Checkpoint);
-		MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
+		if (SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence))
+		{
+			MiningGameState->DiscardSnowOperationsThrough(LatestCheckpointSequence);
+		}
 	}
 
+	FDRSnowJoinCheckpoint Checkpoint;
 	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint))
 	{
 		return false;

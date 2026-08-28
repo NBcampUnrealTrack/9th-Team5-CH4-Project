@@ -120,6 +120,8 @@ public:
 
 	// 서버의 현재 VoxelWorld 및 SnowVolume 상태를 하나의 checkpoint로 고정한다.
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
+	// 매 눈 작업마다 checkpoint 전체 데이터를 복사하지 않도록 Sequence만 조회한다.
+	bool GetLatestCheckpointOperationSequence(int32& OutOperationSequence) const;
 	bool GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint) const;
 	bool GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint) const;
 	void ResetCheckpoints();
@@ -164,7 +166,7 @@ private:
 	bool DeserializeOwnership(AVoxelWorld* VoxelWorld, const TArray<uint8>& CompressedData);
 
 	int32 NextSnapshotId = 1;
-	FDRSnowJoinCheckpoint LatestCheckpoint;
+	int32 LatestCheckpointId = INDEX_NONE;
 	TMap<int32, FDRSnowJoinCheckpoint> CheckpointsById;
 	UWorld* World = nullptr;
 	FDRSnowVolumeStore& VolumeStore;
