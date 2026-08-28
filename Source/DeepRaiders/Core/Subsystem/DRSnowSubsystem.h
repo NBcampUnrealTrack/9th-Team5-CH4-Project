@@ -49,6 +49,7 @@ public:
 	// 중도 난입 checkpoint 생성/전송에 사용하는 snapshot API다.
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(AVoxelWorld* TargetVoxelWorld = nullptr, bool bLogResult = true);
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
+	bool GetLatestCheckpointOperationSequence(int32& OutOperationSequence);
 	bool GetLatestCheckpoint(FDRSnowJoinCheckpoint& OutCheckpoint);
 	bool GetCheckpoint(int32 SnapshotId, FDRSnowJoinCheckpoint& OutCheckpoint);
 

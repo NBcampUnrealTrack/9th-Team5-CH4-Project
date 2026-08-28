@@ -13,7 +13,8 @@
 
 UDRHUDUIComponent::UDRHUDUIComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 }
 
 void UDRHUDUIComponent::BeginPlay()
@@ -58,6 +59,7 @@ void UDRHUDUIComponent::BeginPlay()
 	}
 
 	RefreshPlayerCharacter();
+	SetComponentTickEnabled(true);
 }
 
 void UDRHUDUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -95,5 +97,18 @@ void UDRHUDUIComponent::RefreshPlayerCharacter()
 		: nullptr;
 
 	HUDViewModel->Initialize(PlayerCharacter);
+}
+
+void UDRHUDUIComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (IsValid(HUDViewModel))
+	{
+		HUDViewModel->TickGaugeInterpolation(DeltaTime);
+	}
 }
 

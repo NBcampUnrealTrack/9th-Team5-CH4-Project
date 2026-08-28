@@ -26,6 +26,7 @@ class USpringArmComponent;
 class UDRPlayerAttributeSet;
 class UDRItemAnimationSet;
 class UDRFreezeVisualComponent;
+class UDRSilhouetteComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -76,9 +77,6 @@ public:
 	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
 	void RefreshTeamColor();
 
-	/** 로컬 플레이어의 팀원이라면 지속 실루엣을 적용한다. */
-	void RefreshTeamSilhouette();
-
 	void ApplyHandEquipmentVisual(
 		UStaticMesh* WorldMesh,
 		const FTransform& WorldTransform);
@@ -113,6 +111,11 @@ public:
 	UStaticMeshComponent* GetWorldHandEquipmentMesh() const
 	{
 		return WorldHandEquipmentMesh;
+	}
+
+	UDRSilhouetteComponent* GetSilhouetteComponent() const
+	{
+		return SilhouetteComponent;
 	}
 
 	UDRJetpackComponent* GetJetpackComponent() const
@@ -180,6 +183,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Silhouette", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRSilhouetteComponent> SilhouetteComponent;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")

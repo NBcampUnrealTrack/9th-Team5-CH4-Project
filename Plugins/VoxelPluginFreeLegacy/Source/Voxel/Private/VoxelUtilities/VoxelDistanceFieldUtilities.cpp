@@ -32,7 +32,7 @@ void FVoxelDistanceFieldUtilities::JumpFlood(const FIntVector& Size, TArray<FVec
 
 	check(InOutSurfacePositions.Num() == Size.X * Size.Y * Size.Z);
 
-	const bool bCanUseGPU = false;
+	const bool bCanUseGPU = IsInGameThread() && FApp::CanEverRender();
 	if (bCanUseGPU)
 	{
 		const auto DataPtr = MakeVoxelShared<TArray<FVector3f>>(MoveTemp(InOutSurfacePositions));

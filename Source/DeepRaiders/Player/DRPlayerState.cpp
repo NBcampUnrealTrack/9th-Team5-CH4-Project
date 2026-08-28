@@ -1,6 +1,7 @@
 #include "DRPlayerState.h"
 
 #include "DRPlayerCharacter.h"
+#include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
@@ -612,7 +613,7 @@ void ADRPlayerState::SetTeamId(int32 NewTeamId)
 	}
 	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
-		Iterator->RefreshTeamSilhouette();
+		Iterator->GetSilhouetteComponent()->RefreshTeamSilhouette();
 	}
 	ForceNetUpdate();
 }
@@ -625,7 +626,7 @@ void ADRPlayerState::OnRep_TeamId()
 	}
 	for (TActorIterator<ADRPlayerCharacter> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
-		Iterator->RefreshTeamSilhouette();
+		Iterator->GetSilhouetteComponent()->RefreshTeamSilhouette();
 	}
 }
 #pragma endregion

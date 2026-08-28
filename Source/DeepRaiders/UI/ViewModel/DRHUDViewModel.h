@@ -29,6 +29,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	void Deinitialize();
 
+	/** HUD에 표시되는 게이지 비율을 목표값까지 부드럽게 갱신한다. */
+	void TickGaugeInterpolation(float DeltaSeconds);
+
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Health")
 	float CurrentHealth = 0.f;
@@ -83,6 +86,14 @@ private:
 	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle MaxSnowGaugeChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
+	float TargetCurrentHealth = 0.f;
+	int32 TargetSnowGauge = 0;
+	float InterpolatedSnowGauge = 0.f;
+	float TargetFreezeGauge = 0.f;
+	float TargetHealthRatio = 0.f;
+	float TargetSnowGaugeRatio = 0.f;
+	float TargetFreezeGaugeRatio = 0.f;
+	bool bInterpolateGauges = false;
 	
 #pragma region Interaction
 protected:

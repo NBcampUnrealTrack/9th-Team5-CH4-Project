@@ -1,41 +1,34 @@
 // Copyright Voxel Plugin SAS. All Rights Reserved.
 
 #include "/Engine/Public/Platform.ush"
-#include "/Engine/Generated/GeneratedUniformBuffers.ush"
 
-#if __RSCPP_VERSION
-struct FConstants
-{
-    uint SizeX;
-    uint SizeY;
-    uint SizeZ;
-	uint Step;
-};
-FConstants VoxelDistanceFieldParameters;
-#endif
+uint SizeX;
+uint SizeY;
+uint SizeZ;
+uint Step;
 
-RWBuffer<float> RWSrc;
-RWBuffer<float> RWDst;
+Buffer<float> Src;
+RWBuffer<float> Dst;
 
 float3 GetCoord(uint3 Position)
 {
-	const int Index = Position.x + VoxelDistanceFieldParameters.SizeX * Position.y + VoxelDistanceFieldParameters.SizeX * VoxelDistanceFieldParameters.SizeY * Position.z;
+	const int Index = Position.x + SizeX * Position.y + SizeX * SizeY * Position.z;
 	return float3(
-		RWSrc[3 * Index + 0],
-		RWSrc[3 * Index + 1],
-		RWSrc[3 * Index + 2]);
+		Src[3 * Index + 0],
+		Src[3 * Index + 1],
+		Src[3 * Index + 2]);
 }
 void SetCoord(uint3 Position, float3 Coord)
 {
-	const int Index = Position.x + VoxelDistanceFieldParameters.SizeX * Position.y + VoxelDistanceFieldParameters.SizeX * VoxelDistanceFieldParameters.SizeY * Position.z;
-	RWDst[3 * Index + 0] = Coord.x;
-	RWDst[3 * Index + 1] = Coord.y;
-	RWDst[3 * Index + 2] = Coord.z;
+	const int Index = Position.x + SizeX * Position.y + SizeX * SizeY * Position.z;
+	Dst[3 * Index + 0] = Coord.x;
+	Dst[3 * Index + 1] = Coord.y;
+	Dst[3 * Index + 2] = Coord.z;
 }
 
 bool IsCoordValid(float3 Coord)
 {
-	return Coord.x <= 1e9;
+	return Coord.x < 1e9;
 }
 
 [numthreads(NUM_THREADS_CS, NUM_THREADS_CS, NUM_THREADS_CS)]
@@ -43,9 +36,9 @@ void ExpandDistanceField(uint3 ThreadId : SV_DispatchThreadID)
 {
     const uint3 Position = ThreadId.xyz;
 
-    if (Position.x >= VoxelDistanceFieldParameters.SizeX || 
-        Position.y >= VoxelDistanceFieldParameters.SizeY || 
-        Position.z >= VoxelDistanceFieldParameters.SizeZ)
+    if (Position.x >= SizeX ||
+        Position.y >= SizeY ||
+        Position.z >= SizeZ)
     {
         return;
 	}
@@ -59,14 +52,14 @@ void ExpandDistanceField(uint3 ThreadId : SV_DispatchThreadID)
 		{
 			for (int z = -1; z <= 1; ++z)
 			{
-				const int3 NeighborPosition = Position + int3(x, y, z) * VoxelDistanceFieldParameters.Step;
+				const int3 NeighborPosition = Position + int3(x, y, z) * Step;
 				
 				if (NeighborPosition.x < 0 ||
 					NeighborPosition.y < 0 ||
 					NeighborPosition.z < 0 ||
-					NeighborPosition.x >= int(VoxelDistanceFieldParameters.SizeX) ||
-					NeighborPosition.y >= int(VoxelDistanceFieldParameters.SizeY) ||
-					NeighborPosition.z >= int(VoxelDistanceFieldParameters.SizeZ))
+					NeighborPosition.x >= int(SizeX) ||
+					NeighborPosition.y >= int(SizeY) ||
+					NeighborPosition.z >= int(SizeZ))
 				{
 					// We could clamp the index below instead of jumping, but it probably has the same cost anyways
 					// and produce less nice patterns in the first passes

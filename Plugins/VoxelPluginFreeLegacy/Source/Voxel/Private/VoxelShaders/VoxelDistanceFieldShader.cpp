@@ -3,63 +3,27 @@
 #include "VoxelShaders/VoxelDistanceFieldShader.h"
 #include "VoxelUtilities/VoxelIntVectorUtilities.h"
 
-#include "ShaderParameterUtils.h"
+#include "RenderGraphBuilder.h"
+#include "RenderGraphUtils.h"
+#include "RHIGPUReadback.h"
 
-IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FVoxelDistanceFieldParameters, "VoxelDistanceFieldParameters");
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
 
-FVoxelDistanceFieldBaseCS::FVoxelDistanceFieldBaseCS(
-	const ShaderMetaType::CompiledShaderInitializerType& Initializer)
-	: FGlobalShader(Initializer)
-{
-	Src.Bind(Initializer.ParameterMap, TEXT("RWSrc"));
-	Dst.Bind(Initializer.ParameterMap, TEXT("RWDst"));
-}
-
-void FVoxelDistanceFieldBaseCS::ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment)
+void FVoxelJumpFloodCS::ModifyCompilationEnvironment(
+	const FGlobalShaderPermutationParameters& Parameters,
+	FShaderCompilerEnvironment& OutEnvironment)
 {
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
 	OutEnvironment.SetDefine(TEXT("NUM_THREADS_CS"), VOXEL_DISTANCE_FIELD_NUM_THREADS_CS);
 }
 
-void FVoxelDistanceFieldBaseCS::SetBuffers(
-	FRHIBatchedShaderParameters& BatchedParameters,
-	const FRWBuffer& SrcBuffer,
-	const FRWBuffer& DstBuffer) const
-{
-	SetUAVParameter(BatchedParameters, Src, SrcBuffer.UAV);
-	SetUAVParameter(BatchedParameters, Dst, DstBuffer.UAV);
-}
-
-void FVoxelDistanceFieldBaseCS::SetUniformBuffers(
-	FRHIBatchedShaderParameters& BatchedParameters,
-	const FVoxelDistanceFieldParameters& Parameters) const
-{
-	const FVoxelDistanceFieldParametersRef ParametersBuffer =
-		FVoxelDistanceFieldParametersRef::CreateUniformBufferImmediate(
-			Parameters,
-			UniformBuffer_MultiFrame);
-
-	SetUniformBufferParameter(
-		BatchedParameters,
-		GetUniformBufferParameter<FVoxelDistanceFieldParameters>(),
-		ParametersBuffer);
-}
-void FVoxelDistanceFieldBaseCS::UnsetBuffers(FRHIBatchedShaderUnbinds& BatchedUnbinds) const
-{
-	UnsetUAVParameter(BatchedUnbinds, Src);
-	UnsetUAVParameter(BatchedUnbinds, Dst);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
-IMPLEMENT_TYPE_LAYOUT(FVoxelDistanceFieldBaseCS)
-IMPLEMENT_SHADER_TYPE(, FVoxelJumpFloodCS, TEXT("/Plugin/Voxel/Private/DistanceField.usf"), TEXT("ExpandDistanceField"), SF_Compute);
-
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
+IMPLEMENT_GLOBAL_SHADER(
+	FVoxelJumpFloodCS,
+	"/Plugin/Voxel/Private/DistanceField.usf",
+	"ExpandDistanceField",
+	SF_Compute);
 
 void FVoxelDistanceFieldShaderHelper::WaitForCompletion() const
 {
@@ -68,22 +32,25 @@ void FVoxelDistanceFieldShaderHelper::WaitForCompletion() const
 	Fence.Wait();
 }
 
-void FVoxelDistanceFieldShaderHelper::StartCompute(const FIntVector& Size, const TVoxelSharedRef<TArray<FVector3f>>& InOutData, int32 MaxPasses_Debug)
+void FVoxelDistanceFieldShaderHelper::StartCompute(
+	const FIntVector& Size,
+	const TVoxelSharedRef<TArray<FVector3f>>& InOutData,
+	int32 MaxPasses_Debug)
 {
 	VOXEL_FUNCTION_COUNTER();
 	check(IsInGameThread());
-	
+
 	check(InOutData->Num() == Size.X * Size.Y * Size.Z);
 	check(Size.X > 0 && Size.Y > 0 && Size.Z > 0);
-	
+
 	ensure(Fence.IsFenceComplete());
-	
+
 	ENQUEUE_RENDER_COMMAND(VoxelDistanceFieldCompute)(
 		MakeWeakPtrLambda(this, [= UE_504_ONLY(, this)](FRHICommandListImmediate& RHICmdList)
 		{
 			Compute_RenderThread(RHICmdList, Size, GetData(*InOutData), GetNum(*InOutData), MaxPasses_Debug);
 		}));
-	
+
 	Fence.BeginFence();
 }
 
@@ -99,23 +66,19 @@ void FVoxelDistanceFieldShaderHelper::Compute_RenderThread(
 
 	check(Size.X > 0 && Size.Y > 0 && Size.Z > 0);
 	check(Num == Size.X * Size.Y * Size.Z);
-	
-	if (AllocatedSize != Size)
-	{
-		VOXEL_RENDER_SCOPE_COUNTER("Create Buffers");
-		
-		AllocatedSize = Size;
-		
-		SrcBuffer.Initialize(UE_503_ONLY(RHICmdList, )TEXT("DEBUG"), sizeof(float), 3 * Num, PF_R32_FLOAT);
-		DstBuffer.Initialize(UE_503_ONLY(RHICmdList, )TEXT("DEBUG"), sizeof(float), 3 * Num, PF_R32_FLOAT);
-	}
-	
-	{
-		VOXEL_RENDER_SCOPE_COUNTER("Copy Data To Buffers");
-		void* BufferData = RHICmdList.LockBuffer(SrcBuffer.Buffer, 0, SrcBuffer.NumBytes, EResourceLockMode::RLM_WriteOnly);
-		FMemory::Memcpy(BufferData, Data, SrcBuffer.NumBytes);
-		RHICmdList.UnlockBuffer(SrcBuffer.Buffer);
-	}
+
+	const uint32 NumFloatElements = 3u * static_cast<uint32>(Num);
+	const uint32 NumBytes = NumFloatElements * sizeof(float);
+	check(NumBytes == static_cast<uint32>(Num) * sizeof(FVector3f));
+
+	FRDGBuilder GraphBuilder(RHICmdList, RDG_EVENT_NAME("Voxel JumpFlood"));
+
+	FRDGBufferDesc BufferDesc = FRDGBufferDesc::CreateBufferDesc(sizeof(float), NumFloatElements);
+	BufferDesc.Usage |= EBufferUsageFlags::SourceCopy;
+
+	FRDGBufferRef SrcBuffer = GraphBuilder.CreateBuffer(BufferDesc, TEXT("Voxel.JumpFlood.Src"));
+	FRDGBufferRef DstBuffer = GraphBuilder.CreateBuffer(BufferDesc, TEXT("Voxel.JumpFlood.Dst"));
+	GraphBuilder.QueueBufferUpload(SrcBuffer, Data, NumBytes);
 
 	const int32 PowerOfTwo = FMath::CeilLogTwo(Size.GetMax());
 	for (int32 Pass = 0; Pass < PowerOfTwo; Pass++)
@@ -124,84 +87,81 @@ void FVoxelDistanceFieldShaderHelper::Compute_RenderThread(
 		{
 			break;
 		}
-	
-		// -1: we want to start with half the size
+
 		const int32 Step = 1 << (PowerOfTwo - 1 - Pass);
-		ApplyComputeShader<FVoxelJumpFloodCS>(RHICmdList, Size, Step);
+
+		FVoxelJumpFloodCS::FParameters* PassParameters =
+			GraphBuilder.AllocParameters<FVoxelJumpFloodCS::FParameters>();
+		PassParameters->SizeX = Size.X;
+		PassParameters->SizeY = Size.Y;
+		PassParameters->SizeZ = Size.Z;
+		PassParameters->Step = Step;
+		PassParameters->Src = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(SrcBuffer, PF_R32_FLOAT));
+		PassParameters->Dst = GraphBuilder.CreateUAV(FRDGBufferUAVDesc(DstBuffer, PF_R32_FLOAT));
+
+		const TShaderMapRef<FVoxelJumpFloodCS> ComputeShader(
+			GetGlobalShaderMap(GMaxRHIFeatureLevel));
+		const FIntVector GroupCount =
+			FVoxelUtilities::DivideCeil(Size, VOXEL_DISTANCE_FIELD_NUM_THREADS_CS);
+
+		FComputeShaderUtils::AddPass(
+			GraphBuilder,
+			RDG_EVENT_NAME("Voxel JumpFlood Step=%d", Step),
+			ComputeShader,
+			PassParameters,
+			GroupCount);
+
+		Swap(SrcBuffer, DstBuffer);
 	}
 
-	// The final output is stored in SrcBuffer after the last swap.
-	RHICmdList.Transition(
-		FRHITransitionInfo(
-			SrcBuffer.UAV,
-			ERHIAccess::UAVCompute,
-			ERHIAccess::CopySrc));
-	{
-		VOXEL_RENDER_SCOPE_COUNTER("Copy Data From Buffers");
-		void* BufferData = RHICmdList.LockBuffer(SrcBuffer.Buffer, 0, SrcBuffer.NumBytes, EResourceLockMode::RLM_ReadOnly);
-		FMemory::Memcpy(Data, BufferData, SrcBuffer.NumBytes);
-		RHICmdList.UnlockBuffer(SrcBuffer.Buffer);
-	}
+	FRHIGPUBufferReadback Readback(TEXT("Voxel.JumpFlood.Readback"));
+	AddEnqueueCopyPass(GraphBuilder, &Readback, SrcBuffer, NumBytes);
+	GraphBuilder.Execute();
 
-	// Make sure to release the buffers, else will crash on DX12!
-	SrcBuffer.Release();
-	DstBuffer.Release();
+	// JumpFlood is synchronous today. Wait for this copy fence and read the
+	// staging buffer instead of directly locking a GPU source buffer. Submit
+	// the recorded copy first so waiting on its fence cannot deadlock.
+	RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
+	Readback.Wait(RHICmdList, FRHIGPUMask::All());
+	void* const BufferData = Readback.Lock(NumBytes);
+	check(BufferData);
+	FMemory::Memcpy(Data, BufferData, NumBytes);
+	Readback.Unlock();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-template<typename T>
-void FVoxelDistanceFieldShaderHelper::ApplyComputeShader(
-	FRHICommandListImmediate& RHICmdList,
-	const FIntVector& Size,
-	int32 Step)
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FVoxelJumpFloodRDGTest,
+	"Voxel.DistanceField.JumpFloodRDG",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FVoxelJumpFloodRDGTest::RunTest(const FString& Parameters)
 {
-	check(IsInRenderingThread());
+	const FIntVector Size(4, 4, 4);
+	const int32 Num = Size.X * Size.Y * Size.Z;
+	const FVector3f InvalidPosition(1.e9f, 1.e9f, 1.e9f);
 
-	const TShaderMapRef<T> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-	FRHIComputeShader* const ShaderRHI = ComputeShader.GetComputeShader();
+	const TVoxelSharedRef<TArray<FVector3f>> Data = MakeVoxelShared<TArray<FVector3f>>();
+	Data->Init(InvalidPosition, Num);
+	(*Data)[0] = FVector3f::ZeroVector;
 
-	SetComputePipelineState(RHICmdList, ShaderRHI);
+	const TVoxelSharedRef<FVoxelDistanceFieldShaderHelper> Helper =
+		MakeVoxelShared<FVoxelDistanceFieldShaderHelper>();
+	Helper->StartCompute(Size, Data);
+	Helper->WaitForCompletion();
 
-	FVoxelDistanceFieldParameters Parameters;
-	Parameters.SizeX = Size.X;
-	Parameters.SizeY = Size.Y;
-	Parameters.SizeZ = Size.Z;
-	Parameters.Step = Step;
-
-	const FIntVector NumThreads =
-		FVoxelUtilities::DivideCeil(Size, VOXEL_DISTANCE_FIELD_NUM_THREADS_CS);
-
-	check(NumThreads.X > 0 && NumThreads.Y > 0 && NumThreads.Z > 0);
-
-	RHICmdList.Transition(
-		FRHITransitionInfo(
-			SrcBuffer.UAV,
-			ERHIAccess::UAVCompute,
-			ERHIAccess::UAVCompute));
-
-	RHICmdList.Transition(
-		FRHITransitionInfo(
-			DstBuffer.UAV,
-			ERHIAccess::UAVCompute,
-			ERHIAccess::UAVCompute));
-
-	FRHIBatchedShaderParameters& BatchedParameters = RHICmdList.GetScratchShaderParameters();
-
-	ComputeShader->SetUniformBuffers(BatchedParameters, Parameters);
-	ComputeShader->SetBuffers(BatchedParameters, SrcBuffer, DstBuffer);
-
-	RHICmdList.SetBatchedShaderParameters(ShaderRHI, BatchedParameters);
-	RHICmdList.DispatchComputeShader(NumThreads.X, NumThreads.Y, NumThreads.Z);
-
-	if (RHICmdList.NeedsShaderUnbinds())
+	for (int32 Index = 0; Index < Data->Num(); Index++)
 	{
-		FRHIBatchedShaderUnbinds& BatchedUnbinds = RHICmdList.GetScratchShaderUnbinds();
-
-		ComputeShader->UnsetBuffers(BatchedUnbinds);
-		RHICmdList.SetBatchedShaderUnbinds(ShaderRHI, BatchedUnbinds);
+		if (!(*Data)[Index].Equals(FVector3f::ZeroVector))
+		{
+			AddError(FString::Printf(
+				TEXT("JumpFlood output mismatch at index %d: %s"),
+				Index,
+				*(*Data)[Index].ToString()));
+			return false;
+		}
 	}
 
-	Swap(SrcBuffer, DstBuffer);
+	return true;
 }
+#endif
