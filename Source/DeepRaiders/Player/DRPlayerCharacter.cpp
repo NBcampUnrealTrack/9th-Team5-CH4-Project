@@ -314,12 +314,22 @@ void ADRPlayerCharacter::RefreshTeamColor()
 	}
 }
 
-void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, const FTransform& WorldTransform)
+void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName)
 {
+	if (!IsValid(WorldHandEquipmentMesh)
+		|| !IsValid(GetMesh()))
+	{
+		return;
+	}
+
+	if (AttachSocketName.IsNone())
+	{
+		AttachSocketName = TEXT("S_HandGrip_R");
+	}
+
+	WorldHandEquipmentMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
-
-	WorldHandEquipmentMesh->SetRelativeTransform(WorldTransform);
-
+	WorldHandEquipmentMesh->SetRelativeTransform(FTransform::Identity);
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
 }
 

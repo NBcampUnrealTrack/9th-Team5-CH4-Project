@@ -85,9 +85,9 @@ ADRWorldItemActor* UDRWorldItemSubsystem::SpawnWorldItem(const FDRItemInstance& 
 	}
 	
 	const bool bUsesHoverPresentation = SpawnActorClass.Get()->IsChildOf(ADRHoveringWorldItemActor::StaticClass());
-	const FTransform SourceWorldTransform = Definition->SpawnOffsetTransform * SpawnParams.SourceTransform;
+	const FTransform SourceWorldTransform = Definition->WorldItemOffsetTransform * SpawnParams.SourceTransform;
 	const FTransform SpawnTransform = bUsesHoverPresentation ? 
-		ResolveHoverSpawnTransform(Definition, SpawnParams) : Definition->SpawnOffsetTransform * SpawnParams.TargetTransform;
+		ResolveHoverSpawnTransform(Definition, SpawnParams) : Definition->WorldItemOffsetTransform * SpawnParams.TargetTransform;
 	
 	ADRWorldItemActor* ItemActor = World->SpawnActorDeferred<ADRWorldItemActor>(SpawnActorClass, SpawnTransform,
 		nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
@@ -138,8 +138,8 @@ FTransform UDRWorldItemSubsystem::ResolveHoverSpawnTransform(const UDRItemDefini
 	constexpr float GroundTraceDistance = 500.f;
 	constexpr float HoverGroundClearance = 30.f;
 	
-	FTransform DesiredTransform = Definition->SpawnOffsetTransform * SpawnParams.TargetTransform;
-	const FTransform SourceTransform = Definition->SpawnOffsetTransform * SpawnParams.SourceTransform;
+	FTransform DesiredTransform = Definition->WorldItemOffsetTransform * SpawnParams.TargetTransform;
+	const FTransform SourceTransform = Definition->WorldItemOffsetTransform * SpawnParams.SourceTransform;
 	
 	UWorld* World = GetWorld();
 	if (!IsValid(World))

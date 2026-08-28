@@ -77,9 +77,7 @@ public:
 	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
 	void RefreshTeamColor();
 
-	void ApplyHandEquipmentVisual(
-		UStaticMesh* WorldMesh,
-		const FTransform& WorldTransform);
+	void ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName);
 		
 	/** 현재 손 장비 외형을 제거한다. */
 	void ClearHandEquipmentVisual();
