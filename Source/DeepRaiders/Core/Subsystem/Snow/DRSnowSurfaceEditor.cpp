@@ -751,6 +751,82 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 	return bPaintedAny;
 }
 
+bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtModifiedVoxels(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& EditResult,
+	const FDRSnowOwnershipStore& OwnershipStore,
+	const FDRSnowVolumeStore& VolumeStore)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_Total);
+	if (!EditResult.EditedBounds.IsValid() || EditResult.ModifiedValues.IsEmpty())
+	{
+		return false;
+	}
+
+	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
+	if (!IsValid(VoxelWorld))
+	{
+		VoxelWorld = ResolveVoxelWorld(Request);
+	}
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+
+	const FVoxelSurfaceEditsProcessedVoxels DirtyVoxels =
+		UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
+			EditResult.EditedBounds,
+			EditResult.ModifiedValues,
+			false);
+	if (DirtyVoxels.Voxels->IsEmpty())
+	{
+		return false;
+	}
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Repaint/DirtyVoxels"), DirtyVoxels.Voxels->Num());
+
+	TArray<FIntVector> DirtyPositions;
+	DirtyPositions.Reserve(DirtyVoxels.Voxels->Num());
+	for (const FVoxelSurfaceEditsVoxel& Voxel : *DirtyVoxels.Voxels)
+	{
+		DirtyPositions.Add(Voxel.Position);
+	}
+
+	TArray<int32> ResolvedTeamIds;
+	TBitArray<> FoundOwnership;
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_ResolveOwnership);
+		OwnershipStore.ResolveNearestTeamsAtVoxels(
+			VoxelWorld,
+			DirtyPositions,
+			2,
+			ResolvedTeamIds,
+			FoundOwnership);
+	}
+
+	TMap<int32, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByTeam;
+	for (int32 VoxelIndex = 0; VoxelIndex < DirtyVoxels.Voxels->Num(); ++VoxelIndex)
+	{
+		const FVoxelSurfaceEditsVoxel& Voxel = (*DirtyVoxels.Voxels)[VoxelIndex];
+		int32 DominantTeamId = ResolvedTeamIds[VoxelIndex];
+		if (!FoundOwnership[VoxelIndex])
+		{
+			DominantTeamId = VolumeStore.GetDominantTeamAtLocation(
+				VoxelWorld->LocalToGlobal(Voxel.Position));
+		}
+		VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);
+	}
+
+	bool bPaintedAny = false;
+	for (TPair<int32, TArray<FVoxelSurfaceEditsVoxel>>& TeamVoxels : VoxelsByTeam)
+	{
+		bPaintedAny |= PaintProcessedTeamSurface(
+			VoxelWorld,
+			MakeProcessedVoxelGroup(DirtyVoxels, MoveTemp(TeamVoxels.Value)),
+			TeamVoxels.Key);
+	}
+	return bPaintedAny;
+}
+
 AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const
 {
 	if (IsValid(Request.TargetVoxelWorld.Get()))

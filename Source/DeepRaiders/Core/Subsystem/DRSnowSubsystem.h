@@ -20,13 +20,6 @@ struct FDRSnowPendingRenderUpdate
 	TArray<FVoxelIntBox> Bounds;
 };
 
-// 흡수는 짧은 간격으로 연속 호출된다. 재질 재칠은 여러 회의 실제 Voxel 변경을 합쳐 처리한다.
-struct FDRSnowPendingAbsorbRepaint
-{
-	FDRSnowSurfaceRemoveRequest Request;
-	FDRSnowSurfaceEditResult EditResult;
-};
-
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
 UCLASS()
@@ -49,8 +42,6 @@ public:
 	bool RepaintSnowMaterialsAtArea(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult);
-	// 흡수 종료 시 남아 있는 재질 재칠 작업을 즉시 반영한다.
-	void FlushPendingAbsorbRepaints();
 
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
@@ -94,9 +85,6 @@ private:
 	void ProcessNextDirectionalAdd();
 	void QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIntBox& Bounds);
 	void FlushRenderUpdates();
-	void QueueAbsorbRepaint(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult);
 
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
@@ -106,6 +94,4 @@ private:
 	bool bDirectionalAddInProgress = false;
 	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;
 	FTimerHandle RenderUpdateTimerHandle;
-	TArray<FDRSnowPendingAbsorbRepaint> PendingAbsorbRepaints;
-	FTimerHandle AbsorbRepaintTimerHandle;
 };
