@@ -19,10 +19,15 @@ public:
 
 	/** 현재 컨트롤러가 소유한 캐릭터를 HUD ViewModel에 다시 연결한다. */
 	void RefreshPlayerCharacter();
+	UUserWidget* GetHUDWidget() const { return HUDWidget; }
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 	UPROPERTY(Transient)

@@ -1,6 +1,5 @@
 #include "HostOrJoinWidget.h"
 
-#include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Overlay.h"
 #include "Components/Slider.h"
@@ -17,6 +16,12 @@ namespace DRTitleSettings
 	constexpr float MaxVolumeDisplay = 100.f;
 	constexpr float MinMouseSensitivity = 0.001f;
 	constexpr float MaxMouseSensitivity = 5.f;
+	constexpr TCHAR MasterSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Master.SC_Master");
+	constexpr TCHAR MusicSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Music.SC_Music");
+	constexpr TCHAR SFXSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_SFX.SC_SFX");
 }
 
 bool UHostOrJoinWidget::Initialize()
@@ -32,20 +37,6 @@ bool UHostOrJoinWidget::Initialize()
 		return true;
 	}
 
-	// 타이틀
-	PublicMatch->OnClicked.AddDynamic(this, &ThisClass::HandlePublicMatchClicked);
-	PrivateCreate->OnClicked.AddDynamic(this, &ThisClass::HandlePrivateCreateClicked);
-	ExitGame->OnClicked.AddDynamic(this, &ThisClass::HandleExitGameClicked);
-
-	// Join Server
-	PrivateMatch->OnClicked.AddDynamic(this, &ThisClass::HandlePrivateMatchClicked);
-	Btn_Join->OnClicked.AddDynamic(this, &ThisClass::HandleJoinClicked);
-	Btn_CloseJoin->OnClicked.AddDynamic(this, &ThisClass::HandleCloseJoinClicked);
-
-	// Settings
-	Settings->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsClicked);
-	Button_Apply->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsApplyClicked);
-	Button_Cancel->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsCancelClicked);
 	Slider_MasterVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
 	Slider_MusicVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
 	Slider_SFXVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
@@ -62,15 +53,6 @@ bool UHostOrJoinWidget::Initialize()
 			UserSettings->GetMasterVolume(),
 			UserSettings->GetMusicVolume(),
 			UserSettings->GetSFXVolume());
-	}
-
-	UGameInstance* GameInstance = GetGameInstance();
-	if (IsValid(GameInstance))
-	{
-		if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
-		{
-			SessionSubsystem->OnJoinSessionComplete.AddDynamic(this, &ThisClass::HandleJoinSessionComplete);
-		}
 	}
 
 	return true;
@@ -103,7 +85,6 @@ void UHostOrJoinWidget::HandlePublicMatchClicked()
 		}
 	}
 
-	PublicMatch->SetIsEnabled(true);
 }
 
 void UHostOrJoinWidget::HandlePrivateCreateClicked()
@@ -113,11 +94,9 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 		return;
 	}
 
-	PrivateCreate->SetIsEnabled(false);
 	UGameInstance* GameInstance = GetGameInstance();
 	if (!IsValid(GameInstance))
 	{
-		PrivateCreate->SetIsEnabled(true);
 		return;
 	}
 
@@ -127,7 +106,6 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 		return;
 	}
 
-	PrivateCreate->SetIsEnabled(true);
 }
 
 void UHostOrJoinWidget::HandlePrivateMatchClicked()
@@ -207,15 +185,6 @@ void UHostOrJoinWidget::HandleExitGameClicked()
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
 }
 
-void UHostOrJoinWidget::HandleJoinSessionComplete(bool bWasSuccessful)
-{
-	if (!bWasSuccessful)
-	{
-		PublicMatch->SetIsEnabled(true);
-		Btn_Join->SetIsEnabled(true);
-	}
-}
-
 void UHostOrJoinWidget::LoadSettingsIntoSliders()
 {
 	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
@@ -266,6 +235,20 @@ void UHostOrJoinWidget::RefreshSettingValueTexts()
 
 void UHostOrJoinWidget::ApplyAudioSettings(float MasterVolume, float MusicVolume, float SFXVolume)
 {
+	// BP에 SoundClass가 지정되지 않아도 프로젝트 기본 SoundClass를 사용한다.
+	if (!IsValid(MasterSoundClass))
+	{
+		MasterSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::MasterSoundClassPath);
+	}
+	if (!IsValid(MusicSoundClass))
+	{
+		MusicSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::MusicSoundClassPath);
+	}
+	if (!IsValid(SFXSoundClass))
+	{
+		SFXSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::SFXSoundClassPath);
+	}
+
 	if (!IsValid(RuntimeSoundMix))
 	{
 		RuntimeSoundMix = NewObject<USoundMix>(this);

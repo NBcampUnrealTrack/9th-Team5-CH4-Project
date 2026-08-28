@@ -6,8 +6,7 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
-#include "AbilitySystemComponent.h"
-#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 
 ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(CollisionComponentName))
@@ -15,6 +14,8 @@ ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitial
 	UBoxComponent* BoxCollision = CastChecked<UBoxComponent>(CollisionComponent);
 
 	BoxCollision->InitBoxExtent(FVector(40.f, 12.f, 12.f));
+	
+	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
 }
 
 void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
@@ -31,7 +32,19 @@ void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
 		Destroy();
 		return;
 	}
+	
+	const FDRProjectileWorldImpactData& ImpactData = GetWorldImpactData();
+	if (!ImpactData.bAddSnow)
+	{
+		return;
+	}
 
+	SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
+	SnowAddComponent->SetAddSettings(ImpactData.SnowRadius, ImpactData.SnowAmount);
+	SnowAddComponent->SetAddEditTool(ImpactData.SnowEditTool);
+	SnowAddComponent->SetAllowVirtualSurfaceFallback(ImpactData.bAllowVirtualSurfaceFallback);
+	SnowAddComponent->TryAddSnowFromHit(ImpactResult);
+	
 	const FVector ExplosionLocation = ImpactResult.ImpactPoint;
 
 	TArray<FOverlapResult> OverlapResults;
@@ -85,33 +98,9 @@ void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
 
 	// 폭발 VFX / Sound Cue
 	ExecuteImpactGameplayCue(ImpactResult);
-
-	ExecuteExplosionSoundCue(ImpactResult);
 	
 	// DRSnowProjectile의 눈 생성
 	HandleWorldImpact(ImpactResult);
 
 	Destroy();
-}
-
-void ADRCannonProjectile::ExecuteExplosionSoundCue(const FHitResult& ImpactResult)
-{
-	UAbilitySystemComponent* SourceASC = GetSourceAbilitySystem();
-
-	if (!IsValid(SourceASC))
-	{
-		return;
-	}
-
-	FGameplayCueParameters Parameters;
-
-	Parameters.Location = ImpactResult.ImpactPoint;
-
-	Parameters.Normal = ImpactResult.ImpactNormal;
-
-	Parameters.Instigator = GetInstigator();
-
-	Parameters.EffectCauser = this;
-
-	SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Cannon_Explosion, Parameters);
 }

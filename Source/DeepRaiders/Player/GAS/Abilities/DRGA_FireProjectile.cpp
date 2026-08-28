@@ -282,8 +282,13 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		return false;
 	}
 
-	Projectile->InitializeProjectile(AbilitySystem, ImpactEffectSpecs,
-		GetBreakableDamageAmount(), WorldImpactData, GetImpactGameplayCueTag(), GetSourceTeamId());
+	Projectile->InitializeProjectile(
+		AbilitySystem,
+		ImpactEffectSpecs,
+		GetBreakableDamageAmount(),
+		WorldImpactData,
+		GetSourceTeamId(),
+		WeaponDefinition);
 
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 

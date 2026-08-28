@@ -611,16 +611,20 @@ void UDRGA_SpraySnow::StartSprayGameplayCue()
 		return;
 	}
 
-	UAbilitySystemComponent* ASC =
-		ActorInfo->AbilitySystemComponent.Get();
-
-	if (!IsValid(ASC))
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+	UDRSprayerWeaponDefinition* WeaponDefinition = Cast<UDRSprayerWeaponDefinition>(GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo));
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	if (!IsValid(ASC) || !IsValid(WeaponDefinition) || !IsValid(AvatarActor))
 	{
 		return;
 	}
 
-	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active);
-	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Sprayer_Active);
+	FGameplayCueParameters Parameters;
+	Parameters.SourceObject = WeaponDefinition;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active, Parameters);
 }
 
 void UDRGA_SpraySnow::StopSprayGameplayCue()
@@ -632,16 +636,12 @@ void UDRGA_SpraySnow::StopSprayGameplayCue()
 		return;
 	}
 
-	UAbilitySystemComponent* ASC =
-		ActorInfo->AbilitySystemComponent.Get();
-
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	if (!IsValid(ASC))
 	{
 		return;
 	}
-
 	ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active);
-	ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Sound_Weapon_Sprayer_Active);
 }
 
 void UDRGA_SpraySnow::StartSprayMontage()

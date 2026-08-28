@@ -1,13 +1,14 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "DRItemDefinition.h"
+#include "DRRangedWeaponDefinition.h"
+#include "DRWeaponPresentationTypes.h"
 #include "DRSprayerWeaponDefinition.generated.h"
 
 class UGameplayEffect;
 
 UCLASS(BlueprintType)
-class DEEPRAIDERS_API UDRSprayerWeaponDefinition : public UDRItemDefinition
+class DEEPRAIDERS_API UDRSprayerWeaponDefinition : public UDRRangedWeaponDefinition
 {
 	GENERATED_BODY()
 
@@ -19,4 +20,7 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Snow")
 	TSubclassOf<UGameplayEffect> SnowCostEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
+	FDRWeaponPresentationData ActivePresentation;
 };

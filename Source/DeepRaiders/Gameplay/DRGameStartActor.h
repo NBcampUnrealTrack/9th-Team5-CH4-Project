@@ -54,6 +54,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Game Start")
 	int32 GetTotalPlayerCount() const;
 
+	/** 접속 및 퇴장 후 준비 인원과 전체 인원을 다시 계산한다. */
+	void RefreshPlayerRoster();
+
 	UFUNCTION(BlueprintPure, Category = "Game Start")
 	int32 GetCountdownSecondsRemaining() const { return CountdownSecondsRemaining; }
 
@@ -107,6 +110,9 @@ private:
 	UFUNCTION()
 	void OnRep_CountdownSecondsRemaining();
 
+	UFUNCTION()
+	void OnRep_TotalPlayerCount();
+
 	void RefreshReadyState();
 	void RefreshLocalReadyColor();
 	void BroadcastReadyStatus();
@@ -122,6 +128,9 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_CountdownSecondsRemaining)
 	int32 CountdownSecondsRemaining = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_TotalPlayerCount)
+	int32 TotalPlayerCount = 0;
 
 	FTimerHandle GameStartTimerHandle;
 };

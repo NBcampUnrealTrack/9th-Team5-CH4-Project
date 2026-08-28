@@ -21,12 +21,13 @@ public:
 	ADRProjectile(const FObjectInitializer& ObjectInitializer);
 	
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
-	void InitializeProjectile(UAbilitySystemComponent* InSourceAbilitySystem
-		, const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs
-		, float InBreakableDamageAmount
-		, const FDRProjectileWorldImpactData& InWorldImpactData
-		, FGameplayTag InImpactGameplayCueTag
-		, int32 InSourceTeamId);
+	void InitializeProjectile(
+		UAbilitySystemComponent* InSourceAbilitySystem,
+		const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
+		float InBreakableDamageAmount,
+		const FDRProjectileWorldImpactData& InWorldImpactData,
+		int32 InSourceTeamId,
+		const UObject* InPresentationSourceObject);
 	
 protected:
 	virtual void BeginPlay() override;
@@ -55,7 +56,7 @@ protected:
 	
 	// 아군 충돌 무시 설정
 	void RefreshFriendlyCollisionIgnores();
-	void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
+	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
 	
 	static const FName CollisionComponentName;
 	
@@ -65,6 +66,13 @@ protected:
 	UAbilitySystemComponent* GetSourceAbilitySystem() const
 	{
 		return SourceAbilitySystem.Get();
+	}
+	
+	void ConfigureProjectileMovement(float InitialSpeed, float GravityScale);
+	
+	virtual bool ShouldIgnoreFriendlyBlockingHit() const
+	{
+		return true;
 	}
 	
 private:
@@ -87,6 +95,5 @@ private:
 	
 	bool bImpactHandled = false;	
 	
-	// 충돌 지점에 적용될 GameplayCue Tag
-	FGameplayTag ImpactGameplayCueTag;
+	TWeakObjectPtr<UObject> PresentationSourceObject;
 };

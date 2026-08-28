@@ -5,7 +5,7 @@
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
@@ -171,9 +171,11 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 
 bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const
 {
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
-		Cast<UDRProjectileWeaponItemDefinition>(
-			GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
+	const UDRRangedWeaponDefinition* WeaponDefinition =
+		Cast<UDRRangedWeaponDefinition>(
+			GetSourceObject(
+				GetCurrentAbilitySpecHandle(),
+				GetCurrentActorInfo()));
 	if (!IsValid(WeaponDefinition) || !WeaponDefinition->SnowAbsorbSettings.bEnabled)
 	{
 		return false;

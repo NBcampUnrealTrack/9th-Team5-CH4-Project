@@ -5,6 +5,4 @@
 
 UDRProjectileWeaponItemDefinition::UDRProjectileWeaponItemDefinition()
 {
-	Category = EDRItemCategory::Equipment;
-	MaxStackSize = 1;
 }

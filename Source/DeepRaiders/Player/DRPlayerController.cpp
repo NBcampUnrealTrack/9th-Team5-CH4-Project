@@ -31,6 +31,7 @@
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
+#include "DeepRaiders/UI/Skill/DRSkillUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
@@ -43,6 +44,7 @@
 #include "AbilitySystemComponent.h"
 #include "DRPlayerState.h"
 #include "GameplayAbilitySpec.h"
+#include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "GameplayPrediction.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -70,6 +72,7 @@ ADRPlayerController::ADRPlayerController()
 	
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
+	SkillUIComponent = CreateDefaultSubobject<UDRSkillUIComponent>(TEXT("SkillUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
@@ -115,7 +118,7 @@ void ADRPlayerController::BeginPlay()
 		InventoryComponent,
 		QuickSlotComponent);
 
-	StartingSelectionUIComponent->ShowStartingSelection(
+	StartingSelectionUIComponent->InitializeStartingSelection(
 		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
@@ -151,15 +154,18 @@ void ADRPlayerController::BeginPlay()
 
 	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer);
 
-	if (!IsValid(InputSubsystem) || !IsValid(DefaultMappingContext.Get()))
+	if (IsValid(InputSubsystem) && IsValid(DefaultMappingContext.Get()))
 	{
-		return;
+		UInputMappingContext* MappingContext = DefaultMappingContext.Get();
+
+		InputSubsystem->RemoveMappingContext(MappingContext);
+		InputSubsystem->AddMappingContext(MappingContext, 0);
 	}
 
-	UInputMappingContext* MappingContext = DefaultMappingContext.Get();
-
-	InputSubsystem->RemoveMappingContext(MappingContext);
-	InputSubsystem->AddMappingContext(MappingContext, 0);
+	if (IsValid(SkillUIComponent) && IsValid(HUDUIComponent))
+	{
+		SkillUIComponent->Initialize(HUDUIComponent->GetHUDWidget());
+	}
 }
 
 void ADRPlayerController::RefreshPublicQuickSlotSnapshot()
@@ -312,10 +318,7 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 		QuickSlotComponent->RefreshSelectedItem();
 	}
 
-	if (IsValid(HUDUIComponent))
-	{
-		HUDUIComponent->RefreshPlayerCharacter();
-	}
+	RefreshPlayerUI();
 }
 
 void ADRPlayerController::OnRep_Pawn()
@@ -323,12 +326,7 @@ void ADRPlayerController::OnRep_Pawn()
 	Super::OnRep_Pawn();
 
 	ApplyViewPitchLimits();
-	
-	if (IsValid(HUDUIComponent))
-	{
-		HUDUIComponent->RefreshPlayerCharacter();
-	}
-
+	RefreshPlayerUI();
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -336,16 +334,25 @@ void ADRPlayerController::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	SetupGASInputComponent();
-
-	if (IsValid(HUDUIComponent))
-	{
-		HUDUIComponent->RefreshPlayerCharacter();
-	}
+	RefreshPlayerUI();
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
 {
 	return Cast<ADRPlayerCharacter>(GetPawn());
+}
+
+void ADRPlayerController::RefreshPlayerUI()
+{
+	if (IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->RefreshPlayerCharacter();
+	}
+
+	if (IsValid(SkillUIComponent))
+	{
+		SkillUIComponent->RefreshPlayerCharacter();
+	}
 }
 
 void ADRPlayerController::HandleMove(const FInputActionValue& Value)
@@ -1035,3 +1042,18 @@ void ADRPlayerController::ApplySnowJoinOperations(const TArray<FDRSnowOperationR
 	}
 }
 #pragma endregion
+UInputAction* ADRPlayerController::GetSkillInputAction(
+	EDRSkillSlot SkillSlot) const
+{
+	switch (SkillSlot)
+	{
+	case EDRSkillSlot::One:
+		return Skill1Action;
+
+	case EDRSkillSlot::Two:
+		return Skill2Action;
+
+	default:
+		return nullptr;
+	}
+}
