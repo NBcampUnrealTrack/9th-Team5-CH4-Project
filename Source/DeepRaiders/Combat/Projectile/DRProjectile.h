@@ -67,6 +67,13 @@ protected:
 		return SourceAbilitySystem.Get();
 	}
 	
+	void ConfigureProjectileMovement(float InitialSpeed, float GravityScale);
+	
+	virtual bool ShouldIgnoreFriendlyBlockingHit() const
+	{
+		return true;
+	}
+	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UStaticMeshComponent> MeshComponent;

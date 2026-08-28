@@ -114,7 +114,9 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 	AActor* HitActor = ImpactResult.GetActor();
 
 	// 아군과 충돌하면 무시하고 계속 진행
-	if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
+	if (ShouldIgnoreFriendlyBlockingHit()
+		&& IsValid(HitActor) 
+		&& IsFriendlyTarget(HitActor))
 	{
 		CollisionComponent->IgnoreActorWhenMoving(HitActor, true);
 		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
@@ -278,16 +280,13 @@ void ADRProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
 	SourceASC->ExecuteGameplayCue(ImpactGameplayCueTag, CueParameters);	
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+void ADRProjectile::ConfigureProjectileMovement(float InitialSpeed, float GravityScale)
+{
+	const float SafeSpeed = FMath::Max(InitialSpeed, 1.f);
+	
+	ProjectileMovement->InitialSpeed = SafeSpeed;
+	ProjectileMovement->MaxSpeed = SafeSpeed;
+	ProjectileMovement->ProjectileGravityScale = FMath::Max(GravityScale, 0.f);
+	
+	ProjectileMovement->Velocity = GetActorForwardVector() * SafeSpeed;
+}
