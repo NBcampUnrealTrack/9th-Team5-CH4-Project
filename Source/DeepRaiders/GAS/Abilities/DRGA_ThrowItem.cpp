@@ -178,7 +178,27 @@ void UDRGA_ThrowItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHand
 		AimReleaseTask = nullptr;
 	}
 	
-	ConfirmedTargetData = TargetData;
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr)
+	{
+		CancelThrow();
+		return;
+	}
+	
+	// 서버는 TargetData가 도착한 시점에 즉시 검증
+	if (ActorInfo->IsNetAuthority())
+	{
+		FVector ServerValidatedAimDirection;
+		
+		if (!ValidateServerTargetData(TargetData, ServerValidatedAimDirection))
+		{
+			CancelThrow();
+			return;
+		}
+		
+		ValidatedAimDirection = ServerValidatedAimDirection;
+	}
+	
 	StartThrowMontage();
 }
 
@@ -194,7 +214,7 @@ void UDRGA_ThrowItem::ExecuteConfirmedThrow()
 	
 	FVector LaunchLocation;
 	FVector LaunchDirection;
-	if (!ValidateServerTargetData(LaunchLocation, LaunchDirection))
+	if (!ResolveServerLaunchData(LaunchLocation, LaunchDirection))
 	{
 		CancelThrow();
 		return;
@@ -227,33 +247,26 @@ void UDRGA_ThrowItem::ExecuteConfirmedThrow()
 		*GetName(), *InstanceId.ToString());
 }
 
-bool UDRGA_ThrowItem::ValidateServerTargetData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const
+bool UDRGA_ThrowItem::ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData,
+	FVector& OutAimDirection) const
 {
-	OutLaunchLocation = FVector::ZeroVector;
-	OutLaunchDirection = FVector::ZeroVector;
+	OutAimDirection = FVector::ZeroVector;
 	
-	if (!IsValid(ActiveDefinition)
-		|| ConfirmedTargetData.Num() != 1)
-	{
-		return false;
-	}
-	
-	const FHitResult* ClientAimHit = ConfirmedTargetData.Get(0)->GetHitResult();
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	
-	if (ClientAimHit == nullptr
-		|| ActorInfo == nullptr)
+	if (!IsValid(ActiveDefinition)
+		|| TargetData.Num() != 1
+		|| ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority())
 	{
 		return false;
 	}
 	
+	const FHitResult* ClientAimHit = TargetData.Get(0)->GetHitResult();
 	APlayerController* PlayerController = ActorInfo->PlayerController.Get();
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	UWorld* World = GetWorld();
 	
-	if (!IsValid(PlayerController)
-		|| !IsValid(AvatarActor)
-		|| !IsValid(World))
+	if (ClientAimHit == nullptr
+		|| !IsValid(PlayerController))
 	{
 		return false;
 	}
@@ -262,7 +275,6 @@ bool UDRGA_ThrowItem::ValidateServerTargetData(FVector& OutLaunchLocation, FVect
 	FRotator ServerViewRotation;
 	
 	PlayerController->GetPlayerViewPoint(ServerViewLocation,  ServerViewRotation);
-	
 	if (FVector::Dist(ServerViewLocation, ClientAimHit->TraceStart) > ActionSettings.ServerViewOriginTolerance)
 	{
 		return false;
@@ -274,25 +286,74 @@ bool UDRGA_ThrowItem::ValidateServerTargetData(FVector& OutLaunchLocation, FVect
 		return false;
 	}
 	
-	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(ActionSettings.ServerAimAngleTolerance));
+	const float MaximumAimAngle = FMath::Clamp(ActionSettings.ServerAimAngleTolerance, 0.f, 90.f);
+	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(MaximumAimAngle));	
 	if (FVector::DotProduct(ClientAimDirection, ServerViewRotation.Vector()) < MinimumAimDot)
 	{
 		return false;
 	}
 	
-	const FVector ServerTraceEnd = ServerViewLocation + ClientAimDirection * ActiveDefinition->ThrowSettings.MaxAimDistance;
+	OutAimDirection = ClientAimDirection;
+	return true;
+}
+
+bool UDRGA_ThrowItem::ResolveServerLaunchData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const
+{
+	OutLaunchLocation = FVector::ZeroVector;
+	OutLaunchDirection = FVector::ZeroVector;
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	if (!IsValid(ActiveDefinition)
+		|| ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority())
+	{
+		return false;
+	}
+
+	const FVector LockedAimDirection = ValidatedAimDirection.GetSafeNormal();
+
+	if (LockedAimDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	APlayerController* PlayerController = ActorInfo->PlayerController.Get();
+
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(PlayerController)
+		|| !IsValid(AvatarActor)
+		|| !IsValid(World))
+	{
+		return false;
+	}
+
+	FVector CurrentViewLocation;
+	FRotator CurrentViewRotation;
+	PlayerController->GetPlayerViewPoint(CurrentViewLocation, CurrentViewRotation);
+
+	const float MaximumAimDistance = FMath::Max(ActiveDefinition->ThrowSettings.MaxAimDistance, 1.f);
+	const FVector ServerTraceEnd = CurrentViewLocation + LockedAimDirection * MaximumAimDistance;
+
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRServerThrowAim), false);
 	QueryParams.AddIgnoredActor(AvatarActor);
-	
+
 	FHitResult ServerAimHit;
-	const bool bBlockingHit = World->LineTraceSingleByChannel(ServerAimHit, ServerViewLocation, ServerTraceEnd,
-		ActionSettings.AimTraceChannel, QueryParams);
-	
+	const bool bBlockingHit = World->LineTraceSingleByChannel(ServerAimHit, CurrentViewLocation,
+		ServerTraceEnd, ActionSettings.AimTraceChannel,	QueryParams);
+
 	const FVector AimPoint = bBlockingHit ? ServerAimHit.ImpactPoint : ServerTraceEnd;
-	
-	OutLaunchLocation = DRThrow::ResolveLaunchLocation(AvatarActor, ActionSettings, ClientAimDirection);
+
+	/*
+	 * 위치는 Notify 시점의 현재 ThrowPoint를 사용한다.
+	 * fallback 위치도 확정 시점의 조준 방향을 기준으로 계산한다.
+	 */
+	OutLaunchLocation = DRThrow::ResolveLaunchLocation(AvatarActor, ActionSettings, LockedAimDirection);
+
 	OutLaunchDirection = (AimPoint - OutLaunchLocation).GetSafeNormal();
-	
+
 	return !OutLaunchDirection.IsNearlyZero();
 }
 
@@ -623,7 +684,7 @@ void UDRGA_ThrowItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const 
 		ReleaseEventTask = nullptr;
 	}
 	
-	ConfirmedTargetData.Clear();
+	ValidatedAimDirection = FVector::ZeroVector;
 	ActiveDefinition = nullptr;
 	ActiveInstanceId.Invalidate();
 	bReleaseEventReceived = false;

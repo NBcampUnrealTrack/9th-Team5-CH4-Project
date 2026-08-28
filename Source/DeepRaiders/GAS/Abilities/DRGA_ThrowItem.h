@@ -37,7 +37,8 @@ private:
 	void StartBlockingStateTasks();
 	void ExecuteConfirmedThrow();
 	
-	bool ValidateServerTargetData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const;
+	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutAimDirection) const;
+	bool ResolveServerLaunchData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const;
 	
 	bool SpawnServerProjectile(const FVector& LaunchLocation, const FVector& LaunchDirection);
 	
@@ -72,6 +73,7 @@ private:
 	UFUNCTION()
 	void HandleMontageInterrupted();
 	
+private:
 	UPROPERTY(EditDefaultsOnly, Category = "Throw")
 	TSubclassOf<ADRThrowTargetActor> TargetActorClass;
 	
@@ -92,6 +94,7 @@ private:
 	
 	bool bReleaseEventReceived = false;
 	
-	FGameplayAbilityTargetDataHandle ConfirmedTargetData;
 	FGuid ActiveInstanceId;	
+	
+	FVector ValidatedAimDirection = FVector::ZeroVector;	
 };
