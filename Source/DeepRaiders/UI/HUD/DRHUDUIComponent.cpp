@@ -45,10 +45,12 @@ void UDRHUDUIComponent::BeginPlay()
 
 	HUDViewModel = NewObject<UDRHUDViewModel>(this);
 	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(HUDWidget);
-	if (!IsValid(View) || !View->SetViewModel(UIConfig->HUDViewModelName, HUDViewModel))
+	const bool IsViewModelRegistered = IsValid(View)
+		&& View->SetViewModel(UIConfig->HUDViewModelName, HUDViewModel);
+	if (!IsViewModelRegistered)
 	{
-		UE_LOG(LogTemp, Error, TEXT("HUD ViewModel '%s' was not registered on %s"),
-			*UIConfig->HUDViewModelName.ToString(), *GetNameSafe(HUDWidget));
+		UE_LOG(LogTemp, Error, TEXT("HUD ViewModels were not registered on %s"),
+			*GetNameSafe(HUDWidget));
 		UIManager->ReleaseManagedWidget(HUDWidget);
 		HUDWidget = nullptr;
 		HUDViewModel = nullptr;
@@ -87,7 +89,7 @@ void UDRHUDUIComponent::RefreshPlayerCharacter()
 		return;
 	}
 
-	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
 	ADRPlayerCharacter* PlayerCharacter = IsValid(PlayerController)
 		? Cast<ADRPlayerCharacter>(PlayerController->GetPawn())
 		: nullptr;
