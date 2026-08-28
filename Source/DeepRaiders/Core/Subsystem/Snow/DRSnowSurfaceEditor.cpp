@@ -357,6 +357,8 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[SnowSurface] Add rejected: Voxel=%s Created=%d Location=%s"),
+			*GetNameSafe(VoxelWorld), IsValid(VoxelWorld) && VoxelWorld->IsCreated(), *Request.WorldLocation.ToString());
 		return false;
 	}
 
@@ -383,6 +385,9 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 			Request.Amount,
 			true);
 	}
+	UE_LOG(LogTemp, Log, TEXT("[SnowSurface] Add footprint: Voxel=%s Location=%s Virtual=%d Fallback=%d Voxels=%d"),
+		*GetNameSafe(VoxelWorld), *Request.WorldLocation.ToString(), Request.bUseVirtualSurface,
+		Request.bAllowVirtualSurfaceFallback, SurfaceFootprint.Voxels->Num());
 
 	const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld = VoxelWorld;
 	return UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
@@ -403,6 +408,8 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 			}
 
 			Result.AppliedAmount = FMath::Min(Request.Amount, GetModifiedValueAmount(ModifiedValues));
+			UE_LOG(LogTemp, Log, TEXT("[SnowSurface] Add edit: Voxel=%s Modified=%d Applied=%.4f BoundsValid=%d"),
+				*GetNameSafe(ValidVoxelWorld), ModifiedValues.Num(), Result.AppliedAmount, EditedBounds.IsValid());
 			if (Result.AppliedAmount <= 0.f || !EditedBounds.IsValid())
 			{
 				Completion(MoveTemp(Result));
@@ -444,6 +451,9 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[SnowSurface] Absorb rejected: Voxel=%s Created=%d Origin=%s Target=%s"),
+			*GetNameSafe(VoxelWorld), IsValid(VoxelWorld) && VoxelWorld->IsCreated(),
+			*Request.BrushOrigin.ToString(), *Request.WorldLocation.ToString());
 		return Result;
 	}
 
@@ -482,6 +492,9 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 	}
 
 	Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+	UE_LOG(LogTemp, Log, TEXT("[SnowSurface] Absorb result: Voxel=%s Adaptive=%d Modified=%d Applied=%.4f BoundsValid=%d"),
+		*GetNameSafe(VoxelWorld), Request.bUseAdaptiveAbsorbQuery, ModifiedValues.Num(),
+		Result.AppliedAmount, EditedBounds.IsValid());
 	if (Result.AppliedAmount > 0.f)
 	{
 		Result.VoxelWorld = VoxelWorld;

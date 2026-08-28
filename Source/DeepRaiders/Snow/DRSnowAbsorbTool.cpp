@@ -19,12 +19,6 @@ TAutoConsoleVariable<int32> CVarDRSnowAbsorbDebugDraw(
 	TEXT("Draw the active snow absorb range. 0: Off, 1: On"),
 	ECVF_Default);
 
-TAutoConsoleVariable<int32> CVarDRSnowAbsorbLog(
-	TEXT("dr.Snow.Absorb.Log"),
-	0,
-	TEXT("Log snow absorb pipeline. 0: Off, 1: On"),
-	ECVF_Default);
-
 float SmoothStep(const float Value)
 {
 	const float ClampedValue = FMath::Clamp(Value, 0.f, 1.f);
@@ -124,7 +118,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Full_Total);
 	OutModifiedValues.Reset();
 	OutEditedBounds = FVoxelIntBox();
-	const bool bLogAbsorb = CVarDRSnowAbsorbLog.GetValueOnGameThread() != 0;
+	const bool bLogAbsorb = true;
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || OuterRadius <= 0.f ||
 		Strength <= 0.f || DistanceDivisor <= 0.f)
 	{
@@ -315,7 +309,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Adaptive_Total);
 	OutModifiedValues.Reset();
 	OutEditedBounds = FVoxelIntBox();
-	const bool bLogAbsorb = CVarDRSnowAbsorbLog.GetValueOnGameThread() != 0;
+	const bool bLogAbsorb = true;
 
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
 		OuterRadius <= 0.f || Strength <= 0.f || DistanceDivisor <= 0.f ||

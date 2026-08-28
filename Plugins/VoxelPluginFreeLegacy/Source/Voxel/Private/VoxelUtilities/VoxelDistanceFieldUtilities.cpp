@@ -8,6 +8,8 @@
 #include "Async/ParallelFor.h"
 #include "Misc/App.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogVoxelDistanceField, Log, All);
+
 FColor FVoxelDistanceFieldUtilities::GetDistanceFieldColor(float Value)
 {
 	// Credit for this snippet goes to Inigo Quilez
@@ -35,6 +37,12 @@ void FVoxelDistanceFieldUtilities::JumpFlood(const FIntVector& Size, TArray<FVec
 	const bool bCanUseGPU = IsInGameThread() && FApp::CanEverRender();
 	if (bCanUseGPU)
 	{
+#if WITH_EDITOR
+		// GPU JumpFlood 결과를 CPU 기준값과 즉시 대조한다. GPU/드라이버별 결과 차이를
+		// 확인하기 위한 임시 진단 경로이며 Editor 빌드에서만 실행된다.
+		const TArray<FVector3f> CPUReferenceInput = InOutSurfacePositions;
+#endif
+
 		const auto DataPtr = MakeVoxelShared<TArray<FVector3f>>(MoveTemp(InOutSurfacePositions));
 
 		const auto Helper = MakeVoxelShared<FVoxelDistanceFieldShaderHelper>();
@@ -42,6 +50,93 @@ void FVoxelDistanceFieldUtilities::JumpFlood(const FIntVector& Size, TArray<FVec
 		Helper->WaitForCompletion();
 
 		InOutSurfacePositions = MoveTemp(*DataPtr);
+
+#if WITH_EDITOR
+		TArray<FVector3f> CPUReferenceOutput = CPUReferenceInput;
+		TArray<FVector3f> Temp;
+		Temp.SetNumUninitialized(CPUReferenceOutput.Num());
+		bool bUseTempAsSrc = false;
+		const int32 PowerOfTwo = FMath::CeilLogTwo(Size.GetMax());
+		for (int32 Pass = 0; Pass < PowerOfTwo; Pass++)
+		{
+			if (MaxPasses_Debug == Pass)
+			{
+				break;
+			}
+
+			const int32 Step = 1 << (PowerOfTwo - 1 - Pass);
+			JumpFloodStep_CPU(
+				Size,
+				bUseTempAsSrc ? Temp : CPUReferenceOutput,
+				bUseTempAsSrc ? CPUReferenceOutput : Temp,
+				Step,
+				bMultiThreaded);
+			bUseTempAsSrc = !bUseTempAsSrc;
+		}
+		if (bUseTempAsSrc)
+		{
+			CPUReferenceOutput = MoveTemp(Temp);
+		}
+
+		int32 InputValidCount = 0;
+		int32 GPUInvalidCount = 0;
+		int32 CPUInvalidCount = 0;
+		int32 DifferentSurfacePositionCount = 0;
+		int32 DistanceMismatchCount = 0;
+		int32 FirstDistanceMismatchIndex = INDEX_NONE;
+		float MaxDistanceError = 0.f;
+		for (int32 Index = 0; Index < InOutSurfacePositions.Num(); Index++)
+		{
+			const FVector3f& Input = CPUReferenceInput[Index];
+			const FVector3f& GPUPosition = InOutSurfacePositions[Index];
+			const FVector3f& CPUPosition = CPUReferenceOutput[Index];
+			InputValidCount += IsSurfacePositionValid(Input);
+			GPUInvalidCount += !IsSurfacePositionValid(GPUPosition);
+			CPUInvalidCount += !IsSurfacePositionValid(CPUPosition);
+
+			const bool bGPUValid = IsSurfacePositionValid(GPUPosition);
+			const bool bCPUValid = IsSurfacePositionValid(CPUPosition);
+			if (bGPUValid && bCPUValid && !GPUPosition.Equals(CPUPosition, KINDA_SMALL_NUMBER))
+			{
+				DifferentSurfacePositionCount++;
+			}
+
+			// JumpFlood는 동거리 표면 후보 중 하나를 고르는 알고리즘이다. GPU와 CPU가
+			// 서로 다른 후보 좌표를 골라도 거리 값이 같으면 정상이다.
+			const FVector3f VoxelPosition(
+				Index % Size.X,
+				(Index / Size.X) % Size.Y,
+				Index / (Size.X * Size.Y));
+			const float GPUDistance = bGPUValid ? FVector3f::Distance(VoxelPosition, GPUPosition) : BIG_NUMBER;
+			const float CPUDistance = bCPUValid ? FVector3f::Distance(VoxelPosition, CPUPosition) : BIG_NUMBER;
+			const float DistanceError = FMath::Abs(GPUDistance - CPUDistance);
+			MaxDistanceError = FMath::Max(MaxDistanceError, DistanceError);
+			if (DistanceError > 0.01f)
+			{
+				DistanceMismatchCount++;
+				FirstDistanceMismatchIndex = FirstDistanceMismatchIndex == INDEX_NONE ? Index : FirstDistanceMismatchIndex;
+			}
+		}
+
+		if (DistanceMismatchCount > 0)
+		{
+			const int32 FirstX = FirstDistanceMismatchIndex % Size.X;
+			const int32 FirstYZ = FirstDistanceMismatchIndex / Size.X;
+			const FIntVector FirstPosition(FirstX, FirstYZ % Size.Y, FirstYZ / Size.Y);
+			UE_LOG(LogVoxelDistanceField, Warning, TEXT("JumpFlood GPU/CPU distance mismatch: Size=%s Passes=%d InputValid=%d GPUInvalid=%d CPUInvalid=%d DifferentSurfacePositions=%d DistanceMismatches=%d MaxDistanceError=%.6f FirstIndex=%d FirstPosition=%s GPU=%s CPU=%s"),
+				*Size.ToString(), PowerOfTwo, InputValidCount, GPUInvalidCount, CPUInvalidCount,
+				DifferentSurfacePositionCount, DistanceMismatchCount, MaxDistanceError,
+				FirstDistanceMismatchIndex, *FirstPosition.ToString(),
+				*FVector(InOutSurfacePositions[FirstDistanceMismatchIndex]).ToString(),
+				*FVector(CPUReferenceOutput[FirstDistanceMismatchIndex]).ToString());
+		}
+		else
+		{
+			UE_LOG(LogVoxelDistanceField, Log, TEXT("JumpFlood GPU/CPU distance match: Size=%s Passes=%d InputValid=%d GPUInvalid=%d CPUInvalid=%d DifferentSurfacePositions=%d MaxDistanceError=%.6f"),
+				*Size.ToString(), PowerOfTwo, InputValidCount, GPUInvalidCount, CPUInvalidCount,
+				DifferentSurfacePositionCount, MaxDistanceError);
+		}
+#endif
 		return;
 	}
 

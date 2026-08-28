@@ -2,11 +2,16 @@
 
 #include "Components/PrimitiveComponent.h"
 #include "DrawDebugHelpers.h"
-#include "HAL/IConsoleManager.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "VoxelWorld.h"
+
+namespace
+{
+DEFINE_LOG_CATEGORY_STATIC(LogDRSnowRemove, Log, All);
+
+}
 
 UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 {
@@ -72,6 +77,8 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 	AActor* Owner = GetOwner();
 	if (!IsValid(Owner) || !Owner->HasAuthority() || !CanRemoveNow(RemovalSpec))
 	{
+		UE_LOG(LogDRSnowRemove, Warning, TEXT("Absorb rejected: Owner=%s Authority=%d CanRemove=%d"),
+			*GetNameSafe(Owner), IsValid(Owner) && Owner->HasAuthority(), CanRemoveNow(RemovalSpec));
 		return 0.f;
 	}
 
@@ -90,6 +97,9 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 		-NormalizedDirection,
 		FrustumOrigin,
 		RemovalSpec);
+	UE_LOG(LogDRSnowRemove, Log, TEXT("Absorb request: Owner=%s Origin=%s Direction=%s End=%s Range=%.1f Radius=%.1f Power=%.3f Adaptive=%d"),
+		*GetNameSafe(Owner), *FrustumOrigin.ToString(), *NormalizedDirection.ToString(), *FrustumEnd.ToString(),
+		RemovalSpec.SnowAbsorbRange, Request.Radius, Request.RequestedAmount, Request.bUseAdaptiveAbsorbQuery);
 	return ExecuteRemoveRequest(Request, nullptr, true);
 }
 
@@ -128,6 +138,8 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 			RemovedAmount = bUseAbsorbTool
 				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request).RemovedAmount
 				: SnowSubsystem->RemoveSnow(Request).RemovedAmount;
+			UE_LOG(LogDRSnowRemove, Log, TEXT("Removal result: AbsorbTool=%d Removed=%.4f Origin=%s Target=%s"),
+				bUseAbsorbTool, RemovedAmount, *Request.BrushOrigin.ToString(), *Request.WorldLocation.ToString());
 			if (RemovedAmount > 0.f)
 			{
 				if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
