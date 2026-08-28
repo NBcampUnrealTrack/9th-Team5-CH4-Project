@@ -56,7 +56,7 @@ protected:
 	
 	// 아군 충돌 무시 설정
 	void RefreshFriendlyCollisionIgnores();
-	void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
+	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult);
 	
 	static const FName CollisionComponentName;
 	

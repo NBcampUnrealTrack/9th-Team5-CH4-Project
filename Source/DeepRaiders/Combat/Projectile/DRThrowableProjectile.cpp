@@ -6,22 +6,31 @@
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 
-void ADRThrowableProjectile::InitializeThrowable(UAbilitySystemComponent* InSourceAbilitySystem,
-	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs, const FDRThrowableItemSettings& InItemSettings,
-	const FDRThrowActionSettings& InActionSettings, int32 InSourceTeamId)
+void ADRThrowableProjectile::InitializeThrowable(
+	UAbilitySystemComponent* InSourceAbilitySystem,
+	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
+	const FDRThrowableItemSettings& InItemSettings,
+	const FDRThrowActionSettings& InActionSettings,
+	int32 InSourceTeamId)
 {
-	// 일단 눈 쌓이지 않는 투척물만 존재
-	// 테스트 신다인
 	FDRProjectileWorldImpactData TempWorldImpactData;
 	TempWorldImpactData.bAddSnow = false;
-	
+
 	ExplosionRadius = FMath::Max(InItemSettings.ExplosionRadius, 1.f);
+
 	OcclusionTraceChannel = InActionSettings.ExplosionOcclusionTraceChannel1;
-	
+
+	ImpactGameplayCueTag = InItemSettings.ImpactGameplayCueTag;
+
 	ConfigureProjectileMovement(InItemSettings.InitialSpeed, InItemSettings.GravityScale);
-	
-	InitializeProjectile(InSourceAbilitySystem, InImpactEffectSpecs, 0.f,
-		TempWorldImpactData, InItemSettings.ImpactGameplayCueTag,	InSourceTeamId);	
+
+	InitializeProjectile(
+		InSourceAbilitySystem,
+		InImpactEffectSpecs,
+		0.f,
+		TempWorldImpactData,
+		InSourceTeamId,
+		nullptr);
 }
 
 void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
@@ -118,19 +127,24 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	Destroy();
 }
 
+void ADRThrowableProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
+{
+	UAbilitySystemComponent* SourceASC = GetSourceAbilitySystem();
 
+	if (!HasAuthority() || !IsValid(SourceASC) || !ImpactGameplayCueTag.IsValid())
+	{
+		return;
+	}
 
+	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
 
+	EffectContext.AddHitResult(ImpactResult, true);
 
+	FGameplayCueParameters Parameters(EffectContext);
+	Parameters.Location = ImpactResult.Location;
+	Parameters.Normal = ImpactResult.ImpactNormal;
+	Parameters.Instigator = GetInstigator();
+	Parameters.EffectCauser = this;
 
-
-
-
-
-
-
-
-
-
-
-
+	SourceASC->ExecuteGameplayCue(ImpactGameplayCueTag, Parameters);
+}

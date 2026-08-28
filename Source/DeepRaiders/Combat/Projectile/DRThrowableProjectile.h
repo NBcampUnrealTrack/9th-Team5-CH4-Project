@@ -20,6 +20,8 @@ public:
 	
 protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
+	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult) override;
+
 	virtual bool ShouldIgnoreFriendlyBlockingHit() const override
 	{
 		// 투척물은 기본적으로 아군과 충돌, 일단은
@@ -28,5 +30,7 @@ protected:
 	
 private:
 	float ExplosionRadius = 300.f;
-	TEnumAsByte<ECollisionChannel> OcclusionTraceChannel = ECC_Visibility;	
+	TEnumAsByte<ECollisionChannel> OcclusionTraceChannel = ECC_Visibility;
+	
+	FGameplayTag ImpactGameplayCueTag;
 };
