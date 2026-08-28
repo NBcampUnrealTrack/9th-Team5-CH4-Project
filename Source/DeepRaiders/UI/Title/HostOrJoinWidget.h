@@ -4,7 +4,6 @@
 #include "Blueprint/UserWidget.h"
 #include "HostOrJoinWidget.generated.h"
 
-class UButton;
 class UEditableTextBox;
 class UOverlay;
 class USlider;
@@ -25,35 +24,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void JoinPrivateMatch(const FString& Address);
 
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandlePublicMatchClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandlePrivateCreateClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandlePrivateMatchClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleSettingsClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleExitGameClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleJoinClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleCloseJoinClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleSettingsApplyClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleSettingsCancelClicked();
+
 protected:
-	// 타이틀
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> PublicMatch;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> PrivateCreate;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> PrivateMatch;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Settings;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> ExitGame;
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_Join;
 
 	// Join Server
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> ETB_IPAddress;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Btn_Join;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Btn_CloseJoin;
 
 	// Settings
 	UPROPERTY(meta = (BindWidget))
@@ -73,12 +77,6 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<USlider> Slider_MouseSensitivityY;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Button_Apply;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> Button_Cancel;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> MasterVolumn;
@@ -112,37 +110,7 @@ protected:
 
 private:
 	UFUNCTION()
-	void HandlePublicMatchClicked();
-
-	UFUNCTION()
-	void HandlePrivateCreateClicked();
-
-	UFUNCTION()
-	void HandlePrivateMatchClicked();
-
-	UFUNCTION()
-	void HandleJoinClicked();
-
-	UFUNCTION()
-	void HandleCloseJoinClicked();
-
-	UFUNCTION()
-	void HandleSettingsClicked();
-
-	UFUNCTION()
-	void HandleSettingsApplyClicked();
-
-	UFUNCTION()
-	void HandleSettingsCancelClicked();
-
-	UFUNCTION()
 	void HandleSettingSliderChanged(float Value);
-
-	UFUNCTION()
-	void HandleExitGameClicked();
-
-	UFUNCTION()
-	void HandleJoinSessionComplete(bool bWasSuccessful);
 
 	void LoadSettingsIntoSliders();
 	void RefreshSettingValueTexts();

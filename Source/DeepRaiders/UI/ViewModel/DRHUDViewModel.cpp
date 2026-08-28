@@ -120,6 +120,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	RefreshAmmoVisibility();
 	RefreshInteractionPrompt();
 	RefreshGameStartStatus();
+	bInterpolateGauges = true;
 }
 
 void UDRHUDViewModel::Deinitialize()
@@ -198,6 +199,49 @@ void UDRHUDViewModel::Deinitialize()
 	GameRemainingSeconds = 0;
 	bGameStarted = false;
 	bGameEnded = false;
+	TargetHealthRatio = 0.f;
+	TargetSnowGaugeRatio = 0.f;
+	TargetFreezeGaugeRatio = 0.f;
+	TargetCurrentHealth = 0.f;
+	TargetSnowGauge = 0;
+	InterpolatedSnowGauge = 0.f;
+	TargetFreezeGauge = 0.f;
+	bInterpolateGauges = false;
+}
+
+void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
+{
+	if (!bInterpolateGauges || DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+
+	const auto InterpolateRatio = [DeltaSeconds](float DisplayRatio, float TargetRatio)
+	{
+		constexpr float InterpolationSpeed = 8.f;
+		constexpr float CompletionTolerance = 0.001f;
+		return FMath::IsNearlyEqual(DisplayRatio, TargetRatio, CompletionTolerance)
+			? TargetRatio
+			: FMath::FInterpTo(DisplayRatio, TargetRatio, DeltaSeconds, InterpolationSpeed);
+	};
+	const auto InterpolateValue = [DeltaSeconds](float DisplayValue, float TargetValue)
+	{
+		constexpr float InterpolationSpeed = 8.f;
+		constexpr float CompletionTolerance = 0.01f;
+		return FMath::IsNearlyEqual(DisplayValue, TargetValue, CompletionTolerance)
+			? TargetValue
+			: FMath::FInterpTo(DisplayValue, TargetValue, DeltaSeconds, InterpolationSpeed);
+	};
+
+	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, InterpolateValue(CurrentHealth, TargetCurrentHealth));
+	InterpolatedSnowGauge = InterpolateValue(InterpolatedSnowGauge, TargetSnowGauge);
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, FMath::RoundToInt(InterpolatedSnowGauge));
+	UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, InterpolateValue(FreezeGauge, TargetFreezeGauge));
+	UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, InterpolateRatio(HealthRatio, TargetHealthRatio));
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, InterpolateRatio(SnowGaugeRatio, TargetSnowGaugeRatio));
+	UE_MVVM_SET_PROPERTY_VALUE(
+		FreezeGaugeRatio,
+		InterpolateRatio(FreezeGaugeRatio, TargetFreezeGaugeRatio));
 }
 
 void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
@@ -252,9 +296,14 @@ void UDRHUDViewModel::RefreshHealth()
 		? FMath::Clamp(NewCurrentHealth / NewMaxHealth, 0.f, 1.f)
 		: 0.f;
 
-	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, NewCurrentHealth);
+	TargetCurrentHealth = NewCurrentHealth;
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHealth, NewMaxHealth);
-	UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, NewHealthRatio);
+	TargetHealthRatio = NewHealthRatio;
+	if (!bInterpolateGauges)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, TargetCurrentHealth);
+		UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, TargetHealthRatio);
+	}
 }
 
 void UDRHUDViewModel::RefreshSnowGauge()
@@ -268,9 +317,15 @@ void UDRHUDViewModel::RefreshSnowGauge()
 		? FMath::Clamp(NewSnowGauge / NewMaxSnowGauge, 0.f, 1.f)
 		: 0.f;
 
-	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, FMath::RoundToInt(NewSnowGauge));
+	TargetSnowGauge = FMath::RoundToInt(NewSnowGauge);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxSnowGauge, FMath::RoundToInt(NewMaxSnowGauge));
-	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, NewSnowGaugeRatio);
+	TargetSnowGaugeRatio = NewSnowGaugeRatio;
+	if (!bInterpolateGauges)
+	{
+		InterpolatedSnowGauge = TargetSnowGauge;
+		UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, TargetSnowGauge);
+		UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, TargetSnowGaugeRatio);
+	}
 }
 
 void UDRHUDViewModel::RefreshFreezeGauge()
@@ -283,8 +338,13 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 		? FMath::Clamp(NewFreezeGauge / MaxHealth, 0.f, 1.f)
 		: 0.f;
 
-	UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, NewFreezeGauge);
-	UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, NewFreezeGaugeRatio);
+	TargetFreezeGauge = NewFreezeGauge;
+	TargetFreezeGaugeRatio = NewFreezeGaugeRatio;
+	if (!bInterpolateGauges)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, TargetFreezeGauge);
+		UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, TargetFreezeGaugeRatio);
+	}
 }
 
 void UDRHUDViewModel::RefreshAmmoVisibility()

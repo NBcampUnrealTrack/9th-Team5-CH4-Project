@@ -1,6 +1,5 @@
 #include "HostOrJoinWidget.h"
 
-#include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/Overlay.h"
 #include "Components/Slider.h"
@@ -38,20 +37,6 @@ bool UHostOrJoinWidget::Initialize()
 		return true;
 	}
 
-	// 타이틀
-	PublicMatch->OnClicked.AddDynamic(this, &ThisClass::HandlePublicMatchClicked);
-	PrivateCreate->OnClicked.AddDynamic(this, &ThisClass::HandlePrivateCreateClicked);
-	ExitGame->OnClicked.AddDynamic(this, &ThisClass::HandleExitGameClicked);
-
-	// Join Server
-	PrivateMatch->OnClicked.AddDynamic(this, &ThisClass::HandlePrivateMatchClicked);
-	Btn_Join->OnClicked.AddDynamic(this, &ThisClass::HandleJoinClicked);
-	Btn_CloseJoin->OnClicked.AddDynamic(this, &ThisClass::HandleCloseJoinClicked);
-
-	// Settings
-	Settings->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsClicked);
-	Button_Apply->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsApplyClicked);
-	Button_Cancel->OnClicked.AddDynamic(this, &ThisClass::HandleSettingsCancelClicked);
 	Slider_MasterVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
 	Slider_MusicVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
 	Slider_SFXVolume->OnValueChanged.AddDynamic(this, &ThisClass::HandleSettingSliderChanged);
@@ -68,15 +53,6 @@ bool UHostOrJoinWidget::Initialize()
 			UserSettings->GetMasterVolume(),
 			UserSettings->GetMusicVolume(),
 			UserSettings->GetSFXVolume());
-	}
-
-	UGameInstance* GameInstance = GetGameInstance();
-	if (IsValid(GameInstance))
-	{
-		if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
-		{
-			SessionSubsystem->OnJoinSessionComplete.AddDynamic(this, &ThisClass::HandleJoinSessionComplete);
-		}
 	}
 
 	return true;
@@ -109,7 +85,6 @@ void UHostOrJoinWidget::HandlePublicMatchClicked()
 		}
 	}
 
-	PublicMatch->SetIsEnabled(true);
 }
 
 void UHostOrJoinWidget::HandlePrivateCreateClicked()
@@ -119,11 +94,9 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 		return;
 	}
 
-	PrivateCreate->SetIsEnabled(false);
 	UGameInstance* GameInstance = GetGameInstance();
 	if (!IsValid(GameInstance))
 	{
-		PrivateCreate->SetIsEnabled(true);
 		return;
 	}
 
@@ -133,7 +106,6 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 		return;
 	}
 
-	PrivateCreate->SetIsEnabled(true);
 }
 
 void UHostOrJoinWidget::HandlePrivateMatchClicked()
@@ -211,15 +183,6 @@ void UHostOrJoinWidget::HandleSettingSliderChanged(float)
 void UHostOrJoinWidget::HandleExitGameClicked()
 {
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
-}
-
-void UHostOrJoinWidget::HandleJoinSessionComplete(bool bWasSuccessful)
-{
-	if (!bWasSuccessful)
-	{
-		PublicMatch->SetIsEnabled(true);
-		Btn_Join->SetIsEnabled(true);
-	}
 }
 
 void UHostOrJoinWidget::LoadSettingsIntoSliders()
