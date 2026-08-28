@@ -107,16 +107,16 @@ public:
 	TObjectPtr<UStaticMesh> WorldMesh;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
-	FTransform SpawnOffsetTransform;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
-	FTransform FirstPersonVisualOffsetTransform;
+	FTransform WorldItemOffsetTransform;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|World Presentation")
 	TObjectPtr<UDRWorldItemPresentationProfile> WorldItemPresentationProfile = nullptr;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Presentation")
+	FName HandAttachSocketName = TEXT("S_HandGrip_R");
 	
 	// Sound
 	
@@ -134,10 +134,6 @@ public:
 	
 	// ===== Animation =====
 
-	/**
-	 * 이 아이템을 손에 들었을 때 사용할
-	 * 캐릭터 Animation Profile.
-	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Animation")
 	TObjectPtr<UDRItemAnimationSet> ItemAnimationSet;
 };

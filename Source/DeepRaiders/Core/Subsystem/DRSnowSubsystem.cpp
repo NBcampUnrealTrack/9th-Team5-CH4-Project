@@ -179,7 +179,11 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurf
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	RepaintSnowMaterialsAtArea(Request, EditResult);
+	SurfaceEditor.RepaintSnowMaterialsAtModifiedVoxels(
+		Request,
+		EditResult,
+		OwnershipStore,
+		VolumeStore);
 	return Result;
 }
 
@@ -221,7 +225,12 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 		return false;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
-	return RepaintSnowMaterialsAtArea(Request, EditResult);
+	SurfaceEditor.RepaintSnowMaterialsAtModifiedVoxels(
+		Request,
+		EditResult,
+		OwnershipStore,
+		VolumeStore);
+	return true;
 }
 
 bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(

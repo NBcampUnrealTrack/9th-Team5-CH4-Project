@@ -77,9 +77,7 @@ public:
 	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
 	void RefreshTeamColor();
 
-	void ApplyHandEquipmentVisual(
-		UStaticMesh* WorldMesh,
-		const FTransform& WorldTransform);
+	void ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName);
 		
 	/** 현재 손 장비 외형을 제거한다. */
 	void ClearHandEquipmentVisual();
@@ -161,6 +159,8 @@ public:
 		return AimPitchMaxDegrees;
 	}
 	
+	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -197,9 +197,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat")
+	TObjectPtr<USceneComponent> GameplayFireAnchor;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float GameplayFireForwardDistance = 50.f;
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
-
 	
 private:
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;

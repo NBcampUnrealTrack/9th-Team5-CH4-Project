@@ -57,16 +57,16 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 		return false;
 	}
 
-	FVector MuzzleLocation;
-	if (!ResolveMuzzleLocation(ViewRotation.Vector(),MuzzleLocation))
+	FVector GameplayFireOrigin;
+	if (!ResolveGameplayFireOrigin(ViewRotation.Vector(), GameplayFireOrigin))
 	{
 		return false;
 	}
-	
-	const FVector AimPoint = CameraHit.bBlockingHit	? CameraHit.ImpactPoint	: CameraHit.TraceEnd;
+
+	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 	if (!ActorInfo->IsNetAuthority())
 	{
-		PlayLocalFirePresentation(MuzzleLocation,AimPoint);
+		PlayLocalFirePresentation(GameplayFireOrigin, AimPoint);
 	}
 
 	if (ActorInfo->IsNetAuthority())
@@ -182,13 +182,14 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 
 	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 
-	FVector MuzzleLocation;
-	if (!ResolveMuzzleLocation(ViewRotation.Vector(), MuzzleLocation))
+	FVector GameplayFireOrigin;
+
+	if (!ResolveGameplayFireOrigin(ViewRotation.Vector(), GameplayFireOrigin))
 	{
 		return false;
 	}
 
-	FVector BaseProjectileDirection = AimPoint - MuzzleLocation;
+	FVector BaseProjectileDirection = AimPoint - GameplayFireOrigin;
 	if (!BaseProjectileDirection.Normalize())
 	{
 		BaseProjectileDirection = ViewRotation.Vector();
@@ -216,7 +217,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 			ProjectileDirection = FMath::VRandCone(BaseProjectileDirection, SpreadRadians);
 		}
 
-		if (SpawnProjectile(MuzzleLocation, ProjectileDirection, AvatarActor, AbilitySystem, ImpactEffectSpecs))
+		if (SpawnProjectile(GameplayFireOrigin, ProjectileDirection, AvatarActor, AbilitySystem, ImpactEffectSpecs))
 		{
 			bSpawnedAnyProjectile = true;
 		}
@@ -227,9 +228,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 		return false;
 	}
 
-	// 발사 Presentation은 Pellet마다 실행하면 안 됨.
-	// Trigger 한 번당 한 번만.
-	PlayServerFirePresentation(MuzzleLocation, AimPoint);
+	PlayServerFirePresentation(GameplayFireOrigin, AimPoint);
 
 	return true;
 }

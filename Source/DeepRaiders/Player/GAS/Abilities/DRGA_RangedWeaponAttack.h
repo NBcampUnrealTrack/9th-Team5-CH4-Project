@@ -60,7 +60,7 @@ protected:
 	
 	bool TraceCameraAim(const FVector& ViewLocation, const FVector& ViewDirection, FHitResult& OutHitResult) const;
 	
-	bool ResolveMuzzleLocation(const FVector& ViewDirection, FVector& OutMuzzleLocation) const;
+	bool ResolveGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
 	
 	void BuildWeaponTraceQueryParams(FCollisionQueryParams& OutQueryParams) const;
 	
@@ -81,11 +81,11 @@ protected:
 		const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const;
 
 	void PlayLocalFirePresentation(
-		const FVector& MuzzleLocation,
+		const FVector& FireOrigin,
 		const FVector& TargetLocation);
 
 	void PlayServerFirePresentation(
-		const FVector& MuzzleLocation,
+		const FVector& FireOrigin,
 		const FVector& TargetLocation);
 
 	float GetMaxAttackDistance() const
@@ -103,15 +103,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Aim",meta = (
 		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
 	float MaxAttackDistance = 10000.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim")
-	FName MuzzleSocketName = TEXT("MuzzlePoint");
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim|Fallback")
-	float MuzzleForwardOffset = 100.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim|Fallback")
-	float MuzzleHeightOffset = 60.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;
@@ -133,7 +124,7 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
-	void ExecuteFireGameplayCue(const FVector& MuzzleLocation) const;
+	void ExecuteFireGameplayCue(const FVector& FireOrigin) const;
 
 	void PlayFireMontage();
 };

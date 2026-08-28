@@ -43,6 +43,12 @@ public:
 		const FDRSnowSurfaceEditResult& EditResult,
 		const FDRSnowOwnershipStore& OwnershipStore,
 		const FDRSnowVolumeStore& VolumeStore);
+	// 흡수처럼 연속 변경되는 경우, 실제로 비워진 Voxel만 즉시 재질 갱신한다.
+	bool RepaintSnowMaterialsAtModifiedVoxels(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult,
+		const FDRSnowOwnershipStore& OwnershipStore,
+		const FDRSnowVolumeStore& VolumeStore);
 
 private:
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const;

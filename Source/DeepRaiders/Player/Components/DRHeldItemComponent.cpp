@@ -148,9 +148,9 @@ void UDRHeldItemComponent::RefreshVisual()
 		return;
 	}
 
-	UStaticMesh* VisualMesh = HeldItemDefinition->WorldMesh;
-	const FTransform WorldVisualTransform = HeldItemDefinition->SpawnOffsetTransform;
-	Character->ApplyHandEquipmentVisual(VisualMesh, WorldVisualTransform);
+	Character->ApplyHandEquipmentVisual(
+		HeldItemDefinition->WorldMesh,
+		HeldItemDefinition->HandAttachSocketName);
 }
 
 void UDRHeldItemComponent::RefreshMiningSettings()
