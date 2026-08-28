@@ -80,8 +80,6 @@ protected:
 		const FHitResult& HitResult,
 		const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const;
 
-	void ExecuteImpactGameplayCue(const FHitResult& HitResult) const;
-
 	void PlayLocalFirePresentation(
 		const FVector& MuzzleLocation,
 		const FVector& TargetLocation);
@@ -95,10 +93,6 @@ protected:
 		return MaxAttackDistance;
 	}
 
-	FGameplayTag GetImpactGameplayCueTag() const
-	{
-		return ImpactGameplayCueTag;
-	}
 	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Fire",meta = (
 		ClampMin = "0.01", UIMin = "0.01", Units = "s"))
 	float BaseFireInterval = 0.25f;
@@ -124,14 +118,6 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float BreakableDamage = 1.f;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category = "Ranged Weapon|Presentation",meta = (
-		GameplayTagFilter = "GameplayCue"))
-	FGameplayTag FireGameplayCueTag;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly,Category = "Ranged Weapon|Presentation",meta = (
-		GameplayTagFilter = "GameplayCue"))
-	FGameplayTag ImpactGameplayCueTag;
 
 private:
 	bool ResolveSelectedWeaponInstance(
@@ -147,7 +133,7 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
-	void ExecuteFireSoundCue(const FVector& MuzzleLocation) const;
+	void ExecuteFireGameplayCue(const FVector& MuzzleLocation) const;
 
 	void PlayFireMontage();
 };

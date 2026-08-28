@@ -21,6 +21,7 @@ class UDRItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
+class UDRSkillUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
@@ -30,6 +31,7 @@ class UUserWidget;
 class UDRScoreboardUIComponent;
 class UDRStartingSelectionUIComponent;
 class UDRInteractionComponent;
+enum class EDRSkillSlot : uint8;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
 
@@ -51,6 +53,7 @@ class DEEPRAIDERS_API ADRPlayerController : public APlayerController, public IAb
 
 public:
 	ADRPlayerController();
+	UInputAction* GetSkillInputAction(EDRSkillSlot SkillSlot) const;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -71,6 +74,7 @@ protected:
 private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
+	void RefreshPlayerUI();
 	
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
@@ -247,6 +251,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRSkillUIComponent> SkillUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;

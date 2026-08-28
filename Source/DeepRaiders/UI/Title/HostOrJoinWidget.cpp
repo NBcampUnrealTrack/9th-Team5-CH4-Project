@@ -17,6 +17,12 @@ namespace DRTitleSettings
 	constexpr float MaxVolumeDisplay = 100.f;
 	constexpr float MinMouseSensitivity = 0.001f;
 	constexpr float MaxMouseSensitivity = 5.f;
+	constexpr TCHAR MasterSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Master.SC_Master");
+	constexpr TCHAR MusicSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Music.SC_Music");
+	constexpr TCHAR SFXSoundClassPath[] =
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_SFX.SC_SFX");
 }
 
 bool UHostOrJoinWidget::Initialize()
@@ -266,6 +272,20 @@ void UHostOrJoinWidget::RefreshSettingValueTexts()
 
 void UHostOrJoinWidget::ApplyAudioSettings(float MasterVolume, float MusicVolume, float SFXVolume)
 {
+	// BP에 SoundClass가 지정되지 않아도 프로젝트 기본 SoundClass를 사용한다.
+	if (!IsValid(MasterSoundClass))
+	{
+		MasterSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::MasterSoundClassPath);
+	}
+	if (!IsValid(MusicSoundClass))
+	{
+		MusicSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::MusicSoundClassPath);
+	}
+	if (!IsValid(SFXSoundClass))
+	{
+		SFXSoundClass = LoadObject<USoundClass>(nullptr, DRTitleSettings::SFXSoundClassPath);
+	}
+
 	if (!IsValid(RuntimeSoundMix))
 	{
 		RuntimeSoundMix = NewObject<USoundMix>(this);

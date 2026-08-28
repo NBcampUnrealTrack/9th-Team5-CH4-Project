@@ -448,6 +448,7 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	}
 
 	Super::PostLogin(NewPlayer);
+	RefreshGameStartPlayerRoster();
 
 	if (!IsValid(PlayerController))
 	{
@@ -551,6 +552,15 @@ void ADRMiningGameModeBase::Logout(AController* Exiting)
 
 	// 기본 Logout이 Pawn, Controller, PlayerState와 GameState PlayerArray를 정리한다.
 	Super::Logout(Exiting);
+	RefreshGameStartPlayerRoster();
+}
+
+void ADRMiningGameModeBase::RefreshGameStartPlayerRoster()
+{
+	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->RefreshPlayerRoster();
+	}
 }
 
 int32 ADRMiningGameModeBase::AssignBalancedTeam(ADRPlayerState* PlayerState) const

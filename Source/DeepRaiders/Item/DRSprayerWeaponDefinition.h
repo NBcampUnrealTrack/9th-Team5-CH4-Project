@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DRItemDefinition.h"
+#include "DRWeaponPresentationTypes.h"
 #include "DRSprayerWeaponDefinition.generated.h"
 
 class UGameplayEffect;
@@ -19,4 +20,7 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Snow")
 	TSubclassOf<UGameplayEffect> SnowCostEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
+	FDRWeaponPresentationData ActivePresentation;
 };

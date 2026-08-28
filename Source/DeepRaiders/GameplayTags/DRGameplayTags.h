@@ -15,7 +15,6 @@ namespace DRGameplayTags
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
-	// UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Projectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged_Sprayer);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
@@ -42,8 +41,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	
 	// Weapon Effect
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Cannon_Explosion);
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
@@ -67,8 +67,13 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Land);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
+
+	// Gameplay Cue - Sound - Weapon
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Rifle_Fire);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Rifle_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Shotgun_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Shotgun_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Fire);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Explosion);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Sprayer_Active);
 }

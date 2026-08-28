@@ -659,37 +659,6 @@ void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* T
 	}	
 }
 
-void UDRGA_RangedWeaponAttack::ExecuteImpactGameplayCue(const FHitResult& HitResult) const
-{
-	if (!ImpactGameplayCueTag.IsValid())
-	{
-		return;
-	}
-	
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	if (ActorInfo == nullptr 
-		|| !ActorInfo->IsNetAuthority())
-	{
-		return;
-	}
-	
-	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
-	if (!IsValid(AbilitySystem))
-	{
-		return;
-	}
-	
-	FGameplayEffectContextHandle EffectContext = AbilitySystem->MakeEffectContext();
-	EffectContext.AddSourceObject(GetWeaponDefinition(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
-	EffectContext.AddHitResult(HitResult, true);
-	
-	FGameplayCueParameters CueParameters(EffectContext);
-	CueParameters.Location = HitResult.Location;
-	CueParameters.Normal = HitResult.Normal;
-	
-	AbilitySystem->ExecuteGameplayCue(ImpactGameplayCueTag, CueParameters);	
-}
-
 void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
 	const FVector& MuzzleLocation,
 	const FVector& TargetLocation)
@@ -705,7 +674,7 @@ void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
 	}
 
 	PlayFireMontage();
-	ExecuteFireSoundCue(MuzzleLocation);
+	ExecuteFireGameplayCue(MuzzleLocation);
 }
 
 void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
@@ -722,7 +691,7 @@ void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
 	}
 
 	PlayFireMontage();
-	ExecuteFireSoundCue(MuzzleLocation);
+	ExecuteFireGameplayCue(MuzzleLocation);
 }
 
 bool UDRGA_RangedWeaponAttack::ResolveSelectedWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo,
@@ -783,44 +752,33 @@ void UDRGA_RangedWeaponAttack::HandleInputReleased(float TimeHeld)
 		true, false);
 }
 
-void UDRGA_RangedWeaponAttack::ExecuteFireSoundCue(
-		const FVector& MuzzleLocation) const
+void UDRGA_RangedWeaponAttack::ExecuteFireGameplayCue(const FVector& MuzzleLocation) const
 {
-	const FGameplayAbilityActorInfo* ActorInfo =
-		GetCurrentActorInfo();
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 
-	if (ActorInfo == nullptr
-		|| !FireGameplayCueTag.IsValid())
+	if (ActorInfo == nullptr)
 	{
 		return;
 	}
 
-	UAbilitySystemComponent* ASC =
-		ActorInfo->AbilitySystemComponent.Get();
-
-	AActor* AvatarActor =
-		ActorInfo->AvatarActor.Get();
-
-	if (!IsValid(ASC)
-		|| !IsValid(AvatarActor))
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	UObject* PresentationSourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
+	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(PresentationSourceObject))
 	{
 		return;
 	}
 
 	FGameplayCueParameters Parameters;
 
-	Parameters.Location =
-		MuzzleLocation;
+	Parameters.Location = MuzzleLocation;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
 
-	Parameters.Instigator =
-		AvatarActor;
+	// DA_Rifle / DA_Shotgun / DA_Cannon
+	Parameters.SourceObject = PresentationSourceObject;
 
-	Parameters.EffectCauser =
-		AvatarActor;
-
-	ASC->ExecuteGameplayCue(
-		FireGameplayCueTag,
-		Parameters);
+	ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Weapon_Projectile_Fire, Parameters);
 }
 
 void UDRGA_RangedWeaponAttack::PlayFireMontage()
