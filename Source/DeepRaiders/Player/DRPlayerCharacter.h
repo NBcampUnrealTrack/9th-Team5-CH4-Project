@@ -203,7 +203,7 @@ protected:
 	TObjectPtr<USceneComponent> GameplayFireAnchor;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float GameplayFireForwardDistance = 50.f;
+	float GameplayFireForwardDistance = 100.f;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
