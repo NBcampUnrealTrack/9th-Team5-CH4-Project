@@ -314,7 +314,7 @@ void ADRPlayerState::EvaluateDeadState()
 	{
 		return;
 	}
-
+	
 	if (AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
 	{
 		return;
@@ -340,7 +340,22 @@ void ADRPlayerState::EvaluateDeadState()
 		return;
 	}
 
+	const bool bWasFrozen = IsFrozen();
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	
+	if (bWasFrozen)
+	{
+		FGameplayCueParameters CueParameters;
+
+		if (APawn* Pawn = GetPawn())
+		{
+			CueParameters.Location = Pawn->GetActorLocation();
+			CueParameters.Instigator = Pawn;
+			CueParameters.EffectCauser = Pawn;
+		}
+
+		AbilitySystemComponent->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Frozen_Death, CueParameters);
+	}
 }
 
 void ADRPlayerState::GrantDefaultAbilities()
