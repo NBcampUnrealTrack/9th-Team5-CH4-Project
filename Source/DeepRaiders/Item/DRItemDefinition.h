@@ -15,6 +15,13 @@ class USoundBase;
 class UDRItemAnimationSet;
 class UDRWorldItemPresentationProfile;
 
+UENUM(BlueprintType)
+enum class EDRItemAbilityLifetimePolicy : uint8
+{
+	EquippedOnly UMETA(DisplayName = "Equipped Only"),
+	KeepWhileActive UMETA(DisplayName = "Keep While Active"),
+};
+
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 {
@@ -100,6 +107,9 @@ public:
 	// 아이템이 장착되었을 때 ASC에 부여할 Ability와 Effect 셋
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
 	TObjectPtr<UDRAbilitySet> ItemAbilitySet;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
+	EDRItemAbilityLifetimePolicy AbilitylifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
 	
 	// Mesh
 	
