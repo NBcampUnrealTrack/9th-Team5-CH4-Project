@@ -28,6 +28,7 @@ class UDRItemAnimationSet;
 class UDRFreezeVisualComponent;
 class UDRSilhouetteComponent;
 class UDRHitReactionSet;
+class UDRMovementActionComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -121,6 +122,11 @@ public:
 	{
 		return JetpackComponent;
 	}
+	
+	UDRMovementActionComponent* GetMovementActionComponent() const
+	{
+		return MovementActionComponent;
+	}
 
 	/**
 	 * HUD에서 사용할 제트팩 연료 비율.
@@ -192,6 +198,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Silhouette", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRSilhouetteComponent> SilhouetteComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Movement", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRMovementActionComponent> MovementActionComponent;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")

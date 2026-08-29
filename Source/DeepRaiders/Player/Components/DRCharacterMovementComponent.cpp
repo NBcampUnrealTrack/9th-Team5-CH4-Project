@@ -3,6 +3,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
 #include "AbilitySystemComponent.h"
 
@@ -245,6 +246,96 @@ FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_
     }
 
     return ClientPredictionData;
+}
+
+void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
+{
+    SetMovementMode(MOVE_Custom, static_cast<uint8>(NewMode));    
+}
+
+bool UDRCharacterMovementComponent::IsMovementActionModeActive() const
+{
+    return MovementMode == MOVE_Custom && CustomMovementMode == static_cast<uint8>(EDRCustomMovementMode::MovementAction);
+}
+
+UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComponent() const
+{
+    if (!IsValid(CharacterOwner))
+    {
+        return nullptr;
+    }
+    
+    return CharacterOwner->FindComponentByClass<UDRMovementActionComponent>();
+}
+
+void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
+{
+    switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
+    {
+    case EDRCustomMovementMode::MovementAction:
+        PhysMovementAction(deltaTime, Iterations);
+        return;
+    default:
+        SetMovementMode(MOVE_Falling);
+        return;
+    }
+}
+
+void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 Iterations)
+{
+    UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
+    
+    if (!IsValid(MovementAction)
+        || !UpdatedComponent
+        || !MovementAction->IsMovementActionActive())
+    {
+        SetMovementMode(MOVE_Falling);
+        return;
+    }
+    
+    FDRMovementActionSimulationInput Input;
+    Input.Location = UpdatedComponent->GetComponentLocation();
+    Input.Velocity = Velocity;
+    Input.DeltaTime = DeltaTime;
+    
+    // 기존 CharacterMovement의 공중 제어 계산을 재사용
+    Input.InputAcceleration = GetFallingLateralAcceleration(DeltaTime);
+    Input.Gravity = GetGravityDirection() * FMath::Abs(GetGravityZ());
+    
+    FDRMovementActionSimulationOutput Output;
+    MovementAction->EvaluateMovementContribution(Input, Output);
+    
+    Velocity += Output.AdditionalAcceleration * DeltaTime;
+    
+    if (Output.bApplyGravity)
+    {
+        Velocity = NewFallVelocity(Velocity, Input.Gravity, DeltaTime);
+    }
+    
+    if (Output.MaxSpeed > KINDA_SMALL_NUMBER)
+    {
+        Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
+    }
+    
+    const FVector Delta = Velocity * DeltaTime;
+    FHitResult Hit;
+    SafeMoveUpdatedComponent(Delta, UpdatedComponent->GetComponentQuat(), true, Hit);
+    
+    if (Hit.IsValidBlockingHit())
+    {
+        HandleImpact(Hit, DeltaTime, Delta);
+        
+        if (Hit.Time < 1.f)
+        {
+            const FVector RemainingDelta = Delta * (1.f - Hit.Time);
+            
+            SlideAlongSurface(RemainingDelta, 1.f - Hit.Time, Hit.Normal, Hit, true);
+        }
+    }
+    
+    // 이동 종료 여부는 판단하지 않고, 결과만 외부에 전달한다.
+    // 이동 액션 종료는 GA 내부에서 판단
+    MovementAction->ReportMovementSimulation(UpdatedComponent->GetComponentLocation(), Velocity);
 }
 
 bool UDRCharacterMovementComponent::CanApplyJetpackThrust() const

@@ -2,11 +2,21 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "DRCharacterMovementComponent.generated.h"
 
 class FSavedMove_DRCharacter;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
+
+UENUM()
+enum class EDRCustomMovementMode : uint8
+{
+    None = 0,
+    
+    // 특정 액션 이름이 아닌 외부 이동 액션을 처리하는 모드
+    MovementAction = 1,
+};
 
 UCLASS()
 class DEEPRAIDERS_API UDRCharacterMovementComponent : public UCharacterMovementComponent
@@ -36,7 +46,12 @@ public:
 
     /** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
-
+    
+    // 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
+    void SetCustomMovementMode(EDRCustomMovementMode NewMode);
+    
+    bool IsMovementActionModeActive() const;
+    
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -45,11 +60,16 @@ protected:
         float DeltaTime,
         int32 Iterations) override;
 
+    virtual void PhysCustom(float deltaTime, int32 Iterations) override;
+    
 private:
     void UnbindAbilitySystem();
     void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
     void ApplyMoveSpeedMultiplier(float Multiplier);
 
+    void PhysMovementAction(float DeltaTime, int32 Iterations);
+    UDRMovementActionComponent* GetMovementActionComponent() const;
+    
     TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
     FDelegateHandle MoveSpeedChangedDelegateHandle;
     float BaseWalkSpeed = 0.f;

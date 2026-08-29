@@ -27,6 +27,7 @@
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
+#include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
 #include "Animation/AnimInstance.h"
@@ -60,6 +61,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
 	SilhouetteComponent = CreateDefaultSubobject<UDRSilhouetteComponent>(TEXT("SilhouetteComponent"));
+	MovementActionComponent = CreateDefaultSubobject<UDRMovementActionComponent>(TEXT("MovementActionComponent"));
 	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
