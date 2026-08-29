@@ -73,7 +73,7 @@ void UDRGA_MeleeAttack::ActivateAbility(
 	 * LocalPredicted GA의 GameplayCue 경로를 사용.
 	 * 별도 PresentationComponent / Multicast 없음.
 	 */
-	ExecuteSoundCue(DRGameplayTags::GameplayCue_Sound_Attack_Swing, Character, Character->GetActorLocation());
+	ExecuteSoundCue(DRGameplayTags::GameplayCue_Sound_Melee_Attack_Swing, Character, Character->GetActorLocation());
 
 	/*
 	 * 실제 Hit 판정은 서버에서만.
@@ -188,7 +188,7 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 		
 		ExecuteSoundCue(
 			DRGameplayTags::
-				GameplayCue_Sound_Attack_Hit,
+				GameplayCue_Sound_Melee_Attack_Hit,
 			Attacker,
 			HitResult.ImpactPoint);
 
@@ -240,9 +240,9 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	const FGameplayTag ImpactSoundTag =
 		bKilled
 			? DRGameplayTags::
-				GameplayCue_Sound_Attack_Kill
+				GameplayCue_Sound_Melee_Attack_Kill
 			: DRGameplayTags::
-				GameplayCue_Sound_Attack_Hit;
+				GameplayCue_Sound_Melee_Attack_Hit;
 
 	ExecuteSoundCue(
 		ImpactSoundTag,

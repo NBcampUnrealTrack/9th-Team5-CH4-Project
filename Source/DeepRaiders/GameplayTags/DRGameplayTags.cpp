@@ -193,24 +193,29 @@ namespace DRGameplayTags
 		"Match scoreboard screen.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Attack_Miss,
-		"GameplayCue.Sound.Attack.Miss",
-		"Attack missed.");
+		GameplayCue_Sound_Melee_Attack_Miss,
+		"GameplayCue.Sound.Melee.Attack.Miss",
+		"Melee attack missed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Attack_Hit,
-		"GameplayCue.Sound.Attack.Hit",
-		"Attack hit.");
+		GameplayCue_Sound_Melee_Attack_Hit,
+		"GameplayCue.Sound.Melee.Attack.Hit",
+		"Melee attack hit.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Attack_Kill,
-		"GameplayCue.Sound.Attack.Kill",
-		"Attack killed the target.");
-	
+		GameplayCue_Sound_Melee_Attack_Kill,
+		"GameplayCue.Sound.Melee.Attack.Kill",
+		"Melee attack killed the target.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		GameplayCue_Sound_Attack_Swing,
-		"GameplayCue.Sound.Attack.Swing",
+		GameplayCue_Sound_Melee_Attack_Swing,
+		"GameplayCue.Sound.Melee.Attack.Swing",
 		"Melee weapon swing.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Snowball_Impact,
+		"GameplayCue.Sound.Player.Snowball.Impact",
+		"Snow projectile impact on a player.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Dig,
@@ -233,9 +238,9 @@ namespace DRGameplayTags
 		"Ore discovered.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-	GameplayCue_Sound_Player_Land,
-	"GameplayCue.Sound.Player.Land",
-	"Player landed.");
+		GameplayCue_Sound_Player_Land,
+		"GameplayCue.Sound.Player.Land",
+		"Player landed.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_FallDamage,
@@ -294,4 +299,9 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Sprayer_Active,
 		"GameplayCue.Sound.Weapon.Sprayer.Active",
 		"Active sprayer loop sound.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Player_Hit,
+		"GameplayCue.Player.Hit",
+		"Player hit presentation.");
 }

@@ -27,6 +27,7 @@ class UDRPlayerAttributeSet;
 class UDRItemAnimationSet;
 class UDRFreezeVisualComponent;
 class UDRSilhouetteComponent;
+class UDRHitReactionSet;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -163,6 +164,9 @@ public:
 	
 	void PlayProjectileFireVFXFromNotify();
 	
+	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
+	void PlayHitReaction(const FVector& ImpactLocation);
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -239,6 +243,8 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
 	FLinearColor Team1Color = FLinearColor::Blue;
+
+	float LastHitReactionTime = -BIG_NUMBER;
 	
 #pragma region QuickSlot
 

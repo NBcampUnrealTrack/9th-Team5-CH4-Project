@@ -29,6 +29,8 @@
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
+#include "Animation/AnimInstance.h"
+#include "DeepRaiders/Item/Animation/DRHitReactionSet.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -502,6 +504,99 @@ void ADRPlayerCharacter::PlayProjectileFireVFXFromNotify()
 		true,
 		ENCPoolMethod::AutoRelease,
 		true);
+}
+
+void ADRPlayerCharacter::PlayHitReaction(
+	const FVector& ImpactLocation)
+{
+	if (GetNetMode() == NM_DedicatedServer
+		|| !IsValid(GetMesh())
+		|| IsDead())
+	{
+		return;
+	}
+
+	const UDRItemAnimationSet* AnimationSet =
+		GetCurrentItemAnimationSet();
+
+	if (!IsValid(AnimationSet)
+		|| !IsValid(AnimationSet->HitReactionSet))
+	{
+		return;
+	}
+
+	const UDRHitReactionSet* HitReactionSet =
+		AnimationSet->HitReactionSet;
+
+	UWorld* World = GetWorld();
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+
+	if (!IsValid(World)
+		|| !IsValid(AnimInstance))
+	{
+		return;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+
+	if (CurrentTime - LastHitReactionTime
+		< HitReactionSet->MinReplayInterval)
+	{
+		return;
+	}
+
+	FVector ToImpact =
+		ImpactLocation - GetActorLocation();
+
+	ToImpact.Z = 0.f;
+	ToImpact = ToImpact.GetSafeNormal();
+
+	if (ToImpact.IsNearlyZero())
+	{
+		return;
+	}
+
+	const float ForwardDot =
+		FVector::DotProduct(
+			GetActorForwardVector(),
+			ToImpact);
+
+	const float RightDot =
+		FVector::DotProduct(
+			GetActorRightVector(),
+			ToImpact);
+
+	UAnimSequenceBase* HitAnimation = nullptr;
+
+	if (FMath::Abs(ForwardDot) >= FMath::Abs(RightDot))
+	{
+		HitAnimation =
+			ForwardDot >= 0.f
+				? HitReactionSet->Front
+				: HitReactionSet->Back;
+	}
+	else
+	{
+		HitAnimation =
+			RightDot >= 0.f
+				? HitReactionSet->Right
+				: HitReactionSet->Left;
+	}
+
+	if (!IsValid(HitAnimation))
+	{
+		return;
+	}
+
+	LastHitReactionTime = CurrentTime;
+
+	AnimInstance->PlaySlotAnimationAsDynamicMontage(
+		HitAnimation,
+		HitReactionSet->SlotName,
+		HitReactionSet->BlendInTime,
+		HitReactionSet->BlendOutTime,
+		1.f,
+		1);
 }
 
 void ADRPlayerCharacter::BeginPlay()

@@ -43,6 +43,9 @@ protected:
 	// 플레이어 적중 Effect를 서버에서 적용
 	void ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
 	
+	// Projectile Effect가 적용된 플레이어에게 피격 Presentation Cue를 실행한다.
+	void ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
+	
 	bool ApplyBreakableDamage(const FHitResult& ImpactResult);
 	
 	// 같은 팀인지 검사

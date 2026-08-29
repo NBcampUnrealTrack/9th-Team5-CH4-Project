@@ -145,6 +145,8 @@ void UDRGA_SpraySnow::StartServerSpray()
 		return;
 	}
 
+	LastHitReactionTimes.Reset();
+	
 	/*
 	 * 즉발 Tick은 넣지 않는다.
 	 *
@@ -163,7 +165,8 @@ void UDRGA_SpraySnow::StopServerSpray()
 	{
 		return;
 	}
-
+	
+	LastHitReactionTimes.Reset();
 	World->GetTimerManager().ClearTimer(SprayTimerHandle);
 }
 
@@ -396,6 +399,18 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 			continue;
 		}
 
+		const float HealthBefore =
+	TargetAbilitySystem->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetHealthAttribute());
+
+		const float FreezeGaugeBefore =
+			TargetAbilitySystem->GetNumericAttribute(
+				UDRPlayerAttributeSet::GetFreezeGaugeAttribute());
+
+		const bool bWasFrozen =
+			TargetAbilitySystem->HasMatchingGameplayTag(
+				DRGameplayTags::State_Frozen);
+
 		for (const FGameplayEffectSpecHandle& SpecHandle : ImpactEffectSpecs)
 		{
 			if (!SpecHandle.IsValid())
@@ -405,7 +420,47 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 
 			FGameplayEffectSpec ImpactSpec(*SpecHandle.Data.Get());
 
-			SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);
+			SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(
+				ImpactSpec,
+				TargetAbilitySystem);
+		}
+
+		const float HealthAfter =
+			TargetAbilitySystem->GetNumericAttribute(
+				UDRPlayerAttributeSet::GetHealthAttribute());
+
+		const float FreezeGaugeAfter =
+			TargetAbilitySystem->GetNumericAttribute(
+				UDRPlayerAttributeSet::GetFreezeGaugeAttribute());
+
+		const bool bIsFrozen =
+			TargetAbilitySystem->HasMatchingGameplayTag(
+				DRGameplayTags::State_Frozen);
+
+		const bool bHealthDamaged =
+			HealthAfter < HealthBefore - KINDA_SMALL_NUMBER;
+
+		const bool bFreezeIncreased =
+			FreezeGaugeAfter > FreezeGaugeBefore + KINDA_SMALL_NUMBER;
+
+		const bool bBecameFrozen =
+			!bWasFrozen && bIsFrozen;
+
+		/*
+		 * Sprayer는 일반 상태에서는 FreezeGauge를 증가시키고,
+		 * Frozen 상태에서는 Health Damage를 줄 수 있다.
+		 *
+		 * 둘 중 하나라도 실제 피격 결과가 발생했거나
+		 * 이번 Tick에 Frozen 상태로 전환됐다면 HitReaction 후보로 처리한다.
+		 */
+		if (bHealthDamaged
+			|| bFreezeIncreased
+			|| bBecameFrozen)
+		{
+			TryExecuteHitReaction(
+				TargetActor,
+				TargetAbilitySystem,
+				Origin);
 		}
 	}
 }
@@ -714,6 +769,51 @@ void UDRGA_SpraySnow::StopSprayMontage()
 	{
 		MontageStop(0.15f);
 	}
+}
+
+void UDRGA_SpraySnow::TryExecuteHitReaction(
+	AActor* TargetActor,
+	UAbilitySystemComponent* TargetAbilitySystem,
+	const FVector& SprayOrigin)
+{
+	if (!IsValid(TargetActor) || !IsValid(TargetAbilitySystem))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const float CurrentTime = World->GetTimeSeconds();
+	if (const float* LastTime = LastHitReactionTimes.Find(TargetActor))
+	{
+		if (CurrentTime - *LastTime < HitReactionInterval)
+		{
+			return;
+		}
+	}
+
+	LastHitReactionTimes.Add(TargetActor, CurrentTime);
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+
+	AActor* SourceActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+
+	FGameplayCueParameters Parameters;
+	/*
+	 * Spray는 Projectile ImpactPoint가 없으므로
+	 * Spray Origin을 피격 방향 판정 기준으로 전달한다.
+	 */
+	Parameters.Location = SprayOrigin;
+	Parameters.Instigator = SourceActor;
+	Parameters.EffectCauser = SourceActor;
+	Parameters.SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
+
+	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Player_Hit, Parameters);
 }
 
 #if ENABLE_DRAW_DEBUG

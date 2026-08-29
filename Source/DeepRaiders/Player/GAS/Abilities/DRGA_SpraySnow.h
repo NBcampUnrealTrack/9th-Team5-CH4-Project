@@ -102,6 +102,15 @@ private:
 	void StartSprayMontage();
 	void StopSprayMontage();
 	
+	// 지속형 Spray는 매 Tick마다 HitReaction을 재생하지 않는다.
+	// 실제 Damage가 발생한 대상에 대해 일정 간격으로만 피격 반응을 실행한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sprayer|Hit Reaction", meta = (AllowPrivateAccess, ClampMin = "0.0", Units = "s"))
+	float HitReactionInterval = 0.5f;
+
+	TMap<TWeakObjectPtr<AActor>, float> LastHitReactionTimes;
+
+	void TryExecuteHitReaction(AActor* TargetActor, UAbilitySystemComponent* TargetAbilitySystem, const FVector& SprayOrigin);
+	
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Sprayer|Debug")
 	bool bDrawDebugSpray = false;

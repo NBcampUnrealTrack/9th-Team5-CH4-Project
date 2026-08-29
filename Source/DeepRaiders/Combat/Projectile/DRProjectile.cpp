@@ -14,6 +14,7 @@
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 
 const FName ADRProjectile::CollisionComponentName(TEXT("CollisionComponent"));
 
@@ -178,12 +179,12 @@ void ADRProjectile::HandleImpact(const FHitResult& ImpactResult)
 void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult)
 {
 	UAbilitySystemComponent* SourceASC = SourceAbilitySystem.Get();
-	
-	if (!IsValid(SourceASC)
-		|| !IsValid(TargetAbilitySystem))
+	if (!IsValid(SourceASC) || !IsValid(TargetAbilitySystem))
 	{
 		return;
 	}
+
+	bool bAppliedAnyEffect = false;
 	
 	for (const FGameplayEffectSpecHandle& SpecHandle : ImpactEffectSpecs)
 	{
@@ -191,12 +192,50 @@ void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySyst
 		{
 			continue;
 		}
-		
+
 		FGameplayEffectSpec ImpactSpec(*SpecHandle.Data.Get());
 		ImpactSpec.GetContext().AddHitResult(ImpactResult, true);
-		
+
 		SourceASC->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);
+
+		bAppliedAnyEffect = true;
 	}
+
+	if (bAppliedAnyEffect)
+	{
+		ExecutePlayerHitGameplayCue(TargetAbilitySystem, ImpactResult);
+	}
+}
+
+void ADRProjectile::ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult)
+{
+	UAbilitySystemComponent* SourceASC = SourceAbilitySystem.Get();
+	if (!HasAuthority() || !IsValid(SourceASC) || !IsValid(TargetAbilitySystem))
+	{
+		return;
+	}
+
+	// ASC Owner는 PlayerState이므로 AvatarActor로 실제 Character인지 확인한다.
+	ADRPlayerCharacter* TargetCharacter = Cast<ADRPlayerCharacter>(TargetAbilitySystem->GetAvatarActor());
+	if (!IsValid(TargetCharacter))
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+	EffectContext.AddHitResult(ImpactResult, true);
+
+	FGameplayCueParameters Parameters(EffectContext);
+	Parameters.Location = ImpactResult.ImpactPoint;
+	Parameters.Normal = ImpactResult.ImpactNormal;
+	Parameters.Instigator = GetInstigator();
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject = PresentationSourceObject.Get();
+
+    // 모든 Player 피격 공통 Presentation.
+	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Player_Hit, Parameters);
+    // Snowball Projectile에 맞았을 때만 재생하는 피격음.
+	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Snowball_Impact, Parameters);
 }
 
 bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
