@@ -103,15 +103,6 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		return;
 	}
 
-	FVector AbsorbOrigin = AvatarActor->GetActorLocation();
-	if (const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(AvatarActor))
-	{
-		if (const UStaticMeshComponent* WeaponMesh = Character->GetWorldHandEquipmentMesh())
-		{
-			AbsorbOrigin = WeaponMesh->GetComponentLocation();
-		}
-	}
-
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	if (AController* Controller = ActorInfo->PlayerController.Get())
@@ -123,10 +114,30 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		AvatarActor->GetActorEyesViewPoint(ViewLocation, ViewRotation);
 	}
 
-	const float RemovedAmount = SnowRemoveComponent->TryRemoveSnowAlongDirection(
-		AbsorbOrigin,
-		ViewRotation.Vector(),
-		RemovalSpec);
+	FVector AbsorbOrigin = AvatarActor->GetActorLocation();
+	if (const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(AvatarActor))
+	{
+		FVector GameplayOrigin;
+
+		/*
+		 * Absorb 판정 시작점은 무기 Mesh의 실제 Socket Transform을 사용하지 않는다.
+		 *
+		 * Dedicated Server에서는 SkeletalMesh Pose / Socket Transform이
+		 * 클라이언트와 동일하게 갱신된다고 보장할 수 없으므로,
+		 * Projectile 발사와 동일한 서버 안전 GameplayFireOrigin을 사용한다.
+		 *
+		 * 시각적인 Absorb VFX는 별도로 무기 VFXPoint Socket을 따라간다.
+		 * 실제 Absorb 영역의 시작점에는 이후 SnowAbsorbStartOffset이 추가된다.
+		 */
+		if (Character->CalculateGameplayFireOrigin(ViewRotation.Vector(), GameplayOrigin))
+		{
+			AbsorbOrigin = GameplayOrigin;
+		}
+	}
+
+	const float RemovedAmount = 
+		SnowRemoveComponent->TryRemoveSnowAlongDirection(AbsorbOrigin, ViewRotation.Vector(), RemovalSpec);
+	
 	ApplySnowGaugeGain(ASC, RemovedAmount);
 
 	ScheduleNextAbsorbTick();

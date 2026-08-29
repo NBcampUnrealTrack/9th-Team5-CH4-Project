@@ -8,6 +8,14 @@
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "VoxelWorld.h"
 
+static TAutoConsoleVariable<int32> CVarDrawSnowAbsorbDebug(
+	TEXT("dr.Snow.DrawAbsorbDebug"),
+	0,
+	TEXT("Draw Snow Absorb debug shape.\n")
+	TEXT("0: Off\n")
+	TEXT("1: On"),
+	ECVF_Cheat);
+
 UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -83,8 +91,31 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 
 	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
+	// BrushOrigin은 호출자가 정한 서버 안전 Gameplay 기준점이며,
+	// 여기서 StartOffset을 추가해 실제 Absorb Frustum 시작점을 계산한다.
 	const FVector FrustumOrigin = BrushOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbStartOffset;
 	const FVector FrustumEnd = FrustumOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbRange;
+	
+#if ENABLE_DRAW_DEBUG
+	if (CVarDrawSnowAbsorbDebug.GetValueOnGameThread() != 0)
+	{
+		const float EndRadius = RemovalSpec.SnowAbsorbRadius;
+		const float StartRadius = EndRadius * RemovalSpec.SnowAbsorbInnerRadiusRatio;
+
+		FVector AxisY;
+		FVector AxisZ;
+		NormalizedDirection.FindBestAxisVectors(AxisY, AxisZ);
+
+		DrawDebugLine(GetWorld(), FrustumOrigin, FrustumEnd, FColor::Cyan, false, 0.15f, 0, 2.f);
+		DrawDebugCircle(GetWorld(), FrustumOrigin, StartRadius, 24, FColor::Green, false, 0.15f, 0, 2.f, AxisY, AxisZ, false);
+		DrawDebugCircle(GetWorld(), FrustumEnd, EndRadius, 24, FColor::Red, false, 0.15f, 0, 2.f, AxisY, AxisZ, false);
+		DrawDebugLine(GetWorld(), FrustumOrigin + AxisY * StartRadius, FrustumEnd + AxisY * EndRadius, FColor::Yellow, false, 0.15f);
+		DrawDebugLine(GetWorld(), FrustumOrigin - AxisY * StartRadius, FrustumEnd - AxisY * EndRadius, FColor::Yellow, false, 0.15f);
+		DrawDebugLine(GetWorld(), FrustumOrigin + AxisZ * StartRadius, FrustumEnd + AxisZ * EndRadius, FColor::Yellow, false, 0.15f);
+		DrawDebugLine(GetWorld(), FrustumOrigin - AxisZ * StartRadius, FrustumEnd - AxisZ * EndRadius, FColor::Yellow, false, 0.15f);
+	}
+#endif
+
 	const FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(
 		FrustumEnd,
 		-NormalizedDirection,
