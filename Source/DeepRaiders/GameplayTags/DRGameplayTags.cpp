@@ -253,6 +253,16 @@ namespace DRGameplayTags
 		"Player died from fall damage.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Frozen_Enter,
+		"GameplayCue.Sound.Player.Frozen.Enter",
+		"Player entered frozen state.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Frozen_Death,
+		"GameplayCue.Sound.Player.Frozen.Death",
+		"Frozen player died.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Item_Throwable_Throw,
 		"GameplayCue.Sound.Item.Throwable.Throw",
 		"Throwable release sound.");

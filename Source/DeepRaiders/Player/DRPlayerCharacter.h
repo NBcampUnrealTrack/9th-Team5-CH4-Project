@@ -112,6 +112,11 @@ public:
 		return WorldHandEquipmentMesh;
 	}
 
+	UStaticMeshComponent* GetWorldBackEquipmentMesh() const
+	{
+		return WorldBackEquipmentMesh;
+	}
+	
 	UDRSilhouetteComponent* GetSilhouetteComponent() const
 	{
 		return SilhouetteComponent;

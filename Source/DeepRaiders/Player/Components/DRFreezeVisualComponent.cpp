@@ -63,7 +63,7 @@ void UDRFreezeVisualComponent::BeginPlay()
 
 	if (UAbilitySystemComponent* ASC = BoundAbilitySystem.Get())
 	{
-		SetFrozenShellVisible(ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
+		SetFrozenStateVisual(ASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
 	}
 }
 
@@ -112,7 +112,7 @@ void UDRFreezeVisualComponent::BindAbilitySystem(UAbilitySystemComponent* InASC)
 	FrozenTagChangedHandle = InASC->RegisterGameplayTagEvent(
 		DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).AddUObject(this, &ThisClass::HandleFrozenTagChanged);
 	
-	SetFrozenShellVisible(InASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
+	SetFrozenStateVisual(InASC->HasMatchingGameplayTag(DRGameplayTags::State_Frozen));
 	
 	/*
 	 * Delegate 등록 전에 이미 Gauge 값이 존재할 수 있으므로
@@ -571,9 +571,85 @@ void UDRFreezeVisualComponent::SetFrozenShellVisible(bool bVisible)
 }
 
 void UDRFreezeVisualComponent::HandleFrozenTagChanged(
-	const FGameplayTag Tag,
+	const FGameplayTag /*Tag*/,
 	int32 NewCount)
 {
-	SetFrozenShellVisible(
-		NewCount > 0);
+	SetFrozenStateVisual(NewCount > 0);
+}
+
+void UDRFreezeVisualComponent::SetFrozenStateVisual(bool bFrozen)
+{
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (!IsValid(Character) || !IsValid(Character->GetMesh()))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+	UStaticMeshComponent* HandEquipmentMesh = Character->GetWorldHandEquipmentMesh();
+	UStaticMeshComponent* BackEquipmentMesh = Character->GetWorldBackEquipmentMesh();
+
+	if (bFrozen)
+	{
+		if (!bFrozenVisualActive)
+		{
+			/*
+			 * Frozen 해제 시 원래 상태로 복구하기 위해
+			 * 빙결 직전 Visibility를 저장한다.
+			 */
+			bCharacterMeshWasVisibleBeforeFrozen = CharacterMesh->IsVisible();
+
+			if (IsValid(HandEquipmentMesh))
+			{
+				bHandEquipmentWasVisibleBeforeFrozen = HandEquipmentMesh->IsVisible();
+			}
+
+			if (IsValid(BackEquipmentMesh))
+			{
+				bBackEquipmentWasVisibleBeforeFrozen = BackEquipmentMesh->IsVisible();
+			}
+
+			bFrozenVisualActive = true;
+		}
+
+		/*
+		 * 자식 전체에 Visibility를 전파하지 않는다.
+		 * FrozenShell / Freeze Visual도 CharacterMesh 하위에 있기 때문.
+		 */
+		CharacterMesh->SetVisibility(false, false);
+
+		if (IsValid(HandEquipmentMesh))
+		{
+			HandEquipmentMesh->SetVisibility(false, false);
+		}
+
+		if (IsValid(BackEquipmentMesh))
+		{
+			BackEquipmentMesh->SetVisibility(false, false);
+		}
+
+		SetFrozenShellVisible(true);
+	}
+	else
+	{
+		if (bFrozenVisualActive)
+		{
+			CharacterMesh->SetVisibility(bCharacterMeshWasVisibleBeforeFrozen, false);
+
+			if (IsValid(HandEquipmentMesh))
+			{
+				HandEquipmentMesh->SetVisibility(bHandEquipmentWasVisibleBeforeFrozen, false);
+			}
+
+			if (IsValid(BackEquipmentMesh))
+			{
+				BackEquipmentMesh->SetVisibility(bBackEquipmentWasVisibleBeforeFrozen, false);
+			}
+
+			bFrozenVisualActive = false;
+		}
+
+		SetFrozenShellVisible(false);
+	}
 }

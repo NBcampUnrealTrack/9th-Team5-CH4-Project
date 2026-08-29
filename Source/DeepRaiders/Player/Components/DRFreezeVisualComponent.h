@@ -126,4 +126,12 @@ private:
 
 	float TargetFreezeAmount = 0.f;
 	float VisualFreezeAmount = 0.f;
+	
+	bool bFrozenVisualActive = false;
+
+	bool bCharacterMeshWasVisibleBeforeFrozen = true;
+	bool bHandEquipmentWasVisibleBeforeFrozen = true;
+	bool bBackEquipmentWasVisibleBeforeFrozen = true;
+
+	void SetFrozenStateVisual(bool bFrozen);
 };
