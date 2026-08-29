@@ -501,18 +501,6 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 	}
 
 	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-	
-	FGameplayCueParameters CueParameters;
-
-	if (APawn* Pawn = GetPawn())
-	{
-		CueParameters.Location = Pawn->GetActorLocation();
-		CueParameters.Instigator = Pawn;
-		CueParameters.EffectCauser = Pawn;
-	}
-
-	AbilitySystemComponent->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Frozen_Enter, CueParameters);
-	
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 
 	StopFreezeDecay();

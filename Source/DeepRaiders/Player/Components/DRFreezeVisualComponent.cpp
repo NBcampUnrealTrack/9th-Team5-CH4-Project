@@ -11,6 +11,8 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Data/DRFreezeVisualProfile.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Audio/DRSoundLibrary.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 
 namespace
 {
@@ -574,7 +576,32 @@ void UDRFreezeVisualComponent::HandleFrozenTagChanged(
 	const FGameplayTag /*Tag*/,
 	int32 NewCount)
 {
-	SetFrozenStateVisual(NewCount > 0);
+	const bool bFrozen = NewCount > 0;
+
+	SetFrozenStateVisual(bFrozen);
+
+	if (!bFrozen)
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* Character =
+		Cast<ADRPlayerCharacter>(GetOwner());
+
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = Character->GetActorLocation();
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
+		DRGameplayTags::GameplayCue_Sound_Player_Frozen_Enter,
+		Parameters);
 }
 
 void UDRFreezeVisualComponent::SetFrozenStateVisual(bool bFrozen)
