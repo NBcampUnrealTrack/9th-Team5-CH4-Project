@@ -173,6 +173,7 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 
 	const float HealthAfter = FMath::Clamp(HealthBefore - RawDamage, 0.f, GetMaxHealth());
 	const float AppliedDamage = HealthBefore - HealthAfter;
+
 	if (AppliedDamage <= KINDA_SMALL_NUMBER)
 	{
 		return;
@@ -180,18 +181,39 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 
 	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
 	UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
+
 	ADRPlayerState* TargetPlayerState = IsValid(TargetASC) ? Cast<ADRPlayerState>(TargetASC->GetOwnerActor()) : nullptr;
 	ADRPlayerState* SourcePlayerState = IsValid(SourceASC) ? Cast<ADRPlayerState>(SourceASC->GetOwnerActor()) : nullptr;
 
 	const bool bFatal = HealthBefore > KINDA_SMALL_NUMBER && HealthAfter <= KINDA_SMALL_NUMBER;
-	// 먼저 Combat Result를 기록
+
+	// CombatStats
 	if (IsValid(TargetPlayerState) && TargetPlayerState->HasAuthority())
 	{
 		TargetPlayerState->HandleDamageResolved(SourcePlayerState, AppliedDamage, bFatal);
 	}
 
-	SetHealth(HealthAfter);
+	/*
+	 * Frozen 판정 기준이 FreezeGauge >= Current Health이므로,
+	 * Health Damage만으로 Freeze 임계값이 내려가
+	 * 갑자기 Frozen되는 것을 방지한다.
+	 *
+	 * Health 감소율만큼 FreezeGauge도 비례 감소시켜
+	 * 현재 Freeze 진행 비율을 유지한다.
+	 */
+	const float FreezeBefore = GetFreezeGauge();
 
+	if (FreezeBefore > KINDA_SMALL_NUMBER && HealthBefore > KINDA_SMALL_NUMBER)
+	{
+		const float RemainingHealthRatio = HealthAfter / HealthBefore;
+		const float FreezeAfter = FreezeBefore * RemainingHealthRatio;
+
+		SetFreezeGauge(FreezeAfter);
+	}
+
+	// 반드시 FreezeGauge 조정 이후 Health 변경.
+	SetHealth(HealthAfter);
+	
 	UE_LOG(LogTemp, Log, TEXT( "[GAS][Damage] " "Raw=%.1f Applied=%.1f " "Health=%.1f->%.1f Fatal=%d " "Source=%s Target=%s"), 
 		RawDamage, AppliedDamage, HealthBefore, HealthAfter, bFatal, *GetNameSafe(SourcePlayerState), *GetNameSafe(TargetPlayerState));
 }
