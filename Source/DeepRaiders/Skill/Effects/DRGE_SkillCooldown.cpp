@@ -7,18 +7,19 @@ UDRGE_SkillCooldown::UDRGE_SkillCooldown(
 	const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	// 모든 개별 스킬이 공용으로 사용하는 쿨다운 GE 설정이다.
+	// 실제 태그는 Ability Spec의 DynamicGrantedTags로 추가한다.
+	DurationPolicy = EGameplayEffectDurationType::HasDuration;
+
+	FSetByCallerFloat Duration;
+	Duration.DataTag = DRGameplayTags::Data_Cooldown_Duration;
+	DurationMagnitude = FGameplayEffectModifierMagnitude(Duration);
 }
 
 void UDRGE_SkillCooldown::ConfigureCooldown(
 	const FObjectInitializer& ObjectInitializer,
 	FGameplayTag CooldownTag)
 {
-	DurationPolicy = EGameplayEffectDurationType::HasDuration;
-
-	FSetByCallerFloat Duration;
-	Duration.DataTag = DRGameplayTags::Data_Cooldown_Duration;
-	DurationMagnitude = FGameplayEffectModifierMagnitude(Duration);
-
 	UTargetTagsGameplayEffectComponent* TargetTagsComponent =
 		ObjectInitializer.CreateDefaultSubobject<UTargetTagsGameplayEffectComponent>(
 			this,

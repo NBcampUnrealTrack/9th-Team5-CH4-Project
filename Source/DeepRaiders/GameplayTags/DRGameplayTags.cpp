@@ -86,6 +86,41 @@ namespace DRGameplayTags
 		Ability_Item_Throw,
 		"Ability.Item.Throw",
 		"Item-based throwable ability.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill,
+		"Ability.Skill",
+		"Parent tag for character skills.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Blink,
+		"Ability.Skill.Blink",
+		"Blink skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_ForwardDash,
+		"Ability.Skill.ForwardDash",
+		"Forward dash skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_SuperJump,
+		"Ability.Skill.SuperJump",
+		"Super jump skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_CombatRoll,
+		"Ability.Skill.CombatRoll",
+		"Combat roll skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Search,
+		"Ability.Skill.Search",
+		"Search skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_Charges,
+		"Perk.Skill.Charges",
+		"Changes the equipped skill to use rechargeable charges.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Event_Ability_Throw_Release,
@@ -106,6 +141,31 @@ namespace DRGameplayTags
 		Cooldown_Skill_Two,
 		"Cooldown.Skill.Two",
 		"Cooldown for the second character skill slot.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Blink,
+		"Cooldown.Skill.Blink",
+		"Cooldown for the blink skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_ForwardDash,
+		"Cooldown.Skill.ForwardDash",
+		"Cooldown for the forward dash skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SuperJump,
+		"Cooldown.Skill.SuperJump",
+		"Cooldown for the super jump skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_CombatRoll,
+		"Cooldown.Skill.CombatRoll",
+		"Cooldown for the combat roll skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Search,
+		"Cooldown.Skill.Search",
+		"Cooldown for the search skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,

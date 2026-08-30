@@ -53,6 +53,7 @@ private:
 	void RefreshSkill();
 	void RefreshInputKey();
 	void RefreshCooldown();
+	void UpdateCooldownTag(FGameplayTag NewCooldownTag);
 	void StopCooldownTimer();
 
 	TWeakObjectPtr<ADRPlayerCharacter> PlayerCharacter;

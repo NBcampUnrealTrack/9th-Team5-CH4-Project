@@ -4,6 +4,8 @@
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
+#include "DeepRaiders/Skill/Components/DRSkillComponent.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
@@ -56,12 +58,23 @@ int32 UDRPerkComponent::GetTotalPerkCount() const
 }
 
 bool UDRPerkComponent::CanAddPerk(
-	const UDRPerkDefinition* PerkDefinition) const
+	const UDRPerkDefinition* PerkDefinition,
+	FGameplayTag EquippedSkillId) const
 {
-	return IsValid(PerkDefinition)
-		&& PerkDefinition->PerkEffectClass
-		&& !PerkDefinition->EffectValues.IsEmpty()
-		&& FindAvailableSlotIndex() != INDEX_NONE;
+	if (!IsValid(PerkDefinition)
+		|| FindAvailableSlotIndex() == INDEX_NONE)
+	{
+		return false;
+	}
+
+	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
+	{
+		return !EquippedSkillId.IsValid()
+			&& PerkDefinition->PerkEffectClass != nullptr;
+	}
+
+	return EquippedSkillId.IsValid()
+		&& PerkDefinition->CompatibleSkillTags.HasTagExact(EquippedSkillId);
 }
 
 int32 UDRPerkComponent::FindAvailableSlotIndex() const
@@ -95,12 +108,12 @@ int32 UDRPerkComponent::FindPerkIndex(FGuid PerkInstanceId) const
 
 FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 	UAbilitySystemComponent* AbilitySystemComponent,
-	const UDRPerkDefinition* PerkDefinition) const
+	const UDRPerkDefinition* PerkDefinition,
+	bool bApplyPersistentPolicy) const
 {
 	if (!IsValid(AbilitySystemComponent)
 		|| !IsValid(PerkDefinition)
-		|| !PerkDefinition->PerkEffectClass
-		|| PerkDefinition->EffectValues.IsEmpty())
+		|| !PerkDefinition->PerkEffectClass)
 	{
 		return FActiveGameplayEffectHandle();
 	}
@@ -124,7 +137,7 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 	 * GE 에셋 자체가 아니라 현재 Spec에만 추가하므로,
 	 * 동일한 GE 클래스를 다른 시스템에서 사용해도 해당 효과에는 적용되지 않는다.
 	 */
-	if (PerkDefinition->bPersistThroughDeath)
+	if (bApplyPersistentPolicy && PerkDefinition->bPersistThroughDeath)
 	{
 		EffectSpec.Data->AddDynamicAssetTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
 	}
@@ -141,7 +154,9 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 		*EffectSpec.Data.Get());
 }
 
-bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
+bool UDRPerkComponent::AddPerk(
+	UDRPerkDefinition* PerkDefinition,
+	FGameplayTag EquippedSkillId)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
 	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
@@ -152,8 +167,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 	if (!IsValid(PlayerState)
 		|| !PlayerState->HasAuthority()
 		|| !IsValid(AbilitySystemComponent)
-		|| !IsValid(PerkDefinition)
-		|| !PerkDefinition->PerkEffectClass)
+		|| !IsValid(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
@@ -165,7 +179,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 	}
 
 	const int32 SlotIndex = FindAvailableSlotIndex();
-	if (!CanAddPerk(PerkDefinition) || SlotIndex == INDEX_NONE)
+	if (!CanAddPerk(PerkDefinition, EquippedSkillId) || SlotIndex == INDEX_NONE)
 	{
 		UE_LOG(
 			LogTemp,
@@ -178,9 +192,13 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 		return false;
 	}
 
-	const FActiveGameplayEffectHandle EffectHandle =
-		ApplyPerkEffect(AbilitySystemComponent, PerkDefinition);
-	if (!EffectHandle.IsValid())
+	const bool bApplyPersistentEffect =
+		PerkDefinition->Trigger == EDRPerkTrigger::WhileEquipped
+		&& PerkDefinition->EffectTarget == EDRPerkEffectTarget::OwnerCharacter;
+	const FActiveGameplayEffectHandle EffectHandle = bApplyPersistentEffect
+		? ApplyPerkEffect(AbilitySystemComponent, PerkDefinition, true)
+		: FActiveGameplayEffectHandle();
+	if (bApplyPersistentEffect && !EffectHandle.IsValid())
 	{
 		UE_LOG(
 			LogTemp,
@@ -211,6 +229,7 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 	}
 	while (FindPerkIndex(PerkEntry.PerkInstanceId) != INDEX_NONE);
 	PerkEntry.PerkDefinition = PerkDefinition;
+	PerkEntry.EquippedSkillId = EquippedSkillId;
 	PerkEntry.EffectHandle = EffectHandle;
 
 	UE_LOG(
@@ -227,6 +246,69 @@ bool UDRPerkComponent::AddPerk(UDRPerkDefinition* PerkDefinition)
 	PlayerState->ForceNetUpdate();
 	OnPerksChanged.Broadcast();
 	return true;
+}
+
+bool UDRPerkComponent::AddPerkToSkill(
+	UDRPerkDefinition* PerkDefinition,
+	const UDRSkillDefinition* SkillDefinition)
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+
+	return IsValid(SkillDefinition)
+		&& SkillDefinition->SkillId.IsValid()
+		&& IsValid(SkillComponent)
+		&& SkillComponent->GetCurrentSkill(SkillDefinition->SkillSlot) == SkillDefinition
+		&& AddPerk(PerkDefinition, SkillDefinition->SkillId);
+}
+
+void UDRPerkComponent::HandleSkillCommitted(FGameplayTag SkillId)
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent)
+		|| !SkillId.IsValid())
+	{
+		return;
+	}
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillId
+			|| PerkDefinition->Trigger != EDRPerkTrigger::OnSkillCommitted
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::OwnerCharacter)
+		{
+			continue;
+		}
+
+		ApplyPerkEffect(AbilitySystemComponent, PerkDefinition, false);
+	}
+}
+
+bool UDRPerkComponent::HasSkillPerk(
+	FGameplayTag SkillId,
+	FGameplayTag PerkTag) const
+{
+	return SkillId.IsValid()
+		&& PerkTag.IsValid()
+		&& PerkEntries.ContainsByPredicate(
+			[SkillId, PerkTag](const FDRPerkEntry& PerkEntry)
+			{
+				return IsValid(PerkEntry.PerkDefinition)
+					&& PerkEntry.EquippedSkillId == SkillId
+					&& PerkEntry.PerkDefinition->EffectTarget
+						== EDRPerkEffectTarget::EquippedSkill
+					&& PerkEntry.PerkDefinition->PerkTag == PerkTag;
+			});
 }
 
 bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)

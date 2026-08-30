@@ -13,6 +13,11 @@
 #include "InputAction.h"
 #include "TimerManager.h"
 
+namespace
+{
+	constexpr float CooldownRefreshInterval = 1.0f / 60.0f;
+}
+
 void UDRSkillSlotViewModel::Initialize(
 	ADRPlayerCharacter* InPlayerCharacter,
 	EDRSkillSlot InSkillSlot)
@@ -29,24 +34,12 @@ void UDRSkillSlotViewModel::Initialize(
 	const ADRPlayerState* PlayerState = InPlayerCharacter->GetPlayerState<ADRPlayerState>();
 	SkillComponent = IsValid(PlayerState) ? PlayerState->GetSkillComponent() : nullptr;
 	SkillSlot = InSkillSlot;
-	CooldownTag = SkillSlot == EDRSkillSlot::One
-		? DRGameplayTags::Cooldown_Skill_One
-		: DRGameplayTags::Cooldown_Skill_Two;
 
 	if (SkillComponent.IsValid())
 	{
 		SkillComponent->OnSkillChanged.AddDynamic(
 			this,
 			&ThisClass::HandleSkillChanged);
-	}
-
-	if (AbilitySystemComponent.IsValid())
-	{
-		CooldownTagChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(
-			CooldownTag,
-			EGameplayTagEventType::NewOrRemoved).AddUObject(
-				this,
-				&ThisClass::HandleCooldownTagChanged);
 	}
 
 	RefreshSkill();
@@ -105,6 +98,13 @@ void UDRSkillSlotViewModel::RefreshSkill()
 		? SkillComponent->GetCurrentSkill(SkillSlot)
 		: nullptr;
 	const bool IsSkillEquipped = IsValid(SkillDefinition);
+	const FGameplayTag NewCooldownTag = IsSkillEquipped
+		&& SkillDefinition->CooldownTag.IsValid()
+		? SkillDefinition->CooldownTag
+		: (SkillSlot == EDRSkillSlot::One
+			? DRGameplayTags::Cooldown_Skill_One
+			: DRGameplayTags::Cooldown_Skill_Two);
+	UpdateCooldownTag(NewCooldownTag);
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		Icon,
@@ -118,6 +118,37 @@ void UDRSkillSlotViewModel::RefreshSkill()
 	else
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(InputKeyText, FText::GetEmpty());
+	}
+
+	RefreshCooldown();
+}
+
+void UDRSkillSlotViewModel::UpdateCooldownTag(FGameplayTag NewCooldownTag)
+{
+	if (CooldownTag == NewCooldownTag)
+	{
+		return;
+	}
+
+	StopCooldownTimer();
+	if (AbilitySystemComponent.IsValid()
+		&& CooldownTag.IsValid()
+		&& CooldownTagChangedHandle.IsValid())
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			CooldownTag,
+			EGameplayTagEventType::NewOrRemoved).Remove(CooldownTagChangedHandle);
+	}
+
+	CooldownTag = NewCooldownTag;
+	CooldownTagChangedHandle.Reset();
+	if (AbilitySystemComponent.IsValid() && CooldownTag.IsValid())
+	{
+		CooldownTagChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(
+			CooldownTag,
+			EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this,
+				&ThisClass::HandleCooldownTagChanged);
 	}
 }
 
@@ -196,7 +227,7 @@ void UDRSkillSlotViewModel::RefreshCooldown()
 				CooldownTimerHandle,
 				this,
 				&ThisClass::RefreshCooldown,
-				0.05f,
+				CooldownRefreshInterval,
 				true);
 		}
 	}

@@ -94,9 +94,11 @@ void UDRGA_CombatRollSkill::ActivateAbility(
 		MOVE_Walking,
 		true,
 		nullptr,
-		ERootMotionFinishVelocityMode::SetVelocity,
+		// 종료 순간 속도를 0으로 만들면 입력이 유지돼도 다시 가속해야 해
+		// 구르기 뒤 이동이 끊긴다. 걷기 속도 범위에서만 관성을 이어간다.
+		ERootMotionFinishVelocityMode::ClampVelocity,
 		FVector::ZeroVector,
-		0.0f);
+		FMath::Max(MovementComponent->MaxWalkSpeed, 0.0f));
 
 	if (!IsValid(MoveTask))
 	{

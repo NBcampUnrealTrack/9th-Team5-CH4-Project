@@ -3,10 +3,12 @@
 #include "ActiveGameplayEffectHandle.h"
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "DRPerkComponent.generated.h"
 
 class UAbilitySystemComponent;
 class UDRPerkDefinition;
+class UDRSkillDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPerksChangedSignature);
 
@@ -22,6 +24,10 @@ struct DEEPRAIDERS_API FDRPerkEntry
 	/** 소유 클라이언트에 복제할 퍽 정의다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
 	TObjectPtr<UDRPerkDefinition> PerkDefinition;
+
+	/** 이 퍽이 장착된 스킬 고유 ID. 비어 있으면 기존 공용 퍽이다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
+	FGameplayTag EquippedSkillId;
 
 	/** 초기화 시 퍽 GameplayEffect를 회수하기 위한 서버 전용 핸들이다. */
 	FActiveGameplayEffectHandle EffectHandle;
@@ -60,10 +66,19 @@ public:
 	}
 
 	/** 전체 퍽 슬롯 제한 안에서 퍽을 추가할 수 있는지 확인한다. */
-	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition) const;
+	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition, FGameplayTag EquippedSkillId = FGameplayTag()) const;
 
 	/** 서버에서 퍽을 추가하고 GameplayEffect를 즉시 적용한다. */
-	bool AddPerk(UDRPerkDefinition* PerkDefinition);
+	bool AddPerk(UDRPerkDefinition* PerkDefinition, FGameplayTag EquippedSkillId = FGameplayTag());
+
+	/** 현재 장착된 스킬 정의를 검증해 퍽을 장착한다. */
+	bool AddPerkToSkill(UDRPerkDefinition* PerkDefinition, const UDRSkillDefinition* SkillDefinition);
+
+	/** 스킬 사용이 성공했을 때 해당 스킬에 장착된 즉발 퍽을 실행한다. 서버 전용. */
+	void HandleSkillCommitted(FGameplayTag SkillId);
+
+	/** 특정 스킬에 장착된 설정 변경형 퍽 태그를 반환한다. */
+	bool HasSkillPerk(FGameplayTag SkillId, FGameplayTag PerkTag) const;
 
 	/** 고유 ID가 일치하는 퍽의 효과와 슬롯을 함께 제거한다. */
 	bool TryRemovePerk(FGuid PerkInstanceId);
@@ -90,7 +105,8 @@ private:
 	/** 퍽 정의로 GameplayEffectSpec을 생성하고 서버 ASC에 적용한다. */
 	FActiveGameplayEffectHandle ApplyPerkEffect(
 		UAbilitySystemComponent* AbilitySystemComponent,
-		const UDRPerkDefinition* PerkDefinition) const;
+		const UDRPerkDefinition* PerkDefinition,
+		bool bApplyPersistentPolicy) const;
 
 	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)

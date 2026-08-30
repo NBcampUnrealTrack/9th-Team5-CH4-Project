@@ -19,6 +19,15 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Blink);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
+
+	// Perk
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
@@ -27,6 +36,11 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_One);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Two);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Blink);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);

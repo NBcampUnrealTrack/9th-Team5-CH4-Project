@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "DRSkillDefinition.generated.h"
@@ -18,6 +19,18 @@ class DEEPRAIDERS_API UDRSkillDefinition : public UDRItemDefinition
 
 public:
 	UDRSkillDefinition();
+
+	/** 슬롯 배치와 독립적인 스킬 고유 식별자다. 예: Ability.Skill.Blink */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
+	FGameplayTag SkillId;
+
+	/** 이 스킬만 차단하는 쿨다운 태그다. 예: Cooldown.Skill.Blink */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Cooldown")
+	FGameplayTag CooldownTag;
+
+	/** 이 스킬의 기본 쿨다운 시간이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Cooldown", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
+	float CooldownDuration = 1.0f;
 
 	/** 이 스킬이 장착되는 스킬 슬롯이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
