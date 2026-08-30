@@ -468,9 +468,9 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	if (!TryStartSnowJoinSnapshot(PlayerController))
 	{
 		// 저장된 눈 상태가 없으면 대기하지 않고 바로 플레이를 시작한다.
-		HandleSnowJoinSnapshotApplied(PlayerController);
+		HandleSnowJoinSnapshotApplied(PlayerController, false);
 	}
-	
+
 	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
 
 	if (!IsValid(TerrainSubsystem))
@@ -501,22 +501,23 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 		return false;
 	}
 
-	int32 LatestCheckpointSequence = INDEX_NONE;
-	if (!SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence) &&
-		SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
+	// 퇴적 요청을 먼저 막은 뒤 현재 VoxelWorld 상태로 중도 난입용 checkpoint를 새로 만든다.
+	// 기존 checkpoint를 재사용하면 그 이후 DepositArea가 만든 복셀이 포함되지 않는다.
+	OnJoinSnapshotStarted.Broadcast();
+	if (!SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
 	{
-		if (SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence))
-		{
-			MiningGameState->DiscardSnowOperationsThrough(LatestCheckpointSequence);
-		}
+		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::InvalidCheckpoint);
+		return false;
 	}
 
 	FDRSnowJoinCheckpoint Checkpoint;
 	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint))
 	{
+		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::InvalidCheckpoint);
 		return false;
 	}
 
+	MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
 	PlayerController->Client_BeginSnowJoinSnapshot(
 		Checkpoint.SnapshotId,
 		Checkpoint.OperationSequence,
@@ -527,8 +528,15 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 	return true;
 }
 
-bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(APlayerController* PlayerController)
+bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
+	APlayerController* PlayerController,
+	bool bNotifySnapshotFinished)
 {
+	if (bNotifySnapshotFinished)
+	{
+		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::Applied);
+	}
+
 	if (!IsValid(PlayerController) || IsValid(PlayerController->GetPawn()))
 	{
 		return false;

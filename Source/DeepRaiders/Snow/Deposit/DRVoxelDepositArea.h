@@ -6,6 +6,7 @@
 #include "DRVoxelDepositArea.generated.h"
 
 class AVoxelWorld;
+enum class EDRSnowJoinSnapshotResult : uint8;
 
 UCLASS()
 class DEEPRAIDERS_API ADRVoxelDepositArea : public AActor
@@ -68,6 +69,7 @@ private:
 	FTimerHandle DepositPipelineTimerHandle;
 	FDRVoxelDepositPlan PreparedDepositPlan;
 	TArray<FDRVoxelDepositCommand> QueuedDepositCommands;
+	int32 ActiveJoinSnapshotCount = 0;
 
 	/**
 	 * 현재 액터 설정으로 새로운 퇴적 명령을 만듭니다.
@@ -75,6 +77,8 @@ private:
 	 * @return 유효한 명령을 만들면 true입니다.
 	 */
 	bool MakeDepositCommand(FDRVoxelDepositCommand& OutCommand) const;
+	void HandleJoinSnapshotStarted();
+	void HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult Result);
 	void RequestDepositArea();
 	void PrepareNextQueuedDeposit();
 	void ApplyPreparedDeposit();

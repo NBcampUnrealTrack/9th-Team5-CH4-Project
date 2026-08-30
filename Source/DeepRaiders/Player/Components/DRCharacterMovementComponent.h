@@ -58,7 +58,10 @@ public:
     // 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
     void SetCustomMovementMode(EDRCustomMovementMode NewMode);
     
-    bool IsMovementActionModeActive() const;
+    // None이면 바닥 상태를 확인한 뒤 일반 이동 모드로 복귀한다.
+    void ExitCustomMovementMode();
+    
+    bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
     
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -77,6 +80,9 @@ private:
 
     void PhysMovementAction(float DeltaTime, int32 Iterations);
     UDRMovementActionComponent* GetMovementActionComponent() const;
+    
+    // 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
+    void RestoreDefaultMovementMode();
     
     TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
     FDelegateHandle MoveSpeedChangedDelegateHandle;

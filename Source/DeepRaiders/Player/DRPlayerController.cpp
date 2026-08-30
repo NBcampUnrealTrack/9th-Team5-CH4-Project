@@ -467,6 +467,56 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
+bool ADRPlayerController::TryForwardSecondaryCancelInput(int32 InputId)
+{
+	if (InputId != static_cast<int32>(EDRAbilityInputId::Secondary))
+	{
+		return false;
+	}
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return false;
+	}
+
+	// MovementAction에게 Secondary 입력을 강제로 전달
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (!Spec.IsActive()
+			|| Spec.Ability == nullptr)
+		{
+			continue;
+		}
+		
+		const FGameplayTagContainer& AssetTags = Spec.Ability->GetAssetTags();
+
+		if (!AssetTags.HasTag(DRGameplayTags::Ability_MovementAction)
+			|| !AssetTags.HasTag(DRGameplayTags::Ability_Input_SecondaryCancel))
+		{
+			continue;
+		}		
+		
+		FGameplayAbilitySpec* MutableSpec = ASC->FindAbilitySpecFromHandle(Spec.Handle);
+
+		if (MutableSpec == nullptr)
+		{
+			continue;
+		}
+
+		MutableSpec->InputPressed = true;
+		ASC->AbilitySpecInputPressed(*MutableSpec);
+
+		ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
+			MutableSpec->Handle,GetAbilityActivationPredictionKey(*MutableSpec));
+
+		return true;
+	}
+
+	return false;
+}
+
 void ADRPlayerController::ResetForGameStart()
 {
 	if (!HasAuthority() || !IsValid(InventoryComponent))
@@ -513,6 +563,12 @@ void ADRPlayerController::HandleScoreboardCompleted(const FInputActionValue&)
 
 void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 {
+	if (TryForwardSecondaryCancelInput(InputId))
+	{
+		ConsumedStartedInputIds.Add(InputId);
+		return;
+	}
+	
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (!IsValid(ASC))
 	{
@@ -522,7 +578,7 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 	const bool bConsumedAsGenericInput = ASC->IsGenericConfirmInputBound(InputId) || ASC->IsGenericCancelInputBound(InputId);
 	if (bConsumedAsGenericInput)
 	{
-		ConsumedGenericInputIds.Add(InputId);
+		ConsumedStartedInputIds.Add(InputId);
 	}
 	
 	ASC->AbilityLocalInputPressed(InputId);
@@ -530,7 +586,7 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 
 void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 {
-	if (ConsumedGenericInputIds.Contains(InputId))
+	if (ConsumedStartedInputIds.Contains(InputId))
 	{
 		return;
 	}	
@@ -569,7 +625,7 @@ void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 
 void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 {
-	if (ConsumedGenericInputIds.Remove(InputId) > 0)
+	if (ConsumedStartedInputIds.Remove(InputId) > 0)
 	{
 		return;
 	}

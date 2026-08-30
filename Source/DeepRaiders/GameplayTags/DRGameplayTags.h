@@ -12,6 +12,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Active);
 
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
@@ -19,6 +20,11 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MovementAction);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Grapple);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Input_SecondaryCancel);
+	
+	// Skill
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Blink);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_ForwardDash);
