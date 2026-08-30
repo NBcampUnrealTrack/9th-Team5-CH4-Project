@@ -104,6 +104,9 @@ private:
 	void RefreshHeldItem();
 	void RequestReplicationUpdate() const;
 	
+	// 특정 액션을 직접 알지 않고, 공통 이동 액션 활성 태그만 검사한다.
+	bool IsQuickSlotSelectionLocked() const;
+	
 public:
 	// 모든 퀵슬롯 변경에 호출
 	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")

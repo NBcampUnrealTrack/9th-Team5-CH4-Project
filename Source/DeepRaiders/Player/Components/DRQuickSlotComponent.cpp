@@ -7,6 +7,7 @@
 #include "DeepRaiders/Inventory/DRInventoryTypes.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -60,7 +61,8 @@ void UDRQuickSlotComponent::GetLifetimeReplicatedProps(TArray<class FLifetimePro
 
 void UDRQuickSlotComponent::RequestSelectSlot(int32 SlotIndex)
 {
-	if (!CachedInventoryComponent())
+	if (IsQuickSlotSelectionLocked()
+		|| !CachedInventoryComponent())
 	{
 		return;
 	}
@@ -215,6 +217,7 @@ bool UDRQuickSlotComponent::IsLocalPlayer() const
 bool UDRQuickSlotComponent::SelectSlotInternal(int32 SlotIndex, FGuid ExpectedInstanceId)
 {
 	if (!HasQuickSlotAuthority()
+		|| IsQuickSlotSelectionLocked()
 		|| !CachedInventoryComponent())
 	{
 		return false;
@@ -372,4 +375,11 @@ void UDRQuickSlotComponent::RequestReplicationUpdate() const
 	
 	OwnerActor->FlushNetDormancy();
 	OwnerActor->ForceNetUpdate();
+}
+
+bool UDRQuickSlotComponent::IsQuickSlotSelectionLocked() const
+{
+	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+
+	return IsValid(ASC)	&& ASC->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Active);
 }

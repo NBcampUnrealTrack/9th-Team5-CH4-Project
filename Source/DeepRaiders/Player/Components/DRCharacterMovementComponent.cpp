@@ -250,12 +250,28 @@ FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_
 
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
 {
-    SetMovementMode(MOVE_Custom, static_cast<uint8>(NewMode));    
+    if (NewMode == EDRCustomMovementMode::None)
+    {
+        ExitCustomMovementMode();
+        return;
+    }
+    
+    SetMovementMode(MOVE_Custom, static_cast<uint8>(NewMode)); 
 }
 
-bool UDRCharacterMovementComponent::IsMovementActionModeActive() const
+void UDRCharacterMovementComponent::ExitCustomMovementMode()
 {
-    return MovementMode == MOVE_Custom && CustomMovementMode == static_cast<uint8>(EDRCustomMovementMode::MovementAction);
+    if (MovementMode != MOVE_Custom)
+    {
+        return;
+    }
+    
+    RestoreDefaultMovementMode();
+}
+
+bool UDRCharacterMovementComponent::IsCustomMovementModeActive(EDRCustomMovementMode Mode) const
+{
+    return MovementMode == MOVE_Custom && CustomMovementMode == static_cast<uint8>(Mode);
 }
 
 UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComponent() const
@@ -268,6 +284,26 @@ UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComp
     return CharacterOwner->FindComponentByClass<UDRMovementActionComponent>();
 }
 
+void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
+{
+    if (!UpdatedComponent)
+    {
+        SetMovementMode(MOVE_Falling);
+        return;
+    }
+    
+    FFindFloorResult FloorResult;
+    FindFloor(UpdatedComponent->GetComponentLocation(), FloorResult, false);
+    
+    if (FloorResult.IsWalkableFloor())
+    {
+        SetMovementMode(MOVE_Walking);
+        return;
+    }
+    
+    SetMovementMode(MOVE_Falling);
+}
+
 void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
 {
     switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
@@ -276,66 +312,107 @@ void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations
         PhysMovementAction(deltaTime, Iterations);
         return;
     default:
-        SetMovementMode(MOVE_Falling);
+        RestoreDefaultMovementMode();
         return;
     }
 }
 
 void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 Iterations)
 {
+    if (DeltaTime < MIN_TICK_TIME)
+    {
+        return;
+    }
+    
     UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
     
     if (!IsValid(MovementAction)
         || !UpdatedComponent
         || !MovementAction->IsMovementActionActive())
     {
-        SetMovementMode(MOVE_Falling);
+        RestoreDefaultMovementMode();
         return;
     }
     
-    FDRMovementActionSimulationInput Input;
-    Input.Location = UpdatedComponent->GetComponentLocation();
-    Input.Velocity = Velocity;
-    Input.DeltaTime = DeltaTime;
+    float RemainingTime = DeltaTime;
     
-    // 기존 CharacterMovement의 공중 제어 계산을 재사용
-    Input.InputAcceleration = GetFallingLateralAcceleration(DeltaTime);
-    Input.Gravity = GetGravityDirection() * FMath::Abs(GetGravityZ());
-    
-    FDRMovementActionSimulationOutput Output;
-    MovementAction->EvaluateMovementContribution(Input, Output);
-    
-    Velocity += Output.AdditionalAcceleration * DeltaTime;
-    
-    if (Output.bApplyGravity)
+    while (RemainingTime >= MIN_TICK_TIME
+        && Iterations < MaxSimulationIterations)
     {
-        Velocity = NewFallVelocity(Velocity, Input.Gravity, DeltaTime);
-    }
-    
-    if (Output.MaxSpeed > KINDA_SMALL_NUMBER)
-    {
-        Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
-    }
-    
-    const FVector Delta = Velocity * DeltaTime;
-    FHitResult Hit;
-    SafeMoveUpdatedComponent(Delta, UpdatedComponent->GetComponentQuat(), true, Hit);
-    
-    if (Hit.IsValidBlockingHit())
-    {
-        HandleImpact(Hit, DeltaTime, Delta);
+        ++Iterations;
         
-        if (Hit.Time < 1.f)
+        const float TimeTick = GetSimulationTimeStep(RemainingTime, Iterations);
+        
+        RemainingTime -= TimeTick;
+        bJustTeleported = false;
+        
+        const FVector OldVelocity = Velocity;
+        
+        FDRMovementActionSimulationInput Input;
+        Input.Location = UpdatedComponent->GetComponentLocation();
+        Input.Velocity = Velocity;
+        Input.DeltaTime = TimeTick;
+        // 기존 CharacterMovement의 공중 제어 계산을 재사용
+        Input.InputAcceleration = GetFallingLateralAcceleration(TimeTick);
+        Input.Gravity = -GetGravityDirection() * GetGravityZ();
+        
+        FDRMovementActionSimulationOutput Output;
+        MovementAction->EvaluateMovementContribution(Input, Output);
+    
+        Velocity += Output.AdditionalAcceleration * TimeTick;
+    
+        if (Output.bApplyGravity)
         {
-            const FVector RemainingDelta = Delta * (1.f - Hit.Time);
+            Velocity = NewFallVelocity(Velocity, Input.Gravity, TimeTick);
+        }
+    
+        if (Output.MaxSpeed > KINDA_SMALL_NUMBER)
+        {
+            Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
+        }
+        
+        const FVector Adjusted = 0.5f * (OldVelocity + Velocity) * TimeTick;
+        FHitResult Hit(1.f);
+        SafeMoveUpdatedComponent(Adjusted, UpdatedComponent->GetComponentQuat(), true, Hit);
+    
+        if (!HasValidData())
+        {
+            return;
+        }
+        
+        if (Hit.IsValidBlockingHit())
+        {
+            const float RemainingTimeAfterHit = TimeTick * (1.f - Hit.Time);
+            const FVector SlideStartLocation = UpdatedComponent->GetComponentLocation();
             
-            SlideAlongSurface(RemainingDelta, 1.f - Hit.Time, Hit.Normal, Hit, true);
+            HandleImpact(Hit, TimeTick, Adjusted);
+            
+            if (!HasValidData()
+                || !IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+            {
+                return;
+            }
+            
+            // 충돌면을 따라 남은 이동량 처리
+            SlideAlongSurface(Adjusted, 1.f - Hit.Time, Hit.Normal, Hit, true);
+            
+            if (RemainingTimeAfterHit > KINDA_SMALL_NUMBER 
+                && !bJustTeleported)
+            {
+                const FVector SlideDelta = UpdatedComponent->GetComponentLocation() - SlideStartLocation;
+                
+                // 다음 프레임에도 벽 안쪽으로 속도가 유지되지 않도록 보정
+                Velocity = SlideDelta / RemainingTimeAfterHit;
+            }
         }
     }
     
-    // 이동 종료 여부는 판단하지 않고, 결과만 외부에 전달한다.
-    // 이동 액션 종료는 GA 내부에서 판단
-    MovementAction->ReportMovementSimulation(UpdatedComponent->GetComponentLocation(), Velocity);
+    if (IsValid(MovementAction)
+        && MovementAction->IsMovementActionActive()
+        && IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+    {
+        MovementAction->ReportMovementSimulation(UpdatedComponent->GetComponentLocation(),Velocity);
+    }    
 }
 
 bool UDRCharacterMovementComponent::CanApplyJetpackThrust() const
