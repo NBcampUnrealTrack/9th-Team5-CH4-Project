@@ -8,6 +8,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frozen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
@@ -33,6 +34,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
 
 	// Effect Policy

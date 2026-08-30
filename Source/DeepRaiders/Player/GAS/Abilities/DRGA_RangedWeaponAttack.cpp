@@ -27,6 +27,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;	
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 
 bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,

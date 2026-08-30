@@ -18,6 +18,11 @@ namespace DRGameplayTags
 		"Player is absorbing snow.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_BlinkRecovery,
+		"State.BlinkRecovery",
+		"Player may move after blinking but cannot attack or use skills.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_UI_InventoryOpen,
 		"State.UI.InventoryOpen",
 		"Local player's inventory UI is open.");
@@ -146,6 +151,11 @@ namespace DRGameplayTags
 		Data_Cooldown_Duration,
 		"Data.Cooldown.Duration",
 		"Cooldown duration passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_BlinkRecovery_Duration,
+		"Data.BlinkRecovery.Duration",
+		"Blink recovery duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Effect_MoveSpeed,

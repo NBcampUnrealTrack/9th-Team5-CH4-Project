@@ -3,6 +3,8 @@
 #include "GameFramework/Controller.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Skill/Effects/DRGE_BlinkRecovery.h"
 
 void UDRGA_BlinkSkill::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -49,6 +51,28 @@ void UDRGA_BlinkSkill::ActivateAbility(
 	// to the first impact instead of allowing teleport destination adjustment past it.
 	Character->SetActorLocation(Destination, true, &HitResult, ETeleportType::TeleportPhysics);
 	Character->SetActorRotation(CharacterRotation, ETeleportType::TeleportPhysics);
+
+	if (RecoveryDuration > 0.0f)
+	{
+		FGameplayEffectSpecHandle RecoverySpec = MakeOutgoingGameplayEffectSpec(
+			Handle,
+			ActorInfo,
+			ActivationInfo,
+			UDRGE_BlinkRecovery::StaticClass(),
+			GetAbilityLevel(Handle, ActorInfo));
+
+		if (RecoverySpec.IsValid())
+		{
+			RecoverySpec.Data->SetSetByCallerMagnitude(
+				DRGameplayTags::Data_BlinkRecovery_Duration,
+				RecoveryDuration);
+			ApplyGameplayEffectSpecToOwner(
+				Handle,
+				ActorInfo,
+				ActivationInfo,
+				RecoverySpec);
+		}
+	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }

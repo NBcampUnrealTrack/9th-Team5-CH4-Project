@@ -16,6 +16,7 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 
 void UDRGA_MeleeAttack::ActivateAbility(

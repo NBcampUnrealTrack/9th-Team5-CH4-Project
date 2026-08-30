@@ -17,6 +17,7 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 
 UGameplayEffect* UDRGA_CharacterSkillBase::GetCooldownGameplayEffect() const
