@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "DRPerkDefinition.generated.h"
 
 class UGameplayEffect;
@@ -52,6 +53,13 @@ public:
 	/** 퍽 획득 시 직접 적용할 GameplayEffect다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
 	TSubclassOf<UGameplayEffect> PerkEffectClass;
+
+	/**
+	 * 이 퍽이 장착된 스킬의 발동 흐름에 추가할 효과들이다.
+	 * 빈 배열이면 기존 PerkEffectClass / Trigger 설정을 호환용으로 사용한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill Effects")
+	TArray<FDRSkillEffectRule> EffectRules;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
 	uint8 bPersistThroughDeath:1 = true;

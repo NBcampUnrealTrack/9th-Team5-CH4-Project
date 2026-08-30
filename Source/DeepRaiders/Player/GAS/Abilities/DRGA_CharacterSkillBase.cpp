@@ -181,6 +181,32 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 		CooldownSpec);
 
 	NotifySkillCommitted(Handle, ActorInfo);
+	NotifySkillActivated(Handle, ActorInfo);
+}
+
+void UDRGA_CharacterSkillBase::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled)
+{
+	if (ActorInfo != nullptr)
+	{
+		if (UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get())
+		{
+			for (const FActiveGameplayEffectHandle EffectHandle : ActiveSkillEffectHandles)
+			{
+				if (EffectHandle.IsValid())
+				{
+					AbilitySystemComponent->RemoveActiveGameplayEffect(EffectHandle);
+				}
+			}
+		}
+	}
+	ActiveSkillEffectHandles.Reset();
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
 ADRPlayerCharacter* UDRGA_CharacterSkillBase::GetPlayerCharacter(
@@ -247,6 +273,30 @@ void UDRGA_CharacterSkillBase::NotifySkillCommitted(
 		&& SkillDefinition->SkillId.IsValid()
 		&& IsValid(PerkComponent))
 	{
-		PerkComponent->HandleSkillCommitted(SkillDefinition->SkillId);
+		PerkComponent->HandleSkillCommitted(SkillDefinition);
+	}
+}
+
+void UDRGA_CharacterSkillBase::NotifySkillActivated(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	const UDRSkillDefinition* SkillDefinition =
+		Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo));
+	ADRPlayerState* PlayerState =
+		Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+	UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	if (IsValid(SkillDefinition) && IsValid(PerkComponent))
+	{
+		PerkComponent->HandleSkillActivated(
+			SkillDefinition,
+			ActiveSkillEffectHandles);
 	}
 }

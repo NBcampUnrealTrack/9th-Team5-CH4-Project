@@ -14,6 +14,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitMaxSnowGauge(100.f);
 	InitSnowGauge(100.f);
 
+	InitDamageReduction(0.f);
 	InitMoveSpeedMultiplier(1.f);
 }
 
@@ -26,6 +27,7 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, FreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, DamageReduction, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
 }
 
@@ -61,6 +63,15 @@ void UDRPlayerAttributeSet::OnRep_MoveSpeedMultiplier(
 		UDRPlayerAttributeSet,
 		MoveSpeedMultiplier,
 		OldMoveSpeedMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_DamageReduction(
+	const FGameplayAttributeData& OldDamageReduction)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(
+		UDRPlayerAttributeSet,
+		DamageReduction,
+		OldDamageReduction);
 }
 
 void UDRPlayerAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
@@ -119,6 +130,10 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
+	else if (Attribute == GetDamageReductionAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, 0.95f);
+	}
 	else if (Attribute == GetMoveSpeedMultiplierAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
@@ -171,7 +186,9 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		return;
 	}
 
-	const float HealthAfter = FMath::Clamp(HealthBefore - RawDamage, 0.f, GetMaxHealth());
+	const float FinalDamageReduction = GetDamageReduction();
+	const float FinalDamage = RawDamage * (1.f - FinalDamageReduction);
+	const float HealthAfter = FMath::Clamp(HealthBefore - FinalDamage, 0.f, GetMaxHealth());
 	const float AppliedDamage = HealthBefore - HealthAfter;
 
 	if (AppliedDamage <= KINDA_SMALL_NUMBER)
@@ -214,6 +231,4 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 	// 반드시 FreezeGauge 조정 이후 Health 변경.
 	SetHealth(HealthAfter);
 	
-	UE_LOG(LogTemp, Log, TEXT( "[GAS][Damage] " "Raw=%.1f Applied=%.1f " "Health=%.1f->%.1f Fatal=%d " "Source=%s Target=%s"), 
-		RawDamage, AppliedDamage, HealthBefore, HealthAfter, bFatal, *GetNameSafe(SourcePlayerState), *GetNameSafe(TargetPlayerState));
 }

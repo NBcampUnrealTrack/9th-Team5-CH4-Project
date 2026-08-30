@@ -11,6 +11,9 @@ class DEEPRAIDERS_API UDRGA_CombatRollSkill : public UDRGA_CharacterSkillBase
 {
 	GENERATED_BODY()
 
+public:
+	UDRGA_CombatRollSkill();
+
 protected:
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,

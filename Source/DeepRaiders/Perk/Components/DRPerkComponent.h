@@ -3,6 +3,7 @@
 #include "ActiveGameplayEffectHandle.h"
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "GameplayTagContainer.h"
 #include "DRPerkComponent.generated.h"
 
@@ -74,8 +75,16 @@ public:
 	/** 현재 장착된 스킬 정의를 검증해 퍽을 장착한다. */
 	bool AddPerkToSkill(UDRPerkDefinition* PerkDefinition, const UDRSkillDefinition* SkillDefinition);
 
-	/** 스킬 사용이 성공했을 때 해당 스킬에 장착된 즉발 퍽을 실행한다. 서버 전용. */
-	void HandleSkillCommitted(FGameplayTag SkillId);
+	/** 스킬 사용이 성공했을 때 기본 효과와 장착 퍽의 즉발 효과를 실행한다. 서버 전용. */
+	void HandleSkillCommitted(const UDRSkillDefinition* SkillDefinition);
+
+	/**
+	 * 스킬 기본 효과와 이 스킬에 실제 장착된 퍽의 활성 중 효과를 적용한다.
+	 * 반환된 핸들은 스킬 종료 시 Ability가 회수한다. 서버 전용.
+	 */
+	void HandleSkillActivated(
+		const UDRSkillDefinition* SkillDefinition,
+		TArray<FActiveGameplayEffectHandle>& OutActiveEffectHandles);
 
 	/** 특정 스킬에 장착된 설정 변경형 퍽 태그를 반환한다. */
 	bool HasSkillPerk(FGameplayTag SkillId, FGameplayTag PerkTag) const;
@@ -107,6 +116,22 @@ private:
 		UAbilitySystemComponent* AbilitySystemComponent,
 		const UDRPerkDefinition* PerkDefinition,
 		bool bApplyPersistentPolicy) const;
+
+	FActiveGameplayEffectHandle ApplySkillEffectRule(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UObject* SourceObject,
+		const FDRSkillEffectRule& EffectRule,
+		bool bPersistThroughDeath) const;
+
+	void ApplySkillEffectRules(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UObject* SourceObject,
+		const TArray<FDRSkillEffectRule>& EffectRules,
+		EDRSkillEffectTrigger Trigger,
+		bool bPersistThroughDeath,
+		TArray<FActiveGameplayEffectHandle>* OutActiveEffectHandles) const;
+
+	bool HasUsableSkillEffectRule(const UDRPerkDefinition* PerkDefinition) const;
 
 	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)

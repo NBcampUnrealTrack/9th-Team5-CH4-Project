@@ -31,6 +31,7 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
 
 protected:
@@ -48,6 +49,13 @@ protected:
 	FGameplayAttributeData MaxSnowGauge;
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingDamage;
+
+	/** 0.0~0.95 범위의 받는 피해 감소 비율이다. 0.5는 50% 감소를 뜻한다. */
+	UPROPERTY(
+		BlueprintReadOnly,
+		ReplicatedUsing = OnRep_DamageReduction,
+		Category = "Player|Defense")
+	FGameplayAttributeData DamageReduction;
 
 	UPROPERTY(
 		BlueprintReadOnly,
@@ -70,6 +78,9 @@ protected:
 	UFUNCTION()
 	void OnRep_MoveSpeedMultiplier(
 		const FGameplayAttributeData& OldMoveSpeedMultiplier);
+	UFUNCTION()
+	void OnRep_DamageReduction(
+		const FGameplayAttributeData& OldDamageReduction);
 	
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;

@@ -2,10 +2,19 @@
 
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+
+UDRGA_CombatRollSkill::UDRGA_CombatRollSkill()
+{
+	// 발사 입력을 누르고 있는 중에도 구르기는 발동해야 한다.
+	// 구르기 시작 시 유지 중인 총격 Ability를 종료한다.
+	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+}
 
 bool UDRGA_CombatRollSkill::CanActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -109,6 +118,18 @@ void UDRGA_CombatRollSkill::ActivateAbility(
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleRollFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleRollInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleRollInterrupted);
+
+	// 다른 Ability가 몽타주 상태를 바꾸는 과정에서 종료 Delegate가 누락돼도
+	// 구르기 GA가 계속 활성 상태로 남지 않도록, 재생 길이 기준 종료를 보장한다.
+	UAbilityTask_WaitDelay* EndSafetyTask = UAbilityTask_WaitDelay::WaitDelay(
+		this,
+		RollDuration);
+	if (IsValid(EndSafetyTask))
+	{
+		EndSafetyTask->OnFinish.AddDynamic(this, &ThisClass::HandleRollFinished);
+		EndSafetyTask->ReadyForActivation();
+	}
+
 	MoveTask->ReadyForActivation();
 	MontageTask->ReadyForActivation();
 }

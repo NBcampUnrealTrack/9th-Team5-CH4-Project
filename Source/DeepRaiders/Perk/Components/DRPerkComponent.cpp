@@ -67,14 +67,18 @@ bool UDRPerkComponent::CanAddPerk(
 		return false;
 	}
 
+	const bool bHasEffect = PerkDefinition->PerkEffectClass != nullptr
+		|| !PerkDefinition->EffectRules.IsEmpty()
+		|| PerkDefinition->PerkTag.IsValid();
 	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
 	{
 		return !EquippedSkillId.IsValid()
-			&& PerkDefinition->PerkEffectClass != nullptr;
+			&& bHasEffect;
 	}
 
 	return EquippedSkillId.IsValid()
-		&& PerkDefinition->CompatibleSkillTags.HasTagExact(EquippedSkillId);
+		&& PerkDefinition->CompatibleSkillTags.HasTagExact(EquippedSkillId)
+		&& bHasEffect;
 }
 
 int32 UDRPerkComponent::FindAvailableSlotIndex() const
@@ -154,6 +158,86 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 		*EffectSpec.Data.Get());
 }
 
+FActiveGameplayEffectHandle UDRPerkComponent::ApplySkillEffectRule(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UObject* SourceObject,
+	const FDRSkillEffectRule& EffectRule,
+	bool bPersistThroughDeath) const
+{
+	if (!IsValid(AbilitySystemComponent) || !EffectRule.EffectClass)
+	{
+		return FActiveGameplayEffectHandle();
+	}
+
+	FGameplayEffectContextHandle EffectContext =
+		AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(const_cast<UObject*>(SourceObject));
+
+	FGameplayEffectSpecHandle EffectSpec =
+		AbilitySystemComponent->MakeOutgoingSpec(
+			EffectRule.EffectClass,
+			1.0f,
+			EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		return FActiveGameplayEffectHandle();
+	}
+
+	if (bPersistThroughDeath)
+	{
+		EffectSpec.Data->AddDynamicAssetTag(
+			DRGameplayTags::Effect_Policy_PersistThroughDeath);
+	}
+
+	for (const TPair<FGameplayTag, float>& EffectValue : EffectRule.EffectValues)
+	{
+		EffectSpec.Data->SetSetByCallerMagnitude(
+			EffectValue.Key,
+			EffectValue.Value);
+	}
+
+	return AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
+		*EffectSpec.Data.Get());
+}
+
+void UDRPerkComponent::ApplySkillEffectRules(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UObject* SourceObject,
+	const TArray<FDRSkillEffectRule>& EffectRules,
+	EDRSkillEffectTrigger Trigger,
+	bool bPersistThroughDeath,
+	TArray<FActiveGameplayEffectHandle>* OutActiveEffectHandles) const
+{
+	for (const FDRSkillEffectRule& EffectRule : EffectRules)
+	{
+		if (EffectRule.Trigger != Trigger)
+		{
+			continue;
+		}
+
+		const FActiveGameplayEffectHandle EffectHandle = ApplySkillEffectRule(
+			AbilitySystemComponent,
+			SourceObject,
+			EffectRule,
+			bPersistThroughDeath);
+		if (OutActiveEffectHandles != nullptr && EffectHandle.IsValid())
+		{
+			OutActiveEffectHandles->Add(EffectHandle);
+		}
+	}
+}
+
+bool UDRPerkComponent::HasUsableSkillEffectRule(
+	const UDRPerkDefinition* PerkDefinition) const
+{
+	return IsValid(PerkDefinition)
+		&& PerkDefinition->EffectRules.ContainsByPredicate(
+			[](const FDRSkillEffectRule& EffectRule)
+			{
+				return EffectRule.EffectClass != nullptr;
+			});
+}
+
 bool UDRPerkComponent::AddPerk(
 	UDRPerkDefinition* PerkDefinition,
 	FGameplayTag EquippedSkillId)
@@ -192,9 +276,13 @@ bool UDRPerkComponent::AddPerk(
 		return false;
 	}
 
+	// EffectRules 배열을 쓰는 스킬 장착 퍽은 스킬 발동 시에만 적용한다.
+	// 기존 단일 PerkEffectClass 기반 공용 퍽만 장착 즉시 유지 효과를 적용한다.
 	const bool bApplyPersistentEffect =
-		PerkDefinition->Trigger == EDRPerkTrigger::WhileEquipped
-		&& PerkDefinition->EffectTarget == EDRPerkEffectTarget::OwnerCharacter;
+		!HasUsableSkillEffectRule(PerkDefinition)
+		&& PerkDefinition->Trigger == EDRPerkTrigger::WhileEquipped
+		&& PerkDefinition->EffectTarget == EDRPerkEffectTarget::OwnerCharacter
+		&& PerkDefinition->PerkEffectClass != nullptr;
 	const FActiveGameplayEffectHandle EffectHandle = bApplyPersistentEffect
 		? ApplyPerkEffect(AbilitySystemComponent, PerkDefinition, true)
 		: FActiveGameplayEffectHandle();
@@ -264,7 +352,8 @@ bool UDRPerkComponent::AddPerkToSkill(
 		&& AddPerk(PerkDefinition, SkillDefinition->SkillId);
 }
 
-void UDRPerkComponent::HandleSkillCommitted(FGameplayTag SkillId)
+void UDRPerkComponent::HandleSkillCommitted(
+	const UDRSkillDefinition* SkillDefinition)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
 	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
@@ -274,23 +363,90 @@ void UDRPerkComponent::HandleSkillCommitted(FGameplayTag SkillId)
 	if (!IsValid(PlayerState)
 		|| !PlayerState->HasAuthority()
 		|| !IsValid(AbilitySystemComponent)
-		|| !SkillId.IsValid())
+		|| !IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid())
 	{
 		return;
 	}
+
+	const FGameplayTag SkillId = SkillDefinition->SkillId;
+	ApplySkillEffectRules(
+		AbilitySystemComponent,
+		SkillDefinition,
+		SkillDefinition->BaseEffectRules,
+		EDRSkillEffectTrigger::OnSkillCommitted,
+		false,
+		nullptr);
 
 	for (const FDRPerkEntry& PerkEntry : PerkEntries)
 	{
 		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
 		if (!IsValid(PerkDefinition)
 			|| PerkEntry.EquippedSkillId != SkillId
-			|| PerkDefinition->Trigger != EDRPerkTrigger::OnSkillCommitted
 			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::OwnerCharacter)
 		{
 			continue;
 		}
 
-		ApplyPerkEffect(AbilitySystemComponent, PerkDefinition, false);
+		if (HasUsableSkillEffectRule(PerkDefinition))
+		{
+			ApplySkillEffectRules(
+				AbilitySystemComponent,
+				PerkDefinition,
+				PerkDefinition->EffectRules,
+				EDRSkillEffectTrigger::OnSkillCommitted,
+				false,
+				nullptr);
+		}
+		else if (PerkDefinition->Trigger == EDRPerkTrigger::OnSkillCommitted)
+		{
+			ApplyPerkEffect(AbilitySystemComponent, PerkDefinition, false);
+		}
+	}
+}
+
+void UDRPerkComponent::HandleSkillActivated(
+	const UDRSkillDefinition* SkillDefinition,
+	TArray<FActiveGameplayEffectHandle>& OutActiveEffectHandles)
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent)
+		|| !IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid())
+	{
+		return;
+	}
+
+	ApplySkillEffectRules(
+		AbilitySystemComponent,
+		SkillDefinition,
+		SkillDefinition->BaseEffectRules,
+		EDRSkillEffectTrigger::WhileSkillActive,
+		false,
+		&OutActiveEffectHandles);
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillDefinition->SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::OwnerCharacter)
+		{
+			continue;
+		}
+
+		ApplySkillEffectRules(
+			AbilitySystemComponent,
+			PerkDefinition,
+			PerkDefinition->EffectRules,
+			EDRSkillEffectTrigger::WhileSkillActive,
+			PerkDefinition->bPersistThroughDeath,
+			&OutActiveEffectHandles);
 	}
 }
 

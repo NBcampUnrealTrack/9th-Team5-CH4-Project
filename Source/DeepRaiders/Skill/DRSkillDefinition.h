@@ -39,4 +39,8 @@ public:
 	/** 지정된 슬롯 입력에 지급할 스킬 Ability다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	TSubclassOf<UDRGA_CharacterSkillBase> SkillAbility;
+
+	/** 이 스킬이 기본으로 가지는 추가 GameplayEffect 규칙이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Effects")
+	TArray<FDRSkillEffectRule> BaseEffectRules;
 };

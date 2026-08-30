@@ -27,6 +27,8 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;	
+	// 이동 스킬이 현재 유지 중인 발사 Ability를 식별하고 취소할 수 있게 한다.
+	AbilityTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 
