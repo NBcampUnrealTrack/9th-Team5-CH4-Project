@@ -31,7 +31,12 @@ namespace DRGameplayTags
 		State_UI_TeleportOpen,
 		"State.UI.TeleportOpen",
 		"Local player's teleport UI is open.");
-
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_MovementAction_Active,
+		"State.MovementAction.Active",
+		"Player is currently executing a movement action.");
+	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
@@ -81,6 +86,21 @@ namespace DRGameplayTags
 		Ability_Item_Throw,
 		"Ability.Item.Throw",
 		"Item-based throwable ability.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_MovementAction,
+		"Ability.MovementAction",
+		"Parent tag for movement action abilities.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Item_Grapple,
+		"Ability.Item.Grapple",
+		"Item-based grappling ability.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Input_SecondaryCancel,
+		"Ability.Input.SecondaryCancel",
+		"Active movement ability receives Secondary input as a cancel request.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Event_Ability_Throw_Release,

@@ -21,7 +21,7 @@ void UDRMovementActionComponent::GetLifetimeReplicatedProps(TArray<class FLifeti
 bool UDRMovementActionComponent::StartPredictedMovementAction(const FDRMovementActionState& NewState)
 {
 	if (!IsLocallyControlledOwner()
-		|| !NewState.IsActive()
+		|| !NewState.IsActive() 
 		|| NewState.SessionId == 0)
 	{
 		return false;

@@ -91,6 +91,9 @@ private:
 
 	void InitializeStartingQuickSlot();
 
+	// Secondary 취소 정책을 가진 활성 이동 Ability에 입력을 전달 
+	bool TryForwardSecondaryCancelInput(int32 InputId);
+	
 	UFUNCTION()
 	void RefreshPublicQuickSlotSnapshot();
 	
@@ -101,12 +104,12 @@ private:
 	
 private:
 	/*
-	 * Generaic Confirm/Cancel로 처리된 입력을 Release까지 소비
+	 * Started 단계에서 별도 경로로 소비된 입력을 Release까지 추적
 	 * Started에서 Generic 입력으로 사용한 뒤 Targeting Task가 즉시 종료되어도,
 	 * 같은 입력에서 발생하는 Triggered가 일반 Ability로 전달되는 것을 방지
 	 * -> 던지기 동작 중 계속 던지기를 시도하지 않도록
 	 */
-	TSet<int32> ConsumedGenericInputIds;
+	TSet<int32> ConsumedStartedInputIds;
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")

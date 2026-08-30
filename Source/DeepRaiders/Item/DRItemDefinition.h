@@ -109,7 +109,7 @@ public:
 	TObjectPtr<UDRAbilitySet> ItemAbilitySet;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
-	EDRItemAbilityLifetimePolicy AbilitylifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
+	EDRItemAbilityLifetimePolicy AbilityLifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
 	
 	// Mesh
 	
