@@ -5,6 +5,15 @@
 #include "TimerManager.h"
 #include "DRMiningGameModeBase.generated.h"
 
+enum class EDRSnowJoinSnapshotResult : uint8
+{
+	Applied,
+	InvalidCheckpoint,
+};
+
+DECLARE_MULTICAST_DELEGATE(FOnJoinSnapshotStarted);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnJoinSnapshotFinished, EDRSnowJoinSnapshotResult);
+
 // 채굴 테스트/플레이용 GameState를 사용하는 GameMode이다.
 UCLASS()
 class DEEPRAIDERS_API ADRMiningGameModeBase : public AGameModeBase
@@ -39,8 +48,13 @@ public:
 	virtual void Logout(AController* Exiting) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
+	FOnJoinSnapshotStarted OnJoinSnapshotStarted;
+	FOnJoinSnapshotFinished OnJoinSnapshotFinished;
+
 	// 중도 접속자의 눈 스냅샷 적용이 끝난 뒤 실제 플레이어를 생성한다.
-	bool HandleSnowJoinSnapshotApplied(APlayerController* PlayerController);
+	bool HandleSnowJoinSnapshotApplied(
+		APlayerController* PlayerController,
+		bool bNotifySnapshotFinished = true);
 
 protected:
 	virtual void BeginPlay() override;

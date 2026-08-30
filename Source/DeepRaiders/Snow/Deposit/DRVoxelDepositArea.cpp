@@ -3,6 +3,7 @@
 #if ENABLE_DRAW_DEBUG
 #include "DrawDebugHelpers.h"
 #endif
+#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "VoxelWorld.h"
@@ -151,6 +152,16 @@ void ADRVoxelDepositArea::BeginPlay()
 		return;
 	}
 
+	if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+	{
+		GameMode->OnJoinSnapshotStarted.AddUObject(
+			this,
+			&ThisClass::HandleJoinSnapshotStarted);
+		GameMode->OnJoinSnapshotFinished.AddUObject(
+			this,
+			&ThisClass::HandleJoinSnapshotFinished);
+	}
+
 	if (DepositInterval > 0.f)
 	{
 		GetWorldTimerManager().SetTimer(
@@ -165,18 +176,46 @@ void ADRVoxelDepositArea::BeginPlay()
 
 void ADRVoxelDepositArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UWorld* World = GetWorld();
+	ADRMiningGameModeBase* GameMode = IsValid(World)
+		? World->GetAuthGameMode<ADRMiningGameModeBase>()
+		: nullptr;
+	if (IsValid(GameMode))
+	{
+		GameMode->OnJoinSnapshotStarted.RemoveAll(this);
+		GameMode->OnJoinSnapshotFinished.RemoveAll(this);
+	}
+
 	CancelDepositPipeline();
 	Super::EndPlay(EndPlayReason);
 }
 
-void ADRVoxelDepositArea::RequestDepositArea()
+void ADRVoxelDepositArea::HandleJoinSnapshotStarted()
 {
 	if (!HasAuthority())
 	{
 		return;
 	}
 
-	//TODO 나중에 들어온 플레이어가 준비가 완료될테까지 요청 중단
+	++ActiveJoinSnapshotCount;
+}
+
+void ADRVoxelDepositArea::HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ActiveJoinSnapshotCount = FMath::Max(0, ActiveJoinSnapshotCount - 1);
+}
+
+void ADRVoxelDepositArea::RequestDepositArea()
+{
+	if (!HasAuthority() || ActiveJoinSnapshotCount > 0)
+	{
+		return;
+	}
 
 	// 이전 명령이 끝날 때까지 새 RPC 생성을 막습니다.
 	if (!PreparedDepositPlan.IsEmpty() || QueuedDepositCommands.Num() > 0 ||
