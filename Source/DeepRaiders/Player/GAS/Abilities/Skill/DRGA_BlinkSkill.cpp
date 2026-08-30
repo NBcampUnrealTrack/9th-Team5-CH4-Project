@@ -37,14 +37,18 @@ void UDRGA_BlinkSkill::ActivateAbility(
 
 	const FVector Destination = Character->GetActorLocation() + BlinkDirection * BlinkDistance;
 	const FRotator CharacterRotation = Character->GetActorRotation();
+	FHitResult HitResult;
 
-	if (!Character->TeleportTo(Destination, CharacterRotation, true, false)
-		|| !CommitAbility(Handle, ActorInfo, ActivationInfo)
-		|| !Character->TeleportTo(Destination, CharacterRotation, false, false))
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+
+	// Sweep the character's collision capsule so a blocking wall clamps the blink
+	// to the first impact instead of allowing teleport destination adjustment past it.
+	Character->SetActorLocation(Destination, true, &HitResult, ETeleportType::TeleportPhysics);
+	Character->SetActorRotation(CharacterRotation, ETeleportType::TeleportPhysics);
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }

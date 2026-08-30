@@ -26,6 +26,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm/s"))
 	float JumpVelocity = 1200.0f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float AirControl = 0.7f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump")
 	bool bAllowInAir = false;
 };

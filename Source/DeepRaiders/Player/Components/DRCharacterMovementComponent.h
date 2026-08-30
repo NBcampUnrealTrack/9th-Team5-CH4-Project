@@ -28,6 +28,9 @@ public:
 
     void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
+    /** 슈퍼점프 체공 중에만 공중 조작력을 높이고, 착지 시 원래 값으로 복원한다. */
+    void ActivateSuperJumpAirControl(float NewAirControl);
+
     /** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
     void SetWantsJetpack(bool bNewWantsJetpack);
 
@@ -43,6 +46,11 @@ public:
         UPrimitiveComponent* NewBase,
         const FName BoneName = NAME_None,
         bool bNotifyActor = true) override;
+
+    virtual void ProcessLanded(
+        const FHitResult& Hit,
+        float RemainingTime,
+        int32 Iterations) override;
 
     /** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
@@ -73,6 +81,9 @@ private:
     TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
     FDelegateHandle MoveSpeedChangedDelegateHandle;
     float BaseWalkSpeed = 0.f;
+    float AirControlBeforeSuperJump = 0.f;
+
+    bool bSuperJumpAirControlActive = false;
 
     bool CanApplyJetpackThrust() const;
 

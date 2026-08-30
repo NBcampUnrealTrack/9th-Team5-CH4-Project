@@ -157,6 +157,17 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
 }
 
+void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
+{
+    if (!bSuperJumpAirControlActive)
+    {
+        AirControlBeforeSuperJump = AirControl;
+        bSuperJumpAirControlActive = true;
+    }
+
+    AirControl = FMath::Max(AirControl, NewAirControl);
+}
+
 void UDRCharacterMovementComponent::EndPlay(
     const EEndPlayReason::Type EndPlayReason)
 {
@@ -230,6 +241,20 @@ void UDRCharacterMovementComponent::SetBase(
         NewBase,
         BoneName,
         bNotifyActor);
+}
+
+void UDRCharacterMovementComponent::ProcessLanded(
+    const FHitResult& Hit,
+    float RemainingTime,
+    int32 Iterations)
+{
+    if (bSuperJumpAirControlActive)
+    {
+        AirControl = AirControlBeforeSuperJump;
+        bSuperJumpAirControlActive = false;
+    }
+
+    Super::ProcessLanded(Hit, RemainingTime, Iterations);
 }
 
 FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_Client() const

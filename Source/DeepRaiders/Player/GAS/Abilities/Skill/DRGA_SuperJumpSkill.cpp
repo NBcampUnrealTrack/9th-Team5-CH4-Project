@@ -3,6 +3,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 
 bool UDRGA_SuperJumpSkill::CanActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -42,6 +43,12 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
+	}
+
+	if (UDRCharacterMovementComponent* MovementComponent =
+		Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement()))
+	{
+		MovementComponent->ActivateSuperJumpAirControl(AirControl);
 	}
 
 	Character->LaunchCharacter(FVector::UpVector * JumpVelocity, false, true);
