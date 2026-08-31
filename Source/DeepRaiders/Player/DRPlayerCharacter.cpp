@@ -28,6 +28,7 @@
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
+#include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
 #include "Animation/AnimInstance.h"
@@ -86,6 +87,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 	FollowCamera->FieldOfView = 90.f;
+
+	PlayerCameraComponent = CreateDefaultSubobject<UDRPlayerCameraComponent>(TEXT("PlayerCameraComponent"));
 
 	// 월드 손 장비
 	WorldHandEquipmentMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WorldHandEquipmentMesh"));
@@ -604,6 +607,14 @@ void ADRPlayerCharacter::PlayHitReaction(
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (IsValid(PlayerCameraComponent))
+	{
+		PlayerCameraComponent->ConfigureCamera(
+			CameraBoom,
+			FollowCamera,
+			Cast<UDRCharacterMovementComponent>(GetCharacterMovement()));
+	}
 
 	if (HasAuthority())
 	{

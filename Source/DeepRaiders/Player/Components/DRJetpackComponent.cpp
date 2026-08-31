@@ -9,8 +9,7 @@
 
 #include "Components/AudioComponent.h"
 #include "Camera/CameraShakeBase.h"
-#include "Camera/PlayerCameraManager.h"
-#include "GameFramework/PlayerController.h"
+#include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 UDRJetpackComponent::UDRJetpackComponent()
@@ -599,13 +598,10 @@ void UDRJetpackComponent::RefreshActivePresentation()
         return;
     }
 
-    APlayerController* PlayerController =
-        Cast<APlayerController>(
-            Character->GetController());
+    UDRPlayerCameraComponent* PlayerCameraComponent =
+        Character->GetPlayerCameraComponent();
 
-    if (!IsValid(PlayerController) ||
-        !IsValid(
-            PlayerController->PlayerCameraManager))
+    if (!IsValid(PlayerCameraComponent))
     {
         return;
     }
@@ -617,14 +613,9 @@ void UDRJetpackComponent::RefreshActivePresentation()
             JetpackCameraShakeClass)
         {
             JetpackCameraShakeInstance =
-                PlayerController->
-                PlayerCameraManager->
-                StartCameraShake(
+                PlayerCameraComponent->PlayCameraShake(
                     JetpackCameraShakeClass,
-                    1.f,
-                    ECameraShakePlaySpace::
-                        CameraLocal,
-                    FRotator::ZeroRotator);
+                    1.f);
         }
     }
     else
@@ -632,11 +623,9 @@ void UDRJetpackComponent::RefreshActivePresentation()
         if (IsValid(
                 JetpackCameraShakeInstance))
         {
-            PlayerController->
-                PlayerCameraManager->
-                StopCameraShake(
-                    JetpackCameraShakeInstance,
-                    false);
+            PlayerCameraComponent->StopCameraShake(
+                JetpackCameraShakeInstance,
+                false);
 
             JetpackCameraShakeInstance =
                 nullptr;

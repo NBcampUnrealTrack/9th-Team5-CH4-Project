@@ -26,9 +26,13 @@
 UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;	
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+	
 	// 이동 스킬이 현재 유지 중인 발사 Ability를 식별하고 취소할 수 있게 한다.
-	AbilityTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	SetAssetTags(InitialTags);
+	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 
@@ -306,7 +310,7 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 	
 	if (!CheckCost(Handle, ActorInfo, nullptr))
 	{
-		EndAbility(Handle, ActorInfo, GetCurrentActivationInfo(), true, false);
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
 	
@@ -316,12 +320,34 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
+	UDRQuickSlotComponent* QuickSlot = IsValid(PlayerController) ?
+		PlayerController->GetQuickSlotComponent() : nullptr;
+
+	if (!IsValid(QuickSlot))
+	{
+		return;
+	}
+
+	const FGuid WeaponInstanceId = QuickSlot->GetSelectedInstanceId();
+
+	if (!QuickSlot->CanRequestLocalWeaponShot(WeaponInstanceId))
+	{
+		return;
+	}
+	
 	// 원격 클라이언트가 발사 요청을 전송하면 ScopedPredictionKey로 Cooldown GE를 예측 적용
 	FScopedPredictionWindow PredictionWindow(AbilitySystem, true);
-	if (SendLocalShotRequest())
+	if (!SendLocalShotRequest())
 	{
-		ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+		return;
 	}
+	
+	/*
+ 	* 이 상태는 로컬 요청 빈도만 제한한다.
+ 	* 실제 발사와 쿨다운 GE 적용 여부는 서버가 결정한다.
+ 	*/
+	QuickSlot->RecordLocalWeaponShot(WeaponInstanceId, BaseFireInterval);
 }
 
 bool UDRGA_RangedWeaponAttack::TryCommitServerShot()

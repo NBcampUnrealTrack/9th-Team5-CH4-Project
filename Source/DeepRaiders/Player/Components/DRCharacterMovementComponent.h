@@ -9,6 +9,12 @@ class FSavedMove_DRCharacter;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
+DECLARE_MULTICAST_DELEGATE_ThreeParams(
+    FDRCharacterMovementUpdated,
+    float,
+    const FVector&,
+    const FVector&);
+
 UENUM()
 enum class EDRCustomMovementMode : uint8
 {
@@ -25,6 +31,9 @@ class DEEPRAIDERS_API UDRCharacterMovementComponent : public UCharacterMovementC
 
 public:
     UDRCharacterMovementComponent();
+
+    /** 이동 갱신 직후 필요한 후처리 컴포넌트에 전달한다. */
+    FDRCharacterMovementUpdated OnCharacterMovementUpdated;
 
     void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
@@ -64,6 +73,11 @@ public:
     bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
     
 protected:
+	virtual void OnMovementUpdated(
+		float DeltaSeconds,
+		const FVector& OldLocation,
+		const FVector& OldVelocity) override;
+
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     /** 낙하 물리 안에서 예측 가능한 제트팩 추진력을 적용한다. */
