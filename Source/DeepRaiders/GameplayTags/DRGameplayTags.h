@@ -37,6 +37,7 @@ namespace DRGameplayTags
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_MovementAction_Cancel);
 	
 	// Cooldown
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);

@@ -2,7 +2,7 @@
 #include "DRGA_GrappleItem.h"
 
 #include "AbilitySystemComponent.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Grapple/DRGrappleTargetActor.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -84,11 +84,10 @@ void UDRGA_GrappleItem::ActivateAbility(
 		|| !ResolveSelectedItem(ActorInfo, ActiveItemDefinition, Inventory, ActiveInstanceId))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-
 		return;
 	}
 
-	StartCancelInputTask();
+	StartCancelEventTask();
 	StartTargeting();
 }
 
@@ -135,27 +134,21 @@ void UDRGA_GrappleItem::StartTargeting()
 	TargetDataTask->FinishSpawningActor(this, SpawnedTargetActor);
 }
 
-void UDRGA_GrappleItem::StartCancelInputTask()
+void UDRGA_GrappleItem::StartCancelEventTask()
 {
-	CancelInputTask =
-		UAbilityTask_WaitInputPress::WaitInputPress(
-			this,
-			false);
-
-	if (!IsValid(CancelInputTask))
+	CancelEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,
+		DRGameplayTags::Event_MovementAction_Cancel, nullptr, true, true);
+	
+	if (!IsValid(CancelEventTask))
 	{
 		return;
 	}
 
-	CancelInputTask->OnPress.AddDynamic(
-		this,
-		&ThisClass::HandleCancelInputPressed);
-
-	CancelInputTask->ReadyForActivation();
+	CancelEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleCancelEventReceived);
+	CancelEventTask->ReadyForActivation();
 }
 
-void UDRGA_GrappleItem::HandleTargetDataReady(
-	const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
 {
 	if (!IsActive()
 		|| TargetData.Num() != 1)
@@ -201,18 +194,14 @@ void UDRGA_GrappleItem::HandleTargetDataReady(
 	}
 }
 
-void UDRGA_GrappleItem::HandleTargetDataCanceled(
-	const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleItem::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
 {
-	QueueEndGrapple(
-		EDRMovementActionEndReason::Cancelled);
+	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
 
-void UDRGA_GrappleItem::HandleCancelInputPressed(
-	float TimeWaited)
+void UDRGA_GrappleItem::HandleCancelEventReceived(FGameplayEventData Payload)
 {
-	QueueEndGrapple(
-		EDRMovementActionEndReason::Cancelled);
+	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
 
 bool UDRGA_GrappleItem::StartPredictedMovement(
@@ -572,11 +561,11 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 	}
-	// 훅 방향과 반대 방향으로 가속
-	else if (bMovingAway)
-	{
-		QueueEndGrapple(EDRMovementActionEndReason::Completed);
-	}
+	// // 훅 방향과 반대 방향으로 가속
+	// else if (bMovingAway)
+	// {
+	// 	QueueEndGrapple(EDRMovementActionEndReason::Completed);
+	// }
 }
 
 void UDRGA_GrappleItem::HandleMovementActionEnded(
@@ -691,10 +680,10 @@ void UDRGA_GrappleItem::EndAbility(
 		TargetDataTask = nullptr;
 	}
 
-	if (IsValid(CancelInputTask))
+	if (IsValid(CancelEventTask))
 	{
-		CancelInputTask->EndTask();
-		CancelInputTask = nullptr;
+		CancelEventTask->EndTask();
+		CancelEventTask = nullptr;
 	}
 
 	StopMovementAction(EndReason);
