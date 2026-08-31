@@ -33,8 +33,10 @@ public:
 		EDRShopOfferType OfferType,
 		const TArray<FDRShopOfferView>& NewOffers);
 
-	/** 판매 패널에 로컬 플레이어 인벤토리를 연결한다. */
-	void InitializeSellPanel(UDRInventoryComponent* InventoryComponent, UDRPerkComponent* PerkComponent);
+	/** 구매·판매 패널에 로컬 플레이어 인벤토리를 연결한다. */
+	void InitializeInventoryPanels(
+		UDRInventoryComponent* InventoryComponent,
+		UDRPerkComponent* PerkComponent);
 
 	UPROPERTY(BlueprintAssignable, Category = "Shop|UI")
 	FDRShopWidgetClosedSignature OnCloseRequested;

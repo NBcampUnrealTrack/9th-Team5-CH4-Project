@@ -2,10 +2,19 @@
 
 #include "Components/Button.h"
 #include "Components/ScrollBox.h"
+#include "DeepRaiders/UI/Inventory/DRInventoryWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRShopViewModel.h"
 #include "DRShopItemWidget.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
+
+void UDRShopBuyPanelWidget::InitializeInventory(UDRInventoryComponent* InventoryComponent)
+{
+	if (IsValid(PlayerInventory))
+	{
+		PlayerInventory->InitializeInventory(InventoryComponent);
+	}
+}
 
 void UDRShopBuyPanelWidget::SetOffers(
 	EDRShopOfferType OfferType,

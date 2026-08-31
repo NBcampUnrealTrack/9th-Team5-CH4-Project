@@ -15,10 +15,15 @@ void UDRShopWidget::SetOffers(
 	}
 }
 
-void UDRShopWidget::InitializeSellPanel(
+void UDRShopWidget::InitializeInventoryPanels(
 	UDRInventoryComponent* InventoryComponent,
 	UDRPerkComponent* PerkComponent)
 {
+	if (IsValid(BuyPanel))
+	{
+		BuyPanel->InitializeInventory(InventoryComponent);
+	}
+
 	if (IsValid(SellPanel))
 	{
 		SellPanel->InitializeInventory(InventoryComponent, PerkComponent);

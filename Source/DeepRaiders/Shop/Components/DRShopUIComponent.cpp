@@ -114,7 +114,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	ActiveShop = ShopActor;
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
-	ShopWidget->InitializeSellPanel(InventoryComponent, PerkComponent);
+	ShopWidget->InitializeInventoryPanels(InventoryComponent, PerkComponent);
 	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
 	RefreshOffers(EDRShopOfferType::Perk);

@@ -6,6 +6,8 @@
 #include "DRShopBuyPanelWidget.generated.h"
 
 class UButton;
+class UDRInventoryComponent;
+class UDRInventoryWidget;
 class UDRShopItemWidget;
 class UDRShopOfferEntryViewModel;
 class UDRShopViewModel;
@@ -23,6 +25,9 @@ class DEEPRAIDERS_API UDRShopBuyPanelWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	/** 구매 패널에 로컬 플레이어 인벤토리를 연결한다. */
+	void InitializeInventory(UDRInventoryComponent* InventoryComponent);
+
 	void SetOffers(
 		EDRShopOfferType OfferType,
 		const TArray<FDRShopOfferView>& NewOffers);
@@ -70,6 +75,9 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UDRInventoryWidget> PlayerInventory;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
