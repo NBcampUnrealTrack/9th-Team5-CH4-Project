@@ -65,9 +65,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float VerticalFollowSnapDistance = 500.f;
 
-	/** 보정 Tick을 멈춰도 되는 목표 높이와의 오차. */
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "cm"))
-	float VerticalFollowStopTolerance = 0.5f;
+	/** 추적 중 카메라 보정을 멈추는 Z축 오차. 시작 범위보다 작게 유지해야 흔들리지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float VerticalFollowReleaseDeadZone = 15.f;
 
 	TWeakObjectPtr<USpringArmComponent> CameraBoom;
 	TWeakObjectPtr<UCameraComponent> FollowCamera;
@@ -77,4 +77,6 @@ private:
 	FVector CameraBoomBaseRelativeLocation = FVector::ZeroVector;
 	float SmoothedCameraPivotZ = 0.f;
 	bool bVerticalFollowInitialized = false;
+	bool bVerticalFollowActive = false;
+	bool bMovementUpdatedSinceLastTick = false;
 };
