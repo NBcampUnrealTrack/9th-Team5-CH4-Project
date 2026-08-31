@@ -2,8 +2,8 @@
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
+#include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "Camera/CameraShakeBase.h"
-#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -11,7 +11,6 @@
 #include "Engine/Engine.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameModeBase.h"
-#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -117,20 +116,20 @@ void UDRPlayerLifecycleComponent::PlayLocalCameraShake(TSubclassOf<UCameraShakeB
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
 
-	if (!IsValid(Character) || !Character->IsLocallyControlled() || !ShakeClass)
+	if (!IsValid(Character) || !ShakeClass)
 	{
 		return;
 	}
 
-	APlayerController* PlayerController = Cast<APlayerController>(Character->GetController());
+	UDRPlayerCameraComponent* PlayerCameraComponent =
+		Character->GetPlayerCameraComponent();
 
-	if (!IsValid(PlayerController) || !IsValid(PlayerController->PlayerCameraManager))
+	if (!IsValid(PlayerCameraComponent))
 	{
 		return;
 	}
 
-	PlayerController->PlayerCameraManager->StartCameraShake(
-		ShakeClass, Scale, ECameraShakePlaySpace::CameraLocal, FRotator::ZeroRotator);
+	PlayerCameraComponent->PlayCameraShake(ShakeClass, Scale);
 }
 
 void UDRPlayerLifecycleComponent::HandleDeathFromServer()

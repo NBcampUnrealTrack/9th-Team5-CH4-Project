@@ -29,6 +29,7 @@ class UDRFreezeVisualComponent;
 class UDRSilhouetteComponent;
 class UDRHitReactionSet;
 class UDRMovementActionComponent;
+class UDRPlayerCameraComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -127,6 +128,11 @@ public:
 	{
 		return JetpackComponent;
 	}
+
+	UDRPlayerCameraComponent* GetPlayerCameraComponent() const
+	{
+		return PlayerCameraComponent;
+	}
 	
 	UDRMovementActionComponent* GetMovementActionComponent() const
 	{
@@ -213,6 +219,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
 	TObjectPtr<UCameraComponent> FollowCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
+	TObjectPtr<UDRPlayerCameraComponent> PlayerCameraComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
