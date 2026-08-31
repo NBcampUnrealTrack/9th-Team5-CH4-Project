@@ -7,10 +7,11 @@
 #include "DRGA_GrappleItem.generated.h"
 
 class ADRGrappleTargetActor;
-class UAbilityTask_WaitInputPress;
 class UAbilityTask_WaitTargetData;
 class UDRInventoryComponent;
 class UDRItemDefinition;
+class UAbilityTask_WaitGameplayEvent;
+struct FGameplayEventData;
 
 UCLASS()
 class DEEPRAIDERS_API UDRGA_GrappleItem : public UGameplayAbility
@@ -42,62 +43,45 @@ protected:
         bool bWasCancelled) override;
 
 private:
-    bool ResolveSelectedItem(
-        const FGameplayAbilityActorInfo* ActorInfo,
-        const UDRItemDefinition* ExpectedDefinition,
-        UDRInventoryComponent*& OutInventory,
-        FGuid& OutInstanceId) const;
+    bool ResolveSelectedItem(const FGameplayAbilityActorInfo* ActorInfo, const UDRItemDefinition* ExpectedDefinition,
+        UDRInventoryComponent*& OutInventory, FGuid& OutInstanceId) const;
 
-    int32 ResolveInputId(
-        const FGameplayAbilitySpecHandle Handle,
-        const FGameplayAbilityActorInfo* ActorInfo) const;
+    int32 ResolveInputId(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo) const;
 
     int32 ResolveSessionId() const;
 
     void StartTargeting();
-    void StartCancelInputTask();
+    void StartCancelEventTask();
 
-    bool ValidateServerTargetData(
-        const FGameplayAbilityTargetDataHandle& TargetData,
-        FVector& OutHookLocation) const;
+    bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutHookLocation) const;
 
-    FDRMovementActionState BuildMovementActionState(
-        const FVector& HookLocation) const;
+    FDRMovementActionState BuildMovementActionState(const FVector& HookLocation) const;
 
-    bool StartPredictedMovement(
-        const FVector& HookLocation);
+    bool StartPredictedMovement(const FVector& HookLocation);
 
-    bool StartAuthoritativeMovement(
-        const FVector& HookLocation);
+    bool StartAuthoritativeMovement(const FVector& HookLocation);
 
     void ApplyMovementActionTag();
     void RemoveMovementActionTag();
 
-    void QueueEndGrapple(
-        EDRMovementActionEndReason EndReason);
+    void QueueEndGrapple(EDRMovementActionEndReason EndReason);
 
     void ApplyQueuedGrappleEnd();
 
-    void StopMovementAction(
-        EDRMovementActionEndReason EndReason);
+    void StopMovementAction(EDRMovementActionEndReason EndReason);
 
     UFUNCTION()
-    void HandleTargetDataReady(
-        const FGameplayAbilityTargetDataHandle& TargetData);
+    void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
 
     UFUNCTION()
-    void HandleTargetDataCanceled(
-        const FGameplayAbilityTargetDataHandle& TargetData);
+    void HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData);
 
     UFUNCTION()
-    void HandleCancelInputPressed(
-        float TimeWaited);
+    void HandleCancelEventReceived(FGameplayEventData Payload);
 
-    void HandleMovementActionEnded(
-        EDRMovementActionEndReason EndReason);
-
-    void HandleMovementActionSimulated(
-        const FDRMovementActionSimulationResult& Result);
+    void HandleMovementActionEnded(EDRMovementActionEndReason EndReason);
+    
+    void HandleMovementActionSimulated(const FDRMovementActionSimulationResult& Result);
 
 protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple", meta = (ShowOnlyInnerProperties))
@@ -114,7 +98,7 @@ private:
     TObjectPtr<UAbilityTask_WaitTargetData> TargetDataTask;
 
     UPROPERTY(Transient)
-    TObjectPtr<UAbilityTask_WaitInputPress> CancelInputTask;
+    TObjectPtr<UAbilityTask_WaitGameplayEvent> CancelEventTask;
 
     FGuid ActiveInstanceId;
     FVector HookLocation = FVector::ZeroVector;

@@ -45,6 +45,7 @@
 #include "GameplayAbilitySpec.h"
 #include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "GameplayPrediction.h"
+#include "Abilities/GameplayAbilityTypes.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
@@ -467,7 +468,7 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	QuickSlotComponent->RequestSelectSlot(0);	
 }
 
-bool ADRPlayerController::TryForwardSecondaryCancelInput(int32 InputId)
+bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 {
 	if (InputId != static_cast<int32>(EDRAbilityInputId::Secondary))
 	{
@@ -480,6 +481,8 @@ bool ADRPlayerController::TryForwardSecondaryCancelInput(int32 InputId)
 	{
 		return false;
 	}
+	
+	bool bHasCancelReceiver = false;
 
 	// MovementAction에게 Secondary 입력을 강제로 전달
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
@@ -492,28 +495,26 @@ bool ADRPlayerController::TryForwardSecondaryCancelInput(int32 InputId)
 		
 		const FGameplayTagContainer& AssetTags = Spec.Ability->GetAssetTags();
 
-		if (!AssetTags.HasTag(DRGameplayTags::Ability_MovementAction)
-			|| !AssetTags.HasTag(DRGameplayTags::Ability_Input_SecondaryCancel))
+		if (AssetTags.HasTagExact(DRGameplayTags::Ability_MovementAction)
+			&& AssetTags.HasTagExact(DRGameplayTags::Ability_Input_SecondaryCancel))
 		{
-			continue;
+			bHasCancelReceiver = true;
+			break;
 		}		
-		
-		FGameplayAbilitySpec* MutableSpec = ASC->FindAbilitySpecFromHandle(Spec.Handle);
-
-		if (MutableSpec == nullptr)
-		{
-			continue;
-		}
-
-		MutableSpec->InputPressed = true;
-		ASC->AbilitySpecInputPressed(*MutableSpec);
-
-		ASC->InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
-			MutableSpec->Handle,GetAbilityActivationPredictionKey(*MutableSpec));
-
-		return true;
 	}
-
+	
+	if (!bHasCancelReceiver)
+	{
+		return false;
+	}
+	
+	FGameplayEventData EventData;
+	EventData.EventTag = DRGameplayTags::Event_MovementAction_Cancel;
+	EventData.Instigator = GetPawn();
+	EventData.Target = GetPawn();
+	
+	ASC->HandleGameplayEvent(EventData.EventTag, &EventData);
+	
 	return false;
 }
 
@@ -563,7 +564,7 @@ void ADRPlayerController::HandleScoreboardCompleted(const FInputActionValue&)
 
 void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 {
-	if (TryForwardSecondaryCancelInput(InputId))
+	if (TrySendSecondaryMovementCancelEvent(InputId))
 	{
 		ConsumedStartedInputIds.Add(InputId);
 		return;

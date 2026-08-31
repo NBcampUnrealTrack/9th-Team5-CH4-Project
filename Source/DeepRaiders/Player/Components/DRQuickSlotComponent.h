@@ -10,6 +10,8 @@
 
 class UDRInventoryComponent;
 class UDRItemDefinition;
+class UAbilitySystemComponent;
+struct FAbilityEndedData;
 
 // 모든 퀵슬롯 변경 사항
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRQuickSlotsChanged);	
@@ -115,6 +117,24 @@ private:
 	// 특정 액션을 직접 알지 않고, 공통 이동 액션 활성 태그만 검사한다.
 	bool IsQuickSlotSelectionLocked() const;
 	
+	bool CacheAbilitySystemComponent();
+	void UnbindAbilitySystemComponent();
+	
+	void RefreshQuickSlotCollectionState();
+	void RefreshSelectedItemState();
+	
+	// 현재 장착 아이템에서 부여된 Ability가 하나라도 활성 상태인지 검사
+	bool HasActiveHeldItemAbility() const;
+	
+	bool ShouldDeferHeldItemRefresh() const;
+	
+	void QueueDeferredHeldItemRefresh();
+	void ApplyDeferredHeldItemRefresh();
+	void ClearDeferredHeldItemRefresh();
+	
+	void HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData);
+	
+	
 public:
 	// 모든 퀵슬롯 변경에 호출
 	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")
@@ -135,6 +155,14 @@ public:
 private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
+	
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
+	FDelegateHandle AbilityEndedDelegateHandle;
+	FTimerHandle DeferredHeldItemRefreshTimerHandle;	
+	
+	uint8 bHeldItemRefreshDeferred = false;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_SelectedInstanceId, VisibleInstanceOnly, BlueprintReadOnly
 		, Category = "Quick Slot", meta = (AllowPrivateAccess = "true"))

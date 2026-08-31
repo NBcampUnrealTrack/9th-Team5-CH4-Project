@@ -12,6 +12,10 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Net/UnrealNetwork.h"
+#include "Abilities/GameplayAbilityTypes.h"
+#include "Engine/World.h"
+#include "GameplayAbilitySpec.h"
+#include "TimerManager.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
 {
@@ -25,6 +29,7 @@ void UDRQuickSlotComponent::BeginPlay()
 	Super::BeginPlay();
 	
 	CachedInventoryComponent();
+	CacheAbilitySystemComponent();
 	
 	CachedSlotCount = GetSlotCount();
 	CachedSelectedSlotIndex = GetSelectedSlotIndex();
@@ -44,7 +49,18 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Inventory->OnInventoryChangedDelegate.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
 	}
 	
-	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
+	ClearDeferredHeldItemRefresh();
+	
+	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	
+	if (!IsValid(ASC))
+	{
+		ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+	}
+		
+	UnbindAbilitySystemComponent();
+	
+	if (IsValid(ASC))
 	{
 		GrantedHandles.TakeFromAbilitySystem(ASC);	
 	}
@@ -100,6 +116,11 @@ int32 UDRQuickSlotComponent::GetSlotCount() const
 
 int32 UDRQuickSlotComponent::GetSelectedSlotIndex() const
 {
+	if (bHeldItemRefreshDeferred)
+	{
+		return CachedSelectedSlotIndex;
+	}
+	
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
 	
 	// 퀵슬롯과 인벤토리의 슬롯 인덱스가 1:1로 매칭됨.
@@ -199,11 +220,39 @@ int32 UDRQuickSlotComponent::GetSlotItemCount(int32 SlotIndex) const
 
 void UDRQuickSlotComponent::OnRep_SelectedInstanceId()
 {
+	CacheAbilitySystemComponent();
+
+	if (ShouldDeferHeldItemRefresh())
+	{
+		bHeldItemRefreshDeferred = true;
+		RefreshQuickSlotCollectionState();
+		return;
+	}
+
+	ClearDeferredHeldItemRefresh();
+	
 	RefreshDerivedState();
 }
 
 void UDRQuickSlotComponent::HandleInventoryChanged()
 {
+	CacheAbilitySystemComponent();
+
+	/*
+	 * 마지막 스택이 제거되어 선택 아이템이 사라졌더라도 활성 Ability가 끝날 때까지
+	 * 선택 표시, 손 외형, AbilitySet은 기존 상태로 유지한다.
+	 */
+	if (ShouldDeferHeldItemRefresh())
+	{
+		bHeldItemRefreshDeferred = true;
+
+		// 슬롯 내용과 수량은 즉시 갱신하되 선택 아이템 상태는 건드리지 않는다.
+		RefreshQuickSlotCollectionState();
+		return;
+	}
+	
+	ClearDeferredHeldItemRefresh();	
+	
 	bool bSelectionChanged = false;
 	
 	if (HasQuickSlotAuthority())
@@ -336,32 +385,14 @@ const FDRItemInstance* UDRQuickSlotComponent::ResolveSelectedItem() const
 
 void UDRQuickSlotComponent::RefreshDerivedState()
 {
-	const int32 NewSlotCount = GetSlotCount();
-	const int32 NewSelectedSlotIndex = GetSelectedSlotIndex();
-	
-	if (NewSlotCount != CachedSlotCount)
-	{
-		CachedSlotCount = NewSlotCount;
-		
-		OnQuickSlotCountChangedDelegate.Broadcast(NewSlotCount);
-	}
-	
-	OnQuickSlotsChangedDelegate.Broadcast();
-	
-	if (NewSelectedSlotIndex != CachedSelectedSlotIndex)
-	{
-		const int32 PreviousSlotIndex = CachedSelectedSlotIndex;
-		
-		CachedSelectedSlotIndex = NewSelectedSlotIndex;
-		
-		OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, NewSelectedSlotIndex);
-	}
-	
-	RefreshHeldItem();
+	RefreshQuickSlotCollectionState();
+	RefreshSelectedItemState();
 }
 
 void UDRQuickSlotComponent::RefreshHeldItem()
 {
+	CacheAbilitySystemComponent();
+	
 	const FDRItemInstance* SelectedItem = ResolveSelectedItem();
 	
 	UDRItemDefinition* NewDefinition = SelectedItem ? SelectedItem->Definition.Get() : nullptr;
@@ -373,7 +404,7 @@ void UDRQuickSlotComponent::RefreshHeldItem()
 		return;
 	}
 	
-	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
+	if (UAbilitySystemComponent* ASC = AbilitySystemComponent.Get())
 	{
 		GrantedHandles.TakeFromAbilitySystem(ASC);
 		
@@ -394,6 +425,17 @@ void UDRQuickSlotComponent::RefreshHeldItem()
 
 void UDRQuickSlotComponent::RefreshSelectedItem()
 {
+	CacheAbilitySystemComponent();
+
+	if (ShouldDeferHeldItemRefresh())
+	{
+		bHeldItemRefreshDeferred = true;
+		RefreshQuickSlotCollectionState();
+		return;
+	}
+
+	ClearDeferredHeldItemRefresh();
+	
 	RefreshHeldItem();
 	ApplySelectedItemToCharacter();	
 }
@@ -434,4 +476,202 @@ bool UDRQuickSlotComponent::IsQuickSlotSelectionLocked() const
 	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
 
 	return IsValid(ASC)	&& ASC->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Active);
+}
+
+bool UDRQuickSlotComponent::CacheAbilitySystemComponent()
+{
+	UAbilitySystemComponent* FoundASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+	
+	if (!IsValid(FoundASC))
+	{
+		return false;
+	}
+	
+	if (AbilitySystemComponent.Get() == FoundASC)
+	{
+		if (!AbilityEndedDelegateHandle.IsValid())
+		{
+			AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
+		}
+		
+		return true;
+	}
+	
+	UnbindAbilitySystemComponent();
+	
+	AbilitySystemComponent= FoundASC;
+	AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
+	
+	return true;
+}
+
+void UDRQuickSlotComponent::UnbindAbilitySystemComponent()
+{
+	if (UAbilitySystemComponent* ASC = AbilitySystemComponent.Get())
+	{
+		if (AbilityEndedDelegateHandle.IsValid())
+		{
+			ASC->OnAbilityEnded.Remove(AbilityEndedDelegateHandle);
+		}
+	}
+
+	AbilityEndedDelegateHandle.Reset();
+	AbilitySystemComponent.Reset();
+}
+
+bool UDRQuickSlotComponent::HasActiveHeldItemAbility() const
+{
+	if (!IsValid(HeldItemDefinition))
+	{
+		return false;
+	}
+	
+	const UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	
+	if (!IsValid(ASC))
+	{
+		ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+	}
+	
+	if (!IsValid(ASC))
+	{
+		return false;
+	}
+	
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.IsActive()
+			&& Spec.SourceObject.Get() == HeldItemDefinition)
+		{
+			return true;
+		}
+	}
+	
+	return false;		
+}
+
+bool UDRQuickSlotComponent::ShouldDeferHeldItemRefresh() const
+{
+	if (!IsValid(HeldItemDefinition)
+		|| HeldItemDefinition->AbilityLifetimePolicy != EDRItemAbilityLifetimePolicy::KeepWhileActive)
+	{
+		return false;
+	}	
+	
+	const FDRItemInstance* SelectedItem = ResolveSelectedItem();
+	const FGuid NewInstanceId = SelectedItem ? SelectedItem->InstanceId : FGuid();
+	
+	if (NewInstanceId == EquippedInstanceId)
+	{
+		return false;
+	}
+	
+	return HasActiveHeldItemAbility();
+}
+
+void UDRQuickSlotComponent::QueueDeferredHeldItemRefresh()
+{
+	if (!bHeldItemRefreshDeferred 
+		|| DeferredHeldItemRefreshTimerHandle.IsValid())
+	{
+		return;
+	}
+	
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+	
+	DeferredHeldItemRefreshTimerHandle = World->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(this, &ThisClass::ApplyDeferredHeldItemRefresh));
+}
+
+void UDRQuickSlotComponent::ApplyDeferredHeldItemRefresh()
+{
+	DeferredHeldItemRefreshTimerHandle.Invalidate();
+	
+	if (!bHeldItemRefreshDeferred
+		||HasActiveHeldItemAbility())
+	{
+		return;
+	}
+	
+	/*
+	 * 클라이언트에서 마지막 스택이 먼저 사라졌다면 서버가 확정한 SelectedInstanceId의 OnRep를 기다린다.
+	 */
+	if (!HasQuickSlotAuthority()
+		&& ResolveSelectedItem() == nullptr)
+	{
+		return;
+	}
+	
+	bool bSelectionChanged = false;
+	
+	if (HasQuickSlotAuthority())
+	{
+		bSelectionChanged = EnsureValidSelection();
+	}
+	
+	ClearDeferredHeldItemRefresh();
+	RefreshDerivedState();
+	
+	if (bSelectionChanged)
+	{
+		RequestReplicationUpdate();
+	}
+}
+
+void UDRQuickSlotComponent::ClearDeferredHeldItemRefresh()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DeferredHeldItemRefreshTimerHandle);
+	}
+	
+	DeferredHeldItemRefreshTimerHandle.Invalidate();
+	bHeldItemRefreshDeferred = false;
+}
+
+void UDRQuickSlotComponent::RefreshQuickSlotCollectionState()
+{
+	const int32 NewSlotCount = GetSlotCount();
+	
+	if (NewSlotCount != CachedSlotCount)
+	{
+		CachedSlotCount = NewSlotCount;
+		OnQuickSlotCountChangedDelegate.Broadcast(NewSlotCount);
+	}
+	
+	OnQuickSlotsChangedDelegate.Broadcast();
+}
+
+void UDRQuickSlotComponent::RefreshSelectedItemState()
+{
+	const int32 NewSelectedSlotIndex = GetSelectedSlotIndex();
+	if (NewSelectedSlotIndex != CachedSelectedSlotIndex)
+	{
+		const int32 PreviousSlotIndex = CachedSelectedSlotIndex;
+		
+		CachedSelectedSlotIndex = NewSelectedSlotIndex;
+		
+		OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, NewSelectedSlotIndex);
+	}
+	
+	RefreshHeldItem();
+}
+
+void UDRQuickSlotComponent::HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData)
+{
+	if (!bHeldItemRefreshDeferred 
+		|| HasActiveHeldItemAbility())
+	{
+		return;
+	}
+
+	/*
+	 * GAS의 Ability 종료 Delegate 실행 중에는 Ability Spec 목록이 정리되는 중일 수 있다.
+	 * AbilitySet 회수와 다음 아이템 장착은 다음 틱에 처리한다.
+	 */
+	QueueDeferredHeldItemRefresh();
 }

@@ -148,6 +148,11 @@ namespace DRGameplayTags
 		"Throwable montage release point.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Event_MovementAction_Cancel,
+		"Event.MovementAction.Cancel",
+		"Requests cancellation of the active movement action.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Weapon_Ranged,
 		"Cooldown.Weapon.Ranged",
 		"Shared fire interval cooldown for ranged weapons.");
