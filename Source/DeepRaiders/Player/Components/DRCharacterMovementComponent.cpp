@@ -128,6 +128,15 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     GravityScale = 1.0f;
 }
 
+void UDRCharacterMovementComponent::OnMovementUpdated(
+	float DeltaSeconds,
+	const FVector& OldLocation,
+	const FVector& OldVelocity)
+{
+	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
+}
+
 void UDRCharacterMovementComponent::BindAbilitySystem(
     UAbilitySystemComponent* AbilitySystemComponent)
 {
