@@ -106,6 +106,58 @@ int32 UDRQuickSlotComponent::GetSelectedSlotIndex() const
 	return IsValid(Inventory) ? Inventory->FindSlotIndex(SelectedInstanceId) : INDEX_NONE;	
 }
 
+bool UDRQuickSlotComponent::CanRequestLocalWeaponShot(const FGuid& WeaponInstanceId) const
+{
+	if (!IsLocalPlayer()
+		|| !WeaponInstanceId.IsValid())
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const double* NextFireTime = LocalNextWeaponFireTime.Find(WeaponInstanceId);
+
+	return NextFireTime == nullptr || World->GetTimeSeconds() + KINDA_SMALL_NUMBER >= *NextFireTime;
+}
+
+void UDRQuickSlotComponent::RecordLocalWeaponShot(const FGuid& WeaponInstanceId, float FireInterval)
+{
+	if (!IsLocalPlayer()
+		|| !WeaponInstanceId.IsValid()
+		|| FireInterval <= 0.0f)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const double CurrentTime = World->GetTimeSeconds();
+
+	// 만료된 다른 무기 기록도 함께 정리한다.
+	for (auto Iterator = LocalNextWeaponFireTime.CreateIterator();
+		Iterator;
+		++Iterator)
+	{
+		if (Iterator.Value() <= CurrentTime)
+		{
+			Iterator.RemoveCurrent();
+		}
+	}
+
+	LocalNextWeaponFireTime.FindOrAdd(WeaponInstanceId) = CurrentTime + FireInterval;
+}
+
 bool UDRQuickSlotComponent::GetQuickSlot(int32 SlotIndex, FDRItemInstance& OutItemInstance) const
 {
 	const UDRInventoryComponent* Inventory = InventoryComponent.Get();

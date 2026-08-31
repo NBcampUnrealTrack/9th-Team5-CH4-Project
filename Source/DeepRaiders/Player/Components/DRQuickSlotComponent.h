@@ -50,6 +50,14 @@ public:
 		return SelectedInstanceId;
 	}
 	
+	/*
+ 	* 원격 클라이언트의 로컬 발사 간격을 검사한다.
+ 	* 서버 쿨다운 판정에는 사용하지 않는다.
+ 	*/
+	bool CanRequestLocalWeaponShot(const FGuid& WeaponInstanceId) const;
+
+	void RecordLocalWeaponShot(const FGuid& WeaponInstanceId, float FireInterval);
+	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	bool GetQuickSlot(int32 SlotIndex, FDRItemInstance& OutItemInstance) const;
 	
@@ -146,4 +154,12 @@ private:
 	
 	FGuid EquippedInstanceId;
 	FDRAbilitySet_GrantedHandles GrantedHandles;
+	
+	/*
+ 	* Ability Spec보다 오래 유지되어 무기 교체 후에도 이전 무기의
+ 	* 로컬 발사 가능 시각이 초기화되지 않는다.
+ 	*
+ 	* 서버 권위 상태가 아니며 복제하지 않는다.
+ 	*/
+	TMap<FGuid, double> LocalNextWeaponFireTime;
 };
