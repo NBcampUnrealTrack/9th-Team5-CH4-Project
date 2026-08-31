@@ -188,27 +188,9 @@ void ADRMiningGameModeBase::ResetGameState()
 		return;
 	}
 
-	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
-	{
-		SnowSubsystem->ResetSnowState();
-	}
-
 	if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
 	{
-		MiningGameState->ResetSnowOperationState();
-	}
-
-	if (UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>())
-	{
-		TerrainSubsystem->ResetTerrainState();
-	}
-
-	for (TActorIterator<AVoxelWorld> Iterator(World); Iterator; ++Iterator)
-	{
-		if (Iterator->IsCreated())
-		{
-			UVoxelBlueprintLibrary::ClearAllData(*Iterator, true);
-		}
+		MiningGameState->Multicast_ResetVoxelState();
 	}
 
 	if (!IsValid(GameState))

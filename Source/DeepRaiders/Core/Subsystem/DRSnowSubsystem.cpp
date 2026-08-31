@@ -60,12 +60,18 @@ void UDRSnowSubsystem::ProcessNextDirectionalAdd()
 	bDirectionalAddInProgress = true;
 	SurfaceEditor.SetWorld(GetWorld());
 	const TWeakObjectPtr<UDRSnowSubsystem> WeakThis(this);
+	const int32 RequestGeneration = SnowStateGeneration;
 	const bool bStarted = SurfaceEditor.AddDirectionalSnowAtAreaAsync(
 		Request,
-		[WeakThis, Request](FDRSnowSurfaceEditResult&& EditResult)
+		[WeakThis, Request, RequestGeneration](FDRSnowSurfaceEditResult&& EditResult)
 		{
 			if (UDRSnowSubsystem* SnowSubsystem = WeakThis.Get())
 			{
+				if (SnowSubsystem->SnowStateGeneration != RequestGeneration)
+				{
+					return;
+				}
+
 				// 완료된 실제 변경 voxel만 원본 데이터에 반영한 뒤 다음 요청을 시작한다.
 				SnowSubsystem->ApplyAddedSurfaceEdit(Request, EditResult);
 				SnowSubsystem->QueueRenderUpdate(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
@@ -283,19 +289,20 @@ void UDRSnowSubsystem::ResetCheckpoints()
 
 void UDRSnowSubsystem::ResetSnowState()
 {
+	++SnowStateGeneration;
 	ResetCheckpoints();
 	VolumeStore.Reset();
 	OwnershipStore.Reset();
 	PendingRenderUpdates.Reset();
+	bDirectionalAddInProgress = false;
+	FDRSnowSurfaceAddRequest PendingRequest;
+	while (DirectionalAddQueue.Dequeue(PendingRequest))
+	{
+	}
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(RenderUpdateTimerHandle);
-	}
-
-	FDRSnowSurfaceAddRequest PendingRequest;
-	while (DirectionalAddQueue.Dequeue(PendingRequest))
-	{
 	}
 }
 

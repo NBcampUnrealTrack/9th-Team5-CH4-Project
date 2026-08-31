@@ -92,6 +92,7 @@ private:
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
 	TQueue<FDRSnowSurfaceAddRequest> DirectionalAddQueue;
 	bool bDirectionalAddInProgress = false;
+	int32 SnowStateGeneration = 0;
 	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;
 	FTimerHandle RenderUpdateTimerHandle;
 };

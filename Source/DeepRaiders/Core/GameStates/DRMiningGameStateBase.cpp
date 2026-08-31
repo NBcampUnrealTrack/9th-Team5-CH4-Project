@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelWorld.h"
 
 void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -139,7 +140,6 @@ void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operatio
 	Record.AddOperation = Operation;
 	SnowOperationHistory.Add(Record);
 	Multicast_ApplySnowOperation(Record);
-	TryCreateSnowCheckpoint();
 }
 
 void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Operation)
@@ -155,7 +155,6 @@ void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Op
 	Record.RemoveOperation = Operation;
 	SnowOperationHistory.Add(Record);
 	Multicast_ApplySnowOperation(Record);
-	TryCreateSnowCheckpoint();
 }
 
 void ADRMiningGameStateBase::GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const
@@ -220,6 +219,44 @@ void ADRMiningGameStateBase::ResetSnowApplicationStateForCheckpoint(int32 Checkp
 	{
 		StartPendingSnowRetry();
 	}
+}
+
+void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
+	{
+		SnowSubsystem->ResetSnowState();
+	}
+
+	if (UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>())
+	{
+		TerrainSubsystem->ResetTerrainState();
+	}
+
+	for (TActorIterator<AVoxelWorld> Iterator(World); Iterator; ++Iterator)
+	{
+		if (Iterator->IsCreated())
+		{
+			UVoxelBlueprintLibrary::ClearAllData(*Iterator, true);
+		}
+	}
+
+	if (HasAuthority())
+	{
+		ResetSnowOperationState();
+		return;
+	}
+
+	AppliedSnowCheckpointSequence = 0;
+	AppliedSnowOperationSequences.Reset();
+	PendingSnowOperations.Reset();
+	StopPendingSnowRetry();
 }
 
 void ADRMiningGameStateBase::TryCreateSnowCheckpoint()

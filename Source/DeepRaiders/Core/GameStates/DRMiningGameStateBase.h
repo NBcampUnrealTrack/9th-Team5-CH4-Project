@@ -119,6 +119,10 @@ public:
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
 
+	/** 새 경기를 위해 서버와 모든 클라이언트의 복셀 상태를 함께 초기화한다. */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_ResetVoxelState();
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ApplySnowOperation(const FDRSnowOperationRecord& Record);
 
