@@ -138,7 +138,6 @@ void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operatio
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = true;
 	Record.AddOperation = Operation;
-	SnowOperationHistory.Add(Record);
 	Multicast_ApplySnowOperation(Record);
 }
 
@@ -153,33 +152,7 @@ void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Op
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = false;
 	Record.RemoveOperation = Operation;
-	SnowOperationHistory.Add(Record);
 	Multicast_ApplySnowOperation(Record);
-}
-
-void ADRMiningGameStateBase::GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const
-{
-	OutOperations.Reset();
-	for (const FDRSnowOperationRecord& Record : SnowOperationHistory)
-	{
-		if (Record.Sequence > Sequence)
-		{
-			OutOperations.Add(Record);
-		}
-	}
-}
-
-void ADRMiningGameStateBase::DiscardSnowOperationsThrough(int32 Sequence)
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	SnowOperationHistory.RemoveAll([Sequence](const FDRSnowOperationRecord& Record)
-	{
-		return Record.Sequence <= Sequence;
-	});
 }
 
 void ADRMiningGameStateBase::ResetSnowOperationState()
@@ -190,7 +163,6 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 	}
 
 	NextSnowOperationSequence = 0;
-	SnowOperationHistory.Reset();
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
@@ -257,31 +229,6 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
 	StopPendingSnowRetry();
-}
-
-void ADRMiningGameStateBase::TryCreateSnowCheckpoint()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	if (!IsValid(SnowSubsystem))
-	{
-		return;
-	}
-
-	constexpr int32 CheckpointInterval = 250;
-	int32 LatestCheckpointSequence = INDEX_NONE;
-	const bool bNeedsCheckpoint =
-		!SnowSubsystem->GetLatestCheckpointOperationSequence(LatestCheckpointSequence) ||
-		NextSnowOperationSequence - LatestCheckpointSequence >= CheckpointInterval;
-	if (bNeedsCheckpoint && SnowSubsystem->CreateCheckpoint(NextSnowOperationSequence))
-	{
-		DiscardSnowOperationsThrough(NextSnowOperationSequence);
-	}
 }
 
 void ADRMiningGameStateBase::Multicast_ApplySnowOperation_Implementation(const FDRSnowOperationRecord& Record)

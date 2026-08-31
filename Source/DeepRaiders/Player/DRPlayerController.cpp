@@ -783,7 +783,6 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	PendingSnowOwnershipData.Reset();
-	PendingSnowHistory.Reset();
 	BufferedSnowOperations.Reset();
 
 	ServerRequestSnowJoinSnapshotData(SnapshotId);
@@ -793,8 +792,7 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 {
 	UWorld* World = GetWorld();
 	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	ADRMiningGameStateBase* MiningGameState = IsValid(World) ? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
-	if (!IsValid(SnowSubsystem) || !IsValid(MiningGameState))
+	if (!IsValid(SnowSubsystem))
 	{
 		return;
 	}
@@ -807,7 +805,6 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 
 	World->GetTimerManager().ClearTimer(SnowJoinSnapshotSendTimer);
 	OutgoingSnowSnapshotId = SnapshotId;
-	OutgoingSnowCheckpointSequence = Checkpoint.OperationSequence;
 	ExpectedAppliedSnowSnapshotId = SnapshotId;
 	bSnowSnapshotTransferFinished = false;
 	OutgoingSnowPayloadType = 0;
@@ -815,7 +812,6 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
 	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
 	OutgoingSnowOwnershipData = MoveTemp(Checkpoint.OwnershipData);
-	MiningGameState->GetSnowOperationsAfter(OutgoingSnowCheckpointSequence, OutgoingSnowHistory);
 
 	// 한 프레임에 모든 RPC를 쌓지 않고 일정 간격으로 청크 하나씩 전송한다.
 	World->GetTimerManager().SetTimer(
@@ -881,16 +877,14 @@ void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
 
 	World->GetTimerManager().ClearTimer(SnowJoinSnapshotSendTimer);
 
-	Client_FinishSnowJoinSnapshot(OutgoingSnowSnapshotId, OutgoingSnowHistory);
+	Client_FinishSnowJoinSnapshot(OutgoingSnowSnapshotId);
 	bSnowSnapshotTransferFinished = true;
 	OutgoingSnowSnapshotId = INDEX_NONE;
-	OutgoingSnowCheckpointSequence = 0;
 	OutgoingSnowPayloadType = 0;
 	OutgoingSnowByteOffset = 0;
 	OutgoingSnowVoxelSaveData.Reset();
 	OutgoingSnowVolumeData.Reset();
 	OutgoingSnowOwnershipData.Reset();
-	OutgoingSnowHistory.Reset();
 }
 
 void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
@@ -955,9 +949,7 @@ void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
 	TryApplyPendingSnowJoinSnapshot();
 }
 
-void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(
-	int32 SnapshotId,
-	const TArray<FDRSnowOperationRecord>& RecentHistory)
+void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(int32 SnapshotId)
 {
 	if (SnapshotId != PendingSnowSnapshotId)
 	{
@@ -965,7 +957,6 @@ void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(
 	}
 
 	bPendingSnowSnapshotFinished = true;
-	PendingSnowHistory = RecentHistory;
 	TryApplyPendingSnowJoinSnapshot();
 }
 
@@ -1034,13 +1025,6 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	}
 
 	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
-	for (const FDRSnowOperationRecord& Record : PendingSnowHistory)
-	{
-		if (Record.Sequence > PendingSnowCheckpointSequence)
-		{
-			OperationsBySequence.Add(Record.Sequence, Record);
-		}
-	}
 	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
 	{
 		if (Record.Sequence > PendingSnowCheckpointSequence)
@@ -1066,7 +1050,6 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	PendingSnowOwnershipData.Reset();
-	PendingSnowHistory.Reset();
 	BufferedSnowOperations.Reset();
 	ApplySnowJoinOperations(Operations);
 	
