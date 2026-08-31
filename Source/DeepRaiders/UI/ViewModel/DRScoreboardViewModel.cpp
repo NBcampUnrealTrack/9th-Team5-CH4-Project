@@ -147,12 +147,13 @@ void UDRScoreboardViewModel::RefreshPlayers()
 
 		switch (DRPlayerState->GetTeamId())
 		{
-		case 0:
-			NewBlueTeamEntries.Add(EntryViewModel);
-			break;
 
-		case 1:
+		case 0:
 			NewRedTeamEntries.Add(EntryViewModel);
+			break;
+			
+		case 1:
+			NewBlueTeamEntries.Add(EntryViewModel);
 			break;
 
 		default: UE_LOG(LogTemp, Warning, TEXT( "[Scoreboard] Invalid TeamId. " "Player=%s TeamId=%d"), *GetNameSafe(DRPlayerState), DRPlayerState->GetTeamId());
