@@ -499,7 +499,6 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 		return false;
 	}
 
-	MiningGameState->DiscardSnowOperationsThrough(Checkpoint.OperationSequence);
 	PlayerController->Client_BeginSnowJoinSnapshot(
 		Checkpoint.SnapshotId,
 		Checkpoint.OperationSequence,

@@ -113,8 +113,6 @@ public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
 	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation);
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
-	void GetSnowOperationsAfter(int32 Sequence, TArray<FDRSnowOperationRecord>& OutOperations) const;
-	void DiscardSnowOperationsThrough(int32 Sequence);
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
@@ -137,10 +135,8 @@ private:
 	void StartPendingSnowRetry();
 	void StopPendingSnowRetry();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
-	void TryCreateSnowCheckpoint();
 
 	int32 NextSnowOperationSequence = 0;
-	TArray<FDRSnowOperationRecord> SnowOperationHistory;
 	int32 AppliedSnowCheckpointSequence = 0;
 	TSet<int32> AppliedSnowOperationSequences;
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;

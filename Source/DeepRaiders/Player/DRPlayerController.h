@@ -309,9 +309,7 @@ public:
 		const TArray<uint8>& ChunkData);
 
 	UFUNCTION(Client, Reliable)
-	void Client_FinishSnowJoinSnapshot(
-		int32 SnapshotId,
-		const TArray<FDRSnowOperationRecord>& RecentHistory);
+	void Client_FinishSnowJoinSnapshot(int32 SnapshotId);
 
 	UFUNCTION(Client, Reliable)
 	void Client_ResumeSnowJoinOperations(int32 SnapshotId);
@@ -333,13 +331,11 @@ private:
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
 
 	int32 OutgoingSnowSnapshotId = INDEX_NONE;
-	int32 OutgoingSnowCheckpointSequence = 0;
 	uint8 OutgoingSnowPayloadType = 0;
 	int32 OutgoingSnowByteOffset = 0;
 	TArray<uint8> OutgoingSnowVoxelSaveData;
 	TArray<uint8> OutgoingSnowVolumeData;
 	TArray<uint8> OutgoingSnowOwnershipData;
-	TArray<FDRSnowOperationRecord> OutgoingSnowHistory;
 	FTimerHandle SnowJoinSnapshotSendTimer;
 	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	bool bSnowSnapshotTransferFinished = false;
@@ -355,7 +351,6 @@ private:
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
 	TArray<uint8> PendingSnowOwnershipData;
-	TArray<FDRSnowOperationRecord> PendingSnowHistory;
 	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
 	FTimerHandle SnowJoinSnapshotRetryTimer;
 #pragma endregion
