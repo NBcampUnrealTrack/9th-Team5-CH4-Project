@@ -31,6 +31,7 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 	FollowCamera = InFollowCamera;
 	MovementComponent = InMovementComponent;
 	bVerticalFollowInitialized = false;
+	bVerticalFollowActive = false;
 	SetComponentTickEnabled(false);
 
 	if (CameraBoom.IsValid())
@@ -104,7 +105,32 @@ void UDRPlayerCameraComponent::TickComponent(
 		return;
 	}
 
+	const bool bMovementUpdatedThisFrame = bMovementUpdatedSinceLastTick;
+	bMovementUpdatedSinceLastTick = false;
+
+	const UDRCharacterMovementComponent* CharacterMovement = MovementComponent.Get();
+	if (!IsValid(CharacterMovement) || !CharacterMovement->IsMovingOnGround())
+	{
+		// 점프, 낙하, 제트팩 중의 높이 변화는 의도된 이동이므로
+		// 지면 보정 없이 카메라가 캐릭터를 즉시 따라가게 한다.
+		SmoothedCameraPivotZ =
+			GetOwner()->GetActorLocation().Z + CameraBoomBaseRelativeLocation.Z;
+		bVerticalFollowActive = false;
+		ApplyCameraBoomLocation();
+		return;
+	}
+
 	UpdateVerticalFollow(true, DeltaTime);
+
+	const bool bCharacterIsStationary =
+		CharacterMovement->Velocity.IsNearlyZero(0.1f);
+
+	if (!bMovementUpdatedThisFrame &&
+		!bVerticalFollowActive &&
+		bCharacterIsStationary)
+	{
+		SetComponentTickEnabled(false);
+	}
 }
 
 void UDRPlayerCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -128,8 +154,17 @@ void UDRPlayerCameraComponent::HandleCharacterMovementUpdated(
 		return;
 	}
 
-	// Tick이 꺼진 상태에서도 지형의 미세한 Z 이동을 상쇄해야 한다.
-	UpdateVerticalFollow(false, DeltaSeconds);
+	const bool bLocationChanged = !GetOwner()->GetActorLocation().Equals(OldLocation, 0.01f);
+	const bool bVelocityChanged =
+		!MovementComponent->Velocity.Equals(OldVelocity, 0.01f);
+
+	if (bLocationChanged || bVelocityChanged)
+	{
+		// 이동 계산의 중간 단계에서는 Spring Arm을 갱신하지 않는다.
+		// 카메라 Tick이 물리 이동 이후 한 번만 위치를 반영한다.
+		bMovementUpdatedSinceLastTick = true;
+		SetComponentTickEnabled(true);
+	}
 }
 
 void UDRPlayerCameraComponent::UpdateVerticalFollow(
@@ -146,42 +181,38 @@ void UDRPlayerCameraComponent::UpdateVerticalFollow(
 	}
 
 	const float VerticalDifference = TargetPivotZ - SmoothedCameraPivotZ;
-	if (FMath::Abs(VerticalDifference) >= VerticalFollowSnapDistance)
+	const float ReleaseDeadZone = FMath::Min(
+		VerticalFollowReleaseDeadZone,
+		VerticalFollowDeadZone);
+	if (VerticalFollowSnapDistance > KINDA_SMALL_NUMBER &&
+		FMath::Abs(VerticalDifference) >= VerticalFollowSnapDistance)
 	{
 		SmoothedCameraPivotZ = TargetPivotZ;
-		SetComponentTickEnabled(false);
+		bVerticalFollowActive = false;
 	}
-	else if (FMath::Abs(VerticalDifference) > VerticalFollowDeadZone)
+	else if (!bVerticalFollowActive)
 	{
-		if (bAllowInterpolation)
+		if (FMath::Abs(VerticalDifference) > VerticalFollowDeadZone)
 		{
-			const float DesiredPivotZ = TargetPivotZ -
-				FMath::Sign(VerticalDifference) * VerticalFollowDeadZone;
+			bVerticalFollowActive = true;
+		}
+	}
 
-			SmoothedCameraPivotZ = VerticalFollowSpeed > KINDA_SMALL_NUMBER
-				? FMath::FInterpTo(
-					SmoothedCameraPivotZ,
-					DesiredPivotZ,
-					DeltaSeconds,
-					VerticalFollowSpeed)
-				: DesiredPivotZ;
-
-			if (FMath::IsNearlyEqual(
+	if (bVerticalFollowActive && bAllowInterpolation)
+	{
+		SmoothedCameraPivotZ = VerticalFollowSpeed > KINDA_SMALL_NUMBER
+			? FMath::FInterpTo(
 				SmoothedCameraPivotZ,
-				DesiredPivotZ,
-				VerticalFollowStopTolerance))
-			{
-				SetComponentTickEnabled(false);
-			}
-		}
-		else
+				TargetPivotZ,
+				DeltaSeconds,
+				VerticalFollowSpeed)
+			: TargetPivotZ;
+
+		if (FMath::Abs(TargetPivotZ - SmoothedCameraPivotZ)
+			<= ReleaseDeadZone)
 		{
-			SetComponentTickEnabled(true);
+			bVerticalFollowActive = false;
 		}
-	}
-	else
-	{
-		SetComponentTickEnabled(false);
 	}
 
 	ApplyCameraBoomLocation();
