@@ -461,51 +461,51 @@ void ADRPlayerCharacter::PlayProjectileFireVFXFromNotify()
 		return;
 	}
 
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
-		Cast<UDRProjectileWeaponItemDefinition>(
-			HeldItemComponent->GetHeldItemDefinition());
-
-	if (!IsValid(WeaponDefinition))
-	{
-		return;
-	}
-
-	const FDRWeaponPresentationData& Presentation =
-		WeaponDefinition->FirePresentation;
-
-	if (!IsValid(Presentation.VFX))
-	{
-		return;
-	}
-
-	const FName SocketName =
-		Presentation.AttachSocketName.IsNone()
-			? TEXT("VFXPoint")
-			: Presentation.AttachSocketName;
-
-	if (!WorldHandEquipmentMesh->DoesSocketExist(SocketName))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[WeaponFireVFX] Socket missing. Weapon=%s Socket=%s"),
-			*GetNameSafe(WeaponDefinition),
-			*SocketName.ToString());
-
-		return;
-	}
-
-	UNiagaraFunctionLibrary::SpawnSystemAttached(
-		Presentation.VFX,
-		WorldHandEquipmentMesh,
-		SocketName,
-		FVector::ZeroVector,
-		FRotator::ZeroRotator,
-		EAttachLocation::SnapToTarget,
-		true,
-		true,
-		ENCPoolMethod::AutoRelease,
-		true);
+	// const UDRProjectileWeaponItemDefinition* WeaponDefinition =
+	// 	Cast<UDRProjectileWeaponItemDefinition>(
+	// 		HeldItemComponent->GetHeldItemDefinition());
+	//
+	// if (!IsValid(WeaponDefinition))
+	// {
+	// 	return;
+	// }
+	//
+	// const FDRWeaponPresentationData& Presentation =
+	// 	WeaponDefinition->FirePresentation;
+	//
+	// if (!IsValid(Presentation.VFX))
+	// {
+	// 	return;
+	// }
+	//
+	// const FName SocketName =
+	// 	Presentation.AttachSocketName.IsNone()
+	// 		? TEXT("VFXPoint")
+	// 		: Presentation.AttachSocketName;
+	//
+	// if (!WorldHandEquipmentMesh->DoesSocketExist(SocketName))
+	// {
+	// 	UE_LOG(
+	// 		LogTemp,
+	// 		Warning,
+	// 		TEXT("[WeaponFireVFX] Socket missing. Weapon=%s Socket=%s"),
+	// 		*GetNameSafe(WeaponDefinition),
+	// 		*SocketName.ToString());
+	//
+	// 	return;
+	// }
+	//
+	// UNiagaraFunctionLibrary::SpawnSystemAttached(
+	// 	Presentation.VFX,
+	// 	WorldHandEquipmentMesh,
+	// 	SocketName,
+	// 	FVector::ZeroVector,
+	// 	FRotator::ZeroRotator,
+	// 	EAttachLocation::SnapToTarget,
+	// 	true,
+	// 	true,
+	// 	ENCPoolMethod::AutoRelease,
+	// 	true);
 }
 
 void ADRPlayerCharacter::PlayHitReaction(
