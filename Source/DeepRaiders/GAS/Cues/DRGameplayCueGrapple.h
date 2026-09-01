@@ -23,6 +23,8 @@ public:
 	virtual void ReuseAfterRecycle() override;
 	
 protected:
+	virtual bool OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
+	
 	virtual bool OnActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
 	
 	virtual bool WhileActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
@@ -45,6 +47,9 @@ private:
 	FVector GetCurrentStartLocation() const;
 	
 	void UpdateHookLocation(const FVector& NewLocation);
+	
+	// 현재 훅 위치에서 발사 지점으로 돌아가는 단계를 시작
+	void BeginRetraction();
 	void FinishPresentation();
 	void ResetPresentationState();
 	
@@ -90,6 +95,8 @@ private:
 	float PhaseElapsedTime = 0.f;
 	
 	EPresentationPhase PresentationPhase = EPresentationPhase::Inactive;
+	
+	bool bRetractAfterExtension = false;
 };
 
 

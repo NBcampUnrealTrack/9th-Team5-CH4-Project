@@ -82,10 +82,16 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 		
 		if (Alpha >= 1.f)
 		{
-			PresentationPhase = EPresentationPhase::Attached;
 			PhaseElapsedTime = 0.f;
 			
-			UpdateHookLocation(TargetLocation);
+			if (bRetractAfterExtension)
+			{
+				BeginRetraction();
+			}
+			else
+			{
+				PresentationPhase = EPresentationPhase::Attached;
+			}
 		}
 		
 		break;
@@ -121,13 +127,33 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 	}
 }
 
+bool ADRGameplayCueGrapple::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
+{
+	bRetractAfterExtension = true;
+	
+	if (!BeginPresentation(MyTarget, Parameters))
+	{
+		GameplayCueFinishedCallback();
+		return false;
+	}
+	
+	if (PresentationPhase == EPresentationPhase::Attached)
+	{
+		BeginRetraction();
+	}
+	
+	return true;
+}
+
 bool ADRGameplayCueGrapple::OnActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
 {
+	bRetractAfterExtension = false;
 	return BeginPresentation(MyTarget, Parameters);
 }
 
 bool ADRGameplayCueGrapple::WhileActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
 {
+	bRetractAfterExtension = false;
 	return BeginPresentation(MyTarget, Parameters);
 }
 
@@ -139,25 +165,7 @@ bool ADRGameplayCueGrapple::OnRemove_Implementation(AActor* MyTarget, const FGam
 		return true;
 	}
 	
-	if (PresentationPhase == EPresentationPhase::Retracting)
-	{
-		return true;
-	}
-	
-	RetractStartLocation = HookRoot->GetComponentLocation();
-	
-	PhaseElapsedTime = 0.f;
-	PresentationPhase = EPresentationPhase::Retracting;
-	
-	if (HookRetractDuration <= KINDA_SMALL_NUMBER)
-	{
-		FinishPresentation();
-	}
-	else
-	{
-		SetActorTickEnabled(true);
-	}
-	
+	BeginRetraction();
 	return true;
 }
 
@@ -301,6 +309,35 @@ void ADRGameplayCueGrapple::UpdateHookLocation(const FVector& NewLocation)
 	CableComponent->CableLength = FMath::Max(CurrentDistance * CableLengthScale, 1.f);
 }
 
+void ADRGameplayCueGrapple::BeginRetraction()
+{
+	if (PresentationPhase == EPresentationPhase::Inactive
+		|| PresentationPhase == EPresentationPhase::Retracting)
+	{
+		return;
+	}
+	
+	if (!IsValid(HookRoot))
+	{
+		FinishPresentation();
+		return;
+	}
+	
+	bRetractAfterExtension = false;
+	RetractStartLocation = HookRoot->GetComponentLocation();
+	PhaseElapsedTime = 0.f;
+	PresentationPhase = EPresentationPhase::Retracting;
+	
+	if (HookRetractDuration <= KINDA_SMALL_NUMBER)
+	{
+		FinishPresentation();
+	}
+	else
+	{
+		SetActorTickEnabled(true);
+	}	
+}
+
 void ADRGameplayCueGrapple::FinishPresentation()
 {
 	ResetPresentationState();
@@ -310,8 +347,8 @@ void ADRGameplayCueGrapple::FinishPresentation()
 void ADRGameplayCueGrapple::ResetPresentationState()
 {
 	PresentationPhase = EPresentationPhase::Inactive;
-
 	PhaseElapsedTime = 0.f;
+	bRetractAfterExtension = false;
 
 	StartComponent.Reset();
 	StartSocketName = NAME_None;
@@ -352,5 +389,3 @@ void ADRGameplayCueGrapple::ReuseAfterRecycle()
 
 	ResetPresentationState();
 }
-
-

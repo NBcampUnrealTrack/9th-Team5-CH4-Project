@@ -426,4 +426,8 @@ namespace DRGameplayTags
 		"GameplayCue.MovementAction.Grapple.Active",
 		"Persistent hook and cable presentation for an active grapple movement action.");
 	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_MovementAction_Grapple_Failed,
+		"GameplayCue.MovementAction.Grapple.Failed",
+		"One-shot cable presentation for a failed grapple attempt.");
 }

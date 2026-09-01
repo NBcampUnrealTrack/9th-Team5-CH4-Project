@@ -162,19 +162,32 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 
 	if (ActorInfo == nullptr)
 	{
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
 
 	if (ActorInfo->IsNetAuthority())
 	{
-		FVector ServerHookLocation;
-
-		if (!ValidateServerTargetData(TargetData, ServerHookLocation)
-			|| !StartAuthoritativeMovement(ServerHookLocation))
+		FVector ServerTargetLocation;
+		
+		const EDRGrappleTargetValidationResult ValidationResult = ValidateServerTargetData(TargetData, ServerTargetLocation);
+		
+		if (ValidationResult == EDRGrappleTargetValidationResult::Succeeded)
 		{
-			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+			if (!StartAuthoritativeMovement(ServerTargetLocation))
+			{
+				QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+			}
+			
+			return;
 		}
 
+		if (ValidationResult == EDRGrappleTargetValidationResult::Failed)
+		{
+			PlayFailedGrappleGameplayCue(ServerTargetLocation);
+		}
+		
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
 
@@ -187,11 +200,26 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
 
-	if (ClientHit == nullptr
-		|| !StartPredictedMovement(ClientHit->ImpactPoint))
+	if (ClientHit == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		return;
 	}
+	
+	if (ADRGrappleTargetActor::IsValidGrappleSurface(*ClientHit))
+	{
+		if (!StartPredictedMovement(ClientHit->ImpactPoint))
+		{
+			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		}
+		
+		return;
+	}
+	
+	const FVector FailedLocation = ClientHit->IsValidBlockingHit() ? ClientHit->ImpactPoint : ClientHit->TraceEnd;
+	
+	PlayFailedGrappleGameplayCue(FailedLocation);
+	QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 }
 
 void UDRGA_GrappleItem::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
@@ -393,11 +421,10 @@ void UDRGA_GrappleItem::RemoveMovementActionTag()
 	bMovementActionTagApplied = false;
 }
 
-bool UDRGA_GrappleItem::ValidateServerTargetData(
-	const FGameplayAbilityTargetDataHandle& TargetData,
-	FVector& OutHookLocation) const
+UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateServerTargetData(
+	const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutTargetLocation) const
 {
-	OutHookLocation = FVector::ZeroVector;
+	OutTargetLocation = FVector::ZeroVector;
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 
@@ -406,17 +433,13 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 		|| TargetData.Num() != 1
 		|| !IsValid(ActiveItemDefinition))
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
-
 	APlayerController* PlayerController = ActorInfo->PlayerController.Get();
-
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-
 	UWorld* World = GetWorld();
 
 	if (ClientHit == nullptr
@@ -424,7 +447,7 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 		|| !IsValid(AvatarActor)
 		|| !IsValid(World))
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	FVector ServerViewLocation;
@@ -433,23 +456,22 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 
 	if (FVector::Dist(ServerViewLocation, ClientHit->TraceStart) > GrappleSettings.ServerViewOriginTolerance)
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector ClientAimDirection = (ClientHit->TraceEnd - ClientHit->TraceStart).GetSafeNormal();
 
 	if (ClientAimDirection.IsNearlyZero())
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const float MaxAngle = FMath::Clamp(GrappleSettings.ServerAimAngleTolerance, 0.f, 90.f);
-
 	const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(MaxAngle));
 
 	if (FVector::DotProduct(ClientAimDirection, ServerViewRotation.Vector()) < MinimumDot)
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector TraceEnd = ServerViewLocation + ClientAimDirection * GrappleSettings.MaxDistance;
@@ -465,12 +487,17 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 	if (!bBlockingHit
 		|| !ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
 	{
-		return false;
+		OutTargetLocation = ServerHit.TraceEnd;
+		return EDRGrappleTargetValidationResult::Failed;
 	}
 
-	OutHookLocation = ServerHit.ImpactPoint;
+	OutTargetLocation = ServerHit.ImpactPoint;
+	if (!ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
+	{
+		return EDRGrappleTargetValidationResult::Failed;
+	}
 
-	return true;
+	return EDRGrappleTargetValidationResult::Succeeded;
 }
 
 int32 UDRGA_GrappleItem::ResolveSessionId() const
@@ -685,6 +712,27 @@ void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
 	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active, Parameters);
 	
 	bGrappleGameplayCueActive = true;	
+}
+
+void UDRGA_GrappleItem::PlayFailedGrappleGameplayCue(const FVector& FailedLocation)
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+
+	if (!IsValid(ASC) || !IsValid(AvatarActor) || FailedLocation.ContainsNaN())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = FailedLocation;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = ActiveItemDefinition;
+
+	// 실패 연출은 어빌리티 수명과 무관하게 스스로 재생을 끝내는 일회성 Cue다.
+	ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Failed, Parameters);
 }
 
 void UDRGA_GrappleItem::StopGrappleGameplayCue()

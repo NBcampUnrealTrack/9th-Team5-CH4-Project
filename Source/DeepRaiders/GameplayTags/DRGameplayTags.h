@@ -125,4 +125,5 @@ namespace DRGameplayTags
 	
 	// Gameplay Cue - Movement Action
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Failed);
 }
