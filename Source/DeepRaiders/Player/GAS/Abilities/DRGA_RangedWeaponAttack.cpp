@@ -26,14 +26,18 @@
 UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
-	
-	// 이동 스킬이 현재 유지 중인 발사 Ability를 식별하고 취소할 수 있게 한다.
+
+	// 모든 원거리 공격 Ability 식별용
 	FGameplayTagContainer InitialTags;
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+
 	SetAssetTags(InitialTags);
-	
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 }
 
 bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -300,6 +304,14 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
+	if (AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Frozen)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+
+		return;
+	}
+	
 	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
 
@@ -358,6 +370,21 @@ bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
 		|| ActorInfo == nullptr
 		|| !ActorInfo->IsNetAuthority())
 	{
+		return false;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(AbilitySystem))
+	{
+		return false;
+	}
+
+	if (AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Frozen)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	{
+		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+
 		return false;
 	}
 	
