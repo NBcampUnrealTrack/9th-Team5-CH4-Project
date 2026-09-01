@@ -18,8 +18,6 @@ ADRGameplayCueGrapple::ADRGameplayCueGrapple(const FObjectInitializer& ObjectIni
 	
 	SetReplicates(false);
 	
-	GameplayCueTag = DRGameplayTags::GameplayCue_MovementAction_Grapple_Active;
-	
 	bAutoDestroyOnRemove = false;
 	bAutoAttachToOwner = false;
 	bUniqueInstancePerInstigator = true;
