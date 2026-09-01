@@ -1,6 +1,7 @@
 #include "DRMiningGameStateBase.h"
 
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 #include "EngineUtils.h"
@@ -217,6 +218,11 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 		{
 			UVoxelBlueprintLibrary::ClearAllData(*Iterator, true);
 		}
+	}
+
+	for (TActorIterator<ADRMeshVoxelCarver> Iterator(World); Iterator; ++Iterator)
+	{
+		Iterator->RestartCarveBatch();
 	}
 
 	if (HasAuthority())
