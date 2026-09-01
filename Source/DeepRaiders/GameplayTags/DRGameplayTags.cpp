@@ -123,6 +123,11 @@ namespace DRGameplayTags
 		"Search skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_HotPack,
+		"Ability.Skill.HotPack",
+		"Hot pack skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
@@ -191,6 +196,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_Search,
 		"Cooldown.Skill.Search",
 		"Cooldown for the search skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_HotPack,
+		"Cooldown.Skill.HotPack",
+		"Cooldown for the hot pack skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,

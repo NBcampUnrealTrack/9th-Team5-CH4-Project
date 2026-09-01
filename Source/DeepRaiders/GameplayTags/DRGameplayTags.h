@@ -31,6 +31,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SuperJump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_HotPack);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
@@ -48,6 +49,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SuperJump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_HotPack);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
