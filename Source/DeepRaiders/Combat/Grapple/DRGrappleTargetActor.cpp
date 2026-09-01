@@ -145,7 +145,8 @@ bool ADRGrappleTargetActor::IsValidGrappleSurface(const FHitResult& Hit)
 		return true;
 	}
 
-	return HitComponent->GetCollisionObjectType() == ECC_WorldStatic;
+	return HitComponent->GetCollisionObjectType() == ECC_WorldStatic
+		|| HitComponent->GetCollisionObjectType() == ECC_WorldDynamic;
 }
 
 void ADRGrappleTargetActor::UpdateAimMarker(const FHitResult& Hit)

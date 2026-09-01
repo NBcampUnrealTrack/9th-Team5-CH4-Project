@@ -45,6 +45,7 @@ private:
 	bool ResolveStartAttachment(AActor* Target, USceneComponent*& OutComponent, FName& OutSocketName) const;
 	
 	FVector GetCurrentStartLocation() const;
+	float CalculatePhaseDuration(const FVector& StartLocation, const FVector& EndLocation, float Speed) const;
 	
 	void UpdateHookLocation(const FVector& NewLocation);
 	
@@ -73,16 +74,20 @@ private:
 	FName LaunchSocketName = TEXT("VFXPoint");
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
-		meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
-	float HookTravelDuration = 0.1f;
-	
+		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))
+	float HookTravelSpeed = 6000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
+		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))
+	float HookRetractSpeed = 8000.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
 		meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
-	float HookRetractDuration = 0.12f;
+	float MinimumPhaseDuration = 0.05f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Cable",
 		meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
-	float CableLengthScale = 1.02f;
+	float CableLengthScale = 1.f;
 	
 	TWeakObjectPtr<USceneComponent> StartComponent;
 	
@@ -97,6 +102,8 @@ private:
 	EPresentationPhase PresentationPhase = EPresentationPhase::Inactive;
 	
 	bool bRetractAfterExtension = false;
+	
+	float CurrentPhaseDuration = 0.f;
 };
 
 
