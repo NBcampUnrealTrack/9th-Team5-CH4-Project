@@ -71,6 +71,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_SpeedSlow);
 	
 	// Weapon Effect
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
