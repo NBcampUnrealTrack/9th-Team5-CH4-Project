@@ -27,7 +27,7 @@ public:
 	
 private:
 	bool UpdateTargeting();
-	void UpdateTrajectoryVFX(const TArray<FVector>& PathPoints);
+	void UpdateTrajectoryVFX(const TArray<FVector>& PathPoints, const TArray<FVector>& PathDirections);
 	void DestroyTrajectoryVFX();
 	
 	FDRThrowableItemSettings ItemSettings;

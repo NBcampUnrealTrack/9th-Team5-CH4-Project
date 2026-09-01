@@ -114,14 +114,17 @@ bool ADRThrowTargetActor::UpdateTargeting()
 	UGameplayStatics::PredictProjectilePath(this, PredictParams, PredictResult);
 	
 	TArray<FVector> PathPoints;
+	TArray<FVector> PathDirections;
 	PathPoints.Reserve(PredictResult.PathData.Num());
+	PathDirections.Reserve(PredictResult.PathData.Num());
 	
 	for (const FPredictProjectilePathPointData& PointData : PredictResult.PathData)
 	{
 		PathPoints.Add(PointData.Location);
+		PathDirections.Add(PointData.Velocity.GetSafeNormal());
 	}
 	
-	UpdateTrajectoryVFX(PathPoints);
+	UpdateTrajectoryVFX(PathPoints, PathDirections);
 	
 	return true;
 }
@@ -144,7 +147,7 @@ void ADRThrowTargetActor::ConfirmTargetingAndContinue()
 	TargetDataReadyDelegate.Broadcast(FGameplayAbilityTargetDataHandle(TargetData));	
 }
 
-void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints)
+void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints, const TArray<FVector>& PathDirections)
 {
 	if (!IsValid(TrajectoryComponent))
 	{
@@ -160,6 +163,14 @@ void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints)
 	
 	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(TrajectoryComponent,
 		ActionSettings.TrajectoryPointsParameter, PathPoints);
+	
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(TrajectoryComponent,
+		ActionSettings.TrajectoryDirectionsParameter, PathDirections);
+	
+	if (!PathPoints.IsEmpty())
+	{
+		TrajectoryComponent->SetVariablePosition(ActionSettings.SpherePointParameter, PathPoints.Last());	
+	}	
 }
 
 void ADRThrowTargetActor::DestroyTrajectoryVFX()

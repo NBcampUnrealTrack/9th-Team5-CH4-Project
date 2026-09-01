@@ -45,6 +45,12 @@ struct DEEPRAIDERS_API FDRThrowActionSettings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Preview")
 	FName TrajectoryPointsParameter = TEXT("User.TrajectoryPoints");
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Preview")
+	FName TrajectoryDirectionsParameter = TEXT("User.TrajectoryDirections");
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Preview")
+	FName SpherePointParameter = TEXT("User.SpherePoint");
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throw|Validation", meta = (ClampMin = "0.0", Units = "cm"))
 	float ServerViewOriginTolerance = 150.f;
 	
