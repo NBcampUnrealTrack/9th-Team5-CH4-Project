@@ -70,6 +70,13 @@ private:
 
     void StopMovementAction(EDRMovementActionEndReason EndReason);
 
+    // GameplayCue
+    // 성공한 훅 위치를 모든 클라이언트의 지속형 GameplayCue에 전달한다.
+    void StartGrappleGameplayCue(const FVector& InHookLocation);
+    
+    // EndAbility의 모든 종료 경로에서 지속형 GameplayCue를 제거한다.
+    void StopGrappleGameplayCue();
+    
     UFUNCTION()
     void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
 
@@ -111,4 +118,5 @@ private:
     bool bMovementActionTagApplied = false;
     bool bEndQueued = false;
     bool bEndingGrapple = false;
+    bool bGrappleGameplayCueActive = false;
 };

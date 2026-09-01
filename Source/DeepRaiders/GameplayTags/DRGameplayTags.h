@@ -122,4 +122,7 @@ namespace DRGameplayTags
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);
+	
+	// Gameplay Cue - Movement Action
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Active);
 }

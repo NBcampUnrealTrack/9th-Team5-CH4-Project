@@ -250,6 +250,7 @@ bool UDRGA_GrappleItem::StartPredictedMovement(
 
 	bMovementStarted = true;
 	ApplyMovementActionTag();
+	StartGrappleGameplayCue(HookLocation);
 
 	return true;
 }
@@ -311,6 +312,7 @@ bool UDRGA_GrappleItem::StartAuthoritativeMovement(
 
 	bMovementStarted = true;
 	ApplyMovementActionTag();
+	StartGrappleGameplayCue(HookLocation);
 
 	return true;
 }
@@ -654,6 +656,52 @@ void UDRGA_GrappleItem::StopMovementAction(
 	bEndingGrapple = false;
 }
 
+void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
+{
+	if (bGrappleGameplayCueActive)
+	{
+		return;
+	}
+	
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	
+	if (!IsValid(ASC)
+		|| !IsValid(AvatarActor)
+		|| !IsValid(ActiveItemDefinition))
+	{
+		return;
+	}
+	
+	FGameplayCueParameters Parameters;
+	Parameters.Location = InHookLocation;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = ActiveItemDefinition;
+	
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active, Parameters);
+	
+	bGrappleGameplayCueActive = true;	
+}
+
+void UDRGA_GrappleItem::StopGrappleGameplayCue()
+{
+	if (!bGrappleGameplayCueActive)
+	{
+		return;
+	}
+	
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active);
+	}
+	
+	bGrappleGameplayCueActive = false;
+}
+
 void UDRGA_GrappleItem::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
@@ -688,6 +736,7 @@ void UDRGA_GrappleItem::EndAbility(
 
 	StopMovementAction(EndReason);
 	RemoveMovementActionTag();
+	StopGrappleGameplayCue();
 	
 	ActiveItemDefinition = nullptr;
 	ActiveInstanceId.Invalidate();

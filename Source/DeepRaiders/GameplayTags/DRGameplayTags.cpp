@@ -419,4 +419,11 @@ namespace DRGameplayTags
 		GameplayCue_Player_Hit,
 		"GameplayCue.Player.Hit",
 		"Player hit presentation.");
+	
+	// Gameplay Cue - Movement Action
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_MovementAction_Grapple_Active,
+		"GameplayCue.MovementAction.Grapple.Active",
+		"Persistent hook and cable presentation for an active grapple movement action.");
+	
 }
