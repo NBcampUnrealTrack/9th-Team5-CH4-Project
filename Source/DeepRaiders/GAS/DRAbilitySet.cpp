@@ -93,9 +93,9 @@ void UDRAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySystemCo
 	}
 	
 	// Effect 부여
-	for (const FDRAbilitySet_GameplayEffect& EffectToGrant : GrantedEffects)
+	for (const FDRGameplayEffectData& EffectToGrant : GrantedEffects)
 	{
-		if (!EffectToGrant.GameplayEffect)
+		if (!EffectToGrant.EffectClass)
 		{
 			continue;
 		}
@@ -108,13 +108,21 @@ void UDRAbilitySet::GiveToAbilitySystem(UAbilitySystemComponent* AbilitySystemCo
 		}
 		
 		FGameplayEffectSpecHandle EffectSpec = AbilitySystemComponent->MakeOutgoingSpec(
-			EffectToGrant.GameplayEffect
+			EffectToGrant.EffectClass
 			, EffectToGrant.EffectLevel
 			, EffectContext);
 		
 		if (!EffectSpec.IsValid())
 		{
 			continue;
+		}
+		
+		for (const TPair<FGameplayTag, float>& Magnitude : EffectToGrant.SetByCallerMagnitudes)
+		{
+			if (Magnitude.Key.IsValid())
+			{
+				EffectSpec.Data->SetSetByCallerMagnitude(Magnitude.Key, Magnitude.Value);
+			}
 		}
 		
 		const FActiveGameplayEffectHandle EffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
