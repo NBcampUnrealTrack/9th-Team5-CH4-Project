@@ -392,7 +392,10 @@ void ADRMiningGameStateBase::StopPendingSnowRetry()
 
 bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operation)
 {
-	if (Operation.Radius <= 0.f || Operation.Amount <= 0.f)
+	const bool bUsesOrientedBox = Operation.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool;
+	if (Operation.Amount <= 0.f ||
+		(bUsesOrientedBox && (Operation.BoxExtent.X <= 0.f || Operation.BoxExtent.Y <= 0.f || Operation.BoxExtent.Z <= 0.f)) ||
+		(!bUsesOrientedBox && Operation.Radius <= 0.f))
 	{
 		return false;
 	}
@@ -420,6 +423,8 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operati
 	Request.TargetVoxelWorld = VoxelWorld;
 	Request.Radius = Operation.Radius;
 	Request.Amount = Operation.Amount;
+	Request.BoxExtent = Operation.BoxExtent;
+	Request.BoxRotation = Operation.BoxRotation;
 	Request.EditTool = Operation.EditTool;
 	Request.bAllowVirtualSurfaceFallback = Operation.bAllowVirtualSurfaceFallback;
 	Request.bUseVirtualSurface = Operation.bUseVirtualSurface;

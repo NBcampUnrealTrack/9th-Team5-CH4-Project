@@ -13,6 +13,8 @@
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelTools/VoxelPaintMaterial.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
+#include "VoxelData/VoxelDataIncludes.h"
+#include "VoxelMaterial.h"
 #include "VoxelWorld.h"
 
 namespace
@@ -39,6 +41,94 @@ FVoxelPaintMaterial MakeTeamPaintMaterial(const EVoxelMaterialConfig MaterialCon
 	}
 
 	return PaintMaterial;
+}
+
+FDRSnowSurfaceEditResult AddOrientedBoxSnow(
+	AVoxelWorld* VoxelWorld,
+	const FDRSnowSurfaceAddRequest& Request)
+{
+	FDRSnowSurfaceEditResult Result;
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return Result;
+	}
+
+	const FTransform BoxTransform(Request.BoxRotation, Request.WorldLocation);
+	FBox LocalBounds(ForceInit);
+	for (int32 XSign : {-1, 1})
+	{
+		for (int32 YSign : {-1, 1})
+		{
+			for (int32 ZSign : {-1, 1})
+			{
+				const FVector WorldCorner = BoxTransform.TransformPosition(FVector(
+					Request.BoxExtent.X * XSign,
+					Request.BoxExtent.Y * YSign,
+					Request.BoxExtent.Z * ZSign));
+				const FVector LocalCorner = VoxelWorld->GlobalToLocalFloat(WorldCorner).ToFloat();
+				if (LocalBounds.IsValid)
+				{
+					LocalBounds.Min = LocalBounds.Min.ComponentMin(LocalCorner);
+					LocalBounds.Max = LocalBounds.Max.ComponentMax(LocalCorner);
+				}
+				else
+				{
+					LocalBounds = FBox(LocalCorner, LocalCorner);
+				}
+			}
+		}
+	}
+
+	const FVoxelIntBox CandidateBounds(LocalBounds.Min, LocalBounds.Max);
+	if (!CandidateBounds.IsValid())
+	{
+		return Result;
+	}
+
+	FVoxelMaterial SnowMaterial;
+	SnowMaterial.SetSingleIndex(GetTeamMaterialIndex(Request.Context.TeamId));
+	int32 ModifiedVoxelCount = 0;
+	FVoxelData& Data = VoxelWorld->GetData();
+	{
+		FVoxelWriteScopeLock Lock(Data, CandidateBounds, FUNCTION_FNAME);
+		for (int32 Z = CandidateBounds.Min.Z; Z < CandidateBounds.Max.Z; ++Z)
+		{
+			for (int32 Y = CandidateBounds.Min.Y; Y < CandidateBounds.Max.Y; ++Y)
+			{
+				for (int32 X = CandidateBounds.Min.X; X < CandidateBounds.Max.X; ++X)
+				{
+					const FIntVector VoxelPosition(X, Y, Z);
+					const FVector WorldPosition = VoxelWorld->LocalToGlobalFloat(FVector(VoxelPosition));
+					const FVector BoxLocalPosition = BoxTransform.InverseTransformPosition(WorldPosition);
+					if (FMath::Abs(BoxLocalPosition.X) > Request.BoxExtent.X ||
+						FMath::Abs(BoxLocalPosition.Y) > Request.BoxExtent.Y ||
+						FMath::Abs(BoxLocalPosition.Z) > Request.BoxExtent.Z)
+					{
+						continue;
+					}
+
+					if (!Data.GetValue(VoxelPosition, 0).IsEmpty())
+					{
+						continue;
+					}
+
+					Data.SetValue(VoxelPosition, FVoxelValue::Full());
+					Data.SetMaterial(VoxelPosition, SnowMaterial);
+					++ModifiedVoxelCount;
+				}
+			}
+		}
+	}
+
+	if (ModifiedVoxelCount > 0)
+	{
+		Result.AppliedAmount = Request.Amount;
+		Result.VoxelWorld = VoxelWorld;
+		Result.EditedBounds = CandidateBounds;
+		UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, CandidateBounds.Extend(1));
+	}
+
+	return Result;
 }
 
 bool PaintProcessedTeamSurface(
@@ -152,7 +242,10 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	const FDRSnowSurfaceAddRequest& Request)
 {
 	FDRSnowSurfaceEditResult Result;
-	if (Request.Radius <= 0.f || Request.Amount <= 0.f)
+	const bool bUsesOrientedBox = Request.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool;
+	if (Request.Amount <= 0.f ||
+		(bUsesOrientedBox && (Request.BoxExtent.X <= 0.f || Request.BoxExtent.Y <= 0.f || Request.BoxExtent.Z <= 0.f)) ||
+		(!bUsesOrientedBox && Request.Radius <= 0.f))
 	{
 		return Result;
 	}
@@ -161,6 +254,11 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
 		return Result;
+	}
+
+	if (bUsesOrientedBox)
+	{
+		return AddOrientedBoxSnow(VoxelWorld, Request);
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)

@@ -36,6 +36,18 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 		Result.AddedAmount = Request.Amount;
 		return Result;
 	}
+	if (Request.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool)
+	{
+		// 눈벽은 실제 복셀 부피가 먼저 만들어져야 원본 Volume도 같은 결과로 기록한다.
+		const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
+		if (EditResult.AppliedAmount <= 0.f)
+		{
+			return Result;
+		}
+
+		return VolumeStore.AddSnow(Request);
+	}
+
 	Result = VolumeStore.AddSnow(Request);
 	if (Result.AddedAmount > 0.f)
 	{

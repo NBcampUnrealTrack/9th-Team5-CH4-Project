@@ -86,9 +86,11 @@ bool UDRSnowAddComponent::ExecuteAddRequest(
 				Operation.WorldLocation = Request.WorldLocation;
 				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
 				Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
-				Operation.Radius = Request.Radius;
-				Operation.Amount = Request.Amount;
-				Operation.EditTool = Request.EditTool;
+			Operation.Radius = Request.Radius;
+			Operation.Amount = Request.Amount;
+			Operation.BoxExtent = Request.BoxExtent;
+			Operation.BoxRotation = Request.BoxRotation;
+			Operation.EditTool = Request.EditTool;
 				Operation.bAllowVirtualSurfaceFallback = Request.bAllowVirtualSurfaceFallback;
 				Operation.bUseVirtualSurface = Request.bUseVirtualSurface;
 				Operation.TeamId = Request.Context.TeamId;

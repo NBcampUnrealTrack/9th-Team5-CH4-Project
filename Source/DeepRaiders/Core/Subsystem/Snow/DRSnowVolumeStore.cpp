@@ -42,8 +42,58 @@ FDRSnowAddResult FDRSnowVolumeStore::AddSnow(const FDRSnowSurfaceAddRequest& Req
 {
 	FDRSnowAddResult Result;
 	Result.TeamId = Request.Context.TeamId;
-	if (Request.Radius <= 0.f || Request.Amount <= 0.f)
+	const bool bUsesOrientedBox = Request.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool;
+	if (Request.Amount <= 0.f ||
+		(bUsesOrientedBox && (Request.BoxExtent.X <= 0.f || Request.BoxExtent.Y <= 0.f || Request.BoxExtent.Z <= 0.f)) ||
+		(!bUsesOrientedBox && Request.Radius <= 0.f))
 	{
+		return Result;
+	}
+
+	if (bUsesOrientedBox)
+	{
+		const FTransform BoxTransform(Request.BoxRotation, Request.WorldLocation);
+		FBox WorldBounds(ForceInit);
+		for (int32 XSign : {-1, 1})
+		{
+			for (int32 YSign : {-1, 1})
+			{
+				for (int32 ZSign : {-1, 1})
+				{
+					WorldBounds += BoxTransform.TransformPosition(FVector(
+						Request.BoxExtent.X * XSign,
+						Request.BoxExtent.Y * YSign,
+						Request.BoxExtent.Z * ZSign));
+				}
+			}
+		}
+
+		const FIntVector MinCell = WorldToCell(WorldBounds.Min);
+		const FIntVector MaxCell = WorldToCell(WorldBounds.Max);
+		for (int32 Z = MinCell.Z; Z <= MaxCell.Z; ++Z)
+		{
+			for (int32 Y = MinCell.Y; Y <= MaxCell.Y; ++Y)
+			{
+				for (int32 X = MinCell.X; X <= MaxCell.X; ++X)
+				{
+					const FIntVector GlobalCell(X, Y, Z);
+					const FVector LocalPosition = BoxTransform.InverseTransformPosition(GetCellCenter(GlobalCell, CellSize));
+					if (FMath::Abs(LocalPosition.X) > Request.BoxExtent.X ||
+						FMath::Abs(LocalPosition.Y) > Request.BoxExtent.Y ||
+						FMath::Abs(LocalPosition.Z) > Request.BoxExtent.Z)
+					{
+						continue;
+					}
+
+					FDRSnowVolumeChunk& Chunk = FindOrCreateChunk(CellToChunkOrigin(GlobalCell));
+					if (AddSnowToCell(Chunk, GlobalCell, Request.Context.TeamId, Request.Amount))
+					{
+						Result.AddedAmount += Request.Amount;
+						++Result.TouchedCellCount;
+					}
+				}
+			}
+		}
 		return Result;
 	}
 

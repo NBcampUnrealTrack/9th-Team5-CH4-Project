@@ -19,6 +19,9 @@ enum class EDRSnowVoxelEditTool : uint8
 	// surface footprint만 표면에서 찾고, 실제 값 변경은 요청 방향으로만 적용한다.
 	DirectionalSurfaceTool UMETA(DisplayName = "Directional Surface Tool"),
 
+	// 월드 공간에서 회전 가능한 직육면체 부피를 직접 채운다. 설치형 눈벽 전용이다.
+	OrientedBoxTool UMETA(DisplayName = "Oriented Box Tool"),
+
 };
 
 UENUM(BlueprintType)
@@ -84,6 +87,14 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0"))
 	float Amount = 1.f;
+
+	/** OrientedBoxTool일 때 사용할 로컬 반쪽 크기다. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow", meta = (ClampMin = "0.0", Units = "cm"))
+	FVector BoxExtent = FVector::ZeroVector;
+
+	/** OrientedBoxTool일 때 BoxExtent가 따르는 월드 회전이다. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
+	FRotator BoxRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
@@ -175,6 +186,12 @@ struct DEEPRAIDERS_API FDRSnowAddOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	float Amount = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FVector_NetQuantize BoxExtent = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
+	FRotator BoxRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	EDRSnowVoxelEditTool EditTool = EDRSnowVoxelEditTool::SurfaceTool;
