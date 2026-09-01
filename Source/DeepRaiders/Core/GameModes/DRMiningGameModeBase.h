@@ -59,6 +59,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual bool ShouldSpawnAtStartSpot(AController* Player) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Coin", meta = (ClampMin = "0.01", Units = "s"))
 	float PassiveCoinInterval = 1.f;

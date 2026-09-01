@@ -27,6 +27,12 @@ void ADRMiningGameModeBase::BeginPlay()
 	bIsGameEnd = false;
 }
 
+bool ADRMiningGameModeBase::ShouldSpawnAtStartSpot(AController*)
+{
+	// 팀 변경을 반영하기 위해 최초 접속 시 저장된 StartSpot을 재사용하지 않는다.
+	return false;
+}
+
 bool ADRMiningGameModeBase::StartGame()
 {
 	if (!HasAuthority() || bIsGameStart)
