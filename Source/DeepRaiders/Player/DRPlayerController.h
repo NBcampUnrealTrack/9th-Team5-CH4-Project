@@ -92,7 +92,7 @@ private:
 	void InitializeStartingQuickSlot();
 
 	// Secondary 취소 정책을 가진 활성 이동 Ability에 입력을 전달 
-	bool TryForwardSecondaryCancelInput(int32 InputId);
+	bool TrySendSecondaryMovementCancelEvent(int32 InputId);
 	
 	UFUNCTION()
 	void RefreshPublicQuickSlotSnapshot();

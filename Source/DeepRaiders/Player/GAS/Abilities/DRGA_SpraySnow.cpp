@@ -80,7 +80,7 @@ void UDRGA_SpraySnow::ActivateAbility(const FGameplayAbilitySpecHandle Handle, c
 	}
 
 	StartSprayMontage();
-	StartSprayGameplayCue();
+	StartSprayPresentation();
 
 	if (ActorInfo->IsNetAuthority())
 	{
@@ -105,13 +105,14 @@ void UDRGA_SpraySnow::EndAbility(
 	bool bWasCancelled)
 {
 	StopSprayMontage();
-	StopSprayGameplayCue();
+	StopSprayPresentation();
 
-	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
+	if (ActorInfo != nullptr
+		&& ActorInfo->IsNetAuthority())
 	{
 		StopServerSpray();
 	}
-	
+
 	Super::EndAbility(
 		Handle,
 		ActorInfo,
@@ -658,48 +659,6 @@ const UDRSprayerWeaponDefinition* UDRGA_SpraySnow::GetSprayerDefinition() const
 	return Cast<UDRSprayerWeaponDefinition>(GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
 }
 
-void UDRGA_SpraySnow::StartSprayGameplayCue()
-{
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	if (ActorInfo == nullptr)
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-	UDRSprayerWeaponDefinition* WeaponDefinition = Cast<UDRSprayerWeaponDefinition>(GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo));
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	if (!IsValid(ASC) || !IsValid(WeaponDefinition) || !IsValid(AvatarActor))
-	{
-		return;
-	}
-
-	FGameplayCueParameters Parameters;
-	Parameters.SourceObject = WeaponDefinition;
-	Parameters.Instigator = AvatarActor;
-	Parameters.EffectCauser = AvatarActor;
-
-	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active, Parameters);
-}
-
-void UDRGA_SpraySnow::StopSprayGameplayCue()
-{
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	if (ActorInfo == nullptr)
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-	if (!IsValid(ASC))
-	{
-		return;
-	}
-	ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Weapon_Sprayer_Active);
-}
-
 void UDRGA_SpraySnow::StartSprayMontage()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
@@ -815,6 +774,77 @@ void UDRGA_SpraySnow::TryExecuteHitReaction(
 	Parameters.SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
 
 	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Player_Hit, Parameters);
+}
+
+void UDRGA_SpraySnow::StartSprayPresentation()
+{
+	if (!ActivePresentationEffectClass
+		|| ActivePresentationEffectHandle.IsValid())
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* ActorInfo =
+		GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	UObject* SourceObject =
+		GetSourceObject(
+			GetCurrentAbilitySpecHandle(),
+			ActorInfo);
+	
+	if (!IsValid(ASC)
+		|| !IsValid(SourceObject)
+		|| !SourceObject->IsA<UDRSprayerWeaponDefinition>())
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext =
+		ASC->MakeEffectContext();
+
+	EffectContext.AddSourceObject(SourceObject);
+
+	FGameplayEffectSpecHandle SpecHandle =
+		ASC->MakeOutgoingSpec(
+			ActivePresentationEffectClass,
+			GetAbilityLevel(
+				GetCurrentAbilitySpecHandle(),
+				ActorInfo),
+			EffectContext);
+
+	if (!SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	ActivePresentationEffectHandle =
+		ApplyGameplayEffectSpecToOwner(
+			GetCurrentAbilitySpecHandle(),
+			ActorInfo,
+			GetCurrentActivationInfo(),
+			SpecHandle);
+}
+
+void UDRGA_SpraySnow::StopSprayPresentation()
+{
+	if (!ActivePresentationEffectHandle.IsValid())
+	{
+		return;
+	}
+
+	BP_RemoveGameplayEffectFromOwnerWithHandle(
+		ActivePresentationEffectHandle,
+		-1);
+
+	ActivePresentationEffectHandle.Invalidate();
 }
 
 #if ENABLE_DRAW_DEBUG

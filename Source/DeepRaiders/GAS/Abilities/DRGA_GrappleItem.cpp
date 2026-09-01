@@ -2,7 +2,7 @@
 #include "DRGA_GrappleItem.h"
 
 #include "AbilitySystemComponent.h"
-#include "Abilities/Tasks/AbilityTask_WaitInputPress.h"
+#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Grapple/DRGrappleTargetActor.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -84,11 +84,10 @@ void UDRGA_GrappleItem::ActivateAbility(
 		|| !ResolveSelectedItem(ActorInfo, ActiveItemDefinition, Inventory, ActiveInstanceId))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-
 		return;
 	}
 
-	StartCancelInputTask();
+	StartCancelEventTask();
 	StartTargeting();
 }
 
@@ -135,27 +134,21 @@ void UDRGA_GrappleItem::StartTargeting()
 	TargetDataTask->FinishSpawningActor(this, SpawnedTargetActor);
 }
 
-void UDRGA_GrappleItem::StartCancelInputTask()
+void UDRGA_GrappleItem::StartCancelEventTask()
 {
-	CancelInputTask =
-		UAbilityTask_WaitInputPress::WaitInputPress(
-			this,
-			false);
-
-	if (!IsValid(CancelInputTask))
+	CancelEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,
+		DRGameplayTags::Event_MovementAction_Cancel, nullptr, true, true);
+	
+	if (!IsValid(CancelEventTask))
 	{
 		return;
 	}
 
-	CancelInputTask->OnPress.AddDynamic(
-		this,
-		&ThisClass::HandleCancelInputPressed);
-
-	CancelInputTask->ReadyForActivation();
+	CancelEventTask->EventReceived.AddDynamic(this, &ThisClass::HandleCancelEventReceived);
+	CancelEventTask->ReadyForActivation();
 }
 
-void UDRGA_GrappleItem::HandleTargetDataReady(
-	const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
 {
 	if (!IsActive()
 		|| TargetData.Num() != 1)
@@ -169,19 +162,32 @@ void UDRGA_GrappleItem::HandleTargetDataReady(
 
 	if (ActorInfo == nullptr)
 	{
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
 
 	if (ActorInfo->IsNetAuthority())
 	{
-		FVector ServerHookLocation;
-
-		if (!ValidateServerTargetData(TargetData, ServerHookLocation)
-			|| !StartAuthoritativeMovement(ServerHookLocation))
+		FVector ServerTargetLocation;
+		
+		const EDRGrappleTargetValidationResult ValidationResult = ValidateServerTargetData(TargetData, ServerTargetLocation);
+		
+		if (ValidationResult == EDRGrappleTargetValidationResult::Succeeded)
 		{
-			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+			if (!StartAuthoritativeMovement(ServerTargetLocation))
+			{
+				QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+			}
+			
+			return;
 		}
 
+		if (ValidationResult == EDRGrappleTargetValidationResult::Failed)
+		{
+			PlayFailedGrappleGameplayCue(ServerTargetLocation);
+		}
+		
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
 
@@ -194,25 +200,36 @@ void UDRGA_GrappleItem::HandleTargetDataReady(
 
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
 
-	if (ClientHit == nullptr
-		|| !StartPredictedMovement(ClientHit->ImpactPoint))
+	if (ClientHit == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		return;
 	}
+	
+	if (ADRGrappleTargetActor::IsValidGrappleSurface(*ClientHit))
+	{
+		if (!StartPredictedMovement(ClientHit->ImpactPoint))
+		{
+			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		}
+		
+		return;
+	}
+	
+	const FVector FailedLocation = ClientHit->IsValidBlockingHit() ? ClientHit->ImpactPoint : ClientHit->TraceEnd;
+	
+	PlayFailedGrappleGameplayCue(FailedLocation);
+	QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 }
 
-void UDRGA_GrappleItem::HandleTargetDataCanceled(
-	const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleItem::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
 {
-	QueueEndGrapple(
-		EDRMovementActionEndReason::Cancelled);
+	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
 
-void UDRGA_GrappleItem::HandleCancelInputPressed(
-	float TimeWaited)
+void UDRGA_GrappleItem::HandleCancelEventReceived(FGameplayEventData Payload)
 {
-	QueueEndGrapple(
-		EDRMovementActionEndReason::Cancelled);
+	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
 
 bool UDRGA_GrappleItem::StartPredictedMovement(
@@ -261,6 +278,7 @@ bool UDRGA_GrappleItem::StartPredictedMovement(
 
 	bMovementStarted = true;
 	ApplyMovementActionTag();
+	StartGrappleGameplayCue(HookLocation);
 
 	return true;
 }
@@ -322,6 +340,7 @@ bool UDRGA_GrappleItem::StartAuthoritativeMovement(
 
 	bMovementStarted = true;
 	ApplyMovementActionTag();
+	StartGrappleGameplayCue(HookLocation);
 
 	return true;
 }
@@ -402,11 +421,10 @@ void UDRGA_GrappleItem::RemoveMovementActionTag()
 	bMovementActionTagApplied = false;
 }
 
-bool UDRGA_GrappleItem::ValidateServerTargetData(
-	const FGameplayAbilityTargetDataHandle& TargetData,
-	FVector& OutHookLocation) const
+UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateServerTargetData(
+	const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutTargetLocation) const
 {
-	OutHookLocation = FVector::ZeroVector;
+	OutTargetLocation = FVector::ZeroVector;
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 
@@ -415,17 +433,13 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 		|| TargetData.Num() != 1
 		|| !IsValid(ActiveItemDefinition))
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
-
 	APlayerController* PlayerController = ActorInfo->PlayerController.Get();
-
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-
 	UWorld* World = GetWorld();
 
 	if (ClientHit == nullptr
@@ -433,7 +447,7 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 		|| !IsValid(AvatarActor)
 		|| !IsValid(World))
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	FVector ServerViewLocation;
@@ -442,23 +456,22 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 
 	if (FVector::Dist(ServerViewLocation, ClientHit->TraceStart) > GrappleSettings.ServerViewOriginTolerance)
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector ClientAimDirection = (ClientHit->TraceEnd - ClientHit->TraceStart).GetSafeNormal();
 
 	if (ClientAimDirection.IsNearlyZero())
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const float MaxAngle = FMath::Clamp(GrappleSettings.ServerAimAngleTolerance, 0.f, 90.f);
-
 	const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(MaxAngle));
 
 	if (FVector::DotProduct(ClientAimDirection, ServerViewRotation.Vector()) < MinimumDot)
 	{
-		return false;
+		return EDRGrappleTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector TraceEnd = ServerViewLocation + ClientAimDirection * GrappleSettings.MaxDistance;
@@ -474,12 +487,17 @@ bool UDRGA_GrappleItem::ValidateServerTargetData(
 	if (!bBlockingHit
 		|| !ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
 	{
-		return false;
+		OutTargetLocation = ServerHit.TraceEnd;
+		return EDRGrappleTargetValidationResult::Failed;
 	}
 
-	OutHookLocation = ServerHit.ImpactPoint;
+	OutTargetLocation = ServerHit.ImpactPoint;
+	if (!ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
+	{
+		return EDRGrappleTargetValidationResult::Failed;
+	}
 
-	return true;
+	return EDRGrappleTargetValidationResult::Succeeded;
 }
 
 int32 UDRGA_GrappleItem::ResolveSessionId() const
@@ -572,11 +590,11 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 	}
-	// 훅 방향과 반대 방향으로 가속
-	else if (bMovingAway)
-	{
-		QueueEndGrapple(EDRMovementActionEndReason::Completed);
-	}
+	// // 훅 방향과 반대 방향으로 가속
+	// else if (bMovingAway)
+	// {
+	// 	QueueEndGrapple(EDRMovementActionEndReason::Completed);
+	// }
 }
 
 void UDRGA_GrappleItem::HandleMovementActionEnded(
@@ -665,6 +683,73 @@ void UDRGA_GrappleItem::StopMovementAction(
 	bEndingGrapple = false;
 }
 
+void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
+{
+	if (bGrappleGameplayCueActive)
+	{
+		return;
+	}
+	
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	
+	if (!IsValid(ASC)
+		|| !IsValid(AvatarActor)
+		|| !IsValid(ActiveItemDefinition))
+	{
+		return;
+	}
+	
+	FGameplayCueParameters Parameters;
+	Parameters.Location = InHookLocation;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = ActiveItemDefinition;
+	
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active, Parameters);
+	
+	bGrappleGameplayCueActive = true;	
+}
+
+void UDRGA_GrappleItem::PlayFailedGrappleGameplayCue(const FVector& FailedLocation)
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+
+	if (!IsValid(ASC) || !IsValid(AvatarActor) || FailedLocation.ContainsNaN())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = FailedLocation;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = ActiveItemDefinition;
+
+	// 실패 연출은 어빌리티 수명과 무관하게 스스로 재생을 끝내는 일회성 Cue다.
+	ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Failed, Parameters);
+}
+
+void UDRGA_GrappleItem::StopGrappleGameplayCue()
+{
+	if (!bGrappleGameplayCueActive)
+	{
+		return;
+	}
+	
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active);
+	}
+	
+	bGrappleGameplayCueActive = false;
+}
+
 void UDRGA_GrappleItem::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
@@ -691,14 +776,15 @@ void UDRGA_GrappleItem::EndAbility(
 		TargetDataTask = nullptr;
 	}
 
-	if (IsValid(CancelInputTask))
+	if (IsValid(CancelEventTask))
 	{
-		CancelInputTask->EndTask();
-		CancelInputTask = nullptr;
+		CancelEventTask->EndTask();
+		CancelEventTask = nullptr;
 	}
 
 	StopMovementAction(EndReason);
 	RemoveMovementActionTag();
+	StopGrappleGameplayCue();
 	
 	ActiveItemDefinition = nullptr;
 	ActiveInstanceId.Invalidate();

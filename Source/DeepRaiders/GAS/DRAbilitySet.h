@@ -6,6 +6,7 @@
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
+#include "DeepRaiders/GAS/DRGameplayEffectData.h"
 #include "DRAbilitySet.generated.h"
 
 class UAbilitySystemComponent;
@@ -26,19 +27,6 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
 	EDRAbilityInputId InputID = EDRAbilityInputId::Primary;
-};
-
-// 아이템이 장착된 동안 적용할 GameplayEffect 항목
-USTRUCT(BlueprintType)
-struct FDRAbilitySet_GameplayEffect
-{
-	GENERATED_BODY()
-public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
-	TSubclassOf<UGameplayEffect> GameplayEffect = nullptr;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect", meta = (ClampMin = 0.0, UIMin = 0.0))
-	float EffectLevel = 1.0f;	
 };
 
 // ItemAbilitySet이 제공한 Handle 모음
@@ -77,6 +65,6 @@ protected:
 	TArray<FDRAbilitySet_GameplayAbility> GrantedAbilities;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability Set")
-	TArray<FDRAbilitySet_GameplayEffect> GrantedEffects;
+	TArray<FDRGameplayEffectData> GrantedEffects;
 	
 };

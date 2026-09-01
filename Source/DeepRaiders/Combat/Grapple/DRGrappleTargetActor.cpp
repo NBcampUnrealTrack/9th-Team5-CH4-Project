@@ -46,7 +46,7 @@ void ADRGrappleTargetActor::Tick(
 
 bool ADRGrappleTargetActor::UpdateTargeting()
 {
-	bHasValidAimData = false;
+	bHasAimData = false;
 
 	if (!IsValid(PrimaryPC)
 		|| !IsValid(SourceActor))
@@ -77,31 +77,47 @@ bool ADRGrappleTargetActor::UpdateTargeting()
 	const bool bBlockingHit = World->LineTraceSingleByChannel(AimHit, ViewLocation, TraceEnd, 
 		Settings.AimTraceChannel, QueryParams);
 
-	if (!bBlockingHit
-		|| !IsValidGrappleSurface(AimHit))
+	if (bBlockingHit)
 	{
-		DestroyAimMarker();
-		return false;
+		// 다른 액터와의 충돌도 실패 연출 위치로 전달
+		CachedAimHit = AimHit;
+	}
+	else
+	{
+		// 허공을 조준한 경우에도 최대 사거리 지점을 포함한 TargetData 생성
+		CachedAimHit = FHitResult();
+		CachedAimHit.TraceStart = ViewLocation;
+		CachedAimHit.TraceEnd = TraceEnd;
+		CachedAimHit.Location = TraceEnd;
+		CachedAimHit.ImpactPoint = TraceEnd;
+		CachedAimHit.Distance = Settings.MaxDistance;
 	}
 	
-	CachedAimHit = AimHit;
-	bHasValidAimData = true;
+	bHasAimData = true;
 
-	UpdateAimMarker(AimHit);
-
+	if (bBlockingHit && IsValidGrappleSurface(AimHit))
+	{
+		UpdateAimMarker(AimHit);
+	}
+	else
+	{
+		DestroyAimMarker();
+	}
+	
 	return true;
-}
-
-bool ADRGrappleTargetActor::IsConfirmTargetingAllowed()
-{
-	return bHasValidAimData;
 }
 
 void ADRGrappleTargetActor::ConfirmTargetingAndContinue()
 {
-	if (!ShouldProduceTargetData()
-		|| !IsConfirmTargetingAllowed())
+	if (!ShouldProduceTargetData())
 	{
+		return;
+	}
+	
+	// 클릭 시점의 조준 정보를 다시 계산한다.
+	if (!UpdateTargeting() || !bHasAimData)
+	{
+		CanceledDelegate.Broadcast(FGameplayAbilityTargetDataHandle());
 		return;
 	}
 
@@ -129,7 +145,8 @@ bool ADRGrappleTargetActor::IsValidGrappleSurface(const FHitResult& Hit)
 		return true;
 	}
 
-	return HitComponent->GetCollisionObjectType() == ECC_WorldStatic;
+	return HitComponent->GetCollisionObjectType() == ECC_WorldStatic
+		|| HitComponent->GetCollisionObjectType() == ECC_WorldDynamic;
 }
 
 void ADRGrappleTargetActor::UpdateAimMarker(const FHitResult& Hit)

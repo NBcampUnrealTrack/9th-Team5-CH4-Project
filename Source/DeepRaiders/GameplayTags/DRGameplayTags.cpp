@@ -123,6 +123,11 @@ namespace DRGameplayTags
 		"Search skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_HotPack,
+		"Ability.Skill.HotPack",
+		"Hot pack skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
@@ -146,6 +151,11 @@ namespace DRGameplayTags
 		Event_Ability_Throw_Release,
 		"Event.Ability.Throw.Release",
 		"Throwable montage release point.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Event_MovementAction_Cancel,
+		"Event.MovementAction.Cancel",
+		"Requests cancellation of the active movement action.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Weapon_Ranged,
@@ -186,6 +196,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_Search,
 		"Cooldown.Skill.Search",
 		"Cooldown for the search skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_HotPack,
+		"Cooldown.Skill.HotPack",
+		"Cooldown for the hot pack skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,
@@ -206,6 +221,11 @@ namespace DRGameplayTags
 		GameplayCue_VFX_Effect_MoveSpeed,
 		"GameplayCue.VFX.Effect.MoveSpeed",
 		"MoveSpeed effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Effect_SpeedSlow,
+		"GameplayCue.VFX.Effect.SpeedSlow",
+		"MoveSpeed slow effect visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
@@ -404,4 +424,15 @@ namespace DRGameplayTags
 		GameplayCue_Player_Hit,
 		"GameplayCue.Player.Hit",
 		"Player hit presentation.");
+	
+	// Gameplay Cue - Movement Action
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_MovementAction_Grapple_Active,
+		"GameplayCue.MovementAction.Grapple.Active",
+		"Persistent hook and cable presentation for an active grapple movement action.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_MovementAction_Grapple_Failed,
+		"GameplayCue.MovementAction.Grapple.Failed",
+		"One-shot cable presentation for a failed grapple attempt.");
 }

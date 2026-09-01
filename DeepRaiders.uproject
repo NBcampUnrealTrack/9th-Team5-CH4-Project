@@ -56,6 +56,10 @@
 		{
 			"Name": "OnlineSubsystemNull",
 			"Enabled": true
+		},
+		{
+			"Name": "CableComponent",
+			"Enabled": true
 		}
 	]
 }

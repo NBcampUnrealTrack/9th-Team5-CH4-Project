@@ -31,12 +31,14 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SuperJump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_HotPack);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_MovementAction_Cancel);
 	
 	// Cooldown
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
@@ -47,6 +49,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SuperJump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_HotPack);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
@@ -68,6 +71,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_SpeedSlow);
 	
 	// Weapon Effect
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
@@ -119,4 +123,8 @@ namespace DRGameplayTags
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);
+	
+	// Gameplay Cue - Movement Action
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Failed);
 }

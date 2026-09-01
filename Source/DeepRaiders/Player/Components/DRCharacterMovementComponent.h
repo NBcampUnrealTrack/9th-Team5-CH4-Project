@@ -64,6 +64,9 @@ public:
     /** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
     virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
     
+    // Falling 진입 전 얻은 횡방향 관성이 MaxWalkSpeed에 의해 즉시 제한되지 않도록 한다
+    virtual float GetMaxSpeed() const override;
+    
     // 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
     void SetCustomMovementMode(EDRCustomMovementMode NewMode);
     
