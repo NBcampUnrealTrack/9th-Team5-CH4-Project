@@ -282,6 +282,22 @@ FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_
     return ClientPredictionData;
 }
 
+float UDRCharacterMovementComponent::GetMaxSpeed() const
+{
+    const float ConfiguredMaxSpeed = Super::GetMaxSpeed();
+    
+    if (MovementMode != MOVE_Falling)
+    {
+        return ConfiguredMaxSpeed;
+    }
+    
+    // 이동 액션으로 얻은 현재 횡방향 속도는 Falling 진입 후에도 허용한다.
+    // 현재 속도보다 높은 값을 새로 제공하지 않으므로 일반 점프의 최대 이동 속도는 그대로 유지된다.
+    const float CurrentLateralSpeed = ProjectToGravityFloor(Velocity).Size();
+    
+    return FMath::Max(ConfiguredMaxSpeed, CurrentLateralSpeed);
+}
+
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
 {
     if (NewMode == EDRCustomMovementMode::None)
@@ -326,16 +342,30 @@ void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
         return;
     }
     
+    const FVector ExitVelocity = Velocity;
+    
     FFindFloorResult FloorResult;
     FindFloor(UpdatedComponent->GetComponentLocation(), FloorResult, false);
     
-    if (FloorResult.IsWalkableFloor())
+    const float FloorDistance = FloorResult.bLineTrace ? FloorResult.LineDist : FloorResult.FloorDist;
+    const float VerticalSpeed = GetGravitySpaceZ(ExitVelocity);
+    
+    // FindFloor는 MaxStepHeight 범위까지 바닥을 찾을 수 있다.
+    // 실제 Walking 허용 높이에 있고 바닥으로 이동 중일 때만 지상 이동으로 복귀한다.
+    const bool bCanReturnToWalking = FloorResult.IsWalkableFloor() && FloorDistance <= MAX_FLOOR_DIST 
+        && VerticalSpeed <= KINDA_SMALL_NUMBER;
+    
+    if (bCanReturnToWalking)
     {
         SetMovementMode(MOVE_Walking);
         return;
     }
     
     SetMovementMode(MOVE_Falling);
+    
+    // Custom Mode에서 계산된 속도를 Falling에 그대로 넘긴다.
+    // 이후 중력과 공중 제어만 일반 PhysFalling 규칙으로 적용된다.
+    Velocity = ExitVelocity;
 }
 
 void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
@@ -365,6 +395,13 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         || !MovementAction->IsMovementActionActive())
     {
         RestoreDefaultMovementMode();
+        
+        if (HasValidData())
+        {
+            // 이동 모드가 전환된 같은 프레임의 남은 시간도 새 물리 모드로 처리한다.
+            StartNewPhysics(DeltaTime, Iterations);
+        }
+        
         return;
     }
     

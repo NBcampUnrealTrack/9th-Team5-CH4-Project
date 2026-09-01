@@ -43,6 +43,13 @@ protected:
         bool bWasCancelled) override;
 
 private:
+    enum class EDRGrappleTargetValidationResult : uint8
+    {
+        InvalidRequest,
+        Failed,
+        Succeeded,
+    };
+    
     bool ResolveSelectedItem(const FGameplayAbilityActorInfo* ActorInfo, const UDRItemDefinition* ExpectedDefinition,
         UDRInventoryComponent*& OutInventory, FGuid& OutInstanceId) const;
 
@@ -53,7 +60,8 @@ private:
     void StartTargeting();
     void StartCancelEventTask();
 
-    bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutHookLocation) const;
+    EDRGrappleTargetValidationResult ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData,
+        FVector& OutTargetLocation) const;
 
     FDRMovementActionState BuildMovementActionState(const FVector& HookLocation) const;
 
@@ -69,13 +77,17 @@ private:
     void ApplyQueuedGrappleEnd();
 
     void StopMovementAction(EDRMovementActionEndReason EndReason);
-
-    // GameplayCue
+    
+#pragma region GameplayCue
     // 성공한 훅 위치를 모든 클라이언트의 지속형 GameplayCue에 전달한다.
     void StartGrappleGameplayCue(const FVector& InHookLocation);
     
     // EndAbility의 모든 종료 경로에서 지속형 GameplayCue를 제거한다.
     void StopGrappleGameplayCue();
+    
+    void PlayFailedGrappleGameplayCue(const FVector& FailedLocation);
+
+#pragma endregion
     
     UFUNCTION()
     void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
@@ -89,7 +101,7 @@ private:
     void HandleMovementActionEnded(EDRMovementActionEndReason EndReason);
     
     void HandleMovementActionSimulated(const FDRMovementActionSimulationResult& Result);
-
+    
 protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple", meta = (ShowOnlyInnerProperties))
     FDRGrappleAbilitySettings GrappleSettings;

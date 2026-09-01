@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DRGrappleAbilityTypes.generated.h"
 
 class UNiagaraSystem;
@@ -39,7 +40,7 @@ struct DEEPRAIDERS_API FDRGrappleAbilitySettings
 	float ServerViewOriginTolerance = 100.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Trace")
-	TEnumAsByte<ECollisionChannel> AimTraceChannel = ECC_Visibility;
+	TEnumAsByte<ECollisionChannel> AimTraceChannel = DRCollisionChannels::Grapple;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Presentation")
 	TObjectPtr<UNiagaraSystem> AimMarkerSystem;	

@@ -20,9 +20,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void StartTargeting(UGameplayAbility* Ability) override;
-
-	virtual bool IsConfirmTargetingAllowed() override;
-
+	
 	virtual void ConfirmTargetingAndContinue() override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -42,5 +40,5 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> AimMarkerComponent;
 
-	bool bHasValidAimData = false;
+	bool bHasAimData = false;
 };

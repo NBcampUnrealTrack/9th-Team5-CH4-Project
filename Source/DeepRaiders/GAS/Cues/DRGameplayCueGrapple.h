@@ -23,6 +23,8 @@ public:
 	virtual void ReuseAfterRecycle() override;
 	
 protected:
+	virtual bool OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
+	
 	virtual bool OnActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
 	
 	virtual bool WhileActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
@@ -43,8 +45,12 @@ private:
 	bool ResolveStartAttachment(AActor* Target, USceneComponent*& OutComponent, FName& OutSocketName) const;
 	
 	FVector GetCurrentStartLocation() const;
+	float CalculatePhaseDuration(const FVector& StartLocation, const FVector& EndLocation, float Speed) const;
 	
 	void UpdateHookLocation(const FVector& NewLocation);
+	
+	// 현재 훅 위치에서 발사 지점으로 돌아가는 단계를 시작
+	void BeginRetraction();
 	void FinishPresentation();
 	void ResetPresentationState();
 	
@@ -68,16 +74,20 @@ private:
 	FName LaunchSocketName = TEXT("VFXPoint");
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
-		meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
-	float HookTravelDuration = 0.1f;
-	
+		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))
+	float HookTravelSpeed = 6000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
+		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))
+	float HookRetractSpeed = 8000.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
 		meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
-	float HookRetractDuration = 0.12f;
+	float MinimumPhaseDuration = 0.05f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Cable",
 		meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
-	float CableLengthScale = 1.02f;
+	float CableLengthScale = 1.f;
 	
 	TWeakObjectPtr<USceneComponent> StartComponent;
 	
@@ -90,6 +100,10 @@ private:
 	float PhaseElapsedTime = 0.f;
 	
 	EPresentationPhase PresentationPhase = EPresentationPhase::Inactive;
+	
+	bool bRetractAfterExtension = false;
+	
+	float CurrentPhaseDuration = 0.f;
 };
 
 

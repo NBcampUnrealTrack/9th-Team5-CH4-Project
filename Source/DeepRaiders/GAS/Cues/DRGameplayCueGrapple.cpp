@@ -14,6 +14,7 @@ ADRGameplayCueGrapple::ADRGameplayCueGrapple(const FObjectInitializer& ObjectIni
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	
 	SetReplicates(false);
 	
@@ -30,16 +31,24 @@ ADRGameplayCueGrapple::ADRGameplayCueGrapple(const FObjectInitializer& ObjectIni
 	
 	HookRoot = CreateDefaultSubobject<USceneComponent>(TEXT("HookRoot"));
 	HookRoot->SetupAttachment(PresentationRoot);
+	// 위치와 회전이 플레이어 손의 움직임을 따라가지 않도록 월드 공간에 고정한다.
+	HookRoot->SetAbsolute(true, true, false);
 
 	CableComponent = CreateDefaultSubobject<UCableComponent>(TEXT("CableComponent"));
 	CableComponent->SetupAttachment(PresentationRoot);
+	CableComponent->PrimaryComponentTick.TickGroup = TG_PostPhysics;
+	CableComponent->AddTickPrerequisiteActor(this);
 	
 	CableComponent->bAttachStart = true;
 	CableComponent->bAttachEnd = true;
 	CableComponent ->SetAttachEndToComponent(HookRoot);
+	
+	CableComponent->EndLocation = FVector::ZeroVector;
 	CableComponent->CableLength = 100.f;
-	CableComponent->NumSegments = 10;
-	CableComponent->SolverIterations = 8;
+	CableComponent->NumSegments = 8;
+	CableComponent->SolverIterations = 16;
+	CableComponent->SubstepTime = 1.f / 120.f;
+	CableComponent->bUseSubstepping = true;
 	CableComponent->bEnableStiffness = true;
 	CableComponent->bEnableCollision = false;
 	CableComponent->CableGravityScale = 0.f;
@@ -74,18 +83,25 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 	{
 		PhaseElapsedTime += DeltaSeconds;
 		
-		const float Alpha = HookTravelDuration > KINDA_SMALL_NUMBER ?
-		 FMath::Clamp(PhaseElapsedTime / HookTravelDuration, 0.f, 1.f) : 1.f;
-		const float EasedAlpha = FMath::InterpEaseOut(0.f, 1.f, Alpha, 2.f);
-		
-		UpdateHookLocation(FMath::Lerp(LaunchLocation, TargetLocation, EasedAlpha));
+		const float Alpha = CurrentPhaseDuration > KINDA_SMALL_NUMBER
+			? FMath::Clamp(PhaseElapsedTime / CurrentPhaseDuration, 0.f, 1.f)
+			: 1.f;
+
+		UpdateHookLocation(FMath::Lerp(LaunchLocation, TargetLocation, Alpha));
 		
 		if (Alpha >= 1.f)
 		{
-			PresentationPhase = EPresentationPhase::Attached;
 			PhaseElapsedTime = 0.f;
-			
 			UpdateHookLocation(TargetLocation);
+			
+			if (bRetractAfterExtension)
+			{
+				BeginRetraction();
+			}
+			else
+			{
+				PresentationPhase = EPresentationPhase::Attached;
+			}
 		}
 		
 		break;
@@ -99,13 +115,12 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 	{
 		PhaseElapsedTime += DeltaSeconds;
 		
-		const float Alpha = HookRetractDuration > KINDA_SMALL_NUMBER ?
-			FMath::Clamp(PhaseElapsedTime / HookRetractDuration, 0.f, 1.f) : 1.f;
-		const float EasedAlpha = FMath::InterpEaseIn(0.f, 1.f, Alpha, 2.f);
-		
+		const float Alpha = CurrentPhaseDuration > KINDA_SMALL_NUMBER
+			? FMath::Clamp(PhaseElapsedTime / CurrentPhaseDuration, 0.f, 1.f)
+			: 1.f;
 		const FVector RetractTarget = GetCurrentStartLocation();
 		
-		UpdateHookLocation(FMath::Lerp(RetractStartLocation, RetractTarget, EasedAlpha));
+		UpdateHookLocation(FMath::Lerp(RetractStartLocation, RetractTarget, Alpha));
 		
 		if (Alpha >= 1.f)
 		{
@@ -121,13 +136,33 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 	}
 }
 
+bool ADRGameplayCueGrapple::OnExecute_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
+{
+	bRetractAfterExtension = true;
+	
+	if (!BeginPresentation(MyTarget, Parameters))
+	{
+		GameplayCueFinishedCallback();
+		return false;
+	}
+	
+	if (PresentationPhase == EPresentationPhase::Attached)
+	{
+		BeginRetraction();
+	}
+	
+	return true;
+}
+
 bool ADRGameplayCueGrapple::OnActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
 {
+	bRetractAfterExtension = false;
 	return BeginPresentation(MyTarget, Parameters);
 }
 
 bool ADRGameplayCueGrapple::WhileActive_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
 {
+	bRetractAfterExtension = false;
 	return BeginPresentation(MyTarget, Parameters);
 }
 
@@ -139,25 +174,7 @@ bool ADRGameplayCueGrapple::OnRemove_Implementation(AActor* MyTarget, const FGam
 		return true;
 	}
 	
-	if (PresentationPhase == EPresentationPhase::Retracting)
-	{
-		return true;
-	}
-	
-	RetractStartLocation = HookRoot->GetComponentLocation();
-	
-	PhaseElapsedTime = 0.f;
-	PresentationPhase = EPresentationPhase::Retracting;
-	
-	if (HookRetractDuration <= KINDA_SMALL_NUMBER)
-	{
-		FinishPresentation();
-	}
-	else
-	{
-		SetActorTickEnabled(true);
-	}
-	
+	BeginRetraction();
 	return true;
 }
 
@@ -198,8 +215,10 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	TargetLocation = Parameters.Location;
 	RetractStartLocation = FVector::ZeroVector;
 	PhaseElapsedTime = 0.f;
+	CurrentPhaseDuration = CalculatePhaseDuration(LaunchLocation, TargetLocation, HookTravelSpeed);
 	
 	CableComponent->SetAttachEndToComponent(HookRoot);
+	CableComponent->EndLocation = FVector::ZeroVector;
 	CableComponent->SetVisibility(true, true);
 	
 	const bool bHasHookMesh = IsValid(HookMeshComponent->GetStaticMesh());
@@ -215,11 +234,9 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	UpdateHookLocation(LaunchLocation);
 	
-	if (HookTravelDuration <= KINDA_SMALL_NUMBER
-		|| FVector::PointsAreNear(LaunchLocation, TargetLocation, KINDA_SMALL_NUMBER))
+	if (CurrentPhaseDuration <= KINDA_SMALL_NUMBER)
 	{
 		PresentationPhase = EPresentationPhase::Attached;
-		
 		UpdateHookLocation(TargetLocation);
 	}
 	else
@@ -286,6 +303,18 @@ FVector ADRGameplayCueGrapple::GetCurrentStartLocation() const
 	return ResolvedStartComponent->GetSocketLocation(StartSocketName);
 }
 
+float ADRGameplayCueGrapple::CalculatePhaseDuration(const FVector& StartLocation, const FVector& EndLocation, float Speed) const
+{
+	const float Distance = FVector::Distance(StartLocation, EndLocation);
+
+	if (Distance <= KINDA_SMALL_NUMBER || Speed <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	return FMath::Max(Distance / Speed, MinimumPhaseDuration);
+}
+
 void ADRGameplayCueGrapple::UpdateHookLocation(const FVector& NewLocation)
 {
 	if (!IsValid(HookRoot)
@@ -297,8 +326,48 @@ void ADRGameplayCueGrapple::UpdateHookLocation(const FVector& NewLocation)
 	HookRoot->SetWorldLocation(NewLocation);
 
 	const float CurrentDistance = FVector::Distance(CableComponent->GetComponentLocation(), NewLocation);
-
 	CableComponent->CableLength = FMath::Max(CurrentDistance * CableLengthScale, 1.f);
+
+	// 빠른 VFX 이동은 이전 프레임 Transform을 사용한 객체 모션 블러가 과하게 보일 수 있다.
+	if (IsValid(HookMeshComponent))
+	{
+		HookMeshComponent->ResetSceneVelocity();
+	}
+
+	CableComponent->ResetSceneVelocity();
+}
+
+void ADRGameplayCueGrapple::BeginRetraction()
+{
+	if (PresentationPhase == EPresentationPhase::Inactive
+		|| PresentationPhase == EPresentationPhase::Retracting)
+	{
+		return;
+	}
+	
+	if (!IsValid(HookRoot))
+	{
+		FinishPresentation();
+		return;
+	}
+	
+	bRetractAfterExtension = false;
+	RetractStartLocation = HookRoot->GetComponentLocation();
+	
+	const FVector RetractTarget = GetCurrentStartLocation();
+	CurrentPhaseDuration = CalculatePhaseDuration(RetractStartLocation, RetractTarget, HookRetractSpeed);
+	
+	PhaseElapsedTime = 0.f;
+	PresentationPhase = EPresentationPhase::Retracting;
+	
+	if (CurrentPhaseDuration <= KINDA_SMALL_NUMBER)
+	{
+		FinishPresentation();
+	}
+	else
+	{
+		SetActorTickEnabled(true);
+	}	
 }
 
 void ADRGameplayCueGrapple::FinishPresentation()
@@ -310,8 +379,9 @@ void ADRGameplayCueGrapple::FinishPresentation()
 void ADRGameplayCueGrapple::ResetPresentationState()
 {
 	PresentationPhase = EPresentationPhase::Inactive;
-
 	PhaseElapsedTime = 0.f;
+	CurrentPhaseDuration = 0.f;
+	bRetractAfterExtension = false;
 
 	StartComponent.Reset();
 	StartSocketName = NAME_None;
@@ -352,5 +422,3 @@ void ADRGameplayCueGrapple::ReuseAfterRecycle()
 
 	ResetPresentationState();
 }
-
-
