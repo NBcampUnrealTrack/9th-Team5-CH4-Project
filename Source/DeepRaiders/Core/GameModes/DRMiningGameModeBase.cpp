@@ -40,6 +40,7 @@ bool ADRMiningGameModeBase::StartGame()
 		return false;
 	}
 
+	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
 	ResetGameState();
 	bIsGameStart = true;
 	bIsGameEnd = false;
@@ -183,6 +184,7 @@ void ADRMiningGameModeBase::ClearGameResultText()
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetGameTimerState(0, false, false);
 	}
 }
 
