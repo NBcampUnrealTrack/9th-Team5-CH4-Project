@@ -426,23 +426,37 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         // 기존 CharacterMovement의 공중 제어 계산을 재사용
         Input.InputAcceleration = GetFallingLateralAcceleration(TimeTick);
         Input.Gravity = -GetGravityDirection() * GetGravityZ();
+        // 가공하지 않은 원본 입력 가속도. Zipline ManualTraverse가 W/S 방향 판단에 사용한다.
+        Input.RawAcceleration = Acceleration;
         
         FDRMovementActionSimulationOutput Output;
         MovementAction->EvaluateMovementContribution(Input, Output);
-    
-        Velocity += Output.AdditionalAcceleration * TimeTick;
-    
-        if (Output.bApplyGravity)
+
+        FVector Adjusted;
+
+        if (Output.bOverrideVelocity)
         {
-            Velocity = NewFallVelocity(Velocity, Input.Gravity, TimeTick);
+            // Zipline처럼 기존 속도/중력/가속을 완전히 무시하는 액션 전용 경로다.
+            Velocity = Output.OverrideVelocity;
+            Adjusted = Velocity * TimeTick;
         }
-    
-        if (Output.MaxSpeed > KINDA_SMALL_NUMBER)
+        else
         {
-            Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
+            Velocity += Output.AdditionalAcceleration * TimeTick;
+
+            if (Output.bApplyGravity)
+            {
+                Velocity = NewFallVelocity(Velocity, Input.Gravity, TimeTick);
+            }
+
+            if (Output.MaxSpeed > KINDA_SMALL_NUMBER)
+            {
+                Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
+            }
+
+            Adjusted = 0.5f * (OldVelocity + Velocity) * TimeTick;
         }
-        
-        const FVector Adjusted = 0.5f * (OldVelocity + Velocity) * TimeTick;
+
         FHitResult Hit(1.f);
         SafeMoveUpdatedComponent(Adjusted, UpdatedComponent->GetComponentQuat(), true, Hit);
     
@@ -476,8 +490,23 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
                 Velocity = SlideDelta / RemainingTimeAfterHit;
             }
         }
+
+        // Zipline 목표 Endpoint에 도달하면 즉시 액션을 종료하고 기존 이동 모드로 복귀한다.
+        if (MovementAction->IsZiplineTargetReached(UpdatedComponent->GetComponentLocation()))
+        {
+            MovementAction->EndMovementAction(EDRMovementActionEndReason::Completed);
+
+            RestoreDefaultMovementMode();
+
+            if (HasValidData())
+            {
+                StartNewPhysics(RemainingTime, Iterations);
+            }
+
+            return;
+        }
     }
-    
+
     if (IsValid(MovementAction)
         && MovementAction->IsMovementActionActive()
         && IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
