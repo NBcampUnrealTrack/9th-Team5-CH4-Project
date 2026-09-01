@@ -235,6 +235,13 @@ void ADRPlayerCharacter::HandleJumpPressed()
 		return;
 	}
 
+	if (IsValid(MovementActionComponent)
+		&& MovementActionComponent->GetSimulationActionState().ActionType == EDRMovementActionType::Zipline)
+	{
+		MovementActionComponent->RequestCancelZipline();
+		return;
+	}
+
 	Jump();
 }
 
@@ -376,6 +383,38 @@ void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 	if (!Controller || IsDead() || IsFrozen())
 	{
 		return;
+	}
+
+	if (IsValid(MovementActionComponent))
+	{
+		const FDRMovementActionState& ActionState = MovementActionComponent->GetSimulationActionState();
+
+		if (ActionState.ActionType == EDRMovementActionType::Zipline
+			&& ActionState.ZiplineRideMode == EDRZiplineRideMode::ManualTraverse)
+		{
+			// ManualTraverse는 탑승한 쪽과 무관하게 W=높은 Endpoint, S=낮은 Endpoint로 고정한다.
+			// A/D는 의도적으로 무시한다. 두 Endpoint 높이가 같으면 탑승 Endpoint -> LinkedEndpoint 방향을 사용한다.
+			const FVector EndpointA = ActionState.ZiplineStartLocation;
+			const FVector EndpointB = ActionState.ReferenceLocation;
+
+			FVector LowerEndpoint = EndpointA;
+			FVector UpperEndpoint = EndpointB;
+
+			if (EndpointA.Z > EndpointB.Z + KINDA_SMALL_NUMBER)
+			{
+				LowerEndpoint = EndpointB;
+				UpperEndpoint = EndpointA;
+			}
+
+			const FVector TraverseAxis = (UpperEndpoint - LowerEndpoint).GetSafeNormal();
+
+			if (!TraverseAxis.IsNearlyZero())
+			{
+				AddMovementInput(TraverseAxis, MoveInput.Y);
+			}
+
+			return;
+		}
 	}
 
 	const FRotator ControlRotation = Controller->GetControlRotation();

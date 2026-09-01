@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
 #include "DeepRaiders/GAS/DRGameplayEffectData.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "DRGA_SpraySnow.generated.h"
 
 class UAbilitySystemComponent;
@@ -93,10 +94,6 @@ private:
 	TArray<FDRGameplayEffectData> ImpactEffects;
 
 	FTimerHandle SprayTimerHandle;
-
-	// Cue
-	void StartSprayGameplayCue();
-	void StopSprayGameplayCue();
 	
 	// Monatage
 	void StartSprayMontage();
@@ -110,6 +107,14 @@ private:
 	TMap<TWeakObjectPtr<AActor>, float> LastHitReactionTimes;
 
 	void TryExecuteHitReaction(AActor* TargetActor, UAbilitySystemComponent* TargetAbilitySystem, const FVector& SprayOrigin);
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Sprayer|Presentation")
+	TSubclassOf<UGameplayEffect> ActivePresentationEffectClass;
+
+	FActiveGameplayEffectHandle ActivePresentationEffectHandle;
+
+	void StartSprayPresentation();
+	void StopSprayPresentation();
 	
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Sprayer|Debug")

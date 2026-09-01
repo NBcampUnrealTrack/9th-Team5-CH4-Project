@@ -9,6 +9,7 @@ enum class EDRMovementActionType : uint8
 {
 	None UMETA(DisplayName = "None"),
 	Grapple UMETA(DisplayName = "Grapple"),
+	Zipline UMETA(DisplayName = "Zipline"),
 };
 
 UENUM(BlueprintType)
@@ -18,6 +19,16 @@ enum class EDRMovementActionEndReason : uint8
 	Cancelled UMETA(DisplayName = "Cancelled"),
 	Invalidated UMETA(DisplayName = "Invalidated"),
 	OwnerDeath UMETA(DisplayName = "Owner Death"),
+};
+
+UENUM(BlueprintType)
+enum class EDRZiplineRideMode : uint8
+{
+	// 탑승 즉시 입력을 무시하고 LinkedEndpoint까지 자동으로 이동한다.
+	AutoTraverse UMETA(DisplayName = "Auto Traverse"),
+
+	// W/S 입력으로 두 Endpoint 사이를 직접 오간다. Endpoint 도달로는 종료되지 않는다.
+	ManualTraverse UMETA(DisplayName = "Manual Traverse"),
 };
 
 /*
@@ -45,7 +56,7 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	int32 SessionId = 0;
 
-	// 그래플링에서는 훅 위치로 사용한다.
+	// 그래플링에서는 훅 위치로, Zipline에서는 목표 Endpoint 위치로 사용한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	FVector_NetQuantize ReferenceLocation = FVector::ZeroVector;
 
@@ -54,16 +65,26 @@ public:
 	float ActionAcceleration = 0.f;
 
 	// 액션 중 허용할 최대 속도다. 0 이하이면 제한하지 않는다.
+	// Zipline에서는 ReferenceLocation을 향해 이동하는 목표 속도(ManualTraverse에서는 축을 따라 이동하는 최대 속도)로 사용한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	float MaxSpeed = 0.f;
-	
+
 	// 기존 입력 가속도를 액션 중 얼마나 반영할지 결정한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	float ControlScale = 1.f;
-	
+
 	// 비활성 상태로 복제될 때 마지막 종료 이유를 전달한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRMovementActionEndReason LastEndReason = EDRMovementActionEndReason::Invalidated;
+
+	// Zipline 전용: 이번 탑승에서 실제로 Interact한 Endpoint 위치(축의 시작점)다.
+	// ReferenceLocation(LinkedEndpoint 위치)과 함께 ManualTraverse의 이동 축을 이룬다. AutoTraverse는 사용하지 않는다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	FVector_NetQuantize ZiplineStartLocation = FVector::ZeroVector;
+
+	// Zipline 진행 방식. AutoTraverse/ManualTraverse를 구분한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	EDRZiplineRideMode ZiplineRideMode = EDRZiplineRideMode::AutoTraverse;
 };
 
 /**
@@ -77,6 +98,10 @@ struct FDRMovementActionSimulationInput
 	FVector InputAcceleration = FVector::ZeroVector;
 	FVector Gravity = FVector::ZeroVector;
 	float DeltaTime = 0.f;
+
+	// CharacterMovementComponent::Acceleration을 가공하지 않고 그대로 전달한 값이다.
+	// Grapple/AutoTraverse는 사용하지 않는다. ManualTraverse가 W/S 방향을 판단하는 데 사용한다.
+	FVector RawAcceleration = FVector::ZeroVector;
 };
 
 /**
@@ -87,6 +112,10 @@ struct FDRMovementActionSimulationOutput
 	FVector AdditionalAcceleration = FVector::ZeroVector;
 	float MaxSpeed = 0.f;
 	bool bApplyGravity = true;
+
+	// true이면 기존 가속/중력/속도 clamp 계산을 모두 건너뛰고 OverrideVelocity를 그대로 사용한다.
+	bool bOverrideVelocity = false;
+	FVector OverrideVelocity = FVector::ZeroVector;
 };
 
 /**
@@ -128,24 +157,44 @@ public:
 	void ReportMovementSimulation(const FVector& Location, const FVector& Velocity);
 	
 	bool IsMovementActionActive() const;
-	
+
 	const FDRMovementActionState& GetSimulationActionState() const;
-	
+
+	// 현재 위치가 활성화된 Zipline 액션의 목표 Endpoint에 도달했는지 확인한다.
+	// Zipline이 아니거나 비활성 상태면 항상 false를 반환한다.
+	bool IsZiplineTargetReached(const FVector& CurrentLocation) const;
+
+	// 소유 클라이언트가 활성화된 Zipline에서 이탈을 요청한다. (예: Space 입력)
+	void RequestCancelZipline();
+
 	FDRMovementActionEnded OnMovementActionEnded;
 	FDRMovementActionSimulated OnMovementActionSimulated;
-	
+
 protected:
 	UFUNCTION()
 	void OnRep_AuthoritativeActionState();
-	
+
 private:
 	bool IsLocallyControlledOwner() const;
-	
+
 	void ClearPredictedActionState();
-	
+
 	void EvaluateGrappleContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input,
 		FDRMovementActionSimulationOutput& OutOutput)  const;
-	
+
+	void EvaluateZiplineContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input,
+		FDRMovementActionSimulationOutput& OutOutput) const;
+
+	void EvaluateZiplineAutoTraverseContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input,
+		FDRMovementActionSimulationOutput& OutOutput) const;
+
+	void EvaluateZiplineManualTraverseContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input,
+		FDRMovementActionSimulationOutput& OutOutput) const;
+
+	// 서버에서 요청한 Zipline SessionId를 검증한 뒤 이탈을 처리한다.
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCancelZipline(int32 SessionId);
+
 	void RequestReplicationUpdate() const;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_AuthoritativeActionState, VisibleInstanceOnly, BlueprintReadOnly,
