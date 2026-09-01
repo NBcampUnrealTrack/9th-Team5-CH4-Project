@@ -4,8 +4,17 @@
 #include "DeepRaiders/Item/DRThrowableItemDefinition.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
+#include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+
+ADRThrowableProjectile::ADRThrowableProjectile(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
+	SnowRemoveComponent = CreateDefaultSubobject<UDRSnowRemoveComponent>(TEXT("SnowRemoveComponent"));
+}
 
 void ADRThrowableProjectile::InitializeThrowable(
 	UAbilitySystemComponent* InSourceAbilitySystem,
@@ -15,11 +24,7 @@ void ADRThrowableProjectile::InitializeThrowable(
 	int32 InSourceTeamId,
 	const UObject* InPresentationSourceObject)
 {
-	FDRProjectileWorldImpactData TempWorldImpactData;
-	TempWorldImpactData.bAddSnow = false;
-
-	ExplosionRadius = FMath::Max(InItemSettings.ExplosionRadius, 1.f);
-
+	ItemSettings = InItemSettings;
 	OcclusionTraceChannel = InActionSettings.ExplosionOcclusionTraceChannel;
 
 	const UDRThrowableItemDefinition* ThrowableItemDefinition = Cast<UDRThrowableItemDefinition>(InPresentationSourceObject);
@@ -34,7 +39,7 @@ void ADRThrowableProjectile::InitializeThrowable(
 		InSourceAbilitySystem,
 		InImpactEffectSpecs,
 		0.f,
-		TempWorldImpactData,
+		ItemSettings.WorldImpactData,
 		InSourceTeamId,
 		InPresentationSourceObject);
 }
@@ -66,10 +71,7 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	
 	TArray<FOverlapResult> OverlapResults;
 	World->OverlapMultiByObjectType(OverlapResults, ExplosionLocation, FQuat::Identity, ObjectQuery,
-		FCollisionShape::MakeSphere(ExplosionRadius), OverlapQuery);
-	
-	// 테스트 신다인
-	DrawDebugSphere(World, ExplosionLocation, ExplosionRadius, 16, FColor::Red, false, 1.5f);
+		FCollisionShape::MakeSphere(ItemSettings.ExplosionRadius), OverlapQuery);
 	
 	TSet<AActor*> UniqueActors;
 	TArray<AActor*> CandidateActors;
@@ -130,7 +132,38 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	}
 	
 	ExecuteImpactGameplayCue(ImpactResult);
+	HandleWorldImpact(ImpactResult);
 	Destroy();
+}
+
+void ADRThrowableProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const FDRProjectileWorldImpactData& ImpactData = GetWorldImpactData();
+	if (ImpactData.bAddSnow
+		&& IsValid(SnowAddComponent))
+	{
+		SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
+		SnowAddComponent->SetAddSettings(ImpactData.SnowRadius, ImpactData.SnowAmount);
+		SnowAddComponent->SetAddEditTool(ImpactData.SnowEditTool);
+		SnowAddComponent->SetAllowVirtualSurfaceFallback(ImpactData.bAllowVirtualSurfaceFallback);
+		SnowAddComponent->TryAddSnowFromHit(ImpactResult);
+	}
+	else if (!ImpactData.bAddSnow
+		&& IsValid(SnowRemoveComponent))
+	{
+		FDRSnowRemovalSpec RemovalSpec;
+		RemovalSpec.SnowAbsorbRadius = ImpactData.SnowRadius;
+		RemovalSpec.SnowAbsorbPower = ImpactData.SnowAmount;
+		RemovalSpec.RemovalMode = EDRSnowRemovalMode::ContactBrush;
+		
+		SnowRemoveComponent->SetTeamIdOverride(GetSourceTeamId());
+		SnowRemoveComponent->TryRemoveSnowFromHit(ImpactResult, RemovalSpec);
+	}
 }
 
 void ADRThrowableProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)

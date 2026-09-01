@@ -270,8 +270,7 @@ bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
 
 bool ADRProjectile::IsFriendlyTarget(const AActor* TargetActor) const
 {
-	// 테스트 신다인
-	// 팀 지정 기능이 없으므로 INDEX_NONE에 대하여 항상 적군
+	// INDEX_NONE에 대하여 항상 적군
 	if (SourceTeamId == INDEX_NONE)
 		return false;
 	

@@ -4,6 +4,7 @@
 #include "DRItemDefinition.h"
 #include "DRThrowableItemTypes.h"
 #include "DRWeaponPresentationTypes.h"
+#include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "DRThrowableItemDefinition.generated.h"
 
 class ADRThrowableProjectile;
