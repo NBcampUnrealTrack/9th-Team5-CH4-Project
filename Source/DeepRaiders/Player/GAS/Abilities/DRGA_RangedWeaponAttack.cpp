@@ -38,6 +38,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
 }
 
 bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -45,6 +46,15 @@ bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHand
 	const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	const UAbilitySystemComponent* AbilitySystem =
+		ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	if (IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Zipline))
 	{
 		return false;
 	}
@@ -318,6 +328,18 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 
 		return;
 	}
+
+	// 이미 활성화된 자동/연발 Ability가 Zipline 진입 뒤에도 shot을 계속 내지 못하게 한다.
+	if (AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Zipline))
+	{
+		EndAbility(
+			GetCurrentAbilitySpecHandle(),
+			ActorInfo,
+			GetCurrentActivationInfo(),
+			true,
+			true);
+		return;
+	}
 	
 	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
@@ -390,19 +412,19 @@ bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
 
 	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 
-	if (!IsValid(AbilitySystem))
+	// 탑승 직전에 보낸 RPC/TargetData가 늦게 서버에 도착해도 실제 발사는 승인하지 않는다.
+	if (!IsValid(AbilitySystem)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Zipline))
 	{
+		EndAbility(
+			GetCurrentAbilitySpecHandle(),
+			ActorInfo,
+			GetCurrentActivationInfo(),
+			true,
+			true);
 		return false;
 	}
 
-	if (AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Frozen)
-		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
-	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
-
-		return false;
-	}
-	
 	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
 

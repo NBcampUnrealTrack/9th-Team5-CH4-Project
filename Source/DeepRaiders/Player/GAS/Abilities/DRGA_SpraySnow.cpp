@@ -22,7 +22,13 @@ UDRGA_SpraySnow::UDRGA_SpraySnow()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	SetAssetTags(InitialTags);
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
 }
 
 bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -46,7 +52,8 @@ bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	const UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 
-	if (!IsValid(AbilitySystem))
+	if (!IsValid(AbilitySystem)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Zipline))
 	{
 		return false;
 	}
@@ -186,6 +193,20 @@ void UDRGA_SpraySnow::HandleSprayTick()
 
 	if (!IsActive() || ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
 	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+
+	if (!IsValid(AbilitySystem)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Zipline))
+	{
+		EndAbility(
+			GetCurrentAbilitySpecHandle(),
+			ActorInfo,
+			GetCurrentActivationInfo(),
+			true,
+			true);
 		return;
 	}
 

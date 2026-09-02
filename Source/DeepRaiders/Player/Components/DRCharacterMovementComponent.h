@@ -113,6 +113,15 @@ private:
     /** 로컬 입력 또는 서버가 복원한 입력 상태 */
     uint8 bWantsJetpack : 1;
 
+    /**
+     * Manual Zipline 입력의 네트워크 복원 상태.
+     * -1 = 아래(S), 0 = 정지, +1 = 위(W)
+     *
+     * 소유 클라이언트의 SavedMove가 FLAG_Custom_1/2로 서버에 전달하고,
+     * Dedicated Server의 PhysMovementAction이 이 값을 사용한다.
+     */
+    int8 ManualZiplineInput = 0;
+
     /** 현재 출력 상승 진행 시간 */
     float JetpackSpoolElapsed = 0.f;
 

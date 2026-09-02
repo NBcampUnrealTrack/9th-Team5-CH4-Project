@@ -13,6 +13,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Zipline);
 
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);

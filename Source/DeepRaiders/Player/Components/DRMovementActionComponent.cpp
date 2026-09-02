@@ -2,6 +2,9 @@
 #include "DRMovementActionComponent.h"
 
 #include "DRCharacterMovementComponent.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
@@ -20,6 +23,12 @@ void UDRMovementActionComponent::GetLifetimeReplicatedProps(TArray<class FLifeti
 	DOREPLIFETIME(ThisClass, AuthoritativeActionState);
 }
 
+void UDRMovementActionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	SetZiplineGameplayTagsActive(false);
+	Super::EndPlay(EndPlayReason);
+}
+
 bool UDRMovementActionComponent::StartPredictedMovementAction(const FDRMovementActionState& NewState)
 {
 	if (!IsLocallyControlledOwner()
@@ -30,6 +39,7 @@ bool UDRMovementActionComponent::StartPredictedMovementAction(const FDRMovementA
 	}
 	
 	PredictedActionState = NewState;
+	RefreshZiplineGameplayTags();
 	return true;	
 }
 
@@ -46,6 +56,7 @@ bool UDRMovementActionComponent::StartAuthoritativeMovementAction(const FDRMovem
 	}
 	
 	AuthoritativeActionState = NewState;
+	RefreshZiplineGameplayTags();
 	RequestReplicationUpdate();
 	
 	return true;	
@@ -71,6 +82,7 @@ void UDRMovementActionComponent::EndMovementAction(EDRMovementActionEndReason En
 		AuthoritativeActionState.ActionType = EDRMovementActionType::None;
 		AuthoritativeActionState.LastEndReason = EndReason;
 		
+		RefreshZiplineGameplayTags();
 		RequestReplicationUpdate();
 		
 		OnMovementActionEnded.Broadcast(EndReason);
@@ -84,6 +96,7 @@ void UDRMovementActionComponent::EndMovementAction(EDRMovementActionEndReason En
 	}
 	
 	ClearPredictedActionState();
+	RefreshZiplineGameplayTags();
 	OnMovementActionEnded.Broadcast(EndReason);
 }
 
@@ -163,8 +176,8 @@ void UDRMovementActionComponent::EvaluateZiplineAutoTraverseContribution(const F
 	OutOutput.bApplyGravity = false;
 	OutOutput.bOverrideVelocity = true;
 
-	const FVector StartLocation = State.ZiplineStartLocation;
-	const FVector TargetLocation = State.ReferenceLocation;
+	const FVector StartLocation = State.GetZiplineRideStartLocation();
+	const FVector TargetLocation = State.GetZiplineRideTargetLocation();
 	const FVector SegmentDelta = TargetLocation - StartLocation;
 	const float SegmentLength = SegmentDelta.Size();
 
@@ -201,8 +214,8 @@ void UDRMovementActionComponent::EvaluateZiplineManualTraverseContribution(const
 	OutOutput.bApplyGravity = false;
 	OutOutput.bOverrideVelocity = true;
 
-	const FVector EndpointA = State.ZiplineStartLocation;
-	const FVector EndpointB = State.ReferenceLocation;
+	const FVector EndpointA = State.GetZiplineRideStartLocation();
+	const FVector EndpointB = State.GetZiplineRideTargetLocation();
 	const FVector SegmentDelta = EndpointB - EndpointA;
 	const float SegmentLength = SegmentDelta.Size();
 
@@ -272,7 +285,7 @@ bool UDRMovementActionComponent::IsZiplineTargetReached(const FVector& CurrentLo
 		return false;
 	}
 
-	return FVector::DistSquared(CurrentLocation, State.ReferenceLocation) <= KINDA_SMALL_NUMBER;
+	return FVector::DistSquared(CurrentLocation, State.GetZiplineRideTargetLocation()) <= KINDA_SMALL_NUMBER;
 }
 
 void UDRMovementActionComponent::RequestCancelZipline()
@@ -319,6 +332,110 @@ void UDRMovementActionComponent::ServerRequestCancelZipline_Implementation(int32
 		: nullptr;
 
 	if (IsValid(Movement))
+	{
+		Movement->ExitCustomMovementMode();
+	}
+}
+
+UAbilitySystemComponent* UDRMovementActionComponent::ResolveOwnerAbilitySystemComponent() const
+{
+	const IAbilitySystemInterface* AbilitySystemOwner = Cast<IAbilitySystemInterface>(GetOwner());
+	return AbilitySystemOwner != nullptr ? AbilitySystemOwner->GetAbilitySystemComponent() : nullptr;
+}
+
+void UDRMovementActionComponent::RefreshZiplineGameplayTags()
+{
+	const FDRMovementActionState& State = GetSimulationActionState();
+	const bool bShouldBeActive = State.IsActive() && State.ActionType == EDRMovementActionType::Zipline;
+
+	SetZiplineGameplayTagsActive(bShouldBeActive);
+}
+
+void UDRMovementActionComponent::SetZiplineGameplayTagsActive(bool bActive)
+{
+	if (bActive == bZiplineGameplayTagsApplied)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = bActive
+		? ResolveOwnerAbilitySystemComponent()
+		: ZiplineTaggedAbilitySystem.Get();
+
+	if (!IsValid(AbilitySystem) && !bActive)
+	{
+		AbilitySystem = ResolveOwnerAbilitySystemComponent();
+	}
+
+	if (!IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	if (bActive)
+	{
+		// Active는 기존 QuickSlot 잠금 정책을 그대로 재사용하고,
+		// Zipline은 공격/애니메이션 등 Zipline 전용 정책의 식별자로 사용한다.
+		AbilitySystem->AddLooseGameplayTag(DRGameplayTags::State_MovementAction_Active);
+		AbilitySystem->AddLooseGameplayTag(DRGameplayTags::State_MovementAction_Zipline);
+
+		ZiplineTaggedAbilitySystem = AbilitySystem;
+		bZiplineGameplayTagsApplied = true;
+
+		// 탑승 전에 이미 유지 중이던 공격도 즉시 종료한다.
+		// 새 공격 시작은 각 Ability의 ActivationBlockedTags가 막는다.
+		// WithTags 한 컨테이너에 Ranged/Melee를 함께 넣으면
+		// 둘 다 가진 Ability만 매칭될 수 있으므로 각 그룹을 따로 취소한다.
+		FGameplayTagContainer RangedAttackTags;
+		RangedAttackTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+		AbilitySystem->CancelAbilities(&RangedAttackTags);
+
+		FGameplayTagContainer MeleeAttackTags;
+		MeleeAttackTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
+		AbilitySystem->CancelAbilities(&MeleeAttackTags);
+		return;
+	}
+
+	AbilitySystem->RemoveLooseGameplayTag(DRGameplayTags::State_MovementAction_Zipline);
+	AbilitySystem->RemoveLooseGameplayTag(DRGameplayTags::State_MovementAction_Active);
+
+	bZiplineGameplayTagsApplied = false;
+	ZiplineTaggedAbilitySystem.Reset();
+}
+
+void UDRMovementActionComponent::ReconcileLocallyControlledMovementMode()
+{
+	APawn* PawnOwner = Cast<APawn>(GetOwner());
+
+	if (!IsValid(PawnOwner)
+		|| !PawnOwner->IsLocallyControlled())
+	{
+		return;
+	}
+
+	ACharacter* Character = Cast<ACharacter>(PawnOwner);
+	UDRCharacterMovementComponent* Movement = IsValid(Character)
+		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
+		: nullptr;
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	if (State.IsActive())
+	{
+		if (!Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+		{
+			Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+		}
+
+		return;
+	}
+
+	if (Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
 	{
 		Movement->ExitCustomMovementMode();
 	}
@@ -380,6 +497,9 @@ void UDRMovementActionComponent::OnRep_AuthoritativeActionState()
 	{
 		ClearPredictedActionState();
 	}
+
+	RefreshZiplineGameplayTags();
+	ReconcileLocallyControlledMovementMode();
 
 	// 기존에는 활성 상태였지만 서버 상태 반영 후 종료된 경우다.
 	if (bWasActive && !IsMovementActionActive())
