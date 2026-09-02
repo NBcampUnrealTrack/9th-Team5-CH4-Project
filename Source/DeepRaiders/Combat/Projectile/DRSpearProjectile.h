@@ -20,5 +20,7 @@ protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
 
 private:
+	void ApplyKnockback(const FHitResult& ImpactResult) const;
+
 	float KnockbackStrength = 0.f;
 };

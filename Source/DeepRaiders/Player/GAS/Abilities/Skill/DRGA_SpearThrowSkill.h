@@ -20,10 +20,6 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
-	void BuildImpactEffectSpecs(
-		UAbilitySystemComponent* AbilitySystem,
-		TArray<FGameplayEffectSpecHandle>& OutImpactEffectSpecs) const;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw")
 	TSubclassOf<ADRSpearProjectile> ProjectileClass;
 
@@ -32,4 +28,15 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;
+
+private:
+	bool SpawnProjectile(
+		ADRPlayerCharacter* Character,
+		UAbilitySystemComponent* AbilitySystem,
+		const FVector& SpawnLocation,
+		const FVector& ProjectileDirection) const;
+
+	void BuildImpactEffectSpecs(
+		UAbilitySystemComponent* AbilitySystem,
+		TArray<FGameplayEffectSpecHandle>& OutImpactEffectSpecs) const;
 };

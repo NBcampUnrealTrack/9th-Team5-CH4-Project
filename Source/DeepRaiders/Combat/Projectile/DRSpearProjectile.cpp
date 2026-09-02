@@ -21,18 +21,24 @@ void ADRSpearProjectile::InitializeSpearProjectile(
 
 void ADRSpearProjectile::HandleImpact(const FHitResult& ImpactResult)
 {
+	ApplyKnockback(ImpactResult);
+	Super::HandleImpact(ImpactResult);
+}
+
+void ADRSpearProjectile::ApplyKnockback(const FHitResult& ImpactResult) const
+{
 	ADRPlayerCharacter* TargetCharacter = Cast<ADRPlayerCharacter>(ImpactResult.GetActor());
-	if (HasAuthority()
-		&& IsValid(TargetCharacter)
-		&& !IsFriendlyTarget(TargetCharacter)
-		&& KnockbackStrength > 0.f)
+	if (!HasAuthority()
+		|| !IsValid(TargetCharacter)
+		|| IsFriendlyTarget(TargetCharacter)
+		|| KnockbackStrength <= 0.f)
 	{
-		const FVector KnockbackDirection = GetActorForwardVector().GetSafeNormal2D();
-		TargetCharacter->LaunchCharacter(
-			KnockbackDirection * KnockbackStrength,
-			true,
-			false);
+		return;
 	}
 
-	Super::HandleImpact(ImpactResult);
+	const FVector KnockbackDirection = GetActorForwardVector().GetSafeNormal2D();
+	TargetCharacter->LaunchCharacter(
+		KnockbackDirection * KnockbackStrength,
+		true,
+		false);
 }
