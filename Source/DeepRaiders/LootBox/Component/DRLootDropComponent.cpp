@@ -167,8 +167,11 @@ bool UDRLootDropComponent::RollLootQuantities(EDRLootTier LootTier, const FDRLoo
 
 	TSet<EDRItemRarity> LoggedMissingRarities;
 
-	for (int32 DropIndex = 0; DropIndex < DropCount; ++DropIndex)
+	int IterationCount = 0;
+	int CurrentDropCount = 0;
+	while (CurrentDropCount < DropCount && IterationCount < MaxIterationCount)
 	{
+		++IterationCount;
 		EDRItemRarity SelectedRarity;
 
 		if (!SelectRarity(TierConfig, RandomStream, SelectedRarity))
@@ -177,14 +180,14 @@ bool UDRLootDropComponent::RollLootQuantities(EDRLootTier LootTier, const FDRLoo
 			 * TierConfig는 반복 중 바뀌지 않으므로 이후 Roll도 전부 실패한다.
 			 */
 			UE_LOG(LogTemp, Warning, TEXT("[%s]: LootTier '%s' has no positive rarity weight."),
-			       *GetName(), *UEnum::GetValueAsString(LootTier));
+				   *GetName(), *UEnum::GetValueAsString(LootTier));
 
 			return false;
 		}
 
 		const TArray<const FDRLootTableRow*>* RarityRows = RowsByRarity.Find(SelectedRarity);
 		const FDRLootTableRow* SelectedRow = RarityRows != nullptr
-			                                     ? SelectWeightedLootRow(*RarityRows, RandomStream) : nullptr;
+												 ? SelectWeightedLootRow(*RarityRows, RandomStream) : nullptr;
 
 		if (SelectedRow == nullptr
 			|| !IsValid(SelectedRow->ItemDefinition))
@@ -193,18 +196,28 @@ bool UDRLootDropComponent::RollLootQuantities(EDRLootTier LootTier, const FDRLoo
 			{
 				LoggedMissingRarities.Add(SelectedRarity);
 				UE_LOG(LogTemp, Warning, TEXT("[%s]: No selectable '%s' item. Falling back to all loot rows."),
-				       *GetName(), *UEnum::GetValueAsString(SelectedRarity));
+					   *GetName(), *UEnum::GetValueAsString(SelectedRarity));
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("[%s]: Failed to select a valid loot row."), *GetName());
-			return false;
+			// 유효한 등급의 아이템이 등장하기를 반복한다.
+			continue;
 		}
-
+		
 		const int32 MinQuantity = FMath::Max(1, SelectedRow->MinQuantity);
 		const int32 MaxQuantity = FMath::Max(MinQuantity, SelectedRow->MaxQuantity);
 		const int32 RolledQuantity = RandomStream.RandRange(MinQuantity, MaxQuantity);
 
+		++CurrentDropCount;
 		OutGeneratedQuantities.FindOrAdd(SelectedRow->ItemDefinition) += RolledQuantity;
+	}
+	
+	// 반드시 무언가 등장할 수 있도록 기본 아이템 등록
+	if (IsValid(DefaultItemDefinition))
+	{
+		for (;CurrentDropCount < DropCount; ++CurrentDropCount)
+		{
+			OutGeneratedQuantities.FindOrAdd(DefaultItemDefinition) += 1;
+		}	
 	}
 
 	return true;

@@ -500,7 +500,22 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 		return;
 	}
 
-	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	const FActiveGameplayEffectHandle FrozenHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+	if (!FrozenHandle.IsValid())
+	{
+		return;
+	}
+
+	/*
+	 * Frozen 진입 전에 이미 진행 중이던
+	 * 원거리 공격 Ability를 즉시 종료한다.
+	 */
+	FGameplayTagContainer RangedAttackTags;
+	RangedAttackTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+
+	AbilitySystemComponent->CancelAbilities(&RangedAttackTags);
+
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 
 	StopFreezeDecay();

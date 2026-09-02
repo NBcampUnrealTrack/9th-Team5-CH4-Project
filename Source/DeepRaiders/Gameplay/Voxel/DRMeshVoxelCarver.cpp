@@ -100,12 +100,19 @@ ADRMeshVoxelCarver::ADRMeshVoxelCarver()
 void ADRMeshVoxelCarver::BeginPlay()
 {
 	Super::BeginPlay();
+	RestartCarveBatch();
+}
 
+void ADRMeshVoxelCarver::RestartCarveBatch()
+{
 	if (!bCarveOnBeginPlay)
 	{
 		return;
 	}
 
+	RetryCount = 0;
+	PendingCarverIndex = 0;
+	PendingCarvers.Reset();
 	GetWorldTimerManager().SetTimer(
 		RetryTimerHandle,
 		this,

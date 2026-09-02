@@ -18,8 +18,6 @@ ADRGameplayCueGrapple::ADRGameplayCueGrapple(const FObjectInitializer& ObjectIni
 	
 	SetReplicates(false);
 	
-	GameplayCueTag = DRGameplayTags::GameplayCue_MovementAction_Grapple_Active;
-	
 	bAutoDestroyOnRemove = false;
 	bAutoAttachToOwner = false;
 	bUniqueInstancePerInstigator = true;
@@ -108,6 +106,10 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 	}
 		
 	case EPresentationPhase::Attached:
+		if (AActor* FollowTarget = FollowTargetActor.Get(); IsValid(FollowTarget))
+		{
+			TargetLocation = FollowTarget->GetActorLocation();
+		}
 		UpdateHookLocation(TargetLocation);
 		break;
 		
@@ -213,6 +215,16 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	LaunchLocation = GetCurrentStartLocation();
 	TargetLocation = Parameters.Location;
+	FollowTargetActor = IsEffectCauserTrackingEnabled
+		? Parameters.EffectCauser
+		: nullptr;
+
+	if (!FollowTargetActor.IsValid()
+		|| FollowTargetActor.Get() == Target)
+	{
+		FollowTargetActor.Reset();
+	}
+
 	RetractStartLocation = FVector::ZeroVector;
 	PhaseElapsedTime = 0.f;
 	CurrentPhaseDuration = CalculatePhaseDuration(LaunchLocation, TargetLocation, HookTravelSpeed);
@@ -234,7 +246,13 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	UpdateHookLocation(LaunchLocation);
 	
-	if (CurrentPhaseDuration <= KINDA_SMALL_NUMBER)
+	if (FollowTargetActor.IsValid())
+	{
+		PresentationPhase = EPresentationPhase::Attached;
+		TargetLocation = FollowTargetActor->GetActorLocation();
+		UpdateHookLocation(TargetLocation);
+	}
+	else if (CurrentPhaseDuration <= KINDA_SMALL_NUMBER)
 	{
 		PresentationPhase = EPresentationPhase::Attached;
 		UpdateHookLocation(TargetLocation);
@@ -384,6 +402,7 @@ void ADRGameplayCueGrapple::ResetPresentationState()
 	bRetractAfterExtension = false;
 
 	StartComponent.Reset();
+	FollowTargetActor.Reset();
 	StartSocketName = NAME_None;
 
 	LaunchLocation = FVector::ZeroVector;

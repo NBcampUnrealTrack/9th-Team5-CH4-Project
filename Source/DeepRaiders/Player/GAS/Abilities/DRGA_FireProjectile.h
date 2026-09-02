@@ -15,7 +15,7 @@ class DEEPRAIDERS_API UDRGA_FireProjectile : public UDRGA_RangedWeaponAttack
 	GENERATED_BODY()
 	
 protected:
-	virtual bool IsAttackConfigurationValid() const override;
+	virtual bool IsAttackConfigurationValid(const UDRProjectileWeaponItemDefinition* WeaponDefinition) const override;
 	virtual void OnRangedWeaponActivated() override;
 	virtual void OnRangedWeaponEnded() override;
 	virtual bool SendLocalShotRequest() override;	
@@ -28,15 +28,6 @@ private:
 	bool ExecuteServerProjectileShot();
 
 	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& ProjectileDirection, AActor* AvatarActor, UAbilitySystemComponent* AbilitySystem, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
-	TSubclassOf<ADRProjectile> ProjectileClass;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess, ClampMin = "1", UIMin = "1"))
-	int32 ProjectileCount = 1;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess, ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
-	float SpreadHalfAngleDegrees = 0.f;
-
+	
 	FDelegateHandle ServerShotDelegateHandle;
 };

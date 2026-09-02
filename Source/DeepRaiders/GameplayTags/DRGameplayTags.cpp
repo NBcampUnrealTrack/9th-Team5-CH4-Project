@@ -43,6 +43,16 @@ namespace DRGameplayTags
 		"Player is currently executing a movement action.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_MovementAction_Zipline,
+		"State.MovementAction.Zipline",
+		"Player is currently riding a zipline.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_QuickSlot_ActivationInterval,
+		"State.QuickSlot.ActivationInterval",
+		"Selected quick-slot item cannot be activated yet.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");
@@ -128,6 +138,26 @@ namespace DRGameplayTags
 		"Hot pack skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_SpearThrow,
+		"Ability.Skill.SpearThrow",
+		"Spear throw skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_SlowProjectile,
+		"Ability.Skill.SlowProjectile",
+		"Slow projectile skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_SnowWall,
+		"Ability.Skill.SnowWall",
+		"Snow wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Grab,
+		"Ability.Skill.Grab",
+		"Grab skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
@@ -201,6 +231,26 @@ namespace DRGameplayTags
 		Cooldown_Skill_HotPack,
 		"Cooldown.Skill.HotPack",
 		"Cooldown for the hot pack skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Grab,
+		"Cooldown.Skill.Grab",
+		"Cooldown for the grab skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SnowWall,
+		"Cooldown.Skill.SnowWall",
+		"Cooldown for the snow wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SpearThrow,
+		"Cooldown.Skill.SpearThrow",
+		"Cooldown for the spear throw skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SlowProjectile,
+		"Cooldown.Skill.SlowProjectile",
+		"Cooldown for the slow projectile skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,
@@ -261,6 +311,11 @@ namespace DRGameplayTags
 		Data_Effect_MoveSpeed,
 		"Data.Effect.MoveSpeed",
 		"Effect MoveSpeed passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_QuickSlot_ActivationInterval_Duration,
+		"Data.QuickSlot.ActivationInterval.Duration",
+		"Quick-slot activation interval duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
@@ -435,4 +490,10 @@ namespace DRGameplayTags
 		GameplayCue_MovementAction_Grapple_Failed,
 		"GameplayCue.MovementAction.Grapple.Failed",
 		"One-shot cable presentation for a failed grapple attempt.");
+
+	// Gameplay Cue - Skill
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Skill_Grab_Active,
+		"GameplayCue.Skill.Grab.Active",
+		"Persistent hook and cable presentation for an active grab projectile.");
 }

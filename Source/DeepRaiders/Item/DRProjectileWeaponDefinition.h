@@ -6,9 +6,11 @@
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRRangedWeaponDefinition.h"
 #include "DRWeaponPresentationTypes.h"
+#include "DeepRaiders/GAS/DRGameplayEffectData.h"
 #include "DRProjectileWeaponDefinition.generated.h"
 
 class UGameplayEffect;
+class ADRProjectile;
 
 UENUM(BlueprintType)
 enum class EDRProjectileWeaponResourceType : uint8
@@ -66,6 +68,42 @@ public:
 	EditCondition = "ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo", ClampMin = "1", UIMin = "1"))
 	int32 InitialAmmo = 1;
 
+	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Fire",meta = (
+	ClampMin = "0.01", UIMin = "0.01", Units = "s"))
+	float BaseFireInterval = 0.25f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Fire")
+	bool bAutomaticFire = false;
+
+	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Aim",meta = (
+		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
+	float MaxAttackDistance = 10000.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
+	TArray<FDRGameplayEffectData> ImpactEffects;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float BreakableDamage = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
+	TSubclassOf<ADRProjectile> ProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess,
+		ClampMin = "1", UIMin = "1"))
+	int32 ProjectileCount = 1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess,
+		ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
+	float SpreadHalfAngleDegrees = 0.f;
+	
+	// 관통 가능 여부
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan", meta = (AllowPrivateAccess))
+	bool bCanPenetrateTargets = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan|Validation",
+		meta = (AllowPrivateAccess, ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+	float MaxServerAimDeviationDegrees = 30.0f;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Add"))
 	FDRProjectileWeaponSnowAddSettings SnowAddSettings;
 

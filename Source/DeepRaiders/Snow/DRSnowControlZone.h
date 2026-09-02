@@ -9,9 +9,11 @@
 
 class AVoxelWorld;
 class UBoxComponent;
+class UDRPointLocationWidget;
 class USceneComponent;
 class UTextBlock;
 class UUserWidget;
+class UWidgetComponent;
 
 #pragma region Debug
 
@@ -83,6 +85,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Snow|Control")
 	void RefreshControlRatio();
 
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	int32 GetLeadingTeamId() const;
+
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	float GetPointValue() const
+	{
+		return PointValue;
+	}
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<USceneComponent> Root;
@@ -90,6 +101,28 @@ protected:
 	// 레벨에 배치한 뒤 BoxExtent로 점령/계산 구역을 지정한다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<UBoxComponent> ZoneBounds;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
+	TObjectPtr<UWidgetComponent> PointLocationWidgetComponent;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control")
+	FText DisplayName;
+
+	UPROPERTY(
+		EditInstanceOnly,
+		BlueprintReadOnly,
+		Category = "Snow|Control",
+		meta = (ClampMin = "0.0"))
+	float PointValue = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual")
+	FLinearColor Team0Color = FLinearColor::Red;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual")
+	FLinearColor Team1Color = FLinearColor::Blue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual")
+	FLinearColor NeutralColor = FLinearColor::White;
 
 	// true면 매 틱, false면 ControlUpdateInterval마다 점령 비율을 갱신한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Control|Update")
@@ -104,6 +137,9 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Update")
 	FDRSnowControlRatio CachedControlRatio;
+
+private:
+	void RefreshPointLocationWidget();
 
 #pragma region Debug
 

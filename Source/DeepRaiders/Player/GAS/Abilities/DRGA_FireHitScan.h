@@ -25,13 +25,5 @@ private:
 	FVector TraceHitScan(const FVector& TraceStart, const FVector& TraceEnd, bool bApplyServerEffects,
 		const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs) const;
 	
-	// 관통 가능 여부
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan", meta = (AllowPrivateAccess))
-	bool bCanPenetrateTargets = false;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan|Validation",
-		meta = (AllowPrivateAccess, ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
-	float MaxServerAimDeviationDegrees = 30.0f;
-	
 	FDelegateHandle TargetDataDelegateHandle;	
 };

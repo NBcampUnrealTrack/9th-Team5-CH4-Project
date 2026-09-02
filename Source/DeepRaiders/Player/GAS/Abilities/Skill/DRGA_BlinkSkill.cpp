@@ -21,7 +21,7 @@ void UDRGA_BlinkSkill::ActivateAbility(
 		return;
 	}
 
-	FVector BlinkDirection = Character->GetLastMovementInputVector().GetSafeNormal2D();
+	FVector BlinkDirection = Character->GetSkillMovementDirection();
 	if (BlinkDirection.IsNearlyZero())
 	{
 		const AController* Controller = Character->GetController();

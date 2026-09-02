@@ -27,6 +27,12 @@ void ADRMiningGameModeBase::BeginPlay()
 	bIsGameEnd = false;
 }
 
+bool ADRMiningGameModeBase::ShouldSpawnAtStartSpot(AController*)
+{
+	// 팀 변경을 반영하기 위해 최초 접속 시 저장된 StartSpot을 재사용하지 않는다.
+	return false;
+}
+
 bool ADRMiningGameModeBase::StartGame()
 {
 	if (!HasAuthority() || bIsGameStart)
@@ -34,6 +40,7 @@ bool ADRMiningGameModeBase::StartGame()
 		return false;
 	}
 
+	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
 	ResetGameState();
 	bIsGameStart = true;
 	bIsGameEnd = false;
@@ -93,9 +100,7 @@ void ADRMiningGameModeBase::EndGame()
 		MiningGameState->SetGameTimerState(0, false, true);
 	}
 
-	float TeamAmounts[2] = {0.f, 0.f};
-	float TotalAmount = 0.f;
-	int64 TeamMaterialVoxelCounts[2] = {0, 0};
+	double WeightedTeamScores[2] = {0.0, 0.0};
 	TArray<FString> ZoneDebugTexts;
 	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
@@ -103,61 +108,53 @@ void ADRMiningGameModeBase::EndGame()
 		const FString ZoneDebugText = Iterator->BuildSnowCountDebugTextFromScan(MaterialScan);
 		ZoneDebugTexts.Add(FString::Printf(TEXT("[%s]\n%s"), *Iterator->GetName(), *ZoneDebugText));
 		UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Zone=%s]\n%s"), *Iterator->GetName(), *ZoneDebugText);
-		for (const FDRSnowVoxelMaterialTeamCount& Team : MaterialScan.Teams)
-		{
-			if (Team.TeamId == 0 || Team.TeamId == 1)
-			{
-				TeamMaterialVoxelCounts[Team.TeamId] += Team.VoxelCount;
-			}
-		}
-
 		Iterator->RefreshControlRatio();
 		const FDRSnowControlRatio Ratio = Iterator->GetControlRatio();
 		float ZoneTeamAmounts[2] = {0.f, 0.f};
-		TotalAmount += Ratio.TotalAmount;
 		for (const FDRSnowTeamAmount& Team : Ratio.Teams)
 		{
 			if (Team.TeamId == 0 || Team.TeamId == 1)
 			{
-				TeamAmounts[Team.TeamId] += Team.Amount;
 				ZoneTeamAmounts[Team.TeamId] += Team.Amount;
 			}
 		}
 
+		const float ZoneTeamTotal = ZoneTeamAmounts[0] + ZoneTeamAmounts[1];
 		const float ZoneTeam0Percent =
-			Ratio.TotalAmount > 0.f ? ZoneTeamAmounts[0] / Ratio.TotalAmount * 100.f : 0.f;
+			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[0] / ZoneTeamTotal * 100.f : 0.f;
 		const float ZoneTeam1Percent =
-			Ratio.TotalAmount > 0.f ? ZoneTeamAmounts[1] / Ratio.TotalAmount * 100.f : 0.f;
+			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[1] / ZoneTeamTotal * 100.f : 0.f;
+		WeightedTeamScores[0] += ZoneTeam0Percent * Iterator->GetPointValue();
+		WeightedTeamScores[1] += ZoneTeam1Percent * Iterator->GetPointValue();
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[GameEnd][Zone=%s] Team 0=%.2f%% Team 1=%.2f%%"),
+			TEXT("[GameEnd][Zone=%s] Point=%.2f Team 0=%.2f%% Team 1=%.2f%%"),
 			*Iterator->GetName(),
+			Iterator->GetPointValue(),
 			ZoneTeam0Percent,
 			ZoneTeam1Percent);
 	}
 
-	const float Team0Percent = TotalAmount > 0.f ? TeamAmounts[0] / TotalAmount * 100.f : 0.f;
-	const float Team1Percent = TotalAmount > 0.f ? TeamAmounts[1] / TotalAmount * 100.f : 0.f;
+	const double WeightedScoreTotal = WeightedTeamScores[0] + WeightedTeamScores[1];
+	const int32 Team0Percent = WeightedScoreTotal > 0.0
+		? FMath::RoundToInt(WeightedTeamScores[0] / WeightedScoreTotal * 100.0)
+		: 0;
+	const int32 Team1Percent = WeightedScoreTotal > 0.0 ? 100 - Team0Percent : 0;
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("[GameEnd] 게임 끝! Team 0=%.2f%% Team 1=%.2f%%"),
+		TEXT("[GameEnd] 게임 끝! Team 0=%d%% Team 1=%d%%"),
 		Team0Percent,
 		Team1Percent);
 
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString::Join(ZoneDebugTexts, TEXT("\n\n")));
-		const int64 TeamVoxelTotal = TeamMaterialVoxelCounts[0] + TeamMaterialVoxelCounts[1];
-		const int32 RedPercent = TeamVoxelTotal > 0
-			? FMath::RoundToInt(static_cast<double>(TeamMaterialVoxelCounts[0]) / TeamVoxelTotal * 100.0)
-			: 0;
-		const int32 BluePercent = TeamVoxelTotal > 0 ? 100 - RedPercent : 0;
 		MiningGameState->SetGameResultText(FText::FromString(FString::Printf(
 			TEXT("[Red] %d : %d [Blue]"),
-			RedPercent,
-			BluePercent)));
+			Team0Percent,
+			Team1Percent)));
 		GetWorldTimerManager().SetTimer(
 			GameResultTimerHandle,
 			this,
@@ -177,6 +174,7 @@ void ADRMiningGameModeBase::ClearGameResultText()
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetGameTimerState(0, false, false);
 	}
 }
 

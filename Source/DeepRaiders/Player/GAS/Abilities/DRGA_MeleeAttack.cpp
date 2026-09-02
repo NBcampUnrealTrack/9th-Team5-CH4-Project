@@ -16,7 +16,13 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
+	SetAssetTags(InitialTags);
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
 }
 
 void UDRGA_MeleeAttack::ActivateAbility(
@@ -31,6 +37,17 @@ void UDRGA_MeleeAttack::ActivateAbility(
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 
+		return;
+	}
+
+	const UAbilitySystemComponent* AbilitySystem =
+		ActorInfo->AbilitySystemComponent.Get();
+
+	if (IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(
+			DRGameplayTags::State_MovementAction_Zipline))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 

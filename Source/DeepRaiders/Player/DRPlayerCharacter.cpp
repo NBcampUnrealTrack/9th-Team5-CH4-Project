@@ -1,4 +1,4 @@
-#include "DRPlayerCharacter.h"
+﻿#include "DRPlayerCharacter.h"
 
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -380,6 +380,23 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 {
+	const bool bMovementInputChanged =
+		!LatestMovementInput.Equals(MoveInput);
+
+	LatestMovementInput = MoveInput;
+
+	if (!HasAuthority()
+		&& bMovementInputChanged)
+	{
+		/*
+		 * GAS Ability는 PlayerState에서 실행되므로,
+		 * 별도 Actor channel인 입력 RPC와 발동 RPC 사이의 순서를 전제하지 않는다.
+		 * 대시는 TargetData를 우선 사용하고,
+		 * 이 값은 Blink/Roll 등 서버 실행 경로의 입력 상태로 사용한다.
+		 */
+		ServerSetLatestMovementInput(MoveInput);
+	}
+
 	if (!Controller || IsDead() || IsFrozen())
 	{
 		return;
@@ -392,26 +409,49 @@ void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 		if (ActionState.ActionType == EDRMovementActionType::Zipline
 			&& ActionState.ZiplineRideMode == EDRZiplineRideMode::ManualTraverse)
 		{
-			// ManualTraverse는 탑승한 쪽과 무관하게 W=높은 Endpoint, S=낮은 Endpoint로 고정한다.
-			// A/D는 의도적으로 무시한다. 두 Endpoint 높이가 같으면 탑승 Endpoint -> LinkedEndpoint 방향을 사용한다.
-			const FVector EndpointA = ActionState.ZiplineStartLocation;
-			const FVector EndpointB = ActionState.ReferenceLocation;
+			// ManualTraverse는 A/D를 무시하고 Rope 축 방향 W/S만 사용한다.
+			FVector PositiveAxis =
+				ActionState.GetZiplineManualPositiveAxis();
 
-			FVector LowerEndpoint = EndpointA;
-			FVector UpperEndpoint = EndpointB;
-
-			if (EndpointA.Z > EndpointB.Z + KINDA_SMALL_NUMBER)
+			if (PositiveAxis.IsNearlyZero())
 			{
-				LowerEndpoint = EndpointB;
-				UpperEndpoint = EndpointA;
+				return;
 			}
 
-			const FVector TraverseAxis = (UpperEndpoint - LowerEndpoint).GetSafeNormal();
-
-			if (!TraverseAxis.IsNearlyZero())
+			if (ActionState.ZiplineManualControlMode
+				== EDRZiplineManualControlMode::ViewRelative)
 			{
-				AddMovementInput(TraverseAxis, MoveInput.Y);
+				const FVector ViewForward =
+					Controller->GetControlRotation()
+					.Vector()
+					.GetSafeNormal();
+
+				float ViewDot =
+					FVector::DotProduct(
+						ViewForward,
+						PositiveAxis);
+
+				/*
+				 * Rope를 거의 정측면으로 보는 순간에는 작은 카메라 흔들림으로
+				 * W 방향이 매 프레임 뒤집히지 않도록 Character Forward를 fallback으로 사용한다.
+				 */
+				if (FMath::Abs(ViewDot) < 0.1f)
+				{
+					ViewDot =
+						FVector::DotProduct(
+							GetActorForwardVector(),
+							PositiveAxis);
+				}
+
+				if (ViewDot < 0.f)
+				{
+					PositiveAxis *= -1.f;
+				}
 			}
+
+			AddMovementInput(
+				PositiveAxis,
+				MoveInput.Y);
 
 			return;
 		}
@@ -423,6 +463,47 @@ void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 	AddMovementInput(ForwardDirection, MoveInput.Y);
 	AddMovementInput(RightDirection, MoveInput.X);
+}
+
+FVector ADRPlayerCharacter::GetSkillMovementDirection() const
+{
+	if (LatestMovementInput.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	const AController* CurrentController =
+		GetController();
+
+	if (CurrentController == nullptr)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FRotator YawRotation(
+		0.f,
+		CurrentController->GetControlRotation().Yaw,
+		0.f);
+
+	const FVector ForwardDirection =
+		FRotationMatrix(YawRotation)
+		.GetUnitAxis(EAxis::X);
+
+	const FVector RightDirection =
+		FRotationMatrix(YawRotation)
+		.GetUnitAxis(EAxis::Y);
+
+	return (
+		ForwardDirection * LatestMovementInput.Y
+		+ RightDirection * LatestMovementInput.X
+	)
+	.GetSafeNormal2D();
+}
+
+void ADRPlayerCharacter::ServerSetLatestMovementInput_Implementation(
+	const FVector2D InMovementInput)
+{
+	LatestMovementInput = InMovementInput;
 }
 
 void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)

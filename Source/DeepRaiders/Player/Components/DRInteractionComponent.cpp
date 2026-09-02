@@ -236,11 +236,23 @@ EDRInteractionValidationResult UDRInteractionComponent::EvaluateInteractionTarge
 		return EDRInteractionValidationResult::InvalidInteractor;
 	}
 
-	FVector BoundsOrigin;
-	FVector BoundsExtent;
-	Target->GetActorBounds(false, BoundsOrigin, BoundsExtent);
+	FVector InteractionLocation = FVector::ZeroVector;
+
+	const bool bHasCustomInteractionLocation =
+		IDRInteractableInterface::Execute_GetInteractionLocation(
+			Target,
+			Interactor,
+			InteractionLocation);
+
+	if (!bHasCustomInteractionLocation
+		|| InteractionLocation.ContainsNaN())
+	{
+		FVector BoundsExtent;
+		Target->GetActorBounds(false, InteractionLocation, BoundsExtent);
+	}
 	
-	const FVector PawnToTarget = BoundsOrigin - Interactor->GetActorLocation();
+	const FVector PawnToTarget =
+		InteractionLocation - Interactor->GetActorLocation();
 
 	OutDistanceSquared = PawnToTarget.SizeSquared();
 
@@ -250,18 +262,30 @@ EDRInteractionValidationResult UDRInteractionComponent::EvaluateInteractionTarge
 		return EDRInteractionValidationResult::OutOfRange;
 	}
 
-	const FVector ViewToTargetDirection = (BoundsOrigin - ViewLocation).GetSafeNormal();
+	const FVector ViewToTargetDirection =
+		(InteractionLocation - ViewLocation).GetSafeNormal();
 
-	OutAimDot = FVector::DotProduct(ViewDirection,ViewToTargetDirection);
+	OutAimDot =
+		FVector::DotProduct(
+			ViewDirection,
+			ViewToTargetDirection);
 
-	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(MaxInteractionAngleDegrees));
+	const float MinimumAimDot =
+		FMath::Cos(
+			FMath::DegreesToRadians(
+				MaxInteractionAngleDegrees));
 
 	if (OutAimDot < MinimumAimDot)
 	{
 		return EDRInteractionValidationResult::OutsideInteractionAngle;
 	}
 
-	if (!HasClearLineOfSight(World, Interactor, Target, ViewLocation, BoundsOrigin))
+	if (!HasClearLineOfSight(
+			World,
+			Interactor,
+			Target,
+			ViewLocation,
+			InteractionLocation))
 	{
 		return EDRInteractionValidationResult::BlockedLineOfSight;
 	}

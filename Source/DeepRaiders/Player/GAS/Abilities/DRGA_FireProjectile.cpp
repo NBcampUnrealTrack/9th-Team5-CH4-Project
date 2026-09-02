@@ -9,9 +9,9 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 
-bool UDRGA_FireProjectile::IsAttackConfigurationValid() const
+bool UDRGA_FireProjectile::IsAttackConfigurationValid(const UDRProjectileWeaponItemDefinition* WeaponDefinition) const
 {
-	return Super::IsAttackConfigurationValid() && ProjectileClass != nullptr;
+	return Super::IsAttackConfigurationValid(WeaponDefinition) && WeaponDefinition->ProjectileClass != nullptr;
 }
 
 void UDRGA_FireProjectile::OnRangedWeaponActivated()
@@ -205,8 +205,15 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 
-	const int32 SafeProjectileCount = FMath::Max(ProjectileCount, 1);
-	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(SpreadHalfAngleDegrees, 0.f));
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return false;
+	}	
+	
+	const int32 SafeProjectileCount = FMath::Max(WeaponDefinition->ProjectileCount, 1);
+	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(WeaponDefinition->SpreadHalfAngleDegrees, 0.f));
 	bool bSpawnedAnyProjectile = false;
 	for (int32 ProjectileIndex = 0; ProjectileIndex < SafeProjectileCount; ++ProjectileIndex)
 	{
@@ -240,7 +247,12 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	UAbilitySystemComponent* AbilitySystem,
 	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs)
 {
-	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem) || !ProjectileClass)
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	
+	if (!IsValid(AvatarActor)
+		|| !IsValid(AbilitySystem)
+		|| !IsValid(WeaponDefinition)
+		|| !WeaponDefinition->ProjectileClass)
 	{
 		return false;
 	}
@@ -260,11 +272,6 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	}
 
 	const FTransform SpawnTransform(SafeDirection.Rotation(), SpawnLocation);
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
-	if (!IsValid(WeaponDefinition))
-	{
-		return false;
-	}
 
 	const FDRProjectileWeaponSnowAddSettings& SnowAddSettings = WeaponDefinition->SnowAddSettings;
 	FDRProjectileWorldImpactData WorldImpactData;
@@ -274,7 +281,8 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	WorldImpactData.SnowEditTool = SnowAddSettings.EditTool;
 	WorldImpactData.bAllowVirtualSurfaceFallback = SnowAddSettings.bAllowVirtualSurfaceFallback;
 
-	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(ProjectileClass, SpawnTransform, AvatarActor, Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(WeaponDefinition->ProjectileClass,
+		SpawnTransform, AvatarActor, Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 	if (!IsValid(Projectile))
 	{

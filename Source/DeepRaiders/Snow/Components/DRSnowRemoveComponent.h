@@ -28,7 +28,7 @@ struct DEEPRAIDERS_API FDRSnowRemovalSpec
 	float SnowAbsorbRange = 1000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (Units = "cm"))
-	float SnowAbsorbStartOffset = 75.f;
+	FVector SnowAbsorbStartOffset = FVector(75.f, 0.f, 0.f);
 
 	// Adaptive 거리 필드 slab의 최소 절반 깊이다. 기존 데이터 호환을 위해 이름을 유지한다.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snow|Remove", meta = (ClampMin = "1.0", Units = "cm"))

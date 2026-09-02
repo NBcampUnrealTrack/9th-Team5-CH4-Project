@@ -2,6 +2,9 @@
 #include "DRMovementActionComponent.h"
 
 #include "DRCharacterMovementComponent.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
@@ -20,6 +23,12 @@ void UDRMovementActionComponent::GetLifetimeReplicatedProps(TArray<class FLifeti
 	DOREPLIFETIME(ThisClass, AuthoritativeActionState);
 }
 
+void UDRMovementActionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	SetZiplineGameplayTagsActive(false);
+	Super::EndPlay(EndPlayReason);
+}
+
 bool UDRMovementActionComponent::StartPredictedMovementAction(const FDRMovementActionState& NewState)
 {
 	if (!IsLocallyControlledOwner()
@@ -30,6 +39,7 @@ bool UDRMovementActionComponent::StartPredictedMovementAction(const FDRMovementA
 	}
 	
 	PredictedActionState = NewState;
+	RefreshZiplineGameplayTags();
 	return true;	
 }
 
@@ -46,6 +56,7 @@ bool UDRMovementActionComponent::StartAuthoritativeMovementAction(const FDRMovem
 	}
 	
 	AuthoritativeActionState = NewState;
+	RefreshZiplineGameplayTags();
 	RequestReplicationUpdate();
 	
 	return true;	
@@ -71,6 +82,7 @@ void UDRMovementActionComponent::EndMovementAction(EDRMovementActionEndReason En
 		AuthoritativeActionState.ActionType = EDRMovementActionType::None;
 		AuthoritativeActionState.LastEndReason = EndReason;
 		
+		RefreshZiplineGameplayTags();
 		RequestReplicationUpdate();
 		
 		OnMovementActionEnded.Broadcast(EndReason);
@@ -84,6 +96,7 @@ void UDRMovementActionComponent::EndMovementAction(EDRMovementActionEndReason En
 	}
 	
 	ClearPredictedActionState();
+	RefreshZiplineGameplayTags();
 	OnMovementActionEnded.Broadcast(EndReason);
 }
 
@@ -157,107 +170,215 @@ void UDRMovementActionComponent::EvaluateZiplineContribution(const FDRMovementAc
 	}
 }
 
-void UDRMovementActionComponent::EvaluateZiplineAutoTraverseContribution(const FDRMovementActionState& State,
-	const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const
+void UDRMovementActionComponent::EvaluateZiplineAutoTraverseContribution(
+	const FDRMovementActionState& State,
+	const FDRMovementActionSimulationInput& Input,
+	FDRMovementActionSimulationOutput& OutOutput) const
 {
 	OutOutput.bApplyGravity = false;
 	OutOutput.bOverrideVelocity = true;
 
-	const FVector StartLocation = State.ZiplineStartLocation;
-	const FVector TargetLocation = State.ReferenceLocation;
-	const FVector SegmentDelta = TargetLocation - StartLocation;
-	const float SegmentLength = SegmentDelta.Size();
+	const FVector StartLocation =
+		State.GetZiplineRideStartLocation();
 
-	if (SegmentLength <= KINDA_SMALL_NUMBER)
+	const FVector TargetLocation =
+		State.GetZiplineRideTargetLocation();
+
+	const FVector SegmentDelta =
+		TargetLocation - StartLocation;
+
+	const float SegmentLength =
+		SegmentDelta.Size();
+
+	if (SegmentLength <= KINDA_SMALL_NUMBER
+		|| State.MaxSpeed <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	const FVector Axis = SegmentDelta / SegmentLength;
-	const float SafeDeltaTime = FMath::Max(Input.DeltaTime, KINDA_SMALL_NUMBER);
+	const FVector Axis =
+		SegmentDelta / SegmentLength;
 
-	// 현재 캐릭터 위치를 Zipline segment 위에 투영한다.
-	// 따라서 Endpoint 옆에서 상호작용해도 현재 위치에서 Target으로 대각선 이동하지 않고,
-	// 먼저/동시에 실제 Zipline 선에 붙으면서 반대 Endpoint 방향으로 진행한다.
-	const float DistanceAlongSegment = FMath::Clamp(
-		FVector::DotProduct(Input.Location - StartLocation, Axis),
-		0.f,
-		SegmentLength);
+	const float SafeDeltaTime =
+		FMath::Max(
+			Input.DeltaTime,
+			KINDA_SMALL_NUMBER);
 
-	const float RemainingDistance = SegmentLength - DistanceAlongSegment;
-	const float StepDistance = FMath::Min(State.MaxSpeed * SafeDeltaTime, RemainingDistance);
-	const float DesiredDistanceAlongSegment = DistanceAlongSegment + StepDistance;
-
-	const FVector DesiredLocation = StartLocation + Axis * DesiredDistanceAlongSegment;
-
-	// 위치 기반으로 이번 substep의 속도를 역산한다.
-	// lateral offset 제거와 Endpoint overshoot 방지를 동시에 처리한다.
-	OutOutput.OverrideVelocity = (DesiredLocation - Input.Location) / SafeDeltaTime;
-}
-
-void UDRMovementActionComponent::EvaluateZiplineManualTraverseContribution(const FDRMovementActionState& State,
-	const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const
-{
-	OutOutput.bApplyGravity = false;
-	OutOutput.bOverrideVelocity = true;
-
-	const FVector EndpointA = State.ZiplineStartLocation;
-	const FVector EndpointB = State.ReferenceLocation;
-	const FVector SegmentDelta = EndpointB - EndpointA;
-	const float SegmentLength = SegmentDelta.Size();
-
-	if (SegmentLength <= KINDA_SMALL_NUMBER)
-	{
-		return;
-	}
-
-	// ManualTraverse의 W/S는 어느 Endpoint에서 탔는지가 아니라 월드 높이를 기준으로 한다.
-	// W는 높은 Endpoint 방향, S는 낮은 Endpoint 방향이다.
-	// 두 Endpoint의 높이가 사실상 같으면 탑승 Endpoint -> LinkedEndpoint 방향을 W로 사용한다.
-	FVector LowerEndpoint = EndpointA;
-	FVector UpperEndpoint = EndpointB;
-
-	if (EndpointA.Z > EndpointB.Z + KINDA_SMALL_NUMBER)
-	{
-		LowerEndpoint = EndpointB;
-		UpperEndpoint = EndpointA;
-	}
-
-	const FVector TraverseAxis = (UpperEndpoint - LowerEndpoint).GetSafeNormal();
-
-	if (TraverseAxis.IsNearlyZero())
-	{
-		return;
-	}
-
-	// PlayerCharacter는 ManualTraverse 중 W/S 입력을 TraverseAxis 방향으로만 AddMovementInput 한다.
-	// 기존 CharacterMovement 입력/네트워크 예측 파이프라인을 그대로 사용하고 여기서는 부호만 읽는다.
-	const float InputScalar = FVector::DotProduct(Input.RawAcceleration.GetSafeNormal(), TraverseAxis);
-	const float SafeDeltaTime = FMath::Max(Input.DeltaTime, KINDA_SMALL_NUMBER);
-
-	// 현재 위치를 실제 Zipline segment 위의 가장 가까운 위치로 투영한다.
-	// 입력이 없어도 이 위치로 보정하므로 줄 옆에서 평행하게 이동하지 않고 segment에 붙어 있게 된다.
-	const float DistanceAlongSegment = FMath::Clamp(
-		FVector::DotProduct(Input.Location - LowerEndpoint, TraverseAxis),
-		0.f,
-		SegmentLength);
-
-	float DesiredDistanceAlongSegment = DistanceAlongSegment;
-
-	if (!FMath::IsNearlyZero(InputScalar))
-	{
-		const float SignedStep = FMath::Sign(InputScalar) * State.MaxSpeed * SafeDeltaTime;
-		DesiredDistanceAlongSegment = FMath::Clamp(
-			DistanceAlongSegment + SignedStep,
+	const float DistanceAlongSegment =
+		FMath::Clamp(
+			FVector::DotProduct(
+				Input.Location - StartLocation,
+				Axis),
 			0.f,
 			SegmentLength);
+
+	const float CurrentRailSpeed =
+		FMath::Clamp(
+			Input.ZiplineRailSpeed,
+			0.f,
+			State.MaxSpeed);
+
+	const float DesiredRailSpeed =
+		State.ZiplineAcceleration > KINDA_SMALL_NUMBER
+			? FMath::Min(
+				CurrentRailSpeed
+					+ State.ZiplineAcceleration
+					* SafeDeltaTime,
+				State.MaxSpeed)
+			: State.MaxSpeed;
+
+	OutOutput.bUpdateZiplineRailSpeed = true;
+	OutOutput.ZiplineRailSpeed = DesiredRailSpeed;
+
+	const float RemainingDistance =
+		SegmentLength - DistanceAlongSegment;
+
+	const float StepDistance =
+		FMath::Min(
+			DesiredRailSpeed * SafeDeltaTime,
+			RemainingDistance);
+
+	const float DesiredDistanceAlongSegment =
+		DistanceAlongSegment + StepDistance;
+
+	const FVector DesiredLocation =
+		StartLocation
+		+ Axis * DesiredDistanceAlongSegment;
+
+	/*
+	 * 위치 기반으로 속도를 역산하므로
+	 * Rope 옆에서 탑승해도 rail에 붙는 보정과
+	 * 축 방향 가속을 한 번에 처리한다.
+	 */
+	OutOutput.OverrideVelocity =
+		(DesiredLocation - Input.Location)
+		/ SafeDeltaTime;
+}
+
+void UDRMovementActionComponent::EvaluateZiplineManualTraverseContribution(
+	const FDRMovementActionState& State,
+	const FDRMovementActionSimulationInput& Input,
+	FDRMovementActionSimulationOutput& OutOutput) const
+{
+	OutOutput.bApplyGravity = false;
+	OutOutput.bOverrideVelocity = true;
+	OutOutput.bUpdateZiplineRailSpeed = true;
+
+	FVector AxisStart;
+	FVector AxisEnd;
+
+	State.GetZiplineManualTraverseSegment(
+		AxisStart,
+		AxisEnd);
+
+	const FVector SegmentDelta =
+		AxisEnd - AxisStart;
+
+	const float SegmentLength =
+		SegmentDelta.Size();
+
+	if (SegmentLength <= KINDA_SMALL_NUMBER
+		|| State.MaxSpeed <= KINDA_SMALL_NUMBER)
+	{
+		OutOutput.ZiplineRailSpeed = 0.f;
+		return;
 	}
 
-	const FVector DesiredLocation = LowerEndpoint + TraverseAxis * DesiredDistanceAlongSegment;
+	const FVector TraverseAxis =
+		SegmentDelta / SegmentLength;
 
-	// 위치 기반으로 이번 substep의 속도를 역산한다.
-	// 이동과 동시에 lateral offset을 제거하고 Endpoint overshoot도 막는다.
-	OutOutput.OverrideVelocity = (DesiredLocation - Input.Location) / SafeDeltaTime;
+	const float SafeDeltaTime =
+		FMath::Max(
+			Input.DeltaTime,
+			KINDA_SMALL_NUMBER);
+
+	const float InputScalar =
+		FVector::DotProduct(
+			Input.RawAcceleration.GetSafeNormal(),
+			TraverseAxis);
+
+	const float CurrentRailSpeed =
+		FMath::Clamp(
+			Input.ZiplineRailSpeed,
+			-State.MaxSpeed,
+			State.MaxSpeed);
+
+	float DesiredRailSpeed = 0.f;
+
+	if (FMath::IsNearlyZero(InputScalar))
+	{
+		DesiredRailSpeed =
+			State.ZiplineBrakingDeceleration
+				> KINDA_SMALL_NUMBER
+				? FMath::FInterpConstantTo(
+					CurrentRailSpeed,
+					0.f,
+					SafeDeltaTime,
+					State.ZiplineBrakingDeceleration)
+				: 0.f;
+	}
+	else
+	{
+		const float TargetRailSpeed =
+			FMath::Sign(InputScalar)
+			* State.MaxSpeed;
+
+		DesiredRailSpeed =
+			State.ZiplineAcceleration
+				> KINDA_SMALL_NUMBER
+				? FMath::FInterpConstantTo(
+					CurrentRailSpeed,
+					TargetRailSpeed,
+					SafeDeltaTime,
+					State.ZiplineAcceleration)
+				: TargetRailSpeed;
+	}
+
+	const float DistanceAlongSegment =
+		FMath::Clamp(
+			FVector::DotProduct(
+				Input.Location - AxisStart,
+				TraverseAxis),
+			0.f,
+			SegmentLength);
+
+	/*
+	 * Endpoint 바깥 방향 입력은 실제 이동이 0이므로 rail speed도 0으로 고정한다.
+	 * 따라서 끝에 붙은 상태에서 반대 입력을 주면 즉시 안쪽으로 재가속할 수 있다.
+	 */
+	if ((DistanceAlongSegment <= KINDA_SMALL_NUMBER
+			&& DesiredRailSpeed < 0.f)
+		|| (DistanceAlongSegment
+				>= SegmentLength - KINDA_SMALL_NUMBER
+			&& DesiredRailSpeed > 0.f))
+	{
+		DesiredRailSpeed = 0.f;
+	}
+
+	OutOutput.ZiplineRailSpeed =
+		DesiredRailSpeed;
+
+	const float DesiredDistanceAlongSegment =
+		FMath::Clamp(
+			DistanceAlongSegment
+				+ DesiredRailSpeed
+				* SafeDeltaTime,
+			0.f,
+			SegmentLength);
+
+	const FVector DesiredLocation =
+		AxisStart
+		+ TraverseAxis
+		* DesiredDistanceAlongSegment;
+
+	/*
+	 * Attach 보정 속도는 OverrideVelocity에만 존재한다.
+	 * gameplay rail speed는 OutOutput.ZiplineRailSpeed로 별도 보존하므로
+	 * Rope에 붙는 순간의 큰 보정 Velocity가 다음 프레임 이동 속도로 섞이지 않는다.
+	 */
+	OutOutput.OverrideVelocity =
+		(DesiredLocation - Input.Location)
+		/ SafeDeltaTime;
 }
 
 bool UDRMovementActionComponent::IsZiplineTargetReached(const FVector& CurrentLocation) const
@@ -272,7 +393,7 @@ bool UDRMovementActionComponent::IsZiplineTargetReached(const FVector& CurrentLo
 		return false;
 	}
 
-	return FVector::DistSquared(CurrentLocation, State.ReferenceLocation) <= KINDA_SMALL_NUMBER;
+	return FVector::DistSquared(CurrentLocation, State.GetZiplineRideTargetLocation()) <= KINDA_SMALL_NUMBER;
 }
 
 void UDRMovementActionComponent::RequestCancelZipline()
@@ -319,6 +440,170 @@ void UDRMovementActionComponent::ServerRequestCancelZipline_Implementation(int32
 		: nullptr;
 
 	if (IsValid(Movement))
+	{
+		Movement->ExitCustomMovementMode();
+	}
+}
+
+UAbilitySystemComponent* UDRMovementActionComponent::ResolveOwnerAbilitySystemComponent() const
+{
+	const IAbilitySystemInterface* AbilitySystemOwner = Cast<IAbilitySystemInterface>(GetOwner());
+	return AbilitySystemOwner != nullptr ? AbilitySystemOwner->GetAbilitySystemComponent() : nullptr;
+}
+
+void UDRMovementActionComponent::RefreshZiplineGameplayTags()
+{
+	const FDRMovementActionState& State = GetSimulationActionState();
+	const bool bShouldBeActive = State.IsActive() && State.ActionType == EDRMovementActionType::Zipline;
+
+	SetZiplineGameplayTagsActive(bShouldBeActive);
+}
+
+void UDRMovementActionComponent::SetZiplineGameplayTagsActive(bool bActive)
+{
+	if (bActive == bZiplineGameplayTagsApplied)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = bActive
+		? ResolveOwnerAbilitySystemComponent()
+		: ZiplineTaggedAbilitySystem.Get();
+
+	if (!IsValid(AbilitySystem) && !bActive)
+	{
+		AbilitySystem = ResolveOwnerAbilitySystemComponent();
+	}
+
+	if (!IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	if (bActive)
+	{
+		// Active는 기존 QuickSlot 잠금 정책을 그대로 재사용하고,
+		// Zipline은 공격/애니메이션 등 Zipline 전용 정책의 식별자로 사용한다.
+		AbilitySystem->AddLooseGameplayTag(DRGameplayTags::State_MovementAction_Active);
+		AbilitySystem->AddLooseGameplayTag(DRGameplayTags::State_MovementAction_Zipline);
+
+		ZiplineTaggedAbilitySystem = AbilitySystem;
+		bZiplineGameplayTagsApplied = true;
+
+		// 탑승 전에 이미 유지 중이던 공격도 즉시 종료한다.
+		// 새 공격 시작은 각 Ability의 ActivationBlockedTags가 막는다.
+		// WithTags 한 컨테이너에 Ranged/Melee를 함께 넣으면
+		// 둘 다 가진 Ability만 매칭될 수 있으므로 각 그룹을 따로 취소한다.
+		FGameplayTagContainer RangedAttackTags;
+		RangedAttackTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+		AbilitySystem->CancelAbilities(&RangedAttackTags);
+
+		FGameplayTagContainer MeleeAttackTags;
+		MeleeAttackTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
+		AbilitySystem->CancelAbilities(&MeleeAttackTags);
+		return;
+	}
+
+	AbilitySystem->RemoveLooseGameplayTag(DRGameplayTags::State_MovementAction_Zipline);
+	AbilitySystem->RemoveLooseGameplayTag(DRGameplayTags::State_MovementAction_Active);
+
+	bZiplineGameplayTagsApplied = false;
+	ZiplineTaggedAbilitySystem.Reset();
+}
+
+void UDRMovementActionComponent::ApplyZiplineInitialVelocity(
+	const FDRMovementActionState& State) const
+{
+	if (!State.IsActive()
+		|| State.ActionType != EDRMovementActionType::Zipline)
+	{
+		return;
+	}
+
+	ACharacter* Character =
+		Cast<ACharacter>(GetOwner());
+
+	UDRCharacterMovementComponent* Movement =
+		IsValid(Character)
+			? Cast<UDRCharacterMovementComponent>(
+				Character->GetCharacterMovement())
+			: nullptr;
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	if (State.ZiplineRideMode == EDRZiplineRideMode::ManualTraverse)
+	{
+		// Manual은 Rope를 잡는 순간 현재 운동량과 이전 이동 입력을 모두 버린다.
+		Movement->SetZiplineRailSpeed(0.f);
+		Movement->ResetManualZiplineInputState();
+		Movement->Velocity = FVector::ZeroVector;
+		return;
+	}
+
+	const FVector TravelAxis =
+		(
+			State.GetZiplineRideTargetLocation()
+			- State.GetZiplineRideStartLocation()
+		)
+		.GetSafeNormal();
+
+	if (TravelAxis.IsNearlyZero())
+	{
+		Movement->Velocity = FVector::ZeroVector;
+		return;
+	}
+
+	const float InitialSpeed =
+		FMath::Clamp(
+			State.ZiplineInitialSpeed,
+			0.f,
+			FMath::Max(
+				State.MaxSpeed,
+				0.f));
+
+	Movement->SetZiplineRailSpeed(
+		InitialSpeed);
+
+	Movement->Velocity =
+		TravelAxis * InitialSpeed;
+}
+
+void UDRMovementActionComponent::ReconcileLocallyControlledMovementMode()
+{
+	APawn* PawnOwner = Cast<APawn>(GetOwner());
+
+	if (!IsValid(PawnOwner)
+		|| !PawnOwner->IsLocallyControlled())
+	{
+		return;
+	}
+
+	ACharacter* Character = Cast<ACharacter>(PawnOwner);
+	UDRCharacterMovementComponent* Movement = IsValid(Character)
+		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
+		: nullptr;
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	if (State.IsActive())
+	{
+		if (!Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+		{
+			Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+		}
+
+		return;
+	}
+
+	if (Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
 	{
 		Movement->ExitCustomMovementMode();
 	}
@@ -380,6 +665,17 @@ void UDRMovementActionComponent::OnRep_AuthoritativeActionState()
 	{
 		ClearPredictedActionState();
 	}
+
+	RefreshZiplineGameplayTags();
+
+	if (!bWasActive
+		&& IsLocallyControlledOwner())
+	{
+		ApplyZiplineInitialVelocity(
+			GetSimulationActionState());
+	}
+
+	ReconcileLocallyControlledMovementMode();
 
 	// 기존에는 활성 상태였지만 서버 상태 반영 후 종료된 경우다.
 	if (bWasActive && !IsMovementActionActive())

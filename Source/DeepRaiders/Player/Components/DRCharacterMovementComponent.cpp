@@ -7,12 +7,63 @@
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
 #include "AbilitySystemComponent.h"
 
+
+namespace
+{
+    FVector ResolveManualZiplineTraverseAxis(
+        const FDRMovementActionState& State)
+    {
+        if (!State.IsActive()
+            || State.ActionType != EDRMovementActionType::Zipline
+            || State.ZiplineRideMode != EDRZiplineRideMode::ManualTraverse)
+        {
+            return FVector::ZeroVector;
+        }
+
+        return State.GetZiplineManualPositiveAxis();
+    }
+
+    int8 ResolveManualZiplineInput(
+        const FDRMovementActionState& State,
+        const FVector& Acceleration)
+    {
+        const FVector TraverseAxis =
+            ResolveManualZiplineTraverseAxis(State);
+
+        if (TraverseAxis.IsNearlyZero()
+            || Acceleration.IsNearlyZero())
+        {
+            return 0;
+        }
+
+        const float InputDot =
+            FVector::DotProduct(
+                Acceleration.GetSafeNormal(),
+                TraverseAxis);
+
+        if (InputDot > KINDA_SMALL_NUMBER)
+        {
+            return 1;
+        }
+
+        if (InputDot < -KINDA_SMALL_NUMBER)
+        {
+            return -1;
+        }
+
+        return 0;
+    }
+}
+
 class FSavedMove_DRCharacter : public FSavedMove_Character
 {
 public:
     typedef FSavedMove_Character Super;
 
     uint8 bSavedWantsJetpack : 1;
+    uint8 bSavedZiplineActive : 1;
+    int8 SavedManualZiplineInput = 0;
+    float SavedZiplineRailSpeed = 0.f;
     float SavedJetpackSpoolElapsed = 0.f;
 
     virtual void Clear() override
@@ -20,6 +71,9 @@ public:
         Super::Clear();
 
         bSavedWantsJetpack = false;
+        bSavedZiplineActive = false;
+        SavedManualZiplineInput = 0;
+        SavedZiplineRailSpeed = 0.f;
         SavedJetpackSpoolElapsed = 0.f;
     }
 
@@ -32,6 +86,15 @@ public:
             Result |= FLAG_Custom_0;
         }
 
+        if (SavedManualZiplineInput > 0)
+        {
+            Result |= FLAG_Custom_1;
+        }
+        else if (SavedManualZiplineInput < 0)
+        {
+            Result |= FLAG_Custom_2;
+        }
+
         return Result;
     }
 
@@ -42,7 +105,19 @@ public:
     {
         const FSavedMove_DRCharacter* NewDRMove = static_cast<const FSavedMove_DRCharacter*>(NewMove.Get());
 
-        if (bSavedWantsJetpack != NewDRMove->bSavedWantsJetpack)
+        if (bSavedWantsJetpack != NewDRMove->bSavedWantsJetpack
+            || SavedManualZiplineInput != NewDRMove->SavedManualZiplineInput)
+        {
+            return false;
+        }
+
+        /*
+         * Zipline 가감속은 프레임 단위 rail-speed 적분을 사용한다.
+         * Move를 합치면 같은 입력이어도 적분 결과가 달라질 수 있으므로
+         * Zipline 탑승 중에는 SavedMove를 합치지 않는다.
+         */
+        if (bSavedZiplineActive
+            || NewDRMove->bSavedZiplineActive)
         {
             return false;
         }
@@ -83,6 +158,30 @@ public:
 
         bSavedWantsJetpack = Movement->bWantsJetpack;
 
+        const UDRMovementActionComponent* MovementAction =
+            Character->FindComponentByClass<UDRMovementActionComponent>();
+
+        const FDRMovementActionState* ActionState =
+            IsValid(MovementAction)
+                ? &MovementAction->GetSimulationActionState()
+                : nullptr;
+
+        bSavedZiplineActive =
+            ActionState != nullptr
+            && ActionState->IsActive()
+            && ActionState->ActionType
+                == EDRMovementActionType::Zipline;
+
+        SavedManualZiplineInput =
+            ActionState != nullptr
+                ? ResolveManualZiplineInput(
+                    *ActionState,
+                    NewAccel)
+                : 0;
+
+        SavedZiplineRailSpeed =
+            Movement->ZiplineRailSpeed;
+
         SavedJetpackSpoolElapsed = Movement->JetpackSpoolElapsed;
     }
 
@@ -102,6 +201,12 @@ public:
 
         Movement->bWantsJetpack =
             bSavedWantsJetpack;
+
+        Movement->ManualZiplineInput =
+            SavedManualZiplineInput;
+
+        Movement->ZiplineRailSpeed =
+            SavedZiplineRailSpeed;
 
         Movement->JetpackSpoolElapsed =
             SavedJetpackSpoolElapsed;
@@ -221,6 +326,17 @@ void UDRCharacterMovementComponent::SetWantsJetpack(
     JetpackSpoolElapsed = 0.f;
 }
 
+void UDRCharacterMovementComponent::ResetManualZiplineInputState()
+{
+    ManualZiplineInput = 0;
+    Acceleration = FVector::ZeroVector;
+
+    if (IsValid(CharacterOwner))
+    {
+        CharacterOwner->ConsumeMovementInputVector();
+    }
+}
+
 void UDRCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
 {
     Super::UpdateFromCompressedFlags(Flags);
@@ -230,6 +346,23 @@ void UDRCharacterMovementComponent::UpdateFromCompressedFlags(uint8 Flags)
          FSavedMove_Character::FLAG_Custom_0) != 0;
 
     SetWantsJetpack(bNewWantsJetpack);
+
+
+    const bool bManualZiplineForward =
+        (Flags & FSavedMove_Character::FLAG_Custom_1) != 0;
+
+    const bool bManualZiplineBackward =
+        (Flags & FSavedMove_Character::FLAG_Custom_2) != 0;
+
+    if (bManualZiplineForward == bManualZiplineBackward)
+    {
+        ManualZiplineInput = 0;
+    }
+    else
+    {
+        ManualZiplineInput =
+            bManualZiplineForward ? 1 : -1;
+    }
 }
 
 void UDRCharacterMovementComponent::SetBase(
@@ -313,9 +446,13 @@ void UDRCharacterMovementComponent::ExitCustomMovementMode()
 {
     if (MovementMode != MOVE_Custom)
     {
+        ManualZiplineInput = 0;
+        ZiplineRailSpeed = 0.f;
         return;
     }
-    
+
+    ManualZiplineInput = 0;
+    ZiplineRailSpeed = 0.f;
     RestoreDefaultMovementMode();
 }
 
@@ -336,6 +473,9 @@ UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComp
 
 void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
 {
+    ManualZiplineInput = 0;
+    ZiplineRailSpeed = 0.f;
+
     if (!UpdatedComponent)
     {
         SetMovementMode(MOVE_Falling);
@@ -426,11 +566,35 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         // 기존 CharacterMovement의 공중 제어 계산을 재사용
         Input.InputAcceleration = GetFallingLateralAcceleration(TimeTick);
         Input.Gravity = -GetGravityDirection() * GetGravityZ();
-        // 가공하지 않은 원본 입력 가속도. Zipline ManualTraverse가 W/S 방향 판단에 사용한다.
+        // 소유 클라이언트는 즉각적인 반응을 위해 현재 Acceleration을 사용한다.
+        // Dedicated Server의 원격 Pawn은 SavedMove Custom Flag로 복원한
+        // ManualZiplineInput을 사용해 W/S pressed/released를 정확히 재현한다.
         Input.RawAcceleration = Acceleration;
+        Input.ZiplineRailSpeed = ZiplineRailSpeed;
+
+        const FDRMovementActionState& ActionState =
+            MovementAction->GetSimulationActionState();
+
+        if (ActionState.ActionType == EDRMovementActionType::Zipline
+            && ActionState.ZiplineRideMode == EDRZiplineRideMode::ManualTraverse
+            && IsValid(CharacterOwner)
+            && !CharacterOwner->IsLocallyControlled())
+        {
+            const FVector TraverseAxis =
+                ResolveManualZiplineTraverseAxis(ActionState);
+
+            Input.RawAcceleration =
+                TraverseAxis * static_cast<float>(ManualZiplineInput);
+        }
         
         FDRMovementActionSimulationOutput Output;
         MovementAction->EvaluateMovementContribution(Input, Output);
+
+        if (Output.bUpdateZiplineRailSpeed)
+        {
+            ZiplineRailSpeed =
+                Output.ZiplineRailSpeed;
+        }
 
         FVector Adjusted;
 

@@ -20,6 +20,11 @@ class DEEPRAIDERS_API UDRSkillDefinition : public UDRItemDefinition
 public:
 	UDRSkillDefinition();
 
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(
+		FDataValidationContext& Context) const override;
+#endif
+
 	/** 슬롯 배치와 독립적인 스킬 고유 식별자다. 예: Ability.Skill.Blink */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	FGameplayTag SkillId;

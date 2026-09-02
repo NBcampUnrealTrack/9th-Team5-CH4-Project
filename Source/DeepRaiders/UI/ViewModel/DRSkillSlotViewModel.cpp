@@ -1,7 +1,6 @@
 #include "DRSkillSlotViewModel.h"
 
 #include "AbilitySystemComponent.h"
-#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
@@ -99,11 +98,8 @@ void UDRSkillSlotViewModel::RefreshSkill()
 		: nullptr;
 	const bool IsSkillEquipped = IsValid(SkillDefinition);
 	const FGameplayTag NewCooldownTag = IsSkillEquipped
-		&& SkillDefinition->CooldownTag.IsValid()
 		? SkillDefinition->CooldownTag
-		: (SkillSlot == EDRSkillSlot::One
-			? DRGameplayTags::Cooldown_Skill_One
-			: DRGameplayTags::Cooldown_Skill_Two);
+		: FGameplayTag();
 	UpdateCooldownTag(NewCooldownTag);
 
 	UE_MVVM_SET_PROPERTY_VALUE(

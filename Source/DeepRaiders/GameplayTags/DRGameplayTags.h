@@ -13,7 +13,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Active);
-
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Zipline);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
+	
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
@@ -32,6 +34,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_HotPack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SpearThrow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SlowProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grab);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
@@ -50,6 +56,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_HotPack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grab);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
@@ -59,6 +69,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
 
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);
@@ -127,4 +138,7 @@ namespace DRGameplayTags
 	// Gameplay Cue - Movement Action
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Active);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Failed);
+
+	// Gameplay Cue - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Skill_Grab_Active);
 }
