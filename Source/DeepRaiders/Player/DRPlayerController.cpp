@@ -1214,8 +1214,6 @@ UInputAction* ADRPlayerController::GetSkillInputAction(
 
 namespace DRPlayerControllerDebug
 {
-	constexpr float CameraAimCorrectionMinDistance = 100.0f;
-
 	static TAutoConsoleVariable<int32> CVarDrawCameraAim(
 		TEXT("dr.Debug.CameraAim"),
 		0,
@@ -1293,17 +1291,15 @@ void ADRPlayerController::UpdateCameraAimDebug()
 		return;
 	}
 
-	FVector LaunchOrigin;
-	if (!DebugCharacter->CalculateGameplayFireOrigin(ViewDirection, LaunchOrigin))
-	{
-		return;
-	}
+	// 실제 눈총과 같은 원거리 무기 공통 StartOffset에서 디버그 궤적을 시작한다.
+	const FVector LaunchOrigin = DebugCharacter->GetActorLocation()
+		+ DebugCharacter->GetActorTransform().TransformVectorNoScale(
+			ProjectileWeapon->StartOffset);
 
-	FVector LaunchDirection = AimPoint - LaunchOrigin;
-	if (!LaunchDirection.Normalize())
-	{
-		LaunchDirection = ViewDirection;
-	}
+	const FVector LaunchDirection = ProjectileWeapon->ResolveCameraAimDirection(
+		ViewDirection,
+		LaunchOrigin,
+		AimPoint);
 
 	const FVector LaunchTraceEnd = LaunchOrigin + LaunchDirection *
 		FMath::Max(ProjectileWeapon->MaxAttackDistance, 1.0f);
@@ -1337,35 +1333,14 @@ void ADRPlayerController::UpdateCameraAimDebug()
 	FVector AbsorbDirection = ViewDirection;
 	const FVector AbsorbOrigin = DebugCharacter->GetActorLocation();
 	const FVector AbsorbStart = AbsorbOrigin + DebugCharacter->GetActorTransform().TransformVectorNoScale(
-		AbsorbSettings.StartOffset);
+		ProjectileWeapon->StartOffset);
 	const float CameraAimDistance = FVector::Distance(AbsorbStart, AimPoint);
-	const bool bUseAbsorbAimCorrection = AbsorbSettings.bUseCameraAimCorrection
-		&& CameraAimDistance >= DRPlayerControllerDebug::CameraAimCorrectionMinDistance;
-	if (bUseAbsorbAimCorrection)
-	{
-		const FVector CameraAimDirection = (AimPoint - AbsorbStart).GetSafeNormal();
-		if (!CameraAimDirection.IsNearlyZero())
-		{
-			const float DirectionDot = FMath::Clamp(
-				FVector::DotProduct(ViewDirection, CameraAimDirection), -1.0f, 1.0f);
-			const float CorrectionAngleRadians = FMath::Acos(DirectionDot);
-			const float MaxCorrectionAngleRadians = FMath::DegreesToRadians(
-				FMath::Clamp(AbsorbSettings.MaxCameraAimCorrectionAngleDegrees, 0.0f, 90.0f));
-
-			if (CorrectionAngleRadians <= MaxCorrectionAngleRadians)
-			{
-				AbsorbDirection = CameraAimDirection;
-			}
-			else if (CorrectionAngleRadians > KINDA_SMALL_NUMBER && MaxCorrectionAngleRadians > 0.0f)
-			{
-				const FQuat CorrectionRotation = FQuat::FindBetweenNormals(ViewDirection, CameraAimDirection);
-				AbsorbDirection = FQuat::Slerp(
-					FQuat::Identity,
-					CorrectionRotation,
-					MaxCorrectionAngleRadians / CorrectionAngleRadians).RotateVector(ViewDirection).GetSafeNormal();
-			}
-		}
-	}
+	AbsorbDirection = ProjectileWeapon->ResolveCameraAimDirection(
+		ViewDirection,
+		AbsorbStart,
+		AimPoint);
+	const bool bUseAbsorbAimCorrection = ProjectileWeapon->AimCorrectionSettings.bUseCameraAimCorrection
+		&& CameraAimDistance >= ProjectileWeapon->AimCorrectionSettings.MinCameraAimCorrectionDistance;
 
 	// StartOffset으로 고정한 시작점을 기준으로 보정된 방향의 프러스텀을 구성한다.
 	const FVector AbsorbEnd = AbsorbStart + AbsorbDirection * AbsorbSettings.Range;
@@ -1394,7 +1369,7 @@ void ADRPlayerController::UpdateCameraAimDebug()
 		TEXT("Snow Absorb: %s (Aim %.0f cm / Min %.0f cm)"),
 		bUseAbsorbAimCorrection ? TEXT("Corrected") : TEXT("Forward"),
 		CameraAimDistance,
-		DRPlayerControllerDebug::CameraAimCorrectionMinDistance);
+		ProjectileWeapon->AimCorrectionSettings.MinCameraAimCorrectionDistance);
 	DrawDebugString(World, AbsorbEnd + FVector(0.0f, 0.0f, 25.0f), AbsorbDebugText,
 		nullptr, AbsorbColor, 0.0f, false, 0.9f);
 

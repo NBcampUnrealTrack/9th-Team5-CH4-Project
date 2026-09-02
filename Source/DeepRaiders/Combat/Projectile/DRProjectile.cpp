@@ -3,6 +3,7 @@
 
 #include "Components/ShapeComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
@@ -109,6 +110,25 @@ void ADRProjectile::InitializeProjectile(
 
 	WorldImpactData = InWorldImpactData;
 	SourceTeamId = InSourceTeamId;
+
+	// Deferred Spawn 직후부터 발사자 캡슐과 겹칠 수 있으므로,
+	// BeginPlay를 기다리지 않고 FinishSpawningActor 이전에 충돌을 무시한다.
+	if (IsValid(GetOwner()))
+	{
+		CollisionComponent->IgnoreActorWhenMoving(GetOwner(), true);
+	}
+
+	if (IsValid(GetInstigator()))
+	{
+		CollisionComponent->IgnoreActorWhenMoving(GetInstigator(), true);
+
+		// 캐릭터가 이동할 때도 투사체를 Blocking Hit로 처리하지 않도록 양방향 무시를 설정한다.
+		if (UPrimitiveComponent* InstigatorRootComponent =
+			Cast<UPrimitiveComponent>(GetInstigator()->GetRootComponent()))
+		{
+			InstigatorRootComponent->IgnoreActorWhenMoving(this, true);
+		}
+	}
 
 	// UObject API가 const-correct하지 않은 경계에서만 해제.
 	PresentationSourceObject = const_cast<UObject*>(InPresentationSourceObject);

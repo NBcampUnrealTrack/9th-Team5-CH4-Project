@@ -13,25 +13,34 @@
  */
 
 USTRUCT(BlueprintType)
-struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
+struct DEEPRAIDERS_API FDRRangedWeaponAimCorrectionSettings
 {
 	GENERATED_BODY()
 
-	FDRProjectileWeaponSnowAbsorbSettings()
+	FDRRangedWeaponAimCorrectionSettings()
 		: bUseCameraAimCorrection(true)
 	{
 	}
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
-	bool bEnabled = true;
-
-	/** 흡수 프러스텀을 크로스헤어의 카메라 Trace 충돌 지점 방향으로 보정할지 여부. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
+	/** 카메라 Trace 충돌 지점 방향으로 원거리 무기의 조준 방향을 보정할지 여부. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Aim Correction")
 	uint8 bUseCameraAimCorrection : 1;
 
-	/** 카메라 충돌 지점 방향으로 허용할 최대 흡수 방향 보정 각도. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", ClampMax = "90.0", UIMin = "0.0", UIMax = "90.0", Units = "deg"))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Aim Correction", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float MinCameraAimCorrectionDistance = 100.0f;
+
+	/** 카메라 충돌 지점 방향으로 허용할 최대 조준 방향 보정 각도. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Aim Correction", meta = (ClampMin = "0.0", ClampMax = "90.0", UIMin = "0.0", UIMax = "90.0", Units = "deg"))
 	float MaxCameraAimCorrectionAngleDegrees = 30.0f;
+};
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
+	bool bEnabled = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float Radius = 150.f;
@@ -54,10 +63,6 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (DisplayName = "Use Adaptive Query"))
 	bool bUseAdaptiveQuery = true;
 
-	/** 캐릭터 로컬 좌표 기준 흡수 프러스텀 시작 오프셋. X: 전방, Y: 오른쪽, Z: 위. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (Units = "cm"))
-	FVector StartOffset = FVector::ZeroVector;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
 	float InnerRadiusRatio = 0.5f;
 
@@ -75,6 +80,18 @@ class DEEPRAIDERS_API UDRRangedWeaponDefinition : public UDRItemDefinition
 
 public:
 	UDRRangedWeaponDefinition();
+
+	FVector ResolveCameraAimDirection(
+		const FVector& ViewDirection,
+		const FVector& Origin,
+		const FVector& CameraAimPoint) const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim")
+	FDRRangedWeaponAimCorrectionSettings AimCorrectionSettings;
+
+	/** 캐릭터 로컬 좌표 기준 흡수 및 투사체 시작 오프셋. X: 전방, Y: 오른쪽, Z: 위. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Origin", meta = (DisplayName = "Start Offset", Units = "cm"))
+	FVector StartOffset = FVector(-15.0f, 10.0f, 10.0f);
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Absorb"))
 	FDRProjectileWeaponSnowAbsorbSettings SnowAbsorbSettings;

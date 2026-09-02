@@ -57,11 +57,22 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 		return false;
 	}
 
-	FVector GameplayFireOrigin;
-	if (!ResolveGameplayFireOrigin(ViewRotation.Vector(), GameplayFireOrigin))
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	if (!IsValid(AvatarActor))
 	{
 		return false;
 	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	if (!IsValid(WeaponDefinition))
+	{
+		return false;
+	}
+
+	// 원거리 무기 공통 캐릭터 로컬 StartOffset에서 눈총을 발사한다.
+	const FVector GameplayFireOrigin = AvatarActor->GetActorLocation()
+		+ AvatarActor->GetActorTransform().TransformVectorNoScale(
+			WeaponDefinition->StartOffset);
 
 	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 	if (!ActorInfo->IsNetAuthority())
@@ -182,20 +193,28 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 
 	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 
-	FVector GameplayFireOrigin;
-
-	if (!ResolveGameplayFireOrigin(ViewRotation.Vector(), GameplayFireOrigin))
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	if (!IsValid(AvatarActor))
 	{
 		return false;
 	}
 
-	FVector BaseProjectileDirection = AimPoint - GameplayFireOrigin;
-	if (!BaseProjectileDirection.Normalize())
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	if (!IsValid(WeaponDefinition))
 	{
-		BaseProjectileDirection = ViewRotation.Vector();
+		return false;
 	}
 
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	// 원거리 무기 공통 캐릭터 로컬 StartOffset에서 눈총을 발사한다.
+	const FVector GameplayFireOrigin = AvatarActor->GetActorLocation()
+		+ AvatarActor->GetActorTransform().TransformVectorNoScale(
+			WeaponDefinition->StartOffset);
+
+	const FVector BaseProjectileDirection = WeaponDefinition->ResolveCameraAimDirection(
+		ViewRotation.Vector(),
+		GameplayFireOrigin,
+		AimPoint);
+
 	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();	
 	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem))
 	{
@@ -205,13 +224,6 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
-
-	if (!IsValid(WeaponDefinition))
-	{
-		return false;
-	}	
-	
 	const int32 SafeProjectileCount = FMath::Max(WeaponDefinition->ProjectileCount, 1);
 	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(WeaponDefinition->SpreadHalfAngleDegrees, 0.f));
 	bool bSpawnedAnyProjectile = false;

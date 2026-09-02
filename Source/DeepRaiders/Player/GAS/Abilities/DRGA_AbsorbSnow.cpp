@@ -12,11 +12,6 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 
-namespace DRAbsorbSnow
-{
-	constexpr float CameraAimCorrectionMinDistance = 100.0f;
-}
-
 UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -134,7 +129,7 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	FVector AbsorbDirection = ViewDirection;
 
 	if (IsValid(WeaponDefinition)
-		&& WeaponDefinition->SnowAbsorbSettings.bUseCameraAimCorrection)
+		&& WeaponDefinition->AimCorrectionSettings.bUseCameraAimCorrection)
 	{
 		constexpr float CameraAimTraceDistance = 10000.0f;
 		const FVector CameraTraceEnd = ViewLocation + ViewDirection * CameraAimTraceDistance;
@@ -145,33 +140,11 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		const bool bCameraHit = GetWorld()->LineTraceSingleByChannel(
 			CameraHit, ViewLocation, CameraTraceEnd, DRCollisionChannels::Projectile, CameraQueryParams);
 		const FVector CameraAimPoint = bCameraHit ? CameraHit.ImpactPoint : CameraTraceEnd;
-		const float CameraAimDistance = FVector::Distance(AbsorbFrustumOrigin, CameraAimPoint);
 
-		if (CameraAimDistance >= DRAbsorbSnow::CameraAimCorrectionMinDistance)
-		{
-			const FVector CameraAimDirection = (CameraAimPoint - AbsorbFrustumOrigin).GetSafeNormal();
-			if (!CameraAimDirection.IsNearlyZero())
-			{
-				const float DirectionDot = FMath::Clamp(
-					FVector::DotProduct(ViewDirection, CameraAimDirection), -1.0f, 1.0f);
-				const float CorrectionAngleRadians = FMath::Acos(DirectionDot);
-				const float MaxCorrectionAngleRadians = FMath::DegreesToRadians(
-					FMath::Clamp(WeaponDefinition->SnowAbsorbSettings.MaxCameraAimCorrectionAngleDegrees, 0.0f, 90.0f));
-
-				if (CorrectionAngleRadians <= MaxCorrectionAngleRadians)
-				{
-					AbsorbDirection = CameraAimDirection;
-				}
-				else if (CorrectionAngleRadians > KINDA_SMALL_NUMBER && MaxCorrectionAngleRadians > 0.0f)
-				{
-					const FQuat CorrectionRotation = FQuat::FindBetweenNormals(ViewDirection, CameraAimDirection);
-					AbsorbDirection = FQuat::Slerp(
-						FQuat::Identity,
-						CorrectionRotation,
-						MaxCorrectionAngleRadians / CorrectionAngleRadians).RotateVector(ViewDirection).GetSafeNormal();
-				}
-			}
-		}
+		AbsorbDirection = WeaponDefinition->ResolveCameraAimDirection(
+			ViewDirection,
+			AbsorbFrustumOrigin,
+			CameraAimPoint);
 	}
 
 	// 캐릭터 로컬 StartOffset을 먼저 적용해 시작점을 고정한다.
@@ -242,7 +215,7 @@ bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) cons
 	OutRemovalSpec.SnowAbsorbRadius = SnowAbsorbSettings.Radius;
 	OutRemovalSpec.SnowAbsorbSpeed = SnowAbsorbSettings.Speed;
 	OutRemovalSpec.SnowAbsorbRange = SnowAbsorbSettings.Range;
-	OutRemovalSpec.SnowAbsorbStartOffset = SnowAbsorbSettings.StartOffset;
+	OutRemovalSpec.SnowAbsorbStartOffset = WeaponDefinition->StartOffset;
 	OutRemovalSpec.SnowAbsorbSweepRadius = SnowAbsorbSettings.SweepRadius;
 	OutRemovalSpec.SnowAbsorbMaxSweepsPerTick = SnowAbsorbSettings.MaxSweepsPerTick;
 	OutRemovalSpec.bUseAdaptiveAbsorbQuery = SnowAbsorbSettings.bUseAdaptiveQuery;
