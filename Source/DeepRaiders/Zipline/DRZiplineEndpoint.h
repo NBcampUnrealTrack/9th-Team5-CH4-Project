@@ -48,6 +48,11 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true"))
 	EDRZiplineRideMode RideMode = EDRZiplineRideMode::AutoTraverse;
 
+	// 이 Endpoint의 실제 Cable/기준점에서 캐릭터 Capsule 이동 위치까지의 월드 공간 Offset이다.
+	// A/B 각각 값을 가질 수 있으며, 두 Offset을 연결한 선이 실제 캐릭터 이동선이 된다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true", Units = "cm"))
+	FVector RideOffset = FVector(0.0f, 0.0f, -100.0f);
+
 	// 이 거리보다 LinkedEndpoint와 가까우면 사실상 동일한 위치로 보고 탑승을 거부한다.
 	static constexpr float MinZiplineDistance = 50.f;
 };

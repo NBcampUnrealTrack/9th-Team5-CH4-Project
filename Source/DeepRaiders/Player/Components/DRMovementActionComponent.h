@@ -4,6 +4,8 @@
 #include "Components/ActorComponent.h"
 #include "DRMovementActionComponent.generated.h"
 
+class UAbilitySystemComponent;
+
 UENUM(BlueprintType)
 enum class EDRMovementActionType : uint8
 {
@@ -85,6 +87,28 @@ public:
 	// Zipline 진행 방식. AutoTraverse/ManualTraverse를 구분한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRZiplineRideMode ZiplineRideMode = EDRZiplineRideMode::AutoTraverse;
+
+	// Zipline 전용: 각 Endpoint에서 캐릭터가 실제로 이동할 위치까지의 월드 공간 Offset이다.
+	// Endpoint 위치는 Cable/레벨 기준점으로 유지하고, 실제 Capsule 이동선만 이 Offset으로 분리한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	FVector_NetQuantize ZiplineStartRideOffset = FVector::ZeroVector;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	FVector_NetQuantize ZiplineTargetRideOffset = FVector::ZeroVector;
+
+	FVector GetZiplineRideStartLocation() const
+	{
+		const FVector StartLocation = ZiplineStartLocation;
+		const FVector StartOffset = ZiplineStartRideOffset;
+		return StartLocation + StartOffset;
+	}
+
+	FVector GetZiplineRideTargetLocation() const
+	{
+		const FVector TargetLocation = ReferenceLocation;
+		const FVector TargetOffset = ZiplineTargetRideOffset;
+		return TargetLocation + TargetOffset;
+	}
 };
 
 /**
@@ -139,6 +163,7 @@ public:
 	UDRMovementActionComponent();
 
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	// 소유 클라이언트가 서버 응답 전에 이동을 예측할 때 사용한다.
 	bool StartPredictedMovementAction(const FDRMovementActionState& NewState);
@@ -195,6 +220,11 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerRequestCancelZipline(int32 SessionId);
 
+	UAbilitySystemComponent* ResolveOwnerAbilitySystemComponent() const;
+	void RefreshZiplineGameplayTags();
+	void SetZiplineGameplayTagsActive(bool bActive);
+	void ReconcileLocallyControlledMovementMode();
+
 	void RequestReplicationUpdate() const;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_AuthoritativeActionState, VisibleInstanceOnly, BlueprintReadOnly,
@@ -203,6 +233,10 @@ private:
 	
 	// 클라이언트에서만 사용하는 예측 상태
 	FDRMovementActionState PredictedActionState;	
+
+	// 이 컴포넌트가 직접 추가한 Zipline 관련 loose tag만 정확히 한 번 제거하기 위한 로컬 상태다.
+	bool bZiplineGameplayTagsApplied = false;
+	TWeakObjectPtr<UAbilitySystemComponent> ZiplineTaggedAbilitySystem;
 };
 
 
