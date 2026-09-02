@@ -36,11 +36,8 @@ public:
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
 
-	TWeakObjectPtr<UDRMiningComponent> MiningComponent;
-
 	void RefreshHeldItemState();
 	void RefreshVisual();
-	void RefreshMiningSettings();
 	void RefreshSnowComponents();
 
 	void PlayEquipSound();
