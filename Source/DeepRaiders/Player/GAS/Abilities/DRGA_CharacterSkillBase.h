@@ -48,7 +48,6 @@ protected:
 	ADRPlayerCharacter* GetPlayerCharacter(const FGameplayAbilityActorInfo* ActorInfo) const;
 	const UDRSkillDefinition* GetCurrentSkillDefinition() const;
 	FGameplayTag GetCooldownTag() const;
-	float GetCooldownDuration() const;
 
 	/** 스킬 Commit 성공 뒤, 해당 스킬에 장착된 퍽의 사용 시 효과를 실행한다. */
 	void NotifySkillCommitted(
@@ -65,14 +64,6 @@ protected:
 		const UGameplayEffect* CooldownEffect,
 		FDataValidationContext& Context);
 #endif
-
-	/** 기존 스킬 에셋이 SkillDefinition 쿨다운으로 이전되기 전까지의 호환용 값이다. */
-	UPROPERTY(
-		EditDefaultsOnly,
-		BlueprintReadOnly,
-		Category = "Skill|Cooldown",
-		meta = (DeprecatedProperty, ClampMin = "0.01", UIMin = "0.01", Units = "s"))
-	float CooldownDuration = 1.0f;
 
 	mutable FGameplayTagContainer CurrentCooldownTags;
 

@@ -1,7 +1,6 @@
 #include "DRGA_CharacterSkillBase.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Input/DRInputTypes.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
@@ -50,13 +49,6 @@ EDataValidationResult UDRGA_CharacterSkillBase::IsDataValid(
 		UDRGE_SkillCooldown::StaticClass()->GetDefaultObject<UGameplayEffect>(),
 		Context))
 	{
-		Result = EDataValidationResult::Invalid;
-	}
-
-	if (CooldownDuration <= 0.0f)
-	{
-		Context.AddError(FText::FromString(
-			TEXT("Cooldown Duration must be greater than zero.")));
 		Result = EDataValidationResult::Invalid;
 	}
 
@@ -138,21 +130,12 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo) const
 {
-	// Commit 중인 Spec의 SourceObject를 직접 읽어, 현재 활성 Spec 조회 실패 시
-	// 슬롯 기반 호환 쿨다운으로 잘못 폴백하지 않도록 한다.
 	const UDRSkillDefinition* SkillDefinition =
 		Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo));
-	const float Cooldown =
-		IsValid(SkillDefinition) && SkillDefinition->CooldownDuration > 0.0f
-		? SkillDefinition->CooldownDuration
-		: GetCooldownDuration();
-	const FGameplayTag CooldownTag =
-		IsValid(SkillDefinition) && SkillDefinition->CooldownTag.IsValid()
-		? SkillDefinition->CooldownTag
-		: GetCooldownTag();
 	if (ActorInfo == nullptr
-		|| Cooldown <= 0.0f
-		|| !CooldownTag.IsValid())
+		|| !IsValid(SkillDefinition)
+		|| SkillDefinition->CooldownDuration <= 0.0f
+		|| !SkillDefinition->CooldownTag.IsValid())
 	{
 		return;
 	}
@@ -171,8 +154,9 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 
 	CooldownSpec.Data->SetSetByCallerMagnitude(
 		DRGameplayTags::Data_Cooldown_Duration,
-		Cooldown);
-	CooldownSpec.Data->DynamicGrantedTags.AddTag(CooldownTag);
+		SkillDefinition->CooldownDuration);
+	CooldownSpec.Data->DynamicGrantedTags.AddTag(
+		SkillDefinition->CooldownTag);
 
 	ApplyGameplayEffectSpecToOwner(
 		Handle,
@@ -235,21 +219,7 @@ FGameplayTag UDRGA_CharacterSkillBase::GetCooldownTag() const
 		return SkillDefinition->CooldownTag;
 	}
 
-	const FGameplayAbilitySpec* AbilitySpec = IsInstantiated()
-		? GetCurrentAbilitySpec()
-		: nullptr;
-	return AbilitySpec != nullptr
-		&& AbilitySpec->InputID == static_cast<int32>(EDRAbilityInputId::Skill2)
-		? DRGameplayTags::Cooldown_Skill_Two
-		: DRGameplayTags::Cooldown_Skill_One;
-}
-
-float UDRGA_CharacterSkillBase::GetCooldownDuration() const
-{
-	const UDRSkillDefinition* SkillDefinition = GetCurrentSkillDefinition();
-	return IsValid(SkillDefinition) && SkillDefinition->CooldownDuration > 0.0f
-		? SkillDefinition->CooldownDuration
-		: CooldownDuration;
+	return FGameplayTag();
 }
 
 void UDRGA_CharacterSkillBase::NotifySkillCommitted(

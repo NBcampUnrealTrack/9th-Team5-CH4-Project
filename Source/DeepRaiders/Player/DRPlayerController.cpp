@@ -4,6 +4,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
@@ -17,6 +18,8 @@
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
@@ -49,6 +52,11 @@
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/UI/Scoreboard/DRScoreboardUIComponent.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
+
+#include "DrawDebugHelpers.h"
+#include "DeepRaiders/Combat/Projectile/DRProjectile.h"
+#include "HAL/IConsoleManager.h"
 
 namespace DRSnowSnapshotTransfer
 {
@@ -1097,6 +1105,7 @@ void ADRPlayerController::ApplySnowJoinOperations(const TArray<FDRSnowOperationR
 	}
 }
 #pragma endregion
+
 UInputAction* ADRPlayerController::GetSkillInputAction(
 	EDRSkillSlot SkillSlot) const
 {
@@ -1112,3 +1121,196 @@ UInputAction* ADRPlayerController::GetSkillInputAction(
 		return nullptr;
 	}
 }
+
+
+#pragma region Debug
+
+namespace DRPlayerControllerDebug
+{
+	constexpr float CameraAimCorrectionMinDistance = 100.0f;
+
+	static TAutoConsoleVariable<int32> CVarDrawCameraAim(
+		TEXT("dr.Debug.CameraAim"),
+		0,
+		TEXT("Draw the local player's continuous camera aim trace. 0: Off, 1: On."),
+		ECVF_Cheat);
+
+	constexpr float MaxCameraAimDistance = 10000.0f;
+	constexpr float ImpactRadius = 18.0f;
+	constexpr float ProjectileLaunchOriginRadius = 10.0f;
+}
+
+void ADRPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	UpdateCameraAimDebug();
+}
+
+void ADRPlayerController::UpdateCameraAimDebug()
+{
+	if (!IsLocalController()
+		|| DRPlayerControllerDebug::CVarDrawCameraAim.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+	const FVector ViewDirection = ViewRotation.Vector().GetSafeNormal();
+	if (ViewDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector TraceEnd = ViewLocation + ViewDirection * DRPlayerControllerDebug::MaxCameraAimDistance;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRCameraAimDebug), false);
+	QueryParams.AddIgnoredActor(GetPawn());
+
+	FHitResult HitResult;
+	const bool bBlockingHit = World->LineTraceSingleByChannel(
+		HitResult, ViewLocation, TraceEnd, DRCollisionChannels::Projectile, QueryParams);
+	const FVector AimPoint = bBlockingHit ? HitResult.ImpactPoint : TraceEnd;
+	const FColor TraceColor = bBlockingHit ? FColor::Green : FColor::Cyan;
+
+	// 한 프레임만 그리되 매 Tick 갱신하여, 카메라 중심 레이가 항상 보이도록 한다.
+	DrawDebugLine(World, ViewLocation, AimPoint, TraceColor, false, 0.0f, 0, 2.0f);
+	DrawDebugSphere(World, AimPoint, DRPlayerControllerDebug::ImpactRadius, 12,
+		TraceColor, false, 0.0f, 0, 1.5f);
+	DrawDebugDirectionalArrow(World, ViewLocation, ViewLocation + ViewDirection * 120.0f,
+		24.0f, FColor::White, false, 0.0f, 0, 2.0f);
+	DrawDebugString(World, AimPoint + FVector(0.0f, 0.0f, 30.0f),
+		bBlockingHit ? TEXT("Camera Aim: HIT") : TEXT("Camera Aim: NO HIT"), nullptr,
+		TraceColor, 0.0f, false, 1.0f);
+
+	const FDRItemInstance* SelectedItem = IsValid(InventoryComponent) && IsValid(QuickSlotComponent)
+		? InventoryComponent->FindItemInstance(QuickSlotComponent->GetSelectedInstanceId())
+		: nullptr;
+	const UDRProjectileWeaponItemDefinition* ProjectileWeapon = SelectedItem != nullptr
+		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem->Definition.Get())
+		: nullptr;
+	ADRPlayerCharacter* DebugCharacter = GetDRPlayerCharacter();
+
+	if (!IsValid(ProjectileWeapon)
+		|| !ProjectileWeapon->ProjectileClass
+		|| !IsValid(DebugCharacter))
+	{
+		return;
+	}
+
+	FVector LaunchOrigin;
+	if (!DebugCharacter->CalculateGameplayFireOrigin(ViewDirection, LaunchOrigin))
+	{
+		return;
+	}
+
+	FVector LaunchDirection = AimPoint - LaunchOrigin;
+	if (!LaunchDirection.Normalize())
+	{
+		LaunchDirection = ViewDirection;
+	}
+
+	const FVector LaunchTraceEnd = LaunchOrigin + LaunchDirection *
+		FMath::Max(ProjectileWeapon->MaxAttackDistance, 1.0f);
+	FCollisionQueryParams LaunchQueryParams(SCENE_QUERY_STAT(DRProjectileLaunchDebug), false);
+	LaunchQueryParams.AddIgnoredActor(GetPawn());
+
+	FHitResult LaunchHit;
+	const bool bLaunchBlockingHit = World->LineTraceSingleByChannel(
+		LaunchHit, LaunchOrigin, LaunchTraceEnd, DRCollisionChannels::Projectile, LaunchQueryParams);
+	const FVector LaunchImpactPoint = bLaunchBlockingHit ? LaunchHit.ImpactPoint : LaunchTraceEnd;
+	const FColor LaunchTraceColor = bLaunchBlockingHit ? FColor::Yellow : FColor::Orange;
+
+	// 투사체가 실제로 사용하는 Launch 벡터를 기준으로 한 진단용 Trace다.
+	DrawDebugSphere(World, LaunchOrigin, DRPlayerControllerDebug::ProjectileLaunchOriginRadius, 12,
+		LaunchTraceColor, false, 0.0f, 0, 1.5f);
+	DrawDebugLine(World, LaunchOrigin, LaunchImpactPoint, LaunchTraceColor, false, 0.0f, 0, 2.0f);
+	DrawDebugDirectionalArrow(World, LaunchOrigin, LaunchOrigin + LaunchDirection * 120.0f,
+		24.0f, LaunchTraceColor, false, 0.0f, 0, 2.0f);
+	DrawDebugString(World, LaunchOrigin + FVector(0.0f, 0.0f, 25.0f),
+		bLaunchBlockingHit ? TEXT("Projectile Launch Trace: HIT") : TEXT("Projectile Launch Trace: NO HIT"),
+		nullptr, LaunchTraceColor, 0.0f, false, 0.9f);
+
+	const FDRProjectileWeaponSnowAbsorbSettings& AbsorbSettings = ProjectileWeapon->SnowAbsorbSettings;
+	if (!AbsorbSettings.bEnabled
+		|| AbsorbSettings.Range <= 0.0f
+		|| AbsorbSettings.Radius <= 0.0f)
+	{
+		return;
+	}
+
+	FVector AbsorbDirection = ViewDirection;
+	const FVector AbsorbOrigin = DebugCharacter->GetActorLocation();
+	const FVector AbsorbStart = AbsorbOrigin + DebugCharacter->GetActorTransform().TransformVectorNoScale(
+		AbsorbSettings.StartOffset);
+	const float CameraAimDistance = FVector::Distance(AbsorbStart, AimPoint);
+	const bool bUseAbsorbAimCorrection = AbsorbSettings.bUseCameraAimCorrection
+		&& CameraAimDistance >= DRPlayerControllerDebug::CameraAimCorrectionMinDistance;
+	if (bUseAbsorbAimCorrection)
+	{
+		const FVector CameraAimDirection = (AimPoint - AbsorbStart).GetSafeNormal();
+		if (!CameraAimDirection.IsNearlyZero())
+		{
+			const float DirectionDot = FMath::Clamp(
+				FVector::DotProduct(ViewDirection, CameraAimDirection), -1.0f, 1.0f);
+			const float CorrectionAngleRadians = FMath::Acos(DirectionDot);
+			const float MaxCorrectionAngleRadians = FMath::DegreesToRadians(
+				FMath::Clamp(AbsorbSettings.MaxCameraAimCorrectionAngleDegrees, 0.0f, 90.0f));
+
+			if (CorrectionAngleRadians <= MaxCorrectionAngleRadians)
+			{
+				AbsorbDirection = CameraAimDirection;
+			}
+			else if (CorrectionAngleRadians > KINDA_SMALL_NUMBER && MaxCorrectionAngleRadians > 0.0f)
+			{
+				const FQuat CorrectionRotation = FQuat::FindBetweenNormals(ViewDirection, CameraAimDirection);
+				AbsorbDirection = FQuat::Slerp(
+					FQuat::Identity,
+					CorrectionRotation,
+					MaxCorrectionAngleRadians / CorrectionAngleRadians).RotateVector(ViewDirection).GetSafeNormal();
+			}
+		}
+	}
+
+	// StartOffset으로 고정한 시작점을 기준으로 보정된 방향의 프러스텀을 구성한다.
+	const FVector AbsorbEnd = AbsorbStart + AbsorbDirection * AbsorbSettings.Range;
+	const float AbsorbStartRadius = AbsorbSettings.Radius *
+		FMath::Clamp(AbsorbSettings.InnerRadiusRatio, 0.0f, 1.0f);
+
+	FVector AxisY;
+	FVector AxisZ;
+	AbsorbDirection.FindBestAxisVectors(AxisY, AxisZ);
+
+	const FColor AbsorbColor(190, 80, 255);
+	DrawDebugLine(World, AbsorbStart, AbsorbEnd, AbsorbColor, false, 0.0f, 0, 2.0f);
+	DrawDebugCircle(World, AbsorbStart, AbsorbStartRadius, 24, FColor::Green, false,
+		0.0f, 0, 2.0f, AxisY, AxisZ, false);
+	DrawDebugCircle(World, AbsorbEnd, AbsorbSettings.Radius, 24, AbsorbColor, false,
+		0.0f, 0, 2.0f, AxisY, AxisZ, false);
+	DrawDebugLine(World, AbsorbStart + AxisY * AbsorbStartRadius,
+		AbsorbEnd + AxisY * AbsorbSettings.Radius, AbsorbColor, false, 0.0f, 0, 1.5f);
+	DrawDebugLine(World, AbsorbStart - AxisY * AbsorbStartRadius,
+		AbsorbEnd - AxisY * AbsorbSettings.Radius, AbsorbColor, false, 0.0f, 0, 1.5f);
+	DrawDebugLine(World, AbsorbStart + AxisZ * AbsorbStartRadius,
+		AbsorbEnd + AxisZ * AbsorbSettings.Radius, AbsorbColor, false, 0.0f, 0, 1.5f);
+	DrawDebugLine(World, AbsorbStart - AxisZ * AbsorbStartRadius,
+		AbsorbEnd - AxisZ * AbsorbSettings.Radius, AbsorbColor, false, 0.0f, 0, 1.5f);
+	const FString AbsorbDebugText = FString::Printf(
+		TEXT("Snow Absorb: %s (Aim %.0f cm / Min %.0f cm)"),
+		bUseAbsorbAimCorrection ? TEXT("Corrected") : TEXT("Forward"),
+		CameraAimDistance,
+		DRPlayerControllerDebug::CameraAimCorrectionMinDistance);
+	DrawDebugString(World, AbsorbEnd + FVector(0.0f, 0.0f, 25.0f), AbsorbDebugText,
+		nullptr, AbsorbColor, 0.0f, false, 0.9f);
+
+}
+
+#pragma endregion

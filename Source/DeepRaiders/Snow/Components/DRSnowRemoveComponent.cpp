@@ -92,8 +92,10 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
 	// BrushOrigin은 호출자가 정한 서버 안전 Gameplay 기준점이며,
-	// 여기서 StartOffset을 추가해 실제 Absorb Frustum 시작점을 계산한다.
-	const FVector FrustumOrigin = BrushOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbStartOffset;
+	// 여기서 캐릭터 로컬 StartOffset을 추가해 실제 Absorb Frustum 시작점을 계산한다.
+	const FVector WorldStartOffset = Owner->GetActorTransform().TransformVectorNoScale(
+		RemovalSpec.SnowAbsorbStartOffset);
+	const FVector FrustumOrigin = BrushOrigin + WorldStartOffset;
 	const FVector FrustumEnd = FrustumOrigin + NormalizedDirection * RemovalSpec.SnowAbsorbRange;
 	
 #if ENABLE_DRAW_DEBUG

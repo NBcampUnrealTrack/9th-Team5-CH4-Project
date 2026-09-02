@@ -8,3 +8,12 @@ bool IDRInteractableInterface::GetInteractionPromptData_Implementation(APawn* In
 	
 	return true;
 }
+
+
+bool IDRInteractableInterface::GetInteractionLocation_Implementation(
+	APawn* Interactor,
+	FVector& OutInteractionLocation) const
+{
+	OutInteractionLocation = FVector::ZeroVector;
+	return false;
+}

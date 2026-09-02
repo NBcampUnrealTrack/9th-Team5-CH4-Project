@@ -33,6 +33,16 @@ enum class EDRZiplineRideMode : uint8
 	ManualTraverse UMETA(DisplayName = "Manual Traverse"),
 };
 
+UENUM(BlueprintType)
+enum class EDRZiplineManualControlMode : uint8
+{
+	// W = 월드에서 더 높은 Endpoint, S = 더 낮은 Endpoint.
+	Vertical UMETA(DisplayName = "Vertical (W Up / S Down)"),
+
+	// W = 현재 카메라가 Rope 축에서 바라보는 쪽, S = 반대쪽.
+	ViewRelative UMETA(DisplayName = "View Relative (W Camera Direction)"),
+};
+
 /*
  * 이동 액션이 실행되는 동안 유지되는 런타임 상태
  * 실제 설정값은 이후 아이템 또는 스킬 Definition에서 채워 전달한다.
@@ -88,6 +98,26 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRZiplineRideMode ZiplineRideMode = EDRZiplineRideMode::AutoTraverse;
 
+	// ManualTraverse에서 W/S의 양의 진행 방향을 결정한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	EDRZiplineManualControlMode ZiplineManualControlMode =
+		EDRZiplineManualControlMode::Vertical;
+
+	// Zipline 축 방향 속도가 MaxSpeed에 도달할 때까지 사용할 가속도.
+	// 0 이하이면 목표 속도를 즉시 적용한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	float ZiplineAcceleration = 0.f;
+
+	// ManualTraverse에서 입력을 놓았을 때 0까지 감속하는 크기.
+	// 0 이하이면 즉시 정지한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	float ZiplineBrakingDeceleration = 0.f;
+
+	// AutoTraverse 진입 시 서버가 확정한 시작 속도.
+	// 탑승 직전 Velocity 중 진행 방향 성분만 제한적으로 계승한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	float ZiplineInitialSpeed = 0.f;
+
 	// Zipline 전용: 각 Endpoint에서 캐릭터가 실제로 이동할 위치까지의 월드 공간 Offset이다.
 	// Endpoint 위치는 Cable/레벨 기준점으로 유지하고, 실제 Capsule 이동선만 이 Offset으로 분리한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
@@ -109,6 +139,38 @@ public:
 		const FVector TargetOffset = ZiplineTargetRideOffset;
 		return TargetLocation + TargetOffset;
 	}
+
+	void GetZiplineManualTraverseSegment(
+		FVector& OutAxisStart,
+		FVector& OutAxisEnd) const
+	{
+		OutAxisStart = GetZiplineRideStartLocation();
+		OutAxisEnd = GetZiplineRideTargetLocation();
+
+		if (ZiplineManualControlMode
+			!= EDRZiplineManualControlMode::Vertical)
+		{
+			return;
+		}
+
+		if (OutAxisStart.Z
+			> OutAxisEnd.Z + KINDA_SMALL_NUMBER)
+		{
+			Swap(OutAxisStart, OutAxisEnd);
+		}
+	}
+
+	FVector GetZiplineManualPositiveAxis() const
+	{
+		FVector AxisStart;
+		FVector AxisEnd;
+
+		GetZiplineManualTraverseSegment(
+			AxisStart,
+			AxisEnd);
+
+		return (AxisEnd - AxisStart).GetSafeNormal();
+	}
 };
 
 /**
@@ -126,6 +188,9 @@ struct FDRMovementActionSimulationInput
 	// CharacterMovementComponent::Acceleration을 가공하지 않고 그대로 전달한 값이다.
 	// Grapple/AutoTraverse는 사용하지 않는다. ManualTraverse가 W/S 방향을 판단하는 데 사용한다.
 	FVector RawAcceleration = FVector::ZeroVector;
+
+	// Attach 보정용 world Velocity와 분리된 Zipline 축 방향 gameplay 속도.
+	float ZiplineRailSpeed = 0.f;
 };
 
 /**
@@ -140,6 +205,10 @@ struct FDRMovementActionSimulationOutput
 	// true이면 기존 가속/중력/속도 clamp 계산을 모두 건너뛰고 OverrideVelocity를 그대로 사용한다.
 	bool bOverrideVelocity = false;
 	FVector OverrideVelocity = FVector::ZeroVector;
+
+	// Zipline의 독립된 rail speed 상태를 CharacterMovementComponent에 되돌린다.
+	bool bUpdateZiplineRailSpeed = false;
+	float ZiplineRailSpeed = 0.f;
 };
 
 /**
@@ -223,6 +292,7 @@ private:
 	UAbilitySystemComponent* ResolveOwnerAbilitySystemComponent() const;
 	void RefreshZiplineGameplayTags();
 	void SetZiplineGameplayTagsActive(bool bActive);
+	void ApplyZiplineInitialVelocity(const FDRMovementActionState& State) const;
 	void ReconcileLocallyControlledMovementMode();
 
 	void RequestReplicationUpdate() const;

@@ -48,6 +48,20 @@ public:
         return bWantsJetpack;
     }
 
+    /** Zipline attach 보정 Velocity와 분리해 관리하는 축 방향 gameplay 속도. */
+    void SetZiplineRailSpeed(float NewRailSpeed)
+    {
+        ZiplineRailSpeed = NewRailSpeed;
+    }
+
+    float GetZiplineRailSpeed() const
+    {
+        return ZiplineRailSpeed;
+    }
+
+    /** Manual Zipline 탑승 시 이전 walking 입력이 첫 custom tick에 남지 않도록 초기화한다. */
+    void ResetManualZiplineInputState();
+
     /** SavedMove에서 받은 입력 플래그를 서버 이동에 복원한다. */
     virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 
@@ -115,12 +129,18 @@ private:
 
     /**
      * Manual Zipline 입력의 네트워크 복원 상태.
-     * -1 = 아래(S), 0 = 정지, +1 = 위(W)
+     * -1 / 0 / +1은 현재 Manual control mode의 기준 축에 대한 signed input이다.
      *
      * 소유 클라이언트의 SavedMove가 FLAG_Custom_1/2로 서버에 전달하고,
      * Dedicated Server의 PhysMovementAction이 이 값을 사용한다.
      */
     int8 ManualZiplineInput = 0;
+
+    /**
+     * Zipline의 실제 축 방향 gameplay 속도.
+     * Rope에 붙기 위한 lateral / clamp 보정 Velocity와 분리한다.
+     */
+    float ZiplineRailSpeed = 0.f;
 
     /** 현재 출력 상승 진행 시간 */
     float JetpackSpoolElapsed = 0.f;
