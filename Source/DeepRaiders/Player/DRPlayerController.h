@@ -98,7 +98,6 @@ private:
 	void RefreshPublicQuickSlotSnapshot();
 	
 	void ApplyViewPitchLimits();
-
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	
@@ -362,6 +361,14 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Interaction")
 	TObjectPtr<UDRInteractionComponent> InteractionComponent;	
+#pragma endregion
+
+#pragma region Debug
+protected:
+	virtual void PlayerTick(float DeltaTime) override;
+
+private:
+	void UpdateCameraAimDebug();
 #pragma endregion
 	
 };
