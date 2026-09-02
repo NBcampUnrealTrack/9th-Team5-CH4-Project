@@ -1,12 +1,15 @@
 #include "HostOrJoinWidget.h"
 
 #include "AudioDevice.h"
+#include "DRTitleMapDefinition.h"
 #include "DRTitleSettingRowWidget.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/EditableTextBox.h"
+#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
 #include "DeepRaiders/Core/Subsystem/DRSessionSubsystem.h"
+#include "Engine/Texture2D.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
@@ -37,6 +40,12 @@ bool UHostOrJoinWidget::Initialize()
 
 	Overlay_Join->SetVisibility(ESlateVisibility::Collapsed);
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
+	Overlay_ChoiceMap->SetVisibility(ESlateVisibility::Collapsed);
+
+	ComboBoxString_ChoiceMap->OnSelectionChanged.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleMapSelectionChanged);
+	RefreshMapOptions();
 
 	CacheSettingRows();
 	LoadSettingsIntoSliders();
@@ -82,7 +91,21 @@ void UHostOrJoinWidget::HandlePublicMatchClicked()
 
 void UHostOrJoinWidget::HandlePrivateCreateClicked()
 {
-	if (PlayMap.IsNull())
+	Overlay_ChoiceMap->SetVisibility(ESlateVisibility::Visible);
+	SelectMapDefinition(ComboBoxString_ChoiceMap->GetSelectedIndex());
+}
+
+void UHostOrJoinWidget::HandleMapSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+{
+	(void)SelectedItem;
+	(void)SelectionType;
+
+	SelectMapDefinition(ComboBoxString_ChoiceMap->GetSelectedIndex());
+}
+
+void UHostOrJoinWidget::HandleCreateMapClicked()
+{
+	if (SelectedPlayMap.IsNull())
 	{
 		return;
 	}
@@ -95,10 +118,13 @@ void UHostOrJoinWidget::HandlePrivateCreateClicked()
 
 	if (UDRSessionSubsystem* SessionSubsystem = GameInstance->GetSubsystem<UDRSessionSubsystem>())
 	{
-		SessionSubsystem->CreateListenServerSession(PlayMap);
-		return;
+		SessionSubsystem->CreateListenServerSession(SelectedPlayMap);
 	}
+}
 
+void UHostOrJoinWidget::HandleCloseChoiceMapClicked()
+{
+	Overlay_ChoiceMap->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UHostOrJoinWidget::HandlePrivateMatchClicked()
@@ -183,6 +209,77 @@ void UHostOrJoinWidget::HandleSettingsCancelClicked()
 {
 	LoadSettingsIntoSliders();
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UHostOrJoinWidget::RefreshMapOptions()
+{
+	ComboBoxString_ChoiceMap->ClearOptions();
+	MapDefinitionRowNames.Reset();
+
+	if (!IsValid(MapDefinitionTable))
+	{
+		CreateMap->SetIsEnabled(false);
+		return;
+	}
+
+	TArray<FName> DefinitionRowNames = MapDefinitionTable->GetRowNames();
+	DefinitionRowNames.Sort([](const FName& Left, const FName& Right)
+	{
+		return Left.LexicalLess(Right);
+	});
+
+	for (const FName RowName : DefinitionRowNames)
+	{
+		const FDRTitleMapDefinition* Definition = MapDefinitionTable->FindRow<FDRTitleMapDefinition>(
+			RowName,
+			TEXT("Populate title map options"));
+		if (Definition == nullptr)
+		{
+			continue;
+		}
+
+		const FString OptionName = Definition->DisplayName.IsEmpty()
+			? RowName.ToString()
+			: Definition->DisplayName.ToString();
+		MapDefinitionRowNames.Add(RowName);
+		ComboBoxString_ChoiceMap->AddOption(OptionName);
+	}
+
+	if (ComboBoxString_ChoiceMap->GetOptionCount() > 0)
+	{
+		ComboBoxString_ChoiceMap->SetSelectedIndex(0);
+		SelectMapDefinition(0);
+		return;
+	}
+
+	CreateMap->SetIsEnabled(false);
+}
+
+void UHostOrJoinWidget::SelectMapDefinition(int32 DefinitionIndex)
+{
+	if (!MapDefinitionRowNames.IsValidIndex(DefinitionIndex) || !IsValid(MapDefinitionTable))
+	{
+		SelectPlayMap(TSoftObjectPtr<UWorld>(), nullptr);
+		return;
+	}
+
+	const FDRTitleMapDefinition* Definition = MapDefinitionTable->FindRow<FDRTitleMapDefinition>(
+		MapDefinitionRowNames[DefinitionIndex],
+		TEXT("Select title map"));
+	if (Definition == nullptr)
+	{
+		SelectPlayMap(TSoftObjectPtr<UWorld>(), nullptr);
+		return;
+	}
+
+	SelectPlayMap(Definition->Map, Definition->PreviewImage.LoadSynchronous());
+}
+
+void UHostOrJoinWidget::SelectPlayMap(TSoftObjectPtr<UWorld> InPlayMap, UTexture2D* InPreview)
+{
+	SelectedPlayMap = InPlayMap;
+	CreateMap->SetIsEnabled(!SelectedPlayMap.IsNull());
+	ChoosedImageMap->SetBrushFromTexture(InPreview);
 }
 
 void UHostOrJoinWidget::HandleExitGameClicked()

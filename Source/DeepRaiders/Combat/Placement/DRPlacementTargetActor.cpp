@@ -99,7 +99,11 @@ void ADRPlacementTargetActor::ConfirmTargetingAndContinue()
 		return;
 	}
 
-	FGameplayAbilityTargetData_SingleTargetHit* TargetData = new FGameplayAbilityTargetData_SingleTargetHit(CachedAimHit);
+	// VoxelProceduralMeshComponent는 NetGUID 대상이 아니다. 서버는 HitComponent를
+	// 신뢰하지 않고 TraceStart/TraceEnd로 재검증하므로, 컴포넌트 참조는 전송하지 않는다.
+	FHitResult TargetHit = CachedAimHit;
+	TargetHit.Component = nullptr;
+	FGameplayAbilityTargetData_SingleTargetHit* TargetData = new FGameplayAbilityTargetData_SingleTargetHit(TargetHit);
 	TargetDataReadyDelegate.Broadcast(FGameplayAbilityTargetDataHandle(TargetData));
 }
 
