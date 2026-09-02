@@ -3,6 +3,7 @@
 #include "DRPlayerCharacter.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -62,6 +63,7 @@ namespace DRSnowSnapshotTransfer
 {
 	constexpr int32 ChunkByteSize = 48 * 1024;
 	constexpr float ChunkSendInterval = 0.05f;
+	constexpr uint64 ProgressMessageKey = 0x4452534E;
 }
 
 ADRPlayerController::ADRPlayerController()
@@ -77,7 +79,7 @@ ADRPlayerController::ADRPlayerController()
 
 	// Interaction Initialize
 	InteractionComponent = CreateDefaultSubobject<UDRInteractionComponent>(TEXT("InteractionComponent"));
-	
+
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	SkillUIComponent = CreateDefaultSubobject<UDRSkillUIComponent>(TEXT("SkillUIComponent"));
@@ -102,6 +104,61 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 	}
 
 	return DRPlayerState->GetAbilitySystemComponent();
+}
+
+void ADRPlayerController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (SnowJoinLoadingPhase != EDRSnowJoinLoadingPhase::Complete &&
+		PendingSnowSnapshotId == INDEX_NONE &&
+		GetStateName() == NAME_Playing)
+	{
+		const APawn* ControlledPawn = GetPawn();
+		if (IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled())
+		{
+			SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Complete;
+		}
+	}
+
+	if (GEngine == nullptr)
+	{
+		return;
+	}
+
+	FString LoadingStatus;
+	switch (SnowJoinLoadingPhase)
+	{
+	case EDRSnowJoinLoadingPhase::Idle:
+		LoadingStatus = TEXT("Network Sync: Idle");
+		break;
+	case EDRSnowJoinLoadingPhase::ReceivingSnapshot:
+		LoadingStatus = FString::Printf(
+			TEXT("Network Sync: Receiving Snapshot %.1f%%"),
+			GetSnowJoinSnapshotProgress() * 100.f);
+		break;
+	case EDRSnowJoinLoadingPhase::ApplyingSnapshot:
+		LoadingStatus = TEXT("Network Sync: Applying Snapshot");
+		break;
+	case EDRSnowJoinLoadingPhase::WaitingForControl:
+		LoadingStatus = TEXT("Network Sync: Waiting For Control");
+		break;
+	case EDRSnowJoinLoadingPhase::Complete:
+	default:
+		LoadingStatus = TEXT("Network Sync: Complete");
+		break;
+	}
+
+	GEngine->AddOnScreenDebugMessage(
+		DRSnowSnapshotTransfer::ProgressMessageKey,
+		0.1f,
+		FColor::Cyan,
+		LoadingStatus);
 }
 
 void ADRPlayerController::BeginPlay()
@@ -130,7 +187,7 @@ void ADRPlayerController::BeginPlay()
 		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
-	
+
 	/*
 	 * 서버에서 모든 플레이어의 시작 장비를 초기화.
 	 *
@@ -228,14 +285,14 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
 	}
-	
+
 	if (IsValid(ScoreboardAction))
 	{
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Started, this, &ThisClass::HandleScoreboardStarted);
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Completed, this, &ThisClass::HandleScoreboardCompleted);
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Canceled, this, &ThisClass::HandleScoreboardCompleted);
 	}
-	
+
 	SetupGASInputComponent();
 }
 
@@ -265,7 +322,7 @@ void ADRPlayerController::SetupGASInputComponent()
 	if (IsValid(PrimaryAction))
 	{
 		const int32 InputId = static_cast<int32>(EDRAbilityInputId::Primary);
-		
+
 		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, InputId);
 		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, InputId);
 		EnhancedInputComponent->BindAction(PrimaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, InputId);
@@ -275,7 +332,7 @@ void ADRPlayerController::SetupGASInputComponent()
 	if (IsValid(SecondaryAction))
 	{
 		const int32 InputId = static_cast<int32>(EDRAbilityInputId::Secondary);
-		
+
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, InputId);
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Triggered, this, &ThisClass::HandleGASInputTriggered, InputId);
 		EnhancedInputComponent->BindAction(SecondaryAction, ETriggerEvent::Completed, this, &ThisClass::HandleGASInputReleased, InputId);
@@ -291,17 +348,17 @@ void ADRPlayerController::SetupGASInputComponent()
 	{
 		EnhancedInputComponent->BindAction(Skill2Action, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Skill2));
 	}
-	
+
 	if (IsValid(InventoryAction))
 	{
 		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Inventory));
 	}
-	
+
 	if (IsValid(InteractionAction))
 	{
 		EnhancedInputComponent->BindAction(InteractionAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Interaction));
 	}
-	
+
 	if (IsValid(DropAction))
 	{
 		EnhancedInputComponent->BindAction(DropAction, ETriggerEvent::Started, this, &ThisClass::HandleGASInputStarted, static_cast<int32>(EDRAbilityInputId::Drop));
@@ -315,7 +372,7 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 	Super::OnPossess(InPawn);
 
 	ApplyViewPitchLimits();
-	
+
 	if (HasAuthority())
 	{
 		RefreshPublicQuickSlotSnapshot();
@@ -438,42 +495,42 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	{
 		InventoryComponent->TryAddItemToSlot(0, StartingShovelDefinition, 1);
 	}
-	
+
 	if (!InventoryComponent->GetItemAtSlot(1))
 	{
 		InventoryComponent->TryAddItemToSlot(1, StartingRifle, 1);
 	}
-	
+
 	if (!InventoryComponent->GetItemAtSlot(2))
 	{
 		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
-	
+
 	if (!InventoryComponent->GetItemAtSlot(3))
 	{
 		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
 	}
-	
+
 	if (!InventoryComponent->GetItemAtSlot(4))
 	{
 		InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
 	}
-	
+
 #if WITH_EDITOR
-	
+
 	if (!InventoryComponent->GetItemAtSlot(5))
 	{
 		InventoryComponent->TryAddItemToSlot(5, TestItemDefinition1, TestItemQuantity1);
 	}
-	
+
 	if (!InventoryComponent->GetItemAtSlot(6))
 	{
 		InventoryComponent->TryAddItemToSlot(6, TestItemDefinition2, TestItemQuantity2);
 	}
-	
+
 #endif
-	
-	QuickSlotComponent->RequestSelectSlot(0);	
+
+	QuickSlotComponent->RequestSelectSlot(0);
 }
 
 bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
@@ -489,7 +546,7 @@ bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 	{
 		return false;
 	}
-	
+
 	bool bHasCancelReceiver = false;
 
 	// MovementAction에게 Secondary 입력을 강제로 전달
@@ -500,7 +557,7 @@ bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 		{
 			continue;
 		}
-		
+
 		const FGameplayTagContainer& AssetTags = Spec.Ability->GetAssetTags();
 
 		if (AssetTags.HasTagExact(DRGameplayTags::Ability_MovementAction)
@@ -508,21 +565,21 @@ bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 		{
 			bHasCancelReceiver = true;
 			break;
-		}		
+		}
 	}
-	
+
 	if (!bHasCancelReceiver)
 	{
 		return false;
 	}
-	
+
 	FGameplayEventData EventData;
 	EventData.EventTag = DRGameplayTags::Event_MovementAction_Cancel;
 	EventData.Instigator = GetPawn();
 	EventData.Target = GetPawn();
-	
+
 	ASC->HandleGameplayEvent(EventData.EventTag, &EventData);
-	
+
 	return false;
 }
 
@@ -577,10 +634,11 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 		ConsumedStartedInputIds.Add(InputId);
 		return;
 	}
-	
+
+
 	const bool bIsItemUseInput = InputId == static_cast<int32>(EDRAbilityInputId::Primary)
 		|| InputId == static_cast<int32>(EDRAbilityInputId::Secondary);
-	
+
 	if (bIsItemUseInput
 		&& IsValid(QuickSlotComponent)
 		&& QuickSlotComponent->IsQuickSlotActivationIntervalActive())
@@ -588,19 +646,19 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 		ConsumedStartedInputIds.Add(InputId);
 		return;
 	}
-	
+
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (!IsValid(ASC))
 	{
 		return;
 	}
-	
+
 	const bool bConsumedAsGenericInput = ASC->IsGenericConfirmInputBound(InputId) || ASC->IsGenericCancelInputBound(InputId);
 	if (bConsumedAsGenericInput)
 	{
 		ConsumedStartedInputIds.Add(InputId);
 	}
-	
+
 	ASC->AbilityLocalInputPressed(InputId);
 }
 
@@ -609,8 +667,8 @@ void ADRPlayerController::HandleGASInputTriggered(int32 InputId)
 	if (ConsumedStartedInputIds.Contains(InputId))
 	{
 		return;
-	}	
-	
+	}
+
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (!IsValid(ASC))
 	{
@@ -649,7 +707,7 @@ void ADRPlayerController::HandleGASInputReleased(int32 InputId)
 	{
 		return;
 	}
-	
+
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (IsValid(ASC))
 	{
@@ -779,6 +837,32 @@ void ADRPlayerController::ServerRequestInteractCurrentTeleport_Implementation()
 #pragma endregion
 
 #pragma region Snow Join Snapshot
+float ADRPlayerController::GetSnowJoinSnapshotProgress() const
+{
+	if (PendingSnowSnapshotId == INDEX_NONE)
+	{
+		return 1.f;
+	}
+
+	const int64 TotalByteCount =
+		static_cast<int64>(PendingSnowVoxelSaveByteCount) +
+		PendingSnowVolumeByteCount +
+		PendingSnowOwnershipByteCount;
+	if (TotalByteCount <= 0)
+	{
+		return 0.f;
+	}
+
+	const int64 ReceivedByteCount =
+		static_cast<int64>(PendingSnowVoxelSaveData.Num()) +
+		PendingSnowVolumeData.Num() +
+		PendingSnowOwnershipData.Num();
+	return static_cast<float>(FMath::Clamp(
+		static_cast<double>(ReceivedByteCount) / TotalByteCount,
+		0.0,
+		1.0));
+}
+
 void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	int32 SnapshotId,
 	int32 CheckpointSequence,
@@ -792,6 +876,7 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 		return;
 	}
 
+	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::ReceivingSnapshot;
 	PendingSnowSnapshotId = SnapshotId;
 	PendingSnowCheckpointSequence = CheckpointSequence;
 	PendingSnowVoxelWorldName = VoxelWorldName;
@@ -956,7 +1041,7 @@ void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
 		return;
 	}
 	if (ByteOffset + ChunkData.Num() > ExpectedByteCount)
-	{ 
+	{
 		return;
 	}
 
@@ -976,6 +1061,7 @@ void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(int32 Sna
 		return;
 	}
 
+	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::ApplyingSnapshot;
 	bPendingSnowSnapshotFinished = true;
 	TryApplyPendingSnowJoinSnapshot();
 }
@@ -1032,6 +1118,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	}
 
 	bPendingSnowCheckpointApplied = true;
+	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
 	return true;
@@ -1072,7 +1159,7 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	PendingSnowOwnershipData.Reset();
 	BufferedSnowOperations.Reset();
 	ApplySnowJoinOperations(Operations);
-	
+
 	UE_LOG(
 		LogTemp,
 		Log,
@@ -1082,7 +1169,7 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 		AppliedSnowVolumeByteCount,
 		AppliedOwnershipByteCount,
 		Operations.Num());
-	
+
 	return;
 }
 
