@@ -1,5 +1,7 @@
 #include "DRGrabProjectile.h"
 
+#include "AbilitySystemComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 
 ADRGrabProjectile::ADRGrabProjectile(const FObjectInitializer& ObjectInitializer)
@@ -31,6 +33,20 @@ void ADRGrabProjectile::InitializeGrabProjectile(
 		nullptr);
 }
 
+void ADRGrabProjectile::BeginPlay()
+{
+	Super::BeginPlay();
+
+	StartGrabGameplayCue();
+}
+
+void ADRGrabProjectile::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopGrabGameplayCue();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ADRGrabProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -46,6 +62,47 @@ void ADRGrabProjectile::HandleImpact(const FHitResult& ImpactResult)
 {
 	PullTarget(ImpactResult);
 	Destroy();
+}
+
+void ADRGrabProjectile::StartGrabGameplayCue()
+{
+	UAbilitySystemComponent* AbilitySystem = GetSourceAbilitySystem();
+	AActor* SourceActor = GetInstigator();
+
+	if (!HasAuthority()
+		|| !IsValid(AbilitySystem)
+		|| !IsValid(SourceActor)
+		|| IsGrabGameplayCueActive)
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = GetActorLocation();
+	Parameters.Instigator = SourceActor;
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject = this;
+
+	AbilitySystem->AddGameplayCue(
+		DRGameplayTags::GameplayCue_Skill_Grab_Active,
+		Parameters);
+	IsGrabGameplayCueActive = true;
+}
+
+void ADRGrabProjectile::StopGrabGameplayCue()
+{
+	UAbilitySystemComponent* AbilitySystem = GetSourceAbilitySystem();
+
+	if (!HasAuthority()
+		|| !IsValid(AbilitySystem)
+		|| !IsGrabGameplayCueActive)
+	{
+		return;
+	}
+
+	AbilitySystem->RemoveGameplayCue(
+		DRGameplayTags::GameplayCue_Skill_Grab_Active);
+	IsGrabGameplayCueActive = false;
 }
 
 void ADRGrabProjectile::PullTarget(const FHitResult& ImpactResult) const

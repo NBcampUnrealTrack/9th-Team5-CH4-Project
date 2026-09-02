@@ -88,8 +88,14 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Cable",
 		meta = (AllowPrivateAccess = "true", ClampMin = "1.0"))
 	float CableLengthScale = 1.f;
+
+	// 자식 Cue가 EffectCauser로 전달된 액터를 훅 끝점으로 추적할지 결정한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Target",
+		meta = (AllowPrivateAccess = "true"))
+	bool IsEffectCauserTrackingEnabled = false;
 	
 	TWeakObjectPtr<USceneComponent> StartComponent;
+	TWeakObjectPtr<AActor> FollowTargetActor;
 	
 	FName StartSocketName = NAME_None;
 		

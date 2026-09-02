@@ -440,4 +440,10 @@ namespace DRGameplayTags
 		GameplayCue_MovementAction_Grapple_Failed,
 		"GameplayCue.MovementAction.Grapple.Failed",
 		"One-shot cable presentation for a failed grapple attempt.");
+
+	// Gameplay Cue - Skill
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Skill_Grab_Active,
+		"GameplayCue.Skill.Grab.Active",
+		"Persistent hook and cable presentation for an active grab projectile.");
 }
