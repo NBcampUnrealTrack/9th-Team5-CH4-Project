@@ -46,6 +46,16 @@ enum class EDRStorageTransferDirection : uint8
 	StorageToPlayer
 };
 
+UENUM(BlueprintType)
+enum class EDRSnowJoinLoadingPhase : uint8
+{
+	Idle,
+	ReceivingSnapshot,
+	ApplyingSnapshot,
+	WaitingForControl,
+	Complete
+};
+
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController : public APlayerController, public IAbilitySystemInterface
 {
@@ -58,14 +68,16 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
-	
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
-	
+
+	virtual void Tick(float DeltaSeconds) override;
+
 	void SetupGASInputComponent();
 	bool bGASInputBound = false;
-	
+
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_Pawn() override;
 
@@ -75,7 +87,7 @@ private:
 	/** 현재 조종 중인 DeepRaiders 캐릭터를 반환한다. */
 	ADRPlayerCharacter* GetDRPlayerCharacter() const;
 	void RefreshPlayerUI();
-	
+
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
 
@@ -83,7 +95,7 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-	
+
 	void HandleGASInputStarted(int32 InputId);
 	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
@@ -91,17 +103,17 @@ private:
 
 	void InitializeStartingQuickSlot();
 
-	// Secondary 취소 정책을 가진 활성 이동 Ability에 입력을 전달 
+	// Secondary 취소 정책을 가진 활성 이동 Ability에 입력을 전달
 	bool TrySendSecondaryMovementCancelEvent(int32 InputId);
-	
+
 	UFUNCTION()
 	void RefreshPublicQuickSlotSnapshot();
-	
+
 	void ApplyViewPitchLimits();
 
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
-	
+
 private:
 	/*
 	 * Started 단계에서 별도 경로로 소비된 입력을 Release까지 추적
@@ -110,7 +122,7 @@ private:
 	 * -> 던지기 동작 중 계속 던지기를 시도하지 않도록
 	 */
 	TSet<int32> ConsumedStartedInputIds;
-	
+
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputMappingContext> DefaultMappingContext;
@@ -141,16 +153,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InventoryAction;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> InteractionAction;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> DropAction;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> ScoreboardAction;
-	
+
 #pragma region QuickSlot
 
 public:
@@ -183,33 +195,33 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingRifle;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingShotgun;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingSprayer;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingCannon;
 
 protected:
 
 #pragma endregion
-	
+
 #pragma region DEBUG BUILD
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	int32 TestItemQuantity1 = 1;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> TestItemDefinition2;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	int32 TestItemQuantity2 = 1;
 #pragma endregion
@@ -221,7 +233,7 @@ public:
 	{
 		return InventoryUIComponent;
 	}
-	
+
 	/** 상점 영역 이탈에 따른 상점 UI 종료를 처리한다. */
 	void NotifyShopAreaExited(ADRShop* Shop);
 
@@ -239,7 +251,7 @@ protected:
 	/** 로컬 플레이어 UI에서 사용할 위젯 클래스 설정이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<UDRUIConfig> UIConfig;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> ShopAction;
 
@@ -263,7 +275,7 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
-	
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRTeleportUIComponent> TeleportUIComponent;
 
@@ -286,7 +298,7 @@ private:
 
 	uint8 bCanTeleportInteract : 1;
 #pragma endregion
-	
+
 #pragma region Snow Join Snapshot
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Snow|Join Snapshot")
@@ -330,6 +342,8 @@ private:
 	void RetryPendingSnowJoinSnapshot();
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
 
+	float GetSnowJoinSnapshotProgress() const; // 현재 중도 접속 스냅샷의 네트워크 수신 진행률을 0~1 범위로 반환
+
 	int32 OutgoingSnowSnapshotId = INDEX_NONE;
 	uint8 OutgoingSnowPayloadType = 0;
 	int32 OutgoingSnowByteOffset = 0;
@@ -348,6 +362,7 @@ private:
 	int32 PendingSnowOwnershipByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
 	bool bPendingSnowCheckpointApplied = false;
+	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
 	TArray<uint8> PendingSnowOwnershipData;
@@ -358,10 +373,10 @@ private:
 #pragma region Interact
 public:
 	UDRInteractionComponent* GetInteractionComponent() const { return InteractionComponent; }
-	
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Interaction")
-	TObjectPtr<UDRInteractionComponent> InteractionComponent;	
+	TObjectPtr<UDRInteractionComponent> InteractionComponent;
 #pragma endregion
-	
+
 };
