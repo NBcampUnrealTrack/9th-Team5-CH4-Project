@@ -5,6 +5,7 @@
 #include "DRPointLocationWidget.generated.h"
 
 class UImage;
+class UTextBlock;
 
 UCLASS()
 class DEEPRAIDERS_API UDRPointLocationWidget : public UUserWidget
@@ -16,12 +17,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Point Location")
 	void SetIndicatorColor(const FLinearColor& TeamColor);
 
+	UFUNCTION(BlueprintCallable, Category = "Point Location")
+	void SetDisplayName(const FText& DisplayName);
+
 protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UImage> PointIndicator_Back;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UImage> PointIndicator_Front;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> PointIndicator_Text;
 
 private:
 	static void ApplyColorPreservingAlpha(UImage* Image, const FLinearColor& TeamColor);

@@ -136,7 +136,8 @@ ADRSnowControlZone::ADRSnowControlZone()
 	ZoneBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ZoneBounds->SetHiddenInGame(true);
 
-	PointLocationWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("PointLocationWidget"));
+	PointLocationWidgetComponent =
+		CreateDefaultSubobject<UWidgetComponent>(TEXT("PointLocationWidget"));
 	PointLocationWidgetComponent->SetupAttachment(Root);
 	PointLocationWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
 	PointLocationWidgetComponent->SetDrawAtDesiredSize(true);
@@ -239,6 +240,8 @@ void ADRSnowControlZone::RefreshPointLocationWidget()
 	{
 		return;
 	}
+
+	PointLocationWidget->SetDisplayName(DisplayName);
 
 	const int32 LeadingTeamId = GetLeadingTeamId();
 	if (LeadingTeamId == INDEX_NONE)

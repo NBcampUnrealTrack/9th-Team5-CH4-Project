@@ -88,6 +88,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	int32 GetLeadingTeamId() const;
 
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	float GetPointValue() const
+	{
+		return PointValue;
+	}
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<USceneComponent> Root;
@@ -98,6 +104,16 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<UWidgetComponent> PointLocationWidgetComponent;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control")
+	FText DisplayName;
+
+	UPROPERTY(
+		EditInstanceOnly,
+		BlueprintReadOnly,
+		Category = "Snow|Control",
+		meta = (ClampMin = "0.0"))
+	float PointValue = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual")
 	FLinearColor Team0Color = FLinearColor::Red;
