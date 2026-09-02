@@ -141,7 +141,7 @@ FVector UDRGA_CombatRollSkill::ResolveRollDirection(const ADRPlayerCharacter* Ch
 		return FVector::ZeroVector;
 	}
 
-	const FVector InputDirection = Character->GetLastMovementInputVector().GetSafeNormal2D();
+	const FVector InputDirection = Character->GetSkillMovementDirection();
 	return InputDirection.IsNearlyZero()
 		? Character->GetActorForwardVector().GetSafeNormal2D()
 		: InputDirection;

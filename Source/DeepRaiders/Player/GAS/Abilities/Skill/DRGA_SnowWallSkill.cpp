@@ -47,6 +47,16 @@ void UDRGA_SnowWallSkill::StartTargeting()
 	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCanceled);
 	TargetDataTask->ReadyForActivation();
 
+	// TargetActor와 프리뷰는 입력을 가진 로컬 클라이언트에서만 만든다.
+	// 서버는 WaitTargetData가 클라이언트에서 복제해 준 TargetData를 기다린다.
+	// 전용 서버에서 BeginSpawningActor가 실패했다고 Ability를 종료하면, 그 End가
+	// 클라이언트에 복제되어 인디케이터가 한 프레임만 보이고 사라진다.
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr || !ActorInfo->IsLocallyControlled())
+	{
+		return;
+	}
+
 	AGameplayAbilityTargetActor* SpawnedTargetActor = nullptr;
 	if (!TargetDataTask->BeginSpawningActor(this, TargetActorClass, SpawnedTargetActor))
 	{
