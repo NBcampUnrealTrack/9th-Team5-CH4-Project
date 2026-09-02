@@ -6,6 +6,14 @@
 
 void UDRUIManagerSubsystem::Deinitialize()
 {
+	ClearManagedWidgets();
+	PlayerController = nullptr;
+	UIConfig = nullptr;
+	Super::Deinitialize();
+}
+
+void UDRUIManagerSubsystem::ClearManagedWidgets()
+{
 	for (UUserWidget* Widget : ManagedWidgets)
 	{
 		if (IsValid(Widget))
@@ -17,9 +25,6 @@ void UDRUIManagerSubsystem::Deinitialize()
 	ManagedWidgets.Reset();
 	WidgetLayers.Reset();
 	ActiveScreens.Reset();
-	PlayerController = nullptr;
-	UIConfig = nullptr;
-	Super::Deinitialize();
 }
 
 UUserWidget* UDRUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
@@ -79,6 +84,12 @@ void UDRUIManagerSubsystem::Configure(
 	APlayerController* InPlayerController,
 	UDRUIConfig* InUIConfig)
 {
+	if (PlayerController != InPlayerController)
+	{
+		// LocalPlayerSubsystem은 맵 전환 후에도 남으므로 이전 월드의 UI를 정리한다.
+		ClearManagedWidgets();
+	}
+
 	PlayerController = InPlayerController;
 	UIConfig = InUIConfig;
 }

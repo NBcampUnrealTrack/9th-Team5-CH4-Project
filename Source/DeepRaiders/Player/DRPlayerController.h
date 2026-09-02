@@ -112,7 +112,8 @@ private:
 	void ApplyViewPitchLimits();
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
-
+	void HandleToggleMenu(const FInputActionValue&);
+	
 private:
 	/*
 	 * Started 단계에서 별도 경로로 소비된 입력을 Release까지 추적
@@ -162,6 +163,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> ScoreboardAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> MenuAction;
+	
 #pragma region QuickSlot
 
 public:

@@ -1,9 +1,11 @@
 #include "DRMapMusicActor.h"
 
 #include "Components/AudioComponent.h"
+#include "UObject/ConstructorHelpers.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "Engine/World.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundClass.h"
 
 ADRMapMusicActor::ADRMapMusicActor()
 {
@@ -15,6 +17,13 @@ ADRMapMusicActor::ADRMapMusicActor()
 	MusicComponent->bAutoActivate = false;
 	MusicComponent->bAllowSpatialization = false;
 	MusicComponent->bIsUISound = true;
+
+	static ConstructorHelpers::FObjectFinder<USoundClass> MusicSoundClass(
+		TEXT("/Game/DeepRaiders/Sound/SoundClass/SC_Music.SC_Music"));
+	if (MusicSoundClass.Succeeded())
+	{
+		MusicComponent->SoundClassOverride = MusicSoundClass.Object;
+	}
 }
 
 void ADRMapMusicActor::BeginPlay()

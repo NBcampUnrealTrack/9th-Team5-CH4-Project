@@ -43,6 +43,7 @@ public:
 	const UDRUIConfig* GetUIConfig() const { return UIConfig; }
 
 private:
+	void ClearManagedWidgets();
 	void RefreshInputMode();
 	static int32 GetLayerZOrder(EDRUILayer Layer);
 

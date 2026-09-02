@@ -293,7 +293,35 @@ void ADRPlayerController::SetupInputComponent()
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Canceled, this, &ThisClass::HandleScoreboardCompleted);
 	}
 
+	if (IsValid(MenuAction))
+	{
+		EnhancedInput->BindAction(MenuAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleMenu);
+	}
+	
 	SetupGASInputComponent();
+}
+
+void ADRPlayerController::HandleToggleMenu(const FInputActionValue&)
+{
+	ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	if (!IsValid(LocalPlayer))
+	{
+		return;
+	}
+
+	UDRUIManagerSubsystem* UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>();
+	if (!IsValid(UIManager))
+	{
+		return;
+	}
+
+	if (UIManager->IsScreenOpen(DRGameplayTags::UI_Screen_Menu))
+	{
+		UIManager->PopScreen(DRGameplayTags::UI_Screen_Menu);
+		return;
+	}
+
+	UIManager->PushScreen(DRGameplayTags::UI_Screen_Menu);
 }
 
 void ADRPlayerController::SetupGASInputComponent()

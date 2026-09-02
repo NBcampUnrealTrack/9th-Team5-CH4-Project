@@ -98,6 +98,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Shop);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_StartingSelection);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Scoreboard);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Menu);
 	
 	// Gameplay Cue - Sound - Melee
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Miss);
