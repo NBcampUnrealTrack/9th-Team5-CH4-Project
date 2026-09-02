@@ -101,6 +101,7 @@ void UDRGA_SnowWallSkill::HandleTargetDataReady(const FGameplayAbilityTargetData
 		}
 
 		UWorld* World = GetWorld();
+		LiftActorsOntoWall(World, WallTransform, SurfaceHit);
 		ADRSnowWall* SnowWall = IsValid(World)
 			? World->SpawnActorDeferred<ADRSnowWall>(SnowWallClass, WallTransform, ActorInfo->AvatarActor.Get(), Cast<APawn>(ActorInfo->AvatarActor.Get()), ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn)
 			: nullptr;
@@ -268,6 +269,54 @@ FTransform UDRGA_SnowWallSkill::MakeWallTransform(const FVector& ImpactPoint, co
 	const FVector WallLengthDirection = FVector::CrossProduct(FVector::UpVector, AimDirection).GetSafeNormal();
 	const FQuat WallRotation = FRotationMatrix::MakeFromXZ(WallLengthDirection, FVector::UpVector).ToQuat();
 	return FTransform(WallRotation, ImpactPoint + FVector::UpVector * (WallDimensions.Z * 0.5f));
+}
+
+void UDRGA_SnowWallSkill::LiftActorsOntoWall(
+	UWorld* World, const FTransform& WallTransform, const FHitResult& SurfaceHit) const
+{
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const FVector WallExtent = WallDimensions * 0.5f;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!IsValid(Actor) || Actor->IsA<AVoxelWorld>())
+		{
+			continue;
+		}
+
+		FVector BoundsOrigin;
+		FVector BoundsExtent;
+		Actor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+		if (BoundsExtent.IsNearlyZero())
+		{
+			continue;
+		}
+
+		const FVector LocalBoundsOrigin = WallTransform.InverseTransformPosition(BoundsOrigin);
+		const float HorizontalRadius = FMath::Max(BoundsExtent.X, BoundsExtent.Y);
+		const bool bOverlapsWallFootprint =
+			FMath::Abs(LocalBoundsOrigin.X) <= WallExtent.X + HorizontalRadius
+			&& FMath::Abs(LocalBoundsOrigin.Y) <= WallExtent.Y + HorizontalRadius;
+		const float ActorBaseHeight = BoundsOrigin.Z - BoundsExtent.Z;
+		const bool bStandingOnPlacementSurface =
+			FMath::Abs(ActorBaseHeight - SurfaceHit.ImpactPoint.Z) <= 20.f;
+		if (!bOverlapsWallFootprint || !bStandingOnPlacementSurface)
+		{
+			continue;
+		}
+
+		// 생성되는 벽의 바닥은 SurfaceHit 위치고, 윗면은 WallDimensions.Z 높이다.
+		// 먼저 범위 안의 모든 Actor를 윗면으로 올려야 충돌 해소가 옆으로 밀어내지 않는다.
+		Actor->SetActorLocation(
+			Actor->GetActorLocation() + FVector::UpVector * WallDimensions.Z,
+			false,
+			nullptr,
+			ETeleportType::TeleportPhysics);
+	}
 }
 
 void UDRGA_SnowWallSkill::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

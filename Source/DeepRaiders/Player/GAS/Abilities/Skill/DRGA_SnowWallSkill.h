@@ -10,6 +10,7 @@ class ADRPlacementPreviewActor;
 class ADRSnowWall;
 class AVoxelWorld;
 class UAbilityTask_WaitTargetData;
+class UWorld;
 
 /** 바닥을 조준해 눈 벽을 설치하는 스킬이다. 프리뷰는 로컬, 실제 벽 생성은 서버만 담당한다. */
 UCLASS()
@@ -48,6 +49,7 @@ private:
 	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FTransform& OutWallTransform,
 		FHitResult& OutSurfaceHit) const;
 	FTransform MakeWallTransform(const FVector& ImpactPoint, const FRotator& ViewRotation) const;
+	void LiftActorsOntoWall(UWorld* World, const FTransform& WallTransform, const FHitResult& SurfaceHit) const;
 	AVoxelWorld* ResolveVoxelWorld(const FHitResult& SurfaceHit) const;
 
 	UFUNCTION()
