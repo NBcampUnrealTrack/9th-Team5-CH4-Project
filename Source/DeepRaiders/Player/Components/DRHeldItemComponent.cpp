@@ -4,7 +4,6 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 
-#include "DeepRaiders/Player/Components/DRMiningComponent.h"
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 
 #include "Kismet/GameplayStatics.h"
@@ -115,19 +114,11 @@ void UDRHeldItemComponent::BeginPlay()
 	{
 		return;
 	}
-
-	MiningComponent = Character->FindComponentByClass<UDRMiningComponent>();
-	
-	if (!MiningComponent.IsValid())
-	{
-		UE_LOG(LogTemp, Error, TEXT( "[HeldItem] MiningComponent missing. " "Character=%s"), *GetNameSafe(Character));
-	}
 }
 
 void UDRHeldItemComponent::RefreshHeldItemState()
 {
 	RefreshVisual();
-	RefreshMiningSettings();
 	RefreshSnowComponents();
 	RefreshAnimationLayer();
 	PlayEquipSound();
@@ -151,14 +142,6 @@ void UDRHeldItemComponent::RefreshVisual()
 	Character->ApplyHandEquipmentVisual(
 		HeldItemDefinition->WorldMesh,
 		HeldItemDefinition->HandAttachSocketName);
-}
-
-void UDRHeldItemComponent::RefreshMiningSettings()
-{
-	if (UDRMiningComponent* Mining = MiningComponent.Get())
-	{
-		Mining->ApplyItemDefinition(HeldItemDefinition);
-	}
 }
 
 void UDRHeldItemComponent::RefreshSnowComponents()
