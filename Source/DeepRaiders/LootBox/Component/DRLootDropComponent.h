@@ -38,6 +38,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot|Spawn", meta = (ClampMin = "0.0", Units = "deg"))
 	float MaxSpawnAngleJitterDegrees = 10.f;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot|Spawn", meta = (ClampMin = "1"))
+	int32 MaxIterationCount = 50;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Loot|Spawn")
+	TObjectPtr<UDRItemDefinition> DefaultItemDefinition = nullptr;
+	
 private:
 	bool BuildValidLootPools(TArray<const FDRLootTableRow*>& OutAllRows,
 		TMap<EDRItemRarity, TArray<const FDRLootTableRow*>>& OutRowsByRarity) const;
