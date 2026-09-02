@@ -43,6 +43,11 @@ namespace DRGameplayTags
 		"Player is currently executing a movement action.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_MovementAction_Zipline,
+		"State.MovementAction.Zipline",
+		"Player is currently riding a zipline.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");

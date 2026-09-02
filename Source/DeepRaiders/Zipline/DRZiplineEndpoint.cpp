@@ -65,6 +65,8 @@ bool ADRZiplineEndpoint::Interact_Implementation(APawn* Interactor)
 	State.MaxSpeed = ZiplineSpeed;
 	State.ZiplineStartLocation = GetActorLocation();
 	State.ZiplineRideMode = RideMode;
+	State.ZiplineStartRideOffset = RideOffset;
+	State.ZiplineTargetRideOffset = LinkedEndpoint->RideOffset;
 
 	if (!MovementAction->StartAuthoritativeMovementAction(State))
 	{
