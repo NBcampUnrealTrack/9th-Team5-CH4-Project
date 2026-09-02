@@ -1,7 +1,5 @@
 #include "DRGA_ForwardDashSkill.h"
 
-#include "GameFramework/Controller.h"
-
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 
 void UDRGA_ForwardDashSkill::ActivateAbility(
@@ -19,16 +17,7 @@ void UDRGA_ForwardDashSkill::ActivateAbility(
 		return;
 	}
 
-	FVector DashDirection = Character->GetLastMovementInputVector().GetSafeNormal2D();
-	if (DashDirection.IsNearlyZero())
-	{
-		const AController* Controller = Character->GetController();
-		if (Controller != nullptr)
-		{
-			DashDirection = Controller->GetControlRotation().Vector().GetSafeNormal2D();
-		}
-	}
-
+	const FVector DashDirection = Character->GetSkillMovementDirection();
 	if (DashDirection.IsNearlyZero() || !CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);

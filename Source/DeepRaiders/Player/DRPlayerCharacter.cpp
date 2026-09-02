@@ -380,6 +380,16 @@ void ADRPlayerCharacter::RefreshJetpackVisual()
 
 void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 {
+	const bool bMovementInputChanged = !LatestMovementInput.Equals(MoveInput);
+	LatestMovementInput = MoveInput;
+	if (!HasAuthority() && bMovementInputChanged)
+	{
+		// GAS Ability는 PlayerState에서 실행되므로, 별도 Actor channel인 입력 RPC와
+		// 발동 RPC 사이의 순서를 전제하지 않는다. 대시는 TargetData를 우선 사용하고,
+		// 이 값은 Blink/Roll 등 서버 실행 경로의 입력 상태로 사용한다.
+		ServerSetLatestMovementInput(MoveInput);
+	}
+
 	if (!Controller || IsDead() || IsFrozen())
 	{
 		return;
@@ -423,6 +433,30 @@ void ADRPlayerCharacter::MoveInput(const FVector2D& MoveInput)
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 	AddMovementInput(ForwardDirection, MoveInput.Y);
 	AddMovementInput(RightDirection, MoveInput.X);
+}
+
+FVector ADRPlayerCharacter::GetSkillMovementDirection() const
+{
+	if (LatestMovementInput.IsNearlyZero())
+	{
+		return FVector::ZeroVector;
+	}
+
+	const AController* CurrentController = GetController();
+	if (CurrentController == nullptr)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FRotator YawRotation(0.f, CurrentController->GetControlRotation().Yaw, 0.f);
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	return (ForwardDirection * LatestMovementInput.Y + RightDirection * LatestMovementInput.X).GetSafeNormal2D();
+}
+
+void ADRPlayerCharacter::ServerSetLatestMovementInput_Implementation(const FVector2D InMovementInput)
+{
+	LatestMovementInput = InMovementInput;
 }
 
 void ADRPlayerCharacter::LookInput(const FVector2D& LookInput)

@@ -104,6 +104,9 @@ public:
 	void MoveInput(const FVector2D& MoveInput);
 	void LookInput(const FVector2D& LookInput);
 
+	/** 마지막 WASD 입력을 ControlRotation 기준 월드 방향으로 변환한다. */
+	FVector GetSkillMovementDirection() const;
+
 	UDRMeleeCombatComponent* GetMeleeCombatComponent() const
 	{
 		return MeleeCombatComponent;
@@ -236,6 +239,15 @@ protected:
 	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
 	
 private:
+	UFUNCTION(Server, Unreliable)
+	void ServerSetLatestMovementInput(FVector2D InMovementInput);
+
+	/**
+	 * GetLastMovementInputVector는 CharacterMovement tick 뒤에 비워질 수 있다.
+	 * 이동 스킬은 이 값을 사용해, 입력 시점의 8방향을 보존한다.
+	 */
+	FVector2D LatestMovementInput = FVector2D::ZeroVector;
+
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "GAS|Damage")
