@@ -47,20 +47,11 @@ void UDRGA_SnowWallSkill::StartTargeting()
 	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCanceled);
 	TargetDataTask->ReadyForActivation();
 
-	// TargetActor와 프리뷰는 입력을 가진 로컬 클라이언트에서만 만든다.
-	// 서버는 WaitTargetData가 클라이언트에서 복제해 준 TargetData를 기다린다.
-	// 전용 서버에서 BeginSpawningActor가 실패했다고 Ability를 종료하면, 그 End가
-	// 클라이언트에 복제되어 인디케이터가 한 프레임만 보이고 사라진다.
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	if (ActorInfo == nullptr || !ActorInfo->IsLocallyControlled())
-	{
-		return;
-	}
-
 	AGameplayAbilityTargetActor* SpawnedTargetActor = nullptr;
 	if (!TargetDataTask->BeginSpawningActor(this, TargetActorClass, SpawnedTargetActor))
 	{
-		EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true, true);
+		// Grapple Targeting과 같이 서버에서는 TargetActor 생성이 불가능할 수 있다.
+		// 이때 서버는 Task를 유지해 클라이언트가 복제한 TargetData를 계속 대기한다.
 		return;
 	}
 
@@ -92,7 +83,6 @@ void UDRGA_SnowWallSkill::HandleTargetDataReady(const FGameplayAbilityTargetData
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 		return;
 	}
-
 	if (ActorInfo->IsNetAuthority())
 	{
 		FTransform WallTransform;
@@ -151,7 +141,6 @@ void UDRGA_SnowWallSkill::HandleTargetDataReady(const FGameplayAbilityTargetData
 			EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
 			return;
 		}
-
 		if (ADRMiningGameStateBase* GameState = World->GetGameState<ADRMiningGameStateBase>())
 		{
 			FDRSnowAddOperation SnowOperation;
@@ -170,10 +159,16 @@ void UDRGA_SnowWallSkill::HandleTargetDataReady(const FGameplayAbilityTargetData
 		// AddSnow가 복셀 값을 기록하고 갱신을 요청한 직후, 임시 충돌을 제거한다.
 		SnowWall->Destroy();
 	}
-	else if (ActorInfo->IsLocallyControlled()
-		&& !CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo()))
+	else if (ActorInfo->IsLocallyControlled())
 	{
-		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+		if (!CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo()))
+		{
+			EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+		}
+
+		// TargetData RPC와 EndAbility RPC가 같은 ASC 채널에서 순서 경쟁을 일으킨다.
+		// 여기서 종료하면 서버가 TargetData를 처리하기 전에 Ability가 닫힌다.
+		// 서버 검증/설치가 끝낸 EndAbility를 클라이언트가 수신해 종료하도록 둔다.
 		return;
 	}
 
