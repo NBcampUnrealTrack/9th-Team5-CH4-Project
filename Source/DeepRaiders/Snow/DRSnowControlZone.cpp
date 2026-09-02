@@ -4,7 +4,9 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextBlock.h"
+#include "Components/WidgetComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/UI/HUD/DRPointLocationWidget.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
 #include "VoxelData/VoxelDataIncludes.h"
@@ -133,6 +135,12 @@ ADRSnowControlZone::ADRSnowControlZone()
 	ZoneBounds->SetBoxExtent(FVector(500.f, 500.f, 200.f));
 	ZoneBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ZoneBounds->SetHiddenInGame(true);
+
+	PointLocationWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("PointLocationWidget"));
+	PointLocationWidgetComponent->SetupAttachment(Root);
+	PointLocationWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+	PointLocationWidgetComponent->SetDrawAtDesiredSize(true);
+	PointLocationWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ADRSnowControlZone::BeginPlay()
@@ -183,6 +191,7 @@ void ADRSnowControlZone::RefreshControlRatio()
 	if (!IsValid(World))
 	{
 		CachedControlRatio = FDRSnowControlRatio();
+		RefreshPointLocationWidget();
 		return;
 	}
 
@@ -190,10 +199,55 @@ void ADRSnowControlZone::RefreshControlRatio()
 	if (!IsValid(SnowSubsystem))
 	{
 		CachedControlRatio = FDRSnowControlRatio();
+		RefreshPointLocationWidget();
 		return;
 	}
 
 	CachedControlRatio = SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
+	RefreshPointLocationWidget();
+}
+
+int32 ADRSnowControlZone::GetLeadingTeamId() const
+{
+	float TeamAmounts[2] = {0.f, 0.f};
+	for (const FDRSnowTeamAmount& Team : CachedControlRatio.Teams)
+	{
+		if (Team.TeamId == 0 || Team.TeamId == 1)
+		{
+			TeamAmounts[Team.TeamId] += Team.Amount;
+		}
+	}
+
+	if (FMath::IsNearlyEqual(TeamAmounts[0], TeamAmounts[1]))
+	{
+		return INDEX_NONE;
+	}
+
+	return TeamAmounts[0] > TeamAmounts[1] ? 0 : 1;
+}
+
+void ADRSnowControlZone::RefreshPointLocationWidget()
+{
+	if (!IsValid(PointLocationWidgetComponent))
+	{
+		return;
+	}
+
+	UDRPointLocationWidget* PointLocationWidget = Cast<UDRPointLocationWidget>(
+		PointLocationWidgetComponent->GetUserWidgetObject());
+	if (!IsValid(PointLocationWidget))
+	{
+		return;
+	}
+
+	const int32 LeadingTeamId = GetLeadingTeamId();
+	if (LeadingTeamId == INDEX_NONE)
+	{
+		PointLocationWidget->SetIndicatorColor(NeutralColor);
+		return;
+	}
+
+	PointLocationWidget->SetIndicatorColor(LeadingTeamId == 0 ? Team0Color : Team1Color);
 }
 
 #pragma region Debug
