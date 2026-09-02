@@ -119,12 +119,17 @@ private:
 		meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<ADRZiplineEndpoint> EndpointB;
 
-	// Rope 전체가 공유하는 Capsule 이동 offset. Cable 자체 위치는 바꾸지 않는다.
+	// Rope 전체가 공유하는 캐릭터 SkeletalMesh presentation offset.
+	// Gameplay Capsule/Cable rail은 바꾸지 않는다.
+	// Character local 기준 X = 앞/뒤, Y = 오른쪽/왼쪽, Z = 위/아래.
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
 		Category = "Zipline|Ride",
-		meta = (AllowPrivateAccess = "true", Units = "cm"))
+		meta = (
+			AllowPrivateAccess = "true",
+			Units = "cm",
+			ToolTip = "Character-local visual mesh offset. X=Forward, Y=Right, Z=Up."))
 	FVector RideOffset = FVector::ZeroVector;
 
 	UPROPERTY(

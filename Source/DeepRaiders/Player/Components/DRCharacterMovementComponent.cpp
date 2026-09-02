@@ -6,6 +6,7 @@
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
 #include "AbilitySystemComponent.h"
+#include "GameFramework/Controller.h"
 
 
 namespace
@@ -521,6 +522,140 @@ void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations
     }
 }
 
+void UDRCharacterMovementComponent::UpdateZiplineFacing(
+    const FDRMovementActionState& State,
+    float DeltaTime)
+{
+    if (!UpdatedComponent
+        || !State.IsActive()
+        || State.ActionType != EDRMovementActionType::Zipline)
+    {
+        return;
+    }
+
+    FVector DesiredFacing;
+
+    if (State.ZiplineRideMode == EDRZiplineRideMode::AutoTraverse)
+    {
+        // Auto는 선택된 실제 Cable 진행 Endpoint 방향을 바라본다.
+        DesiredFacing =
+            FVector(State.ReferenceLocation)
+            - FVector(State.ZiplineStartLocation);
+
+        FVector HorizontalFacing = DesiredFacing;
+        HorizontalFacing.Z = 0.f;
+
+        // 완전 수직 Auto에서는 진행축으로 yaw를 정할 수 없으므로
+        // 탑승 순간 저장한 방향을 그대로 유지한다.
+        if (HorizontalFacing.IsNearlyZero())
+        {
+            DesiredFacing =
+                State.ZiplineFacingDirection;
+        }
+    }
+    else if (State.ZiplineManualControlMode
+        == EDRZiplineManualControlMode::ViewRelative)
+    {
+        /*
+         * ViewRelative Manual은 실제 rail speed가 0을 지나 반대 부호가 된 뒤
+         * 몸 방향을 진행 방향으로 뒤집는다.
+         *
+         * RailSpeed == 0인 감속/정지 구간에서는 현재 몸 방향을 유지하므로
+         * 키를 바꾼 순간 바로 180도 튀지 않는다.
+         */
+        if (FMath::Abs(ZiplineRailSpeed)
+            > KINDA_SMALL_NUMBER)
+        {
+            DesiredFacing =
+                State.GetZiplineManualPositiveAxis()
+                * FMath::Sign(ZiplineRailSpeed);
+        }
+        else
+        {
+            DesiredFacing =
+                UpdatedComponent->GetForwardVector();
+        }
+    }
+    else
+    {
+        /*
+         * Vertical Manual:
+         * - 이동 입력 의미는 기존 그대로 W=위 / S=아래.
+         * - 몸의 yaw는 탑승 순간 world 방향으로 고정하지 않는다.
+         * - 카메라(ControlRotation) yaw를 따라 Rope의 수직 축 주위를 자유롭게 360도 돈다.
+         *
+         * Gameplay Capsule은 Cable A-B 고정 rail에 있으므로 실제 이동선은 바뀌지 않고,
+         * ABP의 Character-local RideOffset만 Character yaw와 함께 Rope 주위를 회전한다.
+         *
+         * 서버에도 owning Controller가 있으므로 authoritative yaw가 동일하게 계산되고,
+         * 다른 클라이언트는 replicated Character rotation을 받아 같은 방향을 본다.
+         */
+        const AController* Controller =
+            CharacterOwner
+                ? CharacterOwner->GetController()
+                : nullptr;
+
+        if (IsValid(Controller))
+        {
+            const float ControlYaw =
+                Controller->GetControlRotation().Yaw;
+
+            DesiredFacing =
+                FRotator(
+                    0.f,
+                    ControlYaw,
+                    0.f)
+                .Vector();
+        }
+        else
+        {
+            // Controller가 없는 proxy/fallback에서는 현재 회전을 그대로 유지한다.
+            DesiredFacing =
+                UpdatedComponent->GetForwardVector();
+        }
+    }
+
+    DesiredFacing.Z = 0.f;
+    DesiredFacing = DesiredFacing.GetSafeNormal();
+
+    if (DesiredFacing.IsNearlyZero())
+    {
+        return;
+    }
+
+    const FRotator CurrentRotation =
+        UpdatedComponent->GetComponentRotation();
+
+    const float DesiredYaw =
+        DesiredFacing.Rotation().Yaw;
+
+    const float MaxYawStep =
+        FMath::Max(
+            FMath::Abs(RotationRate.Yaw),
+            0.f)
+        * FMath::Max(DeltaTime, 0.f);
+
+    const float NewYaw =
+        MaxYawStep > KINDA_SMALL_NUMBER
+            ? FMath::FixedTurn(
+                CurrentRotation.Yaw,
+                DesiredYaw,
+                MaxYawStep)
+            : DesiredYaw;
+
+    FRotator NewRotation = CurrentRotation;
+    NewRotation.Pitch = 0.f;
+    NewRotation.Yaw = NewYaw;
+    NewRotation.Roll = 0.f;
+
+    // Capsule은 yaw 회전에 대해 대칭이지만 CMC 경로를 통해 회전시켜
+    // autonomous/server prediction 및 replicated movement 흐름을 유지한다.
+    MoveUpdatedComponent(
+        FVector::ZeroVector,
+        NewRotation.Quaternion(),
+        false);
+}
+
 void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 Iterations)
 {
     if (DeltaTime < MIN_TICK_TIME)
@@ -571,6 +706,8 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         // ManualZiplineInput을 사용해 W/S pressed/released를 정확히 재현한다.
         Input.RawAcceleration = Acceleration;
         Input.ZiplineRailSpeed = ZiplineRailSpeed;
+        Input.ZiplineFacingDirection =
+            UpdatedComponent->GetForwardVector();
 
         const FDRMovementActionState& ActionState =
             MovementAction->GetSimulationActionState();
@@ -655,16 +792,44 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
             }
         }
 
-        // Zipline 목표 Endpoint에 도달하면 즉시 액션을 종료하고 기존 이동 모드로 복귀한다.
-        if (MovementAction->IsZiplineTargetReached(UpdatedComponent->GetComponentLocation()))
+        UpdateZiplineFacing(
+            ActionState,
+            TimeTick);
+
+        /*
+         * Auto는 목표 Endpoint에 도달하면 완료 처리 후 자동 하차한다.
+         * 진입 속도/Attach 보정 속도가 하차 직후 남지 않도록 먼저 0으로 정리한다.
+         *
+         * 서버는 EndMovementAction에서 authoritative state를 종료/복제하고,
+         * owning client는 predicted state를 즉시 정리한다.
+         */
+        if (MovementAction->IsZiplineTargetReached(
+                UpdatedComponent->GetComponentLocation()))
         {
-            MovementAction->EndMovementAction(EDRMovementActionEndReason::Completed);
+            Velocity = FVector::ZeroVector;
+            ZiplineRailSpeed = 0.f;
+
+            MovementAction->ReportMovementSimulation(
+                UpdatedComponent->GetComponentLocation(),
+                Velocity);
+
+            MovementAction->EndMovementAction(
+                EDRMovementActionEndReason::Completed);
 
             RestoreDefaultMovementMode();
 
+            if (IsValid(CharacterOwner)
+                && CharacterOwner->HasAuthority())
+            {
+                // 최종 Endpoint transform + 새 MovementMode를 즉시 전송한다.
+                CharacterOwner->ForceNetUpdate();
+            }
+
             if (HasValidData())
             {
-                StartNewPhysics(RemainingTime, Iterations);
+                StartNewPhysics(
+                    RemainingTime,
+                    Iterations);
             }
 
             return;

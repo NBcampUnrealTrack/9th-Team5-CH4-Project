@@ -160,6 +160,11 @@ bool ADRZiplineRope::Interact_Implementation(
 	State.SessionId = NextZiplineSessionId++;
 	State.ZiplineStartLocation = StateStart;
 	State.ReferenceLocation = StateTarget;
+
+	/*
+	 * RideOffset은 Character SkeletalMesh presentation용이다.
+	 * Gameplay Capsule은 실제 Cable A-B rail을 그대로 따라간다.
+	 */
 	State.ZiplineStartRideOffset = RideOffset;
 	State.ZiplineTargetRideOffset = RideOffset;
 	State.ZiplineRideMode = RideMode;
@@ -167,6 +172,101 @@ bool ADRZiplineRope::Interact_Implementation(
 		ManualControlMode;
 	State.MaxSpeed = MaxSpeed;
 
+	/*
+	 * Animation / presentation용 몸 방향은 탑승 순간 서버에서 한 번 확정해
+	 * FDRMovementActionState와 함께 복제한다.
+	 *
+	 * Auto       : 선택된 진행 Endpoint 방향
+	 * Manual Vert: 높은 Endpoint 방향의 수평 성분 (완전 수직이면 현재 몸 방향)
+	 * Manual View: 탑승 순간 카메라가 바라보던 Rope 방향
+	 */
+	FVector FacingDirection =
+		Character->GetActorForwardVector()
+		.GetSafeNormal2D();
+
+	if (RideMode == EDRZiplineRideMode::AutoTraverse)
+	{
+		const FVector AutoFacing =
+			(
+				State.GetZiplineRideTargetLocation()
+				- State.GetZiplineRideStartLocation()
+			)
+			.GetSafeNormal2D();
+
+		if (!AutoFacing.IsNearlyZero())
+		{
+			FacingDirection = AutoFacing;
+		}
+	}
+	else
+	{
+		FVector ManualFacing =
+			State.GetZiplineManualPositiveAxis();
+
+		if (ManualControlMode
+			== EDRZiplineManualControlMode::ViewRelative)
+		{
+			FVector ViewDirection =
+				Character->GetActorForwardVector()
+				.GetSafeNormal();
+
+			if (const AController* Controller =
+					Character->GetController())
+			{
+				FVector ViewLocation;
+				FRotator ViewRotation;
+
+				Controller->GetPlayerViewPoint(
+					ViewLocation,
+					ViewRotation);
+
+				const FVector ControllerViewDirection =
+					ViewRotation.Vector()
+					.GetSafeNormal();
+
+				if (!ControllerViewDirection.IsNearlyZero())
+				{
+					ViewDirection = ControllerViewDirection;
+				}
+			}
+
+			float ViewDot =
+				FVector::DotProduct(
+					ViewDirection,
+					ManualFacing);
+
+			if (FMath::Abs(ViewDot) < 0.1f)
+			{
+				ViewDot =
+					FVector::DotProduct(
+						Character->GetActorForwardVector(),
+						ManualFacing);
+			}
+
+			if (ViewDot < 0.f)
+			{
+				ManualFacing *= -1.f;
+			}
+		}
+
+		ManualFacing.Z = 0.f;
+		ManualFacing = ManualFacing.GetSafeNormal();
+
+		if (!ManualFacing.IsNearlyZero())
+		{
+			FacingDirection = ManualFacing;
+		}
+	}
+
+	if (FacingDirection.IsNearlyZero())
+	{
+		FacingDirection = FVector::ForwardVector;
+	}
+
+	State.ZiplineFacingDirection =
+		FacingDirection.GetSafeNormal();
+
+	// Facing은 이동/animation presentation에 사용하며 gameplay rail은 고정이다.
 	if (RideMode == EDRZiplineRideMode::AutoTraverse)
 	{
 		State.ZiplineAcceleration =

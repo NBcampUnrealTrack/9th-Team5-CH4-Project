@@ -9,195 +9,148 @@ class FSavedMove_DRCharacter;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
-DECLARE_MULTICAST_DELEGATE_ThreeParams(
-    FDRCharacterMovementUpdated,
-    float,
-    const FVector&,
-    const FVector&);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FDRCharacterMovementUpdated, float, const FVector&, const FVector&);
 
 UENUM()
 enum class EDRCustomMovementMode : uint8
 {
-    None = 0,
-    
-    // 특정 액션 이름이 아닌 외부 이동 액션을 처리하는 모드
-    MovementAction = 1,
+	None = 0,
+
+	// 특정 액션 이름이 아닌 외부 이동 액션을 처리하는 모드
+	MovementAction = 1,
 };
 
 UCLASS()
 class DEEPRAIDERS_API UDRCharacterMovementComponent : public UCharacterMovementComponent
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    UDRCharacterMovementComponent();
+	UDRCharacterMovementComponent();
 
-    /** 이동 갱신 직후 필요한 후처리 컴포넌트에 전달한다. */
-    FDRCharacterMovementUpdated OnCharacterMovementUpdated;
+	/** 이동 갱신 직후 필요한 후처리 컴포넌트에 전달한다. */
+	FDRCharacterMovementUpdated OnCharacterMovementUpdated;
 
-    void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
+	void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
-    /** 슈퍼점프 체공 중에만 공중 조작력을 높이고, 착지 시 원래 값으로 복원한다. */
-    void ActivateSuperJumpAirControl(float NewAirControl);
+	/** 슈퍼점프 체공 중에만 공중 조작력을 높이고, 착지 시 원래 값으로 복원한다. */
+	void ActivateSuperJumpAirControl(float NewAirControl);
 
-    /** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
-    void SetWantsJetpack(bool bNewWantsJetpack);
+	/** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
+	void SetWantsJetpack(bool bNewWantsJetpack);
 
-    bool WantsJetpack() const
-    {
-        return bWantsJetpack;
-    }
+	bool WantsJetpack() const
+	{
+		return bWantsJetpack;
+	}
 
-    /** Zipline attach 보정 Velocity와 분리해 관리하는 축 방향 gameplay 속도. */
-    void SetZiplineRailSpeed(float NewRailSpeed)
-    {
-        ZiplineRailSpeed = NewRailSpeed;
-    }
+	/** Zipline attach 보정 Velocity와 분리해 관리하는 축 방향 gameplay 속도. */
+	void SetZiplineRailSpeed(float NewRailSpeed)
+	{
+		ZiplineRailSpeed = NewRailSpeed;
+	}
 
-    float GetZiplineRailSpeed() const
-    {
-        return ZiplineRailSpeed;
-    }
+	float GetZiplineRailSpeed() const
+	{
+		return ZiplineRailSpeed;
+	}
 
-    /** Manual Zipline 탑승 시 이전 walking 입력이 첫 custom tick에 남지 않도록 초기화한다. */
-    void ResetManualZiplineInputState();
+	/** Manual Zipline 탑승 시 이전 walking 입력이 첫 custom tick에 남지 않도록 초기화한다. */
+	void ResetManualZiplineInputState();
 
-    /** SavedMove에서 받은 입력 플래그를 서버 이동에 복원한다. */
-    virtual void UpdateFromCompressedFlags(uint8 Flags) override;
+	/** SavedMove에서 받은 입력 플래그를 서버 이동에 복원한다. */
+	virtual void UpdateFromCompressedFlags(uint8 Flags) override;
 
-    virtual void SetBase(
-        UPrimitiveComponent* NewBase,
-        const FName BoneName = NAME_None,
-        bool bNotifyActor = true) override;
+	virtual void SetBase(UPrimitiveComponent* NewBase, const FName BoneName = NAME_None, bool bNotifyActor = true) override;
 
-    virtual void ProcessLanded(
-        const FHitResult& Hit,
-        float RemainingTime,
-        int32 Iterations) override;
+	virtual void ProcessLanded(const FHitResult& Hit, float RemainingTime, int32 Iterations) override;
 
-    /** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
-    virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
-    
-    // Falling 진입 전 얻은 횡방향 관성이 MaxWalkSpeed에 의해 즉시 제한되지 않도록 한다
-    virtual float GetMaxSpeed() const override;
-    
-    // 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
-    void SetCustomMovementMode(EDRCustomMovementMode NewMode);
-    
-    // None이면 바닥 상태를 확인한 뒤 일반 이동 모드로 복귀한다.
-    void ExitCustomMovementMode();
-    
-    bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
-    
+	/** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
+	virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
+
+	// Falling 진입 전 얻은 횡방향 관성이 MaxWalkSpeed에 의해 즉시 제한되지 않도록 한다
+	virtual float GetMaxSpeed() const override;
+
+	// 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
+	void SetCustomMovementMode(EDRCustomMovementMode NewMode);
+
+	// None이면 바닥 상태를 확인한 뒤 일반 이동 모드로 복귀한다.
+	void ExitCustomMovementMode();
+
+	bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
+
 protected:
-	virtual void OnMovementUpdated(
-		float DeltaSeconds,
-		const FVector& OldLocation,
-		const FVector& OldVelocity) override;
+	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 
-    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-    /** 낙하 물리 안에서 예측 가능한 제트팩 추진력을 적용한다. */
-    virtual void PhysFalling(
-        float DeltaTime,
-        int32 Iterations) override;
+	/** 낙하 물리 안에서 예측 가능한 제트팩 추진력을 적용한다. */
+	virtual void PhysFalling(float DeltaTime, int32 Iterations) override;
 
-    virtual void PhysCustom(float deltaTime, int32 Iterations) override;
-    
+	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
+
 private:
-    void UnbindAbilitySystem();
-    void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
-    void ApplyMoveSpeedMultiplier(float Multiplier);
+	void UnbindAbilitySystem();
+	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
+	void ApplyMoveSpeedMultiplier(float Multiplier);
 
-    void PhysMovementAction(float DeltaTime, int32 Iterations);
-    UDRMovementActionComponent* GetMovementActionComponent() const;
-    
-    // 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
-    void RestoreDefaultMovementMode();
-    
-    TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
-    FDelegateHandle MoveSpeedChangedDelegateHandle;
-    float BaseWalkSpeed = 0.f;
-    float AirControlBeforeSuperJump = 0.f;
+	void PhysMovementAction(float DeltaTime, int32 Iterations);
+	void UpdateZiplineFacing(const FDRMovementActionState& State, float DeltaTime);
+	UDRMovementActionComponent* GetMovementActionComponent() const;
 
-    bool bSuperJumpAirControlActive = false;
+	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
+	void RestoreDefaultMovementMode();
 
-    bool CanApplyJetpackThrust() const;
+	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+	FDelegateHandle MoveSpeedChangedDelegateHandle;
+	float BaseWalkSpeed = 0.f;
+	float AirControlBeforeSuperJump = 0.f;
 
-    /** 로컬 입력 또는 서버가 복원한 입력 상태 */
-    uint8 bWantsJetpack : 1;
+	bool bSuperJumpAirControlActive = false;
 
-    /**
-     * Manual Zipline 입력의 네트워크 복원 상태.
-     * -1 / 0 / +1은 현재 Manual control mode의 기준 축에 대한 signed input이다.
-     *
-     * 소유 클라이언트의 SavedMove가 FLAG_Custom_1/2로 서버에 전달하고,
-     * Dedicated Server의 PhysMovementAction이 이 값을 사용한다.
-     */
-    int8 ManualZiplineInput = 0;
+	bool CanApplyJetpackThrust() const;
 
-    /**
-     * Zipline의 실제 축 방향 gameplay 속도.
-     * Rope에 붙기 위한 lateral / clamp 보정 Velocity와 분리한다.
-     */
-    float ZiplineRailSpeed = 0.f;
+	/** 로컬 입력 또는 서버가 복원한 입력 상태 */
+	uint8 bWantsJetpack : 1;
 
-    /** 현재 출력 상승 진행 시간 */
-    float JetpackSpoolElapsed = 0.f;
+	/**
+	 * Manual Zipline 입력의 네트워크 복원 상태.
+	 * -1 / 0 / +1은 현재 Manual control mode의 기준 축에 대한 signed input이다.
+	 *
+	 * 소유 클라이언트의 SavedMove가 FLAG_Custom_1/2로 서버에 전달하고,
+	 * Dedicated Server의 PhysMovementAction이 이 값을 사용한다.
+	 */
+	int8 ManualZiplineInput = 0;
 
-    /** 제트팩 작동 직후의 초기 추진 가속도 */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadOnly,
-        Category = "Jetpack",
-        meta = (
-            AllowPrivateAccess = "true",
-            ClampMin = "0.0",
-            Units = "cm/s^2"))
-    float InitialJetpackAcceleration = 1200.f;
+	/**
+	 * Zipline의 실제 축 방향 gameplay 속도.
+	 * Rope에 붙기 위한 lateral / clamp 보정 Velocity와 분리한다.
+	 * Manual ViewRelative에서는 이 값의 부호가 몸 Facing 전환 시점도 결정한다.
+	 */
+	float ZiplineRailSpeed = 0.f;
 
-    /** 출력 상승이 끝난 뒤의 최대 추진 가속도 */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadOnly,
-        Category = "Jetpack",
-        meta = (
-            AllowPrivateAccess = "true",
-            ClampMin = "0.0",
-            Units = "cm/s^2"))
-    float MaxJetpackAcceleration = 3200.f;
+	/** 현재 출력 상승 진행 시간 */
+	float JetpackSpoolElapsed = 0.f;
 
-    /** 초기 출력에서 최대 출력까지 도달하는 시간 */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadOnly,
-        Category = "Jetpack",
-        meta = (
-            AllowPrivateAccess = "true",
-            ClampMin = "0.01",
-            Units = "s"))
-    float JetpackSpoolUpTime = 0.65f;
+	/** 제트팩 작동 직후의 초기 추진 가속도 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s^2"))
+	float InitialJetpackAcceleration = 1200.f;
 
-    /** 출력 증가 곡선의 지수 */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadOnly,
-        Category = "Jetpack",
-        meta = (
-            AllowPrivateAccess = "true",
-            ClampMin = "0.01"))
-    float JetpackThrustExponent = 1.7f;
+	/** 출력 상승이 끝난 뒤의 최대 추진 가속도 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s^2"))
+	float MaxJetpackAcceleration = 3200.f;
 
-    /** 제트팩 사용 중 최대 상승 속도 */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadOnly,
-        Category = "Jetpack",
-        meta = (
-            AllowPrivateAccess = "true",
-            ClampMin = "0.0",
-            Units = "cm/s"))
-    float MaxJetpackRiseSpeed = 900.f;
+	/** 초기 출력에서 최대 출력까지 도달하는 시간 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.01", Units = "s"))
+	float JetpackSpoolUpTime = 0.65f;
 
-    friend class FSavedMove_DRCharacter;
+	/** 출력 증가 곡선의 지수 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.01"))
+	float JetpackThrustExponent = 1.7f;
+
+	/** 제트팩 사용 중 최대 상승 속도 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
+	float MaxJetpackRiseSpeed = 900.f;
+
+	friend class FSavedMove_DRCharacter;
 };
