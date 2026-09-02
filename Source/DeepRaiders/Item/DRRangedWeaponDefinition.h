@@ -42,10 +42,10 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	bool bUseAdaptiveQuery = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (Units = "cm"))
-	float StartOffset = -50.f;
+	float StartOffset = -100.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
-	float InnerRadiusRatio = 0.3f;
+	float InnerRadiusRatio = 0.5f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
 	EDRSnowRemovalBrushShape BrushShape = EDRSnowRemovalBrushShape::Sphere;
