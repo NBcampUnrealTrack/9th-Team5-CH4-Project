@@ -2,13 +2,18 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/ComboBoxString.h"
 #include "HostOrJoinWidget.generated.h"
 
 class UEditableTextBox;
+class UDataTable;
+class UImage;
 class UOverlay;
+class UWidget;
 class UDRTitleSettingRowWidget;
 class USoundClass;
 class USoundMix;
+class UTexture2D;
 class UWorld;
 
 UCLASS()
@@ -28,6 +33,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void HandlePrivateCreateClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleCreateMapClicked();
+
+	UFUNCTION(BlueprintCallable, Category = "Title")
+	void HandleCloseChoiceMapClicked();
 
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void HandlePrivateMatchClicked();
@@ -53,6 +64,22 @@ public:
 protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_Join;
+
+	// 비공개 리슨 서버 맵 선택 UI
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UOverlay> Overlay_ChoiceMap;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UComboBoxString> ComboBoxString_ChoiceMap;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWidget> CreateMap;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWidget> CloseChoiceMap;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UImage> ChoosedImageMap;
 
 	// Join Server
 	UPROPERTY(meta = (BindWidget))
@@ -81,7 +108,7 @@ protected:
 	FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
-	TSoftObjectPtr<UWorld> PlayMap;
+	TObjectPtr<UDataTable> MapDefinitionTable;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Settings|Audio")
 	TObjectPtr<USoundClass> MasterSoundClass;
@@ -93,10 +120,21 @@ protected:
 	TObjectPtr<USoundClass> SFXSoundClass;
 
 private:
+	UFUNCTION()
+	void HandleMapSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
 	void CacheSettingRows();
 	void LoadSettingsIntoSliders();
 	void ApplyAudioSettings(float MasterVolume, float MusicVolume, float SFXVolume);
 	bool HasAllSettingRows() const;
+	void RefreshMapOptions();
+	void SelectMapDefinition(int32 DefinitionIndex);
+	void SelectPlayMap(TSoftObjectPtr<UWorld> InPlayMap, UTexture2D* InPreview);
+
+	TArray<FName> MapDefinitionRowNames;
+
+	UPROPERTY(Transient)
+	TSoftObjectPtr<UWorld> SelectedPlayMap;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRTitleSettingRowWidget> MasterVolumeRow;
