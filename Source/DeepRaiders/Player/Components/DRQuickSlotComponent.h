@@ -21,6 +21,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRQuickSlotCountChanged, int32, New
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRSelectedQuickSlotIndexChanged, int32, PreviousSlotIndex, int32, NewSlotIndex); 
 // 슬롯 내의 아이템 변경
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRSelectedQuickSlotItemChanged, UDRItemDefinition*, ItemDefinition);
+// 슬롯 전환 인터벌
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRQuickSlotActivationIntervalChanged);
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DEEPRAIDERS_API UDRQuickSlotComponent : public UActorComponent
@@ -79,6 +81,12 @@ public:
 		return HeldItemDefinition;
 	}	
 	
+	UFUNCTION(BlueprintPure, Category = "Quick Slot|Activation Interval")
+	bool IsQuickSlotActivationIntervalActive() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Quick Slot|Activation Interval")
+	bool GetQuickSlotActivationIntervalState(int32 SlotIndex, float& OutProgress) const;
+	
 	void RefreshSelectedItem();
 	
 	// Character에게 SelectedItem 외형 반영
@@ -134,6 +142,14 @@ private:
 	
 	void HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData);
 	
+	void StartLocalQuickSlotActivationInterval(const FDRItemInstance& ItemInstance);
+	void ApplyAuthorityQuickSlotActivationInterval(const FDRItemInstance& ItemInstance);
+	void ClearAuthorityQuickSlotActivationInterval();
+	
+	bool QueryAuthorityQuickSlotActivationInterval(float& OutRemaining, float& OutDuration) const;
+	double GetQuickSlotActivationIntervalTime() const;
+	
+	void HandleQuickSlotActivationIntervalTagChanged(FGameplayTag Tag, int32 NewCount);
 	
 public:
 	// 모든 퀵슬롯 변경에 호출
@@ -152,6 +168,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")
 	FDRSelectedQuickSlotItemChanged OnSelectedQuickSlotItemChangedDelegate;
 
+	// 퀵슬롯 아이템 인터벌 변경 시 호출
+	UPROPERTY(BlueprintAssignable, Category = "Quick Slot")
+	FDRQuickSlotActivationIntervalChanged OnQuickSlotActivationIntervalChangedDelegate;
+	
 private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
@@ -190,4 +210,14 @@ private:
  	* 서버 권위 상태가 아니며 복제하지 않는다.
  	*/
 	TMap<FGuid, double> LocalNextWeaponFireTime;
+	
+	FDelegateHandle QuickSlotActivationIntervalTagChangedDelegateHandle;
+	FActiveGameplayEffectHandle AuthorityQuickSlotActivationIntervalEffectHandle;
+	
+	// 서버 검증에 통과한 Interval과 로컬의 현재 Interval이 동일한지 검사하기 위한 Id
+	// 서버의 Interval 통과 호출이 잘못된 아이템에 전달될 수 있으므로
+	FGuid LocalActivationIntervalInstanceId;
+	double LocalActivationIntervalStartTime = 0.0;
+	double LocalActivationIntervalEndTime = 0.0;
+	float LocalActivationIntervalDuration = 0.0f;
 };

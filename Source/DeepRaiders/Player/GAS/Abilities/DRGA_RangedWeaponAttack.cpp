@@ -383,7 +383,6 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
-	// 원격 클라이언트가 발사 요청을 전송하면 ScopedPredictionKey로 Cooldown GE를 예측 적용
 	FScopedPredictionWindow PredictionWindow(AbilitySystem, true);
 	if (!SendLocalShotRequest())
 	{

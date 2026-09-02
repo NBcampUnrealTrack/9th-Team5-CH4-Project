@@ -14,7 +14,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Active);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Zipline);
-
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
+	
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
@@ -68,6 +69,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
 
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);

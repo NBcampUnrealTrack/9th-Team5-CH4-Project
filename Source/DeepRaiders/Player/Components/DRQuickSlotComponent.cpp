@@ -16,6 +16,8 @@
 #include "Engine/World.h"
 #include "GameplayAbilitySpec.h"
 #include "TimerManager.h"
+#include "DeepRaiders/GAS/Effects/DRGE_QuickSlotActivationInterval.h"
+#include "GameplayEffect.h"
 
 UDRQuickSlotComponent::UDRQuickSlotComponent()
 {
@@ -50,6 +52,7 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 	
 	ClearDeferredHeldItemRefresh();
+	ClearAuthorityQuickSlotActivationInterval();
 	
 	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
 	
@@ -85,9 +88,15 @@ void UDRQuickSlotComponent::RequestSelectSlot(int32 SlotIndex)
 
 	const FDRItemInstance* ItemInstance = InventoryComponent->GetItemAtSlot(SlotIndex);
 	
-	if (!ItemInstance)
+	if (!ItemInstance
+		|| ItemInstance->InstanceId == SelectedInstanceId)
 	{
 		return;
+	}
+	
+	if (IsLocalPlayer())
+	{
+		StartLocalQuickSlotActivationInterval(*ItemInstance);
 	}
 	
 	if (HasQuickSlotAuthority())
@@ -333,7 +342,17 @@ bool UDRQuickSlotComponent::SelectSlotInternal(int32 SlotIndex, FGuid ExpectedIn
 		return false;
 	}
 	
+	const bool bHadPreviousSelection = SelectedInstanceId.IsValid();
 	SelectedInstanceId = ItemInstance->InstanceId;
+	
+	if (bHadPreviousSelection)
+	{
+		ApplyAuthorityQuickSlotActivationInterval(*ItemInstance);
+	}
+	else
+	{
+		ClearAuthorityQuickSlotActivationInterval();
+	}
 	
 	RefreshDerivedState();
 	RequestReplicationUpdate();
@@ -356,15 +375,10 @@ bool UDRQuickSlotComponent::EnsureValidSelection()
 		return false;
 	}
 	
-	FGuid FallbackInstanceId;
-	
+	const FGuid PreviousInstanceId = SelectedInstanceId;
 	const FDRItemInstance* DefaultItem = Inventory->GetItemAtSlot(DRInventorySlots::DefaultWeapon);
-	
 	// 기본 무기가 있는 경우, 현재 장착 중인 무기가 제거될 때 자동으로 기본 무기를 들게 한다.
-	if (DefaultItem)
-	{
-		FallbackInstanceId = DefaultItem->InstanceId;
-	}
+	FGuid FallbackInstanceId = DefaultItem ? DefaultItem->InstanceId : FGuid();
 	
 	if (FallbackInstanceId == SelectedInstanceId)
 	{
@@ -372,6 +386,16 @@ bool UDRQuickSlotComponent::EnsureValidSelection()
 	}
 	
 	SelectedInstanceId = FallbackInstanceId;
+	
+	if (PreviousInstanceId.IsValid()
+		&& DefaultItem)
+	{
+		ApplyAuthorityQuickSlotActivationInterval(*DefaultItem);
+	}
+	else
+	{
+		ClearAuthorityQuickSlotActivationInterval();
+	}
 	
 	return true;	
 }
@@ -487,20 +511,23 @@ bool UDRQuickSlotComponent::CacheAbilitySystemComponent()
 		return false;
 	}
 	
-	if (AbilitySystemComponent.Get() == FoundASC)
+	if (AbilitySystemComponent.Get() != FoundASC)
 	{
-		if (!AbilityEndedDelegateHandle.IsValid())
-		{
-			AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
-		}
-		
-		return true;
+		UnbindAbilitySystemComponent();
+		AbilitySystemComponent = FoundASC;
 	}
 	
-	UnbindAbilitySystemComponent();
+	if (!AbilityEndedDelegateHandle.IsValid())
+	{
+		AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
+	}
 	
-	AbilitySystemComponent= FoundASC;
-	AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
+	if (!QuickSlotActivationIntervalTagChangedDelegateHandle.IsValid())
+	{
+		QuickSlotActivationIntervalTagChangedDelegateHandle = FoundASC->RegisterGameplayTagEvent(
+			DRGameplayTags::State_QuickSlot_ActivationInterval, EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this, &ThisClass::HandleQuickSlotActivationIntervalTagChanged);
+	}
 	
 	return true;
 }
@@ -513,9 +540,16 @@ void UDRQuickSlotComponent::UnbindAbilitySystemComponent()
 		{
 			ASC->OnAbilityEnded.Remove(AbilityEndedDelegateHandle);
 		}
+		
+		if (QuickSlotActivationIntervalTagChangedDelegateHandle.IsValid())
+		{
+			ASC->RegisterGameplayTagEvent(DRGameplayTags::State_QuickSlot_ActivationInterval,
+				EGameplayTagEventType::NewOrRemoved).Remove(QuickSlotActivationIntervalTagChangedDelegateHandle);
+		}
 	}
 
 	AbilityEndedDelegateHandle.Reset();
+	QuickSlotActivationIntervalTagChangedDelegateHandle.Reset();
 	AbilitySystemComponent.Reset();
 }
 
@@ -675,3 +709,207 @@ void UDRQuickSlotComponent::HandleAbilityEnded(const FAbilityEndedData& AbilityE
 	 */
 	QueueDeferredHeldItemRefresh();
 }
+
+bool UDRQuickSlotComponent::IsQuickSlotActivationIntervalActive() const
+{
+	const double CurrentTime = GetQuickSlotActivationIntervalTime();
+	const bool bHasLocalPrediction = LocalActivationIntervalDuration > KINDA_SMALL_NUMBER 
+		&& CurrentTime + KINDA_SMALL_NUMBER < LocalActivationIntervalEndTime;
+	
+	if (bHasLocalPrediction)
+	{
+		return true;
+	}
+	
+	float Remaining = 0.0f;
+	float Duration = 0.0f;
+	return QueryAuthorityQuickSlotActivationInterval(Remaining, Duration);
+}
+
+bool UDRQuickSlotComponent::GetQuickSlotActivationIntervalState(int32 SlotIndex, float& OutProgress) const
+{
+	OutProgress = 1.f;
+	
+	const UDRInventoryComponent* Inventory = InventoryComponent.Get();
+	if (!IsValid(Inventory))
+	{
+		return false;
+	}
+	
+	const double CurrentTime = GetQuickSlotActivationIntervalTime();
+	const bool bHasLocalPrediction = LocalActivationIntervalDuration > KINDA_SMALL_NUMBER
+		&& CurrentTime + KINDA_SMALL_NUMBER < LocalActivationIntervalEndTime;
+	
+	if (bHasLocalPrediction)
+	{
+		const int32 PredictedSlotIndex = Inventory->FindSlotIndex(LocalActivationIntervalInstanceId);
+		
+		if (PredictedSlotIndex != SlotIndex)
+		{
+			return false;
+		}
+		
+		const double ElapsedTime = CurrentTime - LocalActivationIntervalStartTime;
+		OutProgress = FMath::Clamp(static_cast<float>(ElapsedTime / LocalActivationIntervalDuration), 0.0f, 1.0f);
+		return true;
+	}
+	
+	float Remaining = 0.0f;
+	float Duration = 0.0f;
+	if (!QueryAuthorityQuickSlotActivationInterval(Remaining, Duration)
+		|| GetSelectedSlotIndex() != SlotIndex)
+	{
+		return false;
+	}
+	
+	OutProgress = Duration > KINDA_SMALL_NUMBER ? 1.0f - FMath::Clamp(Remaining / Duration, 0.0f, 1.0f) : 1.0f;
+	
+	return true;
+}
+
+void UDRQuickSlotComponent::StartLocalQuickSlotActivationInterval(const FDRItemInstance& ItemInstance)
+{
+	if (!IsLocalPlayer()
+		|| !ItemInstance.IsValid())
+	{
+		return;
+	}
+	
+	const UDRItemDefinition* ItemDefinition = ItemInstance.Definition.Get();
+	const float Duration = IsValid(ItemDefinition) ? FMath::Max(ItemDefinition->QuickSlotActivationInterval) : 0.0f;
+	const double CurrentTime = GetQuickSlotActivationIntervalTime();
+	
+	LocalActivationIntervalInstanceId = ItemInstance.InstanceId;
+	LocalActivationIntervalDuration = Duration;
+	LocalActivationIntervalStartTime = CurrentTime;
+	LocalActivationIntervalEndTime = CurrentTime + Duration;
+
+	OnQuickSlotActivationIntervalChangedDelegate.Broadcast();
+}
+
+void UDRQuickSlotComponent::ApplyAuthorityQuickSlotActivationInterval(
+	const FDRItemInstance& ItemInstance)
+{
+	if (!HasQuickSlotAuthority() 
+		|| !ItemInstance.IsValid())
+	{
+		return;
+	}
+
+	ClearAuthorityQuickSlotActivationInterval();
+
+	const UDRItemDefinition* ItemDefinition = ItemInstance.Definition.Get();
+	const float Duration = IsValid(ItemDefinition) 
+		? FMath::Max(0.0f, ItemDefinition->QuickSlotActivationInterval) : 0.0f;
+
+	if (Duration <= KINDA_SMALL_NUMBER 
+		|| !CacheAbilitySystemComponent())
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+	EffectContext.AddSourceObject(ItemInstance.Definition.Get());
+
+	FGameplayEffectSpecHandle EffectSpec = ASC->MakeOutgoingSpec(UDRGE_QuickSlotActivationInterval::StaticClass(),
+		1.0f,EffectContext);
+
+	if (!EffectSpec.IsValid())
+	{
+		return;
+	}
+
+	EffectSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_QuickSlot_ActivationInterval_Duration,	Duration);
+
+	AuthorityQuickSlotActivationIntervalEffectHandle =
+		ASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+}
+
+void UDRQuickSlotComponent::ClearAuthorityQuickSlotActivationInterval()
+{
+	if (!HasQuickSlotAuthority())
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	if (!IsValid(ASC))
+	{
+		ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+	}
+
+	if (IsValid(ASC) && AuthorityQuickSlotActivationIntervalEffectHandle.IsValid())
+	{
+		ASC->RemoveActiveGameplayEffect(
+			AuthorityQuickSlotActivationIntervalEffectHandle);
+	}
+
+	AuthorityQuickSlotActivationIntervalEffectHandle.Invalidate();
+}
+
+bool UDRQuickSlotComponent::QueryAuthorityQuickSlotActivationInterval(
+	float& OutRemaining,
+	float& OutDuration) const
+{
+	OutRemaining = 0.0f;
+	OutDuration = 0.0f;
+
+	const UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	if (!IsValid(ASC))
+	{
+		ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
+	}
+
+	if (!IsValid(ASC)
+		|| !ASC->HasMatchingGameplayTag(DRGameplayTags::State_QuickSlot_ActivationInterval))
+	{
+		return false;
+	}
+
+	FGameplayTagContainer IntervalTags;
+	IntervalTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
+
+	const FGameplayEffectQuery Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(IntervalTags);
+	const TArray<TPair<float, float>> Effects = ASC->GetActiveEffectsTimeRemainingAndDuration(Query);
+
+	for (const TPair<float, float>& Effect : Effects)
+	{
+		if (Effect.Key > OutRemaining)
+		{
+			OutRemaining = Effect.Key;
+			OutDuration = Effect.Value;
+		}
+	}
+
+	return OutRemaining > KINDA_SMALL_NUMBER;
+}
+
+double UDRQuickSlotComponent::GetQuickSlotActivationIntervalTime() const
+{
+	const UWorld* World = GetWorld();
+	return IsValid(World) ? World->GetTimeSeconds() : 0.0;
+}
+
+void UDRQuickSlotComponent::HandleQuickSlotActivationIntervalTagChanged(
+	FGameplayTag,
+	int32)
+{
+	OnQuickSlotActivationIntervalChangedDelegate.Broadcast();
+}
+
+
+
+
+
+
+
+
+
+
+
