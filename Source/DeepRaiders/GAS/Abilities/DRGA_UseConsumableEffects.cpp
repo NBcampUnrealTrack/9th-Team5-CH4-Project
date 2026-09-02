@@ -19,6 +19,8 @@ UDRGA_UseConsumableEffects::UDRGA_UseConsumableEffects()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
 }
 
 bool UDRGA_UseConsumableEffects::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,

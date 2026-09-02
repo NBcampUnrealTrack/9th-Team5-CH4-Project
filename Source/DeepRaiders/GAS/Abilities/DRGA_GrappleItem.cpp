@@ -37,6 +37,7 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
 
 	TargetActorClass = ADRGrappleTargetActor::StaticClass();
 }

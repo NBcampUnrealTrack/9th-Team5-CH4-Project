@@ -39,6 +39,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
 }
 
 bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,

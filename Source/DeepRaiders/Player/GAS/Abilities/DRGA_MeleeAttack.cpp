@@ -21,8 +21,11 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
 	SetAssetTags(InitialTags);
 
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
 }
 
 void UDRGA_MeleeAttack::ActivateAbility(

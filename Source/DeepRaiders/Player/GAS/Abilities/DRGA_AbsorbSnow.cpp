@@ -27,6 +27,10 @@ UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 	AssetTags.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 	SetAssetTags(AssetTags);
 
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
+	
 	ActivationOwnedTags.AddTag(DRGameplayTags::State_Absorbing);
 }
 

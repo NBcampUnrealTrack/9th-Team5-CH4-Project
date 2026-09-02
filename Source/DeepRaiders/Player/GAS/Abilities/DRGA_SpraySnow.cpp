@@ -27,8 +27,11 @@ UDRGA_SpraySnow::UDRGA_SpraySnow()
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
 	SetAssetTags(InitialTags);
 
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
 }
 
 bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
