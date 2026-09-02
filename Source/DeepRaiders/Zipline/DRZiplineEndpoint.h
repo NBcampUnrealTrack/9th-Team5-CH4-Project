@@ -27,10 +27,6 @@ public:
 	}
 
 private:
-	UPROPERTY(
-		VisibleAnywhere,
-		BlueprintReadOnly,
-		Category = "Zipline",
-		meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneComponent> Root;
 };
