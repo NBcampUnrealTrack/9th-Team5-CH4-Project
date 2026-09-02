@@ -31,8 +31,14 @@ bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle
 	{
 		return false;
 	}
+	
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
 
-	if (ActorInfo == nullptr || SprayTickInterval <= 0.f || SprayRange <= 0.f || ImpactEffects.IsEmpty())
+	if (ActorInfo == nullptr 
+		|| !IsValid(WeaponDefinition)
+		|| WeaponDefinition->SprayTickInterval <= 0.f 
+		|| WeaponDefinition->SprayRange <= 0.f 
+		|| WeaponDefinition->ImpactEffects.IsEmpty())
 	{
 		return false;
 	}
@@ -44,14 +50,8 @@ bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle
 	{
 		return false;
 	}
-
-	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
-	if (!IsValid(WeaponDefinition))
-	{
-		return false;
-	}
-
-	const float TickCost = WeaponDefinition->SnowCostPerSecond * SprayTickInterval;
+	
+	const float TickCost = WeaponDefinition->SnowCostPerSecond * WeaponDefinition->SprayTickInterval;
 	
 	const float CurrentSnow = AbilitySystem->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 	return CurrentSnow + KINDA_SMALL_NUMBER >= TickCost;
@@ -149,6 +149,13 @@ void UDRGA_SpraySnow::StartServerSpray()
 
 	LastHitReactionTimes.Reset();
 	
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
+	
 	/*
 	 * 즉발 Tick은 넣지 않는다.
 	 *
@@ -156,7 +163,8 @@ void UDRGA_SpraySnow::StartServerSpray()
 	 * 첫 1초 동안 11번 판정되는 식으로
 	 * DPS / Cost 계산이 미묘하게 어긋날 수 있다.
 	 */
-	World->GetTimerManager().SetTimer(SprayTimerHandle, this, &ThisClass::HandleSprayTick, SprayTickInterval, true, SprayTickInterval);
+	World->GetTimerManager().SetTimer(SprayTimerHandle, this, &ThisClass::HandleSprayTick,
+		WeaponDefinition->SprayTickInterval, true, WeaponDefinition->SprayTickInterval);
 }
 
 void UDRGA_SpraySnow::StopServerSpray()
@@ -219,6 +227,13 @@ bool UDRGA_SpraySnow::ResolveSprayOriginAndDirection(FVector& OutOrigin, FVector
 		return false;
 	}
 
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return false;
+	}
+	
 	FRotator AimRotation = AvatarActor->GetActorRotation();
 
 	if (const AController* Controller = ActorInfo->PlayerController.Get())
@@ -247,7 +262,8 @@ bool UDRGA_SpraySnow::ResolveSprayOriginAndDirection(FVector& OutOrigin, FVector
 		HorizontalDirection = AvatarActor->GetActorForwardVector();
 	}
 
-	OutOrigin = AvatarActor->GetActorLocation() + FVector::UpVector * SprayOriginHeightOffset + HorizontalDirection * SprayOriginForwardOffset;
+	OutOrigin = AvatarActor->GetActorLocation() + FVector::UpVector * WeaponDefinition->SprayOriginHeightOffset 
+		+ HorizontalDirection * WeaponDefinition->SprayOriginForwardOffset;
 
 	return true;
 }
@@ -266,12 +282,13 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 	UAbilitySystemComponent* SourceAbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 
 	UWorld* World = GetWorld();
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
 
-	if (!IsValid(AvatarActor) || !IsValid(SourceAbilitySystem) || !IsValid(World))
+	if (!IsValid(AvatarActor) || !IsValid(SourceAbilitySystem) || !IsValid(World) || !IsValid(WeaponDefinition))
 	{
 		return;
 	}
-
+	
 	// --------------------------------
 	// 1. Range 안 Pawn 후보 검색
 	// --------------------------------
@@ -285,7 +302,8 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 
 	OverlapQueryParams.AddIgnoredActor(AvatarActor);
 
-	const bool bHasOverlap = World->OverlapMultiByObjectType(OverlapResults, Origin, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(SprayRange), OverlapQueryParams);
+	const bool bHasOverlap = World->OverlapMultiByObjectType(OverlapResults, Origin
+		, FQuat::Identity, ObjectQueryParams, FCollisionShape::MakeSphere(WeaponDefinition->SprayRange), OverlapQueryParams);
 
 	if (!bHasOverlap)
 	{
@@ -333,7 +351,7 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 		}
 	}
 
-	const float MinDot = FMath::Cos(FMath::DegreesToRadians(SprayHalfAngleDegrees));
+	const float MinDot = FMath::Cos(FMath::DegreesToRadians(WeaponDefinition->SprayHalfAngleDegrees));
 
 	/*
 	 * 하나의 Actor가 Component 여러 개 때문에
@@ -374,7 +392,7 @@ void UDRGA_SpraySnow::ApplySprayToTargets(const FVector& Origin, const FVector& 
 
 		const float DistanceSquared = ToTarget.SizeSquared();
 
-		if (DistanceSquared > FMath::Square(SprayRange))
+		if (DistanceSquared > FMath::Square(WeaponDefinition->SprayRange))
 		{
 			continue;
 		}
@@ -526,7 +544,7 @@ bool UDRGA_SpraySnow::TryConsumeSnowCost()
 		return false;
 	}
 
-	const float TickCost = WeaponDefinition->SnowCostPerSecond * SprayTickInterval;
+	const float TickCost = WeaponDefinition->SnowCostPerSecond * WeaponDefinition->SprayTickInterval;
 
 	const float CurrentSnow = AbilitySystem->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 
@@ -584,9 +602,15 @@ void UDRGA_SpraySnow::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& 
 		return;
 	}
 
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
+	
 	UObject* SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
-
-	for (const FDRGameplayEffectData& EffectData : ImpactEffects)
+	
+	for (const FDRGameplayEffectData& EffectData : WeaponDefinition->ImpactEffects)
 	{
 		if (!EffectData.EffectClass)
 		{
@@ -600,7 +624,8 @@ void UDRGA_SpraySnow::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& 
 			EffectContext.AddSourceObject(SourceObject);
 		}
 
-		FGameplayEffectSpecHandle EffectSpec = AbilitySystem->MakeOutgoingSpec(EffectData.EffectClass, EffectData.EffectLevel, EffectContext);
+		FGameplayEffectSpecHandle EffectSpec = AbilitySystem->MakeOutgoingSpec(EffectData.EffectClass,
+			EffectData.EffectLevel, EffectContext);
 
 		if (!EffectSpec.IsValid())
 		{
@@ -742,16 +767,18 @@ void UDRGA_SpraySnow::TryExecuteHitReaction(
 	}
 
 	UWorld* World = GetWorld();
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
 
-	if (!IsValid(World))
+	if (!IsValid(World) 
+		|| !IsValid(WeaponDefinition))
 	{
 		return;
 	}
-
+	
 	const float CurrentTime = World->GetTimeSeconds();
 	if (const float* LastTime = LastHitReactionTimes.Find(TargetActor))
 	{
-		if (CurrentTime - *LastTime < HitReactionInterval)
+		if (CurrentTime - *LastTime < WeaponDefinition->HitReactionInterval)
 		{
 			return;
 		}
@@ -778,8 +805,7 @@ void UDRGA_SpraySnow::TryExecuteHitReaction(
 
 void UDRGA_SpraySnow::StartSprayPresentation()
 {
-	if (!ActivePresentationEffectClass
-		|| ActivePresentationEffectHandle.IsValid())
+	if (ActivePresentationEffectHandle.IsValid())
 	{
 		return;
 	}
@@ -787,7 +813,11 @@ void UDRGA_SpraySnow::StartSprayPresentation()
 	const FGameplayAbilityActorInfo* ActorInfo =
 		GetCurrentActorInfo();
 
-	if (ActorInfo == nullptr)
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+	
+	if (ActorInfo == nullptr
+		|| !IsValid(WeaponDefinition)
+		|| !WeaponDefinition->ActivePresentationEffectClass)
 	{
 		return;
 	}
@@ -814,7 +844,7 @@ void UDRGA_SpraySnow::StartSprayPresentation()
 
 	FGameplayEffectSpecHandle SpecHandle =
 		ASC->MakeOutgoingSpec(
-			ActivePresentationEffectClass,
+			WeaponDefinition->ActivePresentationEffectClass,
 			GetAbilityLevel(
 				GetCurrentAbilitySpecHandle(),
 				ActorInfo),
@@ -915,16 +945,23 @@ void UDRGA_SpraySnow::DrawDebugSpray(
 	{
 		return;
 	}
+	
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
 
 	const float AngleRadians =
 		FMath::DegreesToRadians(
-			SprayHalfAngleDegrees);
+			WeaponDefinition->SprayHalfAngleDegrees);
 
 	DrawDebugCone(
 		World,
 		Origin,
 		Direction,
-		SprayRange,
+		WeaponDefinition->SprayRange,
 		AngleRadians,
 		AngleRadians,
 		24,

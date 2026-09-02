@@ -32,7 +32,7 @@ protected:
 	
 	// 자식 GA 전용 설정이 유효한지 검사
 	// Projectile Class 등
-	virtual bool IsAttackConfigurationValid() const;
+	virtual bool IsAttackConfigurationValid(const UDRProjectileWeaponItemDefinition* WeaponDefinition) const;
 	
 	// 자식 GA가 서버 delegate 등을 등록
 	virtual void OnRangedWeaponActivated() {};
@@ -88,27 +88,7 @@ protected:
 		const FVector& FireOrigin,
 		const FVector& TargetLocation);
 
-	float GetMaxAttackDistance() const
-	{
-		return MaxAttackDistance;
-	}
-
-	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Fire",meta = (
-		ClampMin = "0.01", UIMin = "0.01", Units = "s"))
-	float BaseFireInterval = 0.25f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Fire")
-	bool bAutomaticFire = false;
-
-	UPROPERTY(EditDefaultsOnly,	BlueprintReadOnly,Category = "Ranged Weapon|Aim",meta = (
-		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
-	float MaxAttackDistance = 10000.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
-	TArray<FDRGameplayEffectData> ImpactEffects;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float BreakableDamage = 1.f;
+	float GetMaxAttackDistance() const;
 
 private:
 	bool ResolveSelectedWeaponInstance(

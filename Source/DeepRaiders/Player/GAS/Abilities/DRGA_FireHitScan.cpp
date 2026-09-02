@@ -7,6 +7,7 @@
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameplayPrediction.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 
 namespace 
 {
@@ -243,8 +244,15 @@ bool UDRGA_FireHitScan::ValidateTargetData(const FGameplayAbilityTargetDataHandl
 
 	const FVector ServerViewDirection =	ServerViewRotation.Vector().GetSafeNormal();
 
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return false;
+	}
+	
 	// 서버와 클라이언트 회전 오차 허용 범위
-	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(MaxServerAimDeviationDegrees));
+	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(WeaponDefinition->MaxServerAimDeviationDegrees));
 
 	if (FVector::DotProduct(ServerViewDirection, ClientAimDirection) < MinimumAimDot)
 	{
@@ -265,6 +273,13 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 		return TraceEnd;
 	}
 
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return TraceEnd;
+	}
+	
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
 
@@ -305,7 +320,7 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 			}
 
 			// 관통에 대한 처리
-			if (bCanPenetrateTargets)
+			if (WeaponDefinition->bCanPenetrateTargets)
 			{
 				QueryParams.AddIgnoredActor(HitActor);
 				continue;

@@ -49,7 +49,7 @@ bool UDRGA_RangedWeaponAttack::CanActivateAbility(const FGameplayAbilitySpecHand
 		return false;
 	}
 	
-	return IsAttackConfigurationValid();
+	return IsAttackConfigurationValid(GetWeaponDefinition(Handle, ActorInfo));
 }
 
 void UDRGA_RangedWeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -63,7 +63,7 @@ void UDRGA_RangedWeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle 
 	UDRInventoryComponent* Inventory = nullptr;
 	const FDRItemInstance* ItemInstance = nullptr;
 	
-	if (!IsAttackConfigurationValid()
+	if (!IsAttackConfigurationValid(WeaponDefinition)
 		|| !ResolveSelectedWeaponInstance(ActorInfo, WeaponDefinition, Inventory, ItemInstance))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -95,7 +95,10 @@ void UDRGA_RangedWeaponAttack::InputPressed(const FGameplayAbilitySpecHandle Han
 {
 	Super::InputPressed(Handle, ActorInfo, ActivationInfo);
 	
-	if (bAutomaticFire
+	const UDRProjectileWeaponItemDefinition* WeaponItemDefinition = GetCurrentWeaponDefinition();
+	
+	if (IsValid(WeaponItemDefinition)
+		&& WeaponItemDefinition->bAutomaticFire
 		&& ActorInfo != nullptr
 		&& ActorInfo->IsLocallyControlled())
 	{
@@ -116,8 +119,11 @@ void UDRGA_RangedWeaponAttack::EndAbility(const FGameplayAbilitySpecHandle Handl
 void UDRGA_RangedWeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetWeaponDefinition(Handle, ActorInfo);
+	
 	if (ActorInfo == nullptr 
-		|| !CooldownGameplayEffectClass)
+		|| !CooldownGameplayEffectClass
+		|| !IsValid(WeaponDefinition))
 	{
 		return;
 	}
@@ -130,7 +136,7 @@ void UDRGA_RangedWeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Ha
 		return;
 	}
 	
-	CooldownSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Cooldown_Duration, BaseFireInterval);
+	CooldownSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Cooldown_Duration, WeaponDefinition->BaseFireInterval);
 	
 	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
 }
@@ -272,12 +278,13 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 	}
 }
 
-bool UDRGA_RangedWeaponAttack::IsAttackConfigurationValid() const
+bool UDRGA_RangedWeaponAttack::IsAttackConfigurationValid(const UDRProjectileWeaponItemDefinition* WeaponDefinition) const
 {
 	const FGameplayTagContainer* CooldownTags = GetCooldownTags();
 	
 	// Cooldown GE가 없으면 발사가 불가능
-	return BaseFireInterval > 0.0f && MaxAttackDistance > 0.0f && CooldownGameplayEffectClass != nullptr
+	return IsValid(WeaponDefinition) && WeaponDefinition->BaseFireInterval > 0.0f 
+		&& WeaponDefinition->MaxAttackDistance > 0.0f && CooldownGameplayEffectClass != nullptr
 		&& CooldownTags != nullptr && CooldownTags->HasTagExact(DRGameplayTags::Cooldown_Weapon_Ranged);
 }
 
@@ -315,6 +322,12 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 	const FGameplayAbilitySpecHandle Handle = GetCurrentAbilitySpecHandle();
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();	
 
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
+	
 	if (!CheckCooldown(Handle, ActorInfo, nullptr))
 	{
 		return;
@@ -359,7 +372,9 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
  	* 이 상태는 로컬 요청 빈도만 제한한다.
  	* 실제 발사와 쿨다운 GE 적용 여부는 서버가 결정한다.
  	*/
-	QuickSlot->RecordLocalWeaponShot(WeaponInstanceId, BaseFireInterval);
+	QuickSlot->RecordLocalWeaponShot(
+		WeaponInstanceId,
+		WeaponDefinition->BaseFireInterval);
 }
 
 bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
@@ -460,7 +475,7 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 		return false;
 	}
 	
-	const FVector TraceEnd = ViewLocation + SafeDirection * MaxAttackDistance;
+	const FVector TraceEnd = ViewLocation + SafeDirection * GetMaxAttackDistance();
 	
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
@@ -573,7 +588,7 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 		return;
 	}
 	
-	for (const FDRGameplayEffectData& EffectData : ImpactEffects)
+	for (const FDRGameplayEffectData& EffectData : WeaponDefinition->ImpactEffects)
 	{
 		if (!EffectData.EffectClass)
 		{
@@ -605,7 +620,9 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 
 float UDRGA_RangedWeaponAttack::GetBreakableDamageAmount() const
 {
-	return FMath::Max(0.f, BreakableDamage);
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	
+	return IsValid(WeaponDefinition) ? FMath::Max(0.f, WeaponDefinition->BreakableDamage) : 0.f;
 }
 
 bool UDRGA_RangedWeaponAttack::TryApplyBreakableDamage(const FHitResult& HitResult) const
@@ -864,6 +881,13 @@ void UDRGA_RangedWeaponAttack::PlayFireMontage()
 		GetCurrentActivationInfo(),
 		FireMontage,
 		1.f);
+}
+
+float UDRGA_RangedWeaponAttack::GetMaxAttackDistance() const
+{
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+
+	return IsValid(WeaponDefinition) ? WeaponDefinition->MaxAttackDistance : 0.f;
 }
 
 #pragma endregion
