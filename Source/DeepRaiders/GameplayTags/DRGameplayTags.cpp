@@ -48,6 +48,11 @@ namespace DRGameplayTags
 		"Player is currently riding a zipline.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_QuickSlot_ActivationInterval,
+		"State.QuickSlot.ActivationInterval",
+		"Selected quick-slot item cannot be activated yet.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");
@@ -266,6 +271,11 @@ namespace DRGameplayTags
 		Data_Effect_MoveSpeed,
 		"Data.Effect.MoveSpeed",
 		"Effect MoveSpeed passed through GAS.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_QuickSlot_ActivationInterval_Duration,
+		"Data.QuickSlot.ActivationInterval.Duration",
+		"Quick-slot activation interval duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

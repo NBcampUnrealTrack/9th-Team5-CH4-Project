@@ -111,6 +111,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|GAS")
 	EDRItemAbilityLifetimePolicy AbilityLifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Quick Slot",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float QuickSlotActivationInterval = 0.2f;
+	
+	
 	// Mesh
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh")

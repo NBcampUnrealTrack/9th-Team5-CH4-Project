@@ -570,6 +570,17 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 		return;
 	}
 	
+	const bool bIsItemUseInput = InputId == static_cast<int32>(EDRAbilityInputId::Primary)
+		|| InputId == static_cast<int32>(EDRAbilityInputId::Secondary);
+	
+	if (bIsItemUseInput
+		&& IsValid(QuickSlotComponent)
+		&& QuickSlotComponent->IsQuickSlotActivationIntervalActive())
+	{
+		ConsumedStartedInputIds.Add(InputId);
+		return;
+	}
+	
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
 	if (!IsValid(ASC))
 	{
