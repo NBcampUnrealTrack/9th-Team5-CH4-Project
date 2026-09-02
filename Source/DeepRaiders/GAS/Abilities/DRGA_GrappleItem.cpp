@@ -93,45 +93,45 @@ void UDRGA_GrappleItem::ActivateAbility(
 
 void UDRGA_GrappleItem::StartTargeting()
 {
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	
+	if (ActorInfo == nullptr)
+	{
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		return;
+	}
+	
 	TargetDataTask = UAbilityTask_WaitTargetData::WaitTargetData(this,
 		TEXT("GrappleTargetData"), EGameplayTargetingConfirmation::Instant, TargetActorClass);
 
 	if (!IsValid(TargetDataTask))
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
-
 		return;
 	}
 
 	TargetDataTask->ValidData.AddDynamic(this, &ThisClass::HandleTargetDataReady);
-
 	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCanceled);
 
-	TargetDataTask->ReadyForActivation();
-
 	AGameplayAbilityTargetActor* SpawnedTargetActor = nullptr;
-
-	if (!TargetDataTask->BeginSpawningActor(this, TargetActorClass, SpawnedTargetActor))
+	
+	// 원격 클라이언트의 경우 BeginSpawningActor()에 항상 실패한다.
+	// 실패에도 그냥 넘어가고 서버가 보내주는 TargetDelegate를 기다린다.
+	if (TargetDataTask->BeginSpawningActor(this, TargetActorClass, SpawnedTargetActor))
 	{
-		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		ADRGrappleTargetActor* GrappleTargetActor = Cast<ADRGrappleTargetActor>(SpawnedTargetActor);
 
-		return;
+		if (!IsValid(GrappleTargetActor))
+		{
+			SpawnedTargetActor->Destroy();
+
+			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+			return;
+		}
+
+		GrappleTargetActor->Configure(GrappleSettings);
+		TargetDataTask->FinishSpawningActor(this, SpawnedTargetActor);
 	}
-
-	ADRGrappleTargetActor* GrappleTargetActor = Cast<ADRGrappleTargetActor>(SpawnedTargetActor);
-
-	if (!IsValid(GrappleTargetActor))
-	{
-		SpawnedTargetActor->Destroy();
-
-		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
-
-		return;
-	}
-
-	GrappleTargetActor->Configure(GrappleSettings);
-
-	TargetDataTask->FinishSpawningActor(this, SpawnedTargetActor);
 }
 
 void UDRGA_GrappleItem::StartCancelEventTask()
