@@ -2,6 +2,11 @@
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+
+
+constexpr float ActivationIntervalRefreshRate = 1.0f / 60.f;
 
 void UDRQuickSlotEntryViewModel::SelectSlot()
 {
@@ -48,6 +53,23 @@ void UDRQuickSlotEntryViewModel::Refresh()
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsAvailable,
 		QuickSlotComponent->IsSlotItemAvailable(SlotIndex));
+	
+	RefreshActivationInterval();
+}
+
+bool UDRQuickSlotEntryViewModel::RefreshActivationInterval()
+{
+	float NewProgress = 0.0f;
+	const bool bNewIsActive = QuickSlotComponent.IsValid()
+		&& QuickSlotComponent->GetQuickSlotActivationIntervalState(SlotIndex, NewProgress);
+	
+	// UI에게 진행도를 역으로 전달
+	NewProgress = FMath::Clamp(1.0f - NewProgress, 0.0f, 1.0f);
+	
+	UE_MVVM_SET_PROPERTY_VALUE(ActivationIntervalProgress, NewProgress);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsActivationIntervalActive, bNewIsActive);
+
+	return bNewIsActive;
 }
 
 void UDRQuickSlotViewModel::Initialize(UDRQuickSlotComponent* InQuickSlotComponent)
@@ -69,8 +91,12 @@ void UDRQuickSlotViewModel::Initialize(UDRQuickSlotComponent* InQuickSlotCompone
 	QuickSlotComponent->OnSelectedQuickSlotIndexChangedDelegate.AddDynamic(
 		this,
 		&ThisClass::HandleSelectedSlotChanged);
+	QuickSlotComponent->OnQuickSlotActivationIntervalChangedDelegate.AddDynamic(
+		this,
+		&ThisClass::HandleActivationIntervalChanged);
 
 	RebuildSlotEntries();
+	RefreshActivationIntervals();
 }
 
 void UDRQuickSlotViewModel::Deinitialize()
@@ -86,6 +112,9 @@ void UDRQuickSlotViewModel::Deinitialize()
 		QuickSlotComponent->OnSelectedQuickSlotIndexChangedDelegate.RemoveDynamic(
 			this,
 			&ThisClass::HandleSelectedSlotChanged);
+		QuickSlotComponent->OnQuickSlotActivationIntervalChangedDelegate.RemoveDynamic(
+			this,
+			&ThisClass::HandleActivationIntervalChanged);
 	}
 
 	QuickSlotComponent.Reset();
@@ -140,4 +169,49 @@ void UDRQuickSlotViewModel::RefreshSlotEntries()
 			EntryViewModel->Refresh();
 		}
 	}
+}
+
+void UDRQuickSlotViewModel::HandleActivationIntervalChanged()
+{
+	RefreshActivationIntervals();
+}
+
+void UDRQuickSlotViewModel::RefreshActivationIntervals()
+{
+	bool bHasActiveInterval = false;
+
+	for (UDRQuickSlotEntryViewModel* EntryViewModel : SlotEntries)
+	{
+		if (IsValid(EntryViewModel))
+		{
+			bHasActiveInterval |= EntryViewModel->RefreshActivationInterval();
+		}
+	}
+
+	UWorld* World = QuickSlotComponent.IsValid() ? QuickSlotComponent->GetWorld() : nullptr;
+
+	if (bHasActiveInterval && IsValid(World))
+	{
+		if (!World->GetTimerManager().IsTimerActive(ActivationIntervalTimerHandle))
+		{
+			World->GetTimerManager().SetTimer(ActivationIntervalTimerHandle, this,
+				&ThisClass::RefreshActivationIntervals, ActivationIntervalRefreshRate, true);
+		}
+	}
+	else
+	{
+		StopActivationIntervalTimer();
+	}
+}
+
+void UDRQuickSlotViewModel::StopActivationIntervalTimer()
+{
+	UWorld* World = QuickSlotComponent.IsValid() ? QuickSlotComponent->GetWorld() : nullptr;
+
+	if (IsValid(World))
+	{
+		World->GetTimerManager().ClearTimer(ActivationIntervalTimerHandle);
+	}
+
+	ActivationIntervalTimerHandle.Invalidate();
 }

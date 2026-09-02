@@ -46,12 +46,20 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
 	bool bIsAvailable = false;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
+	float ActivationIntervalProgress = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
+	bool bIsActivationIntervalActive = false;
+	
 private:
 	friend class UDRQuickSlotViewModel;
 
 	void Initialize(UDRQuickSlotComponent* InQuickSlotComponent, int32 InSlotIndex);
 	void Refresh();
 
+	bool RefreshActivationInterval();
+	
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 };
 
@@ -85,5 +93,13 @@ private:
 	void RebuildSlotEntries();
 	void RefreshSlotEntries();
 
+	UFUNCTION()
+	void HandleActivationIntervalChanged();
+	
+	void RefreshActivationIntervals();
+	void StopActivationIntervalTimer();
+	
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
+	
+	FTimerHandle ActivationIntervalTimerHandle;
 };
