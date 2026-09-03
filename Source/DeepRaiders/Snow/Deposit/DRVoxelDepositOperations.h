@@ -7,6 +7,15 @@ class AActor;
 class AVoxelWorld;
 class UWorld;
 
+/** 퇴적을 허용할 월드 축 기준 영역 모양입니다. */
+UENUM(BlueprintType)
+enum class EDRVoxelDepositAreaShape : uint8
+{
+	Box,
+	Sphere,
+	Cylinder
+};
+
 namespace DRVoxelDeposit
 {
 	template<typename ElementType>
@@ -140,6 +149,35 @@ struct FDRVoxelDepositCommand
 	FVector AreaExtent = FVector::ZeroVector;
 
 	UPROPERTY()
+	EDRVoxelDepositAreaShape AreaShape = EDRVoxelDepositAreaShape::Box;
+
+	/** Extent는 박스 반크기 또는 (반지름, 반지름, 절반 높이)입니다. */
+	bool ContainsWorldPosition(const FVector& Position) const
+	{
+		const FVector Offset = Position - AreaCenter;
+		const FVector Extent = AreaExtent.GetAbs();
+		if (Offset.ContainsNaN() || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
+		{
+			return false;
+		}
+		if (FMath::Abs(Offset.Z) > Extent.Z)
+		{
+			return false;
+		}
+		switch (AreaShape)
+		{
+		case EDRVoxelDepositAreaShape::Box:
+			return FMath::Abs(Offset.X) <= Extent.X && FMath::Abs(Offset.Y) <= Extent.Y;
+		case EDRVoxelDepositAreaShape::Sphere:
+			return Offset.SizeSquared() <= FMath::Square(Extent.X);
+		case EDRVoxelDepositAreaShape::Cylinder:
+			return Offset.SizeSquared2D() <= FMath::Square(Extent.X);
+		default:
+			return false;
+		}
+	}
+
+	UPROPERTY()
 	FDRVoxelDepositInBoxSettings Settings;
 
 	UPROPERTY()
@@ -161,6 +199,7 @@ struct FDRVoxelDepositWrite
 	float AmountScale = 1.f;
 	float StaticMeshSurfaceZ = 0.f;
 	bool bHasStaticMeshSupport = false;
+	bool bAllowBelowSupport = false;
 };
 
 struct FDRVoxelDepositPlan
