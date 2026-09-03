@@ -31,6 +31,7 @@
 #include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
+#include "DeepRaiders/Player/Components/DRCharacterShadowComponent.h"
 #include "Animation/AnimInstance.h"
 #include "DeepRaiders/Item/Animation/DRHitReactionSet.h"
 
@@ -63,6 +64,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
 	SilhouetteComponent = CreateDefaultSubobject<UDRSilhouetteComponent>(TEXT("SilhouetteComponent"));
 	MovementActionComponent = CreateDefaultSubobject<UDRMovementActionComponent>(TEXT("MovementActionComponent"));
+	
+	CharacterShadowComponent = CreateDefaultSubobject<UDRCharacterShadowComponent>(TEXT("CharacterShadowComponent"));
+	CharacterShadowComponent->SetupAttachment(GetCapsuleComponent());
 	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -770,6 +774,11 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 		Cast<UDRCharacterMovementComponent>(GetCharacterMovement()))
 	{
 		MovementComponent->BindAbilitySystem(ASC);
+	}
+	
+	if (IsValid(CharacterShadowComponent))
+	{
+		CharacterShadowComponent->BindAbilitySystem(ASC);
 	}
 
 	const UDRPlayerAttributeSet* RegisteredAttributeSet = ASC->GetSet<UDRPlayerAttributeSet>();

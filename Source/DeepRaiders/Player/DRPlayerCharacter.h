@@ -30,6 +30,7 @@ class UDRSilhouetteComponent;
 class UDRHitReactionSet;
 class UDRMovementActionComponent;
 class UDRPlayerCameraComponent;
+class UDRCharacterShadowComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -212,6 +213,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Silhouette", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRSilhouetteComponent> SilhouetteComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shadow", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRCharacterShadowComponent> CharacterShadowComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Movement", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRMovementActionComponent> MovementActionComponent;

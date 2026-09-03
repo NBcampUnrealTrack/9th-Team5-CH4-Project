@@ -53,6 +53,11 @@ namespace DRGameplayTags
 		"Selected quick-slot item cannot be activated yet.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_Stealthed,
+		"State.Stealthed",
+		"Player is currently stealthed.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");
