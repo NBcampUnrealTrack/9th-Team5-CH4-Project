@@ -1,9 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Containers/Queue.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "TimerManager.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
@@ -13,18 +11,10 @@
 #include "DRSnowSubsystem.generated.h"
 
 class AVoxelWorld;
-
-struct FDRSnowPendingRenderUpdate
-{
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
-	TArray<FVoxelIntBox> Bounds;
-};
-
-struct FDRSnowPendingDirectionalAdd
-{
-	FDRSnowSurfaceAddRequest Request;
-	TFunction<void(float)> Completion;
-};
+class FDRSnowAddPipeline;
+class FDRSnowMaterialPatchApplyQueue;
+class FDRSnowRemovalPipeline;
+class FDRSnowRenderUpdateBatcher;
 
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
@@ -35,7 +25,10 @@ class DEEPRAIDERS_API UDRSnowSubsystem : public UWorldSubsystem
 
 public:
 	UDRSnowSubsystem();
+	virtual ~UDRSnowSubsystem() override;
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
 	FDRSnowAddResult AddSnow(
@@ -88,37 +81,13 @@ public:
 		const TArray<uint8>& SnowVolumeData);
 
 private:
-	// 제거 brush는 실제로 변경된 voxel만 반환한다.
-	// 이 결과를 기준으로 해야 Volume 원본 데이터가 Voxel 표현과 같은 변화만 기록한다.
-	void ApplyAddedSurfaceEdit(
-		const FDRSnowSurfaceAddRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		float VolumeAmount = -1.f);
-	void ApplyRemovedSurfaceEdit(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		float VolumeAmount);
-	void AddVolumeFromModifiedValues(
-		AVoxelWorld& VoxelWorld,
-		const FDRSnowSurfaceAddRequest& Request,
-		const TArray<FModifiedVoxelValue>& ModifiedValues,
-		float MaxAddedAmount);
-	void RemoveVolumeFromModifiedValues(
-		AVoxelWorld& VoxelWorld,
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const TArray<FModifiedVoxelValue>& ModifiedValues,
-		float MaxRemovedAmount);
-	void ProcessNextDirectionalAdd();
-	void QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIntBox& Bounds);
-	void FlushRenderUpdates();
-
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
+	TSharedPtr<FDRSnowRenderUpdateBatcher> RenderUpdateBatcher;
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
-	TQueue<FDRSnowPendingDirectionalAdd> DirectionalAddQueue;
-	bool bDirectionalAddInProgress = false;
+	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
+	TSharedPtr<FDRSnowAddPipeline> AddPipeline;
+	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
 	int32 SnowStateGeneration = 0;
-	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;
-	FTimerHandle RenderUpdateTimerHandle;
 };

@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "DRSnowReplicationTypes.generated.h"
 
+class UPackageMap;
+
 USTRUCT()
 struct DEEPRAIDERS_API FDRSnowMaterialIndexSet
 {
@@ -12,7 +14,7 @@ struct DEEPRAIDERS_API FDRSnowMaterialIndexSet
 	UPROPERTY()
 	uint8 MaterialIndex = 0;
 
-	// 32³ 청크 내부 Voxel 위치
+	// 32³ 청크 내부 Voxel 위치. 패치 빌더가 오름차순/중복 제거를 보장한다.
 	UPROPERTY()
 	TArray<uint16> LocalVoxelIndices;
 };
@@ -42,6 +44,16 @@ struct DEEPRAIDERS_API FDRSnowMaterialPatch
 	bool IsEmpty() const { return Chunks.IsEmpty(); }
 	int32 NumVoxels() const;
 	int32 EstimateSerializedBytes() const;
+	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);
+};
+
+template<>
+struct TStructOpsTypeTraits<FDRSnowMaterialPatch> : TStructOpsTypeTraitsBase2<FDRSnowMaterialPatch>
+{
+	enum
+	{
+		WithNetSerializer = true
+	};
 };
 
 namespace DRSnowMaterialPatchUtils
