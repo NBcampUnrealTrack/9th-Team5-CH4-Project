@@ -129,6 +129,17 @@ public:
 		return SilhouetteComponent;
 	}
 
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartSharedSearchReveal(
+		int32 SourceTeamId,
+		int32 SourcePlayerId,
+		FGuid RevealId,
+		float Duration,
+		int32 StencilValue);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStopSharedSearchReveal(FGuid RevealId);
+
 	UDRJetpackComponent* GetJetpackComponent() const
 	{
 		return JetpackComponent;

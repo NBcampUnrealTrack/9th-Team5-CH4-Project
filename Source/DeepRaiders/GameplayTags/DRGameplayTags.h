@@ -42,6 +42,7 @@ namespace DRGameplayTags
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);

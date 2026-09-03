@@ -67,18 +67,78 @@ bool UDRPerkComponent::CanAddPerk(
 		return false;
 	}
 
-	const bool bHasEffect = PerkDefinition->PerkEffectClass != nullptr
+	const bool IsEffectConfigured = PerkDefinition->PerkEffectClass != nullptr
 		|| !PerkDefinition->EffectRules.IsEmpty()
 		|| PerkDefinition->PerkTag.IsValid();
 	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
 	{
 		return !EquippedSkillId.IsValid()
-			&& bHasEffect;
+			&& IsEffectConfigured;
 	}
 
 	return EquippedSkillId.IsValid()
 		&& PerkDefinition->CompatibleSkillTags.HasTagExact(EquippedSkillId)
-		&& bHasEffect;
+		&& IsEffectConfigured;
+}
+
+bool UDRPerkComponent::CanAddPerkAutomatically(
+	const UDRPerkDefinition* PerkDefinition) const
+{
+	if (!IsValid(PerkDefinition))
+	{
+		return false;
+	}
+
+	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
+	{
+		return CanAddPerk(PerkDefinition);
+	}
+
+	const UDRSkillDefinition* SkillDefinition =
+		FindUniqueCompatibleEquippedSkill(PerkDefinition);
+	return IsValid(SkillDefinition)
+		&& CanAddPerk(PerkDefinition, SkillDefinition->SkillId);
+}
+
+const UDRSkillDefinition* UDRPerkComponent::FindUniqueCompatibleEquippedSkill(
+	const UDRPerkDefinition* PerkDefinition) const
+{
+	const ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	const UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+
+	if (!IsValid(PerkDefinition)
+		|| PerkDefinition->CompatibleSkillTags.IsEmpty()
+		|| !IsValid(SkillComponent))
+	{
+		return nullptr;
+	}
+
+	const UDRSkillDefinition* CompatibleSkill = nullptr;
+	for (int32 SlotIndex = 0;
+		SlotIndex < static_cast<int32>(EDRSkillSlot::Count);
+		++SlotIndex)
+	{
+		const UDRSkillDefinition* SkillDefinition =
+			SkillComponent->GetCurrentSkill(static_cast<EDRSkillSlot>(SlotIndex));
+
+		if (!IsValid(SkillDefinition)
+			|| !SkillDefinition->SkillId.IsValid()
+			|| !PerkDefinition->CompatibleSkillTags.HasTagExact(SkillDefinition->SkillId))
+		{
+			continue;
+		}
+
+		if (IsValid(CompatibleSkill))
+		{
+			return nullptr;
+		}
+
+		CompatibleSkill = SkillDefinition;
+	}
+
+	return CompatibleSkill;
 }
 
 int32 UDRPerkComponent::FindAvailableSlotIndex() const
@@ -350,6 +410,25 @@ bool UDRPerkComponent::AddPerkToSkill(
 		&& IsValid(SkillComponent)
 		&& SkillComponent->GetCurrentSkill(SkillDefinition->SkillSlot) == SkillDefinition
 		&& AddPerk(PerkDefinition, SkillDefinition->SkillId);
+}
+
+bool UDRPerkComponent::AddPerkAutomatically(
+	UDRPerkDefinition* PerkDefinition)
+{
+	if (!IsValid(PerkDefinition))
+	{
+		return false;
+	}
+
+	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
+	{
+		return AddPerk(PerkDefinition);
+	}
+
+	const UDRSkillDefinition* SkillDefinition =
+		FindUniqueCompatibleEquippedSkill(PerkDefinition);
+	return IsValid(SkillDefinition)
+		&& AddPerkToSkill(PerkDefinition, SkillDefinition);
 }
 
 void UDRPerkComponent::HandleSkillCommitted(
