@@ -9,6 +9,7 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class USceneComponent;
 class UStaticMesh;
+class UMaterialInterface;
 class UAnimMontage;
 class UDRItemDefinition;
 
@@ -80,7 +81,7 @@ public:
 	virtual void OnRep_Controller() override;
 	virtual void OnRep_PlayerState() override;
 
-	/** 복제된 팀에 맞춰 캐릭터 머티리얼 색상을 갱신한다. */
+	/** 복제된 팀에 맞춰 지정 슬롯의 머티리얼을 갱신한다. */
 	void RefreshTeamColor();
 
 	void ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset);
@@ -299,8 +300,15 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
 	float AimPitchMaxDegrees = 90.f;
 
+	// 팀별 MI를 적용할 캐릭터 메쉬 슬롯.
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team", meta = (ClampMin = "0"))
+	int32 TeamMaterialSlotIndex = 0;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
-	FName TeamColorParameterName = TEXT("Paint Tint");
+	TObjectPtr<UMaterialInterface> Team0Material;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	TObjectPtr<UMaterialInterface> Team1Material;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
 	FLinearColor Team0Color = FLinearColor::Red;
