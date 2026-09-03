@@ -114,6 +114,8 @@ void UDRTeleportUIComponent::HandleTeleportUseRequested(ADRTeleportPoint* Curren
 	}
 
 	TeleportSelectWidget->InitializeRegisteredTeleportList(INDEX_NONE, CurrentTeleportPoint);
+	UIManager->RegisterCloseHandler(
+		TeleportSelectWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HandleTeleportCloseRequested));
 	TeleportSelectWidget->OnCloseRequested.AddUniqueDynamic(
 		this,
 		&ThisClass::HandleTeleportCloseRequested);

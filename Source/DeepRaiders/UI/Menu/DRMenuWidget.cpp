@@ -7,6 +7,17 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 
+bool UDRMenuWidget::Initialize()
+{
+	if (!Super::Initialize())
+	{
+		return false;
+	}
+
+	SetIsFocusable(true);
+	return true;
+}
+
 void UDRMenuWidget::HandleSettingsClicked()
 {
 	if (IsValid(WBP_Settings))

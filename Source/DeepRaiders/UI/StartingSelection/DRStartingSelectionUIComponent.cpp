@@ -73,6 +73,8 @@ void UDRStartingSelectionUIComponent::ShowStartingSelection()
 	StartingSelectionWidget->OnSelectionCompleted.AddDynamic(
 		this,
 		&ThisClass::HideStartingSelection);
+	UIManager->RegisterCloseHandler(
+		StartingSelectionWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HideStartingSelection));
 	PlayerController->FlushPressedKeys();
 	PlayerController->SetIgnoreMoveInput(true);
 	IsMoveInputBlocked = true;

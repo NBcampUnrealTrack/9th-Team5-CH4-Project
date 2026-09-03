@@ -112,6 +112,8 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	}
 
 	ActiveShop = ShopActor;
+	UIManager->RegisterCloseHandler(
+		ShopWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HideShopWidget));
 
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
 	ShopWidget->InitializeInventoryPanels(InventoryComponent, PerkComponent);

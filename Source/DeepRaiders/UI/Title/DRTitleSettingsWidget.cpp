@@ -3,6 +3,8 @@
 #include "DRTitleSettingRowWidget.h"
 #include "Components/Overlay.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
+#include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
+#include "Engine/LocalPlayer.h"
 
 namespace DRTitleSettings
 {
@@ -35,6 +37,36 @@ void UDRTitleSettingsWidget::Show()
 {
 	LoadSettingsIntoSliders();
 	Overlay_Settings->SetVisibility(ESlateVisibility::Visible);
+	if (ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
+	{
+		if (auto* Manager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
+		{
+			// 열린 동안만 부모 화면보다 먼저 닫히는 팝업으로 등록한다.
+			Manager->RegisterCloseHandler(
+				this, FSimpleDelegate::CreateUObject(this, &ThisClass::HandleSettingsCancelClicked));
+		}
+	}
+}
+
+void UDRTitleSettingsWidget::Hide()
+{
+	if (IsValid(Overlay_Settings))
+	{
+		Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
+	{
+		if (auto* Manager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
+		{
+			Manager->UnregisterCloseHandler(this);
+		}
+	}
+}
+
+void UDRTitleSettingsWidget::NativeDestruct()
+{
+	Hide();
+	Super::NativeDestruct();
 }
 
 void UDRTitleSettingsWidget::HandleSettingsApplyClicked()
@@ -54,13 +86,13 @@ void UDRTitleSettingsWidget::HandleSettingsApplyClicked()
 	UserSettings->ApplySettings(false);
 	UserSettings->SaveSettings();
 	UserSettings->ApplyAudioSettings(this);
-	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
+	Hide();
 }
 
 void UDRTitleSettingsWidget::HandleSettingsCancelClicked()
 {
 	LoadSettingsIntoSliders();
-	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
+	Hide();
 }
 
 void UDRTitleSettingsWidget::LoadSettingsIntoSliders()

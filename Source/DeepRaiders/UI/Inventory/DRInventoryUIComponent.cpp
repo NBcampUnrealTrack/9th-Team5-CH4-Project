@@ -147,6 +147,8 @@ void UDRInventoryUIComponent::ShowPlayerInventory()
 	
 	// Screen ViewModel이 로컬 플레이어와 팀원 패널을 구성한다.
 	PlayerInventoryWidget->InitializeScreen(PlayerController);
+	UIManager->RegisterCloseHandler(
+		PlayerInventoryWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HandleCloseRequested));
 	
 	PlayerInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandlePlayerEntryClicked);
 	PlayerInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
@@ -203,6 +205,8 @@ void UDRInventoryUIComponent::ShowStorageInventory(ADRStorage* Storage)
 		return;
 	}
 	StorageInventoryWidget->InitializeInventory(Storage->GetInventoryComponent());
+	UIManager->RegisterCloseHandler(
+		StorageInventoryWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HandleCloseRequested));
 	StorageInventoryWidget->OnEntryClickedDelegate.AddDynamic(this, &ThisClass::HandleStorageEntryClicked);
 	StorageInventoryWidget->OnCloseRequestedDelegate.AddDynamic(this, &ThisClass::HandleCloseRequested);
 	

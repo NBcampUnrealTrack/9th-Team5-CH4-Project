@@ -13,6 +13,8 @@ class DEEPRAIDERS_API UDRMenuWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	virtual bool Initialize() override;
+
 	UFUNCTION(BlueprintCallable, Category = "Menu")
 	void HandleSettingsClicked();
 
