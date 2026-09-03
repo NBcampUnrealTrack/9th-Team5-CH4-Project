@@ -352,7 +352,7 @@ void ADRPlayerCharacter::RefreshTeamColor()
 	}
 }
 
-void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName)
+void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset)
 {
 	if (!IsValid(WorldHandEquipmentMesh)
 		|| !IsValid(GetMesh()))
@@ -367,7 +367,7 @@ void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName 
 
 	WorldHandEquipmentMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
-	WorldHandEquipmentMesh->SetRelativeTransform(FTransform::Identity);
+	WorldHandEquipmentMesh->SetRelativeTransform(WorldItemOffset);
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
 }
 

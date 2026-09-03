@@ -30,12 +30,17 @@ private:
 	void UpdateTrajectoryVFX(const TArray<FVector>& PathPoints, const TArray<FVector>& PathDirections);
 	void DestroyTrajectoryVFX();
 	
+	FVector ResolveTrajectorySphereScale();
+	
 	FDRThrowableItemSettings ItemSettings;
 	FDRThrowActionSettings ActionSettings;
 	FHitResult CachedAimHit;
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraComponent> TrajectoryComponent;
+	
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly, Category = "VFX", meta = (AllowPrivateAccess = "true"))
+	float TrajectoryPreviewSphereRadius = 100.f;
 	
 	bool bShowTrajectory = false;
 	bool bHasValidAimData = false;

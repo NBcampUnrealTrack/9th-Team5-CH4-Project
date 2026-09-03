@@ -141,7 +141,8 @@ void UDRHeldItemComponent::RefreshVisual()
 
 	Character->ApplyHandEquipmentVisual(
 		HeldItemDefinition->WorldMesh,
-		HeldItemDefinition->HandAttachSocketName);
+		HeldItemDefinition->HandAttachSocketName,
+		HeldItemDefinition->WorldItemOffsetTransform);
 }
 
 void UDRHeldItemComponent::RefreshSnowComponents()
