@@ -7,6 +7,8 @@
 
 class UDRLootDropComponent;
 class USceneComponent;
+class UMaterialInstanceDynamic;
+class UNiagaraComponent;
 
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRLootBoxActor : public ADRBreakableActor
@@ -31,6 +33,7 @@ protected:
 	virtual void BeginPlay() override;
 	
 	virtual void HandleBroken(const FDRBreakableDamageContext& DamageContext) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 	
 	UFUNCTION()
 	void OnRep_LootTier();
@@ -46,4 +49,28 @@ protected:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_LootTier, Category = "Loot")
 	EDRLootTier LootTier = EDRLootTier::Common;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Material|Parameters")
+	FName BaseColorParameterName = TEXT("BaseColor");
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Material|Parameters")
+	FName EmissiveColorParameterName = TEXT("EmissiveColor");
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Material")
+	float EmissiveIntensity = 0.2f;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "VFX")
+	TObjectPtr<UNiagaraComponent> IdleAuraVFXComponent;
+	
+private:
+	void RefreshPresentation();
+	void RefreshDynamicMaterialColor();
+	void RefreshNiagara();
+	
+	FLinearColor GetRarityColor(EDRLootTier Rarity);
+	FLinearColor GetRarityBaseColor(EDRLootTier Rarity);
+	FLinearColor GetRarityEmissiveColor(EDRLootTier Rarity);
+	
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
 };

@@ -9,7 +9,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/SceneComponent.h"
 #include "NiagaraFunctionLibrary.h"
 
@@ -330,7 +330,7 @@ void ADRPlayerCharacter::OnRep_PlayerState()
 void ADRPlayerCharacter::RefreshTeamColor()
 {
 	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
-	if (!IsValid(DRPlayerState) || !IsValid(GetMesh()))
+	if (!IsValid(DRPlayerState) || !IsValid(GetMesh()) || !DRPlayerState->HasAssignedTeam())
 	{
 		return;
 	}
@@ -341,18 +341,18 @@ void ADRPlayerCharacter::RefreshTeamColor()
 		return;
 	}
 	
-	const FLinearColor TeamColor = GetTeamDisplayColor();
-	
-	for (int32 MaterialIndex = 0; MaterialIndex < GetMesh()->GetNumMaterials(); ++MaterialIndex)
+	UMaterialInterface* TeamMaterial = TeamId == 0 ? Team0Material.Get() : Team1Material.Get();
+	if (!IsValid(TeamMaterial)
+		|| TeamMaterialSlotIndex < 0 || TeamMaterialSlotIndex >= GetMesh()->GetNumMaterials())
 	{
-		if (UMaterialInstanceDynamic* Material = GetMesh()->CreateDynamicMaterialInstance(MaterialIndex))
-		{
-			Material->SetVectorParameterValue(TeamColorParameterName, TeamColor);
-		}
+		return;
 	}
+
+	// 팀 ID 복제 후 각 클라이언트에서 같은 MI를 적용한다.
+	GetMesh()->SetMaterial(TeamMaterialSlotIndex, TeamMaterial);
 }
 
-void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName)
+void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset)
 {
 	if (!IsValid(WorldHandEquipmentMesh)
 		|| !IsValid(GetMesh()))
@@ -367,7 +367,7 @@ void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName 
 
 	WorldHandEquipmentMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
-	WorldHandEquipmentMesh->SetRelativeTransform(FTransform::Identity);
+	WorldHandEquipmentMesh->SetRelativeTransform(WorldItemOffset);
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
 }
 

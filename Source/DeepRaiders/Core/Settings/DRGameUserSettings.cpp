@@ -6,6 +6,11 @@
 #include "Sound/SoundClass.h"
 #include "Sound/SoundMix.h"
 
+namespace DRGamePlayerNameSettings
+{
+	constexpr int32 MaxPlayerNameLength = 16;
+}
+
 namespace DRGameAudioSettings
 {
 	constexpr TCHAR MasterSoundClassPath[] =
@@ -28,6 +33,26 @@ void UDRGameUserSettings::SetTitleSettings(float Master, float Music, float SFX,
 	SFXVolume = FMath::Clamp(SFX, 0.f, 1.f);
 	MouseSensitivityX = FMath::Clamp(MouseX, 0.001f, 5.f);
 	MouseSensitivityY = FMath::Clamp(MouseY, 0.001f, 5.f);
+}
+
+FString UDRGameUserSettings::SanitizePlayerDisplayName(const FString& InPlayerDisplayName)
+{
+	FString SanitizedName = InPlayerDisplayName.TrimStartAndEnd();
+	SanitizedName.ReplaceInline(TEXT("\r"), TEXT(""));
+	SanitizedName.ReplaceInline(TEXT("\n"), TEXT(""));
+	SanitizedName.ReplaceInline(TEXT("\t"), TEXT(""));
+
+	if (SanitizedName.Len() > DRGamePlayerNameSettings::MaxPlayerNameLength)
+	{
+		SanitizedName.LeftInline(DRGamePlayerNameSettings::MaxPlayerNameLength);
+	}
+
+	return SanitizedName.IsEmpty() ? TEXT("Player") : SanitizedName;
+}
+
+void UDRGameUserSettings::SetPlayerDisplayName(const FString& NewPlayerDisplayName)
+{
+	PlayerDisplayName = SanitizePlayerDisplayName(NewPlayerDisplayName);
 }
 
 void UDRGameUserSettings::ApplyAudioSettings(const UObject* WorldContextObject)

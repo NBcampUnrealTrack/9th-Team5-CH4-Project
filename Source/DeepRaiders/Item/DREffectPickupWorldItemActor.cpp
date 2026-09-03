@@ -19,6 +19,8 @@ ADREffectPickupWorldItemActor::ADREffectPickupWorldItemActor()
 	InteractionSphereComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionSphereComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	InteractionSphereComponent->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandlePickupOverlap);
+	
+	UncollectedLifeSpan = 10.f;
 }
 
 void ADREffectPickupWorldItemActor::BeginPlay()
@@ -27,12 +29,6 @@ void ADREffectPickupWorldItemActor::BeginPlay()
 	
 	InteractionSphereComponent->SetSphereRadius(PickupRadius);
 	RefreshPickupCollision();
-	
-	if (HasAuthority()
-		&& UncollectedLifeSpan > 0.f)
-	{
-		SetLifeSpan(UncollectedLifeSpan);
-	}
 }
 
 void ADREffectPickupWorldItemActor::RefreshItemPresentation()
