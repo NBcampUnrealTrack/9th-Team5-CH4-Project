@@ -151,15 +151,37 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		UAbilitySystemComponent* TargetASC =
 			GetOwningAbilitySystemComponent();
 
+		UAbilitySystemComponent* SourceASC =
+			Data.EffectSpec
+				.GetContext()
+				.GetOriginalInstigatorAbilitySystemComponent();
+
 		ADRPlayerState* TargetPlayerState =
 			IsValid(TargetASC)
 				? Cast<ADRPlayerState>(
 					TargetASC->GetOwnerActor())
 				: nullptr;
 
+		ADRPlayerState* SourcePlayerState =
+			IsValid(SourceASC)
+				? Cast<ADRPlayerState>(
+					SourceASC->GetOwnerActor())
+				: nullptr;
+
 		if (IsValid(TargetPlayerState)
 			&& TargetPlayerState->HasAuthority())
 		{
+			/*
+			 * 양수 FreezeGauge Modifier가 실제 실행된 경우
+			 * 서버 확정 적중으로 취급한다.
+			 */
+			if (Data.EvaluatedData.Magnitude
+				> KINDA_SMALL_NUMBER)
+			{
+				TargetPlayerState->HandleHostileHitResolved(
+					SourcePlayerState);
+			}
+
 			TargetPlayerState->HandleFreezeGaugeResolved();
 		}
 

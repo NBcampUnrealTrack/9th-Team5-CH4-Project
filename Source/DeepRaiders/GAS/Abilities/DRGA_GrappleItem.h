@@ -60,14 +60,16 @@ private:
     void StartTargeting();
     void StartCancelEventTask();
 
-    EDRGrappleTargetValidationResult ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData,
-        FVector& OutTargetLocation) const;
+    EDRGrappleTargetValidationResult ValidateServerTargetData(
+        const FGameplayAbilityTargetDataHandle& TargetData,
+        FVector& OutTargetLocation,
+        FVector& OutTargetNormal) const;
 
-    FDRMovementActionState BuildMovementActionState(const FVector& HookLocation) const;
+    FDRMovementActionState BuildMovementActionState(const FVector& InHookLocation) const;
 
-    bool StartPredictedMovement(const FVector& HookLocation);
+    bool StartPredictedMovement(const FVector& HookLocation, const FVector& HookNormal);
 
-    bool StartAuthoritativeMovement(const FVector& HookLocation);
+    bool StartAuthoritativeMovement(const FVector& HookLocation, const FVector& HookNormal);
 
     void ApplyMovementActionTag();
     void RemoveMovementActionTag();
@@ -78,9 +80,12 @@ private:
 
     void StopMovementAction(EDRMovementActionEndReason EndReason);
     
+    // 각 로컬 예측 및 서버 권한 인스턴스에서 이동이 시작된 이후의 경과 시간을 반환한다.
+    float GetMovementElapsedTime() const;
+
 #pragma region GameplayCue
-    // 성공한 훅 위치를 모든 클라이언트의 지속형 GameplayCue에 전달한다.
-    void StartGrappleGameplayCue(const FVector& InHookLocation);
+    // 성공한 훅 위치와 표면 방향을 모든 클라이언트의 지속형 GameplayCue에 전달한다.
+    void StartGrappleGameplayCue(const FVector& InHookLocation, const FVector& InHookNormal);
     
     // EndAbility의 모든 종료 경로에서 지속형 GameplayCue를 제거한다.
     void StopGrappleGameplayCue();
@@ -121,6 +126,10 @@ private:
 
     FGuid ActiveInstanceId;
     FVector HookLocation = FVector::ZeroVector;
+    // 훅이 부착된 순간의 월드 공간 표면 노멀이다.
+    // 보호 시간이 끝난 뒤 캐릭터가 훅 평면 반대편으로 넘어갔는지 판정한다.
+    FVector HookSurfaceNormal = FVector::ZeroVector;
+    float MovementStartTimeSeconds = -1.f;
 
     FTimerHandle EndGrappleTimerHandle;
 

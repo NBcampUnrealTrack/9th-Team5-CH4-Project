@@ -35,6 +35,31 @@ namespace
 			0,
 			Thickness);
 	}
+
+	// 판정과 같은 크기로 월드 축 기준 외곽선을 표시합니다.
+	void DrawDepositAreaShape(UWorld* World, const FVector& Center, const FVector& Extent,
+		EDRVoxelDepositAreaShape Shape, bool bPersistentLines, float LifeTime)
+	{
+		if (!IsValid(World) || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
+		{
+			return;
+		}
+		const FColor Color(64, 200, 255);
+		if (Shape == EDRVoxelDepositAreaShape::Box)
+		{
+			DrawDepositAreaBox(World, Center, Extent, Color, bPersistentLines, LifeTime, 2.f);
+			return;
+		}
+		if (Shape == EDRVoxelDepositAreaShape::Sphere)
+		{
+			DrawDebugSphere(World, Center, Extent.X, 32, Color, bPersistentLines, LifeTime, 0, 2.f);
+			return;
+		}
+		const FVector Bottom = Center - FVector(0.0, 0.0, Extent.Z);
+		const FVector Top = Center + FVector(0.0, 0.0, Extent.Z);
+		DrawDebugCylinder(World, Bottom, Top, Extent.X, 32,
+			Color, bPersistentLines, LifeTime, 0, 2.f);
+	}
 }
 #endif
 
@@ -58,19 +83,12 @@ void ADRVoxelDepositArea::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	UWorld* World = GetWorld();
-	if (!IsValid(World) || World->IsGameWorld())
+	if (!bDrawDebug || !IsValid(World) || World->IsGameWorld())
 	{
 		return;
 	}
 
-	DrawDepositAreaBox(
-		World,
-		GetActorLocation(),
-		BoxExtent,
-		FColor(64, 200, 255),
-		false,
-		0.f,
-		2.f);
+	DrawDepositAreaShape(World, GetActorLocation(), GetAreaExtent(), AreaShape, false, 0.f);
 }
 
 bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
@@ -79,22 +97,32 @@ bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
 }
 #endif
 
+FVector ADRVoxelDepositArea::GetAreaExtent() const
+{
+	switch (AreaShape)
+	{
+	case EDRVoxelDepositAreaShape::Sphere:
+		return FVector(AreaRadius);
+	case EDRVoxelDepositAreaShape::Cylinder:
+		return FVector(AreaRadius, AreaRadius, AreaHeight * 0.5f);
+	default:
+		return BoxExtent.GetAbs();
+	}
+}
+
 bool ADRVoxelDepositArea::MakeDepositCommand(
 	FDRVoxelDepositCommand& OutCommand) const
 {
 	// 실패 시 이전 결과가 남지 않도록 출력을 초기화합니다.
 	OutCommand = FDRVoxelDepositCommand();
+	const FVector AreaExtent = GetAreaExtent();
 	if (!IsValid(GetWorld()) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		GetActorLocation().ContainsNaN() || BoxExtent.ContainsNaN() ||
+		GetActorLocation().ContainsNaN() || AreaExtent.ContainsNaN() ||
 		!FMath::IsFinite(RandomScanWorldSize) || RandomScanWorldSize <= 0.f)
 	{
 		return false;
 	}
 
-	const FVector AreaExtent(
-		FMath::Abs(BoxExtent.X),
-		FMath::Abs(BoxExtent.Y),
-		FMath::Abs(BoxExtent.Z));
 	if (AreaExtent.X <= KINDA_SMALL_NUMBER ||
 		AreaExtent.Y <= KINDA_SMALL_NUMBER ||
 		AreaExtent.Z <= KINDA_SMALL_NUMBER)
@@ -123,6 +151,7 @@ bool ADRVoxelDepositArea::MakeDepositCommand(
 		0.f);
 	OutCommand.AreaCenter = GetActorLocation();
 	OutCommand.AreaExtent = AreaExtent;
+	OutCommand.AreaShape = AreaShape;
 	OutCommand.RequiredStaticMeshSurfaceTag = RequiredStaticMeshSurfaceTag;
 	OutCommand.MaxStaticMeshSlopeAngle = MaxStaticMeshSlopeAngle;
 	OutCommand.bDepositOnStaticMeshes = bDepositOnStaticMeshes;
@@ -135,14 +164,10 @@ void ADRVoxelDepositArea::BeginPlay()
 	Super::BeginPlay();
 
 #if ENABLE_DRAW_DEBUG
-	DrawDepositAreaBox(
-		GetWorld(),
-		GetActorLocation(),
-		BoxExtent,
-		FColor(64, 200, 255),
-		true,
-		-1.f,
-		2.f);
+	if (bDrawDebug)
+	{
+		DrawDepositAreaShape(GetWorld(), GetActorLocation(), GetAreaExtent(), AreaShape, true, -1.f);
+	}
 #endif
 
 	SetActorTickEnabled(false);
@@ -244,14 +269,11 @@ void ADRVoxelDepositArea::MulticastPrepareDeposit_Implementation(
 	const FDRVoxelDepositCommand& Command)
 {
 #if ENABLE_DRAW_DEBUG
-	DrawDepositAreaBox(
-		GetWorld(),
-		Command.ScanCenter,
-		Command.ScanExtent,
-		FColor(255, 165, 0),
-		false,
-		1.f,
-		3.f);
+	if (bDrawDebug)
+	{
+		DrawDepositAreaBox(GetWorld(), Command.ScanCenter, Command.ScanExtent,
+			FColor(255, 165, 0), false, 1.f, 3.f);
+	}
 #endif
 
 	// 명령을 수신 순서대로 대기열에 추가합니다.

@@ -138,4 +138,6 @@ private:
 		Category = "Game",
 		meta = (AllowPrivateAccess = "true"))
 	bool bIsGameEnd = false;
+	
+	void EnsureDevelopmentPlayerName(ADRPlayerState* PlayerState) const;
 };

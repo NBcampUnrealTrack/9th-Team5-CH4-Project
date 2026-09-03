@@ -72,6 +72,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaRadius);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_HealthRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_FreezeGaugeRecovery);
 
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);

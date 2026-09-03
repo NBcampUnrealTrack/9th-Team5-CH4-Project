@@ -16,10 +16,14 @@ void UDRScoreboardPlayerEntryViewModel::Initialize(ADRPlayerState* InPlayerState
 	PlayerState = InPlayerState;
 
 	UE_MVVM_SET_PROPERTY_VALUE(bIsLocalPlayer, bInIsLocalPlayer);
-
-	if (!PlayerState.IsValid())
+	UE_MVVM_SET_PROPERTY_VALUE(LocalHighlightOpacity, bInIsLocalPlayer ? 1.f : 0.f);
+	
+	if (PlayerState.IsValid())
 	{
-		return;
+		PlayerIdentityChangedHandle =
+			PlayerState->OnPlayerIdentityChanged.AddUObject(
+				this,
+				&ThisClass::HandlePlayerIdentityChanged);
 	}
 
 	CombatStatsComponent = PlayerState->GetCombatStatsComponent();
@@ -45,6 +49,15 @@ void UDRScoreboardPlayerEntryViewModel::Deinitialize()
 		CombatStatsComponent->OnCombatStatsChanged.RemoveDynamic(this, &ThisClass::HandleCombatStatsChanged);
 	}
 
+	if (PlayerState.IsValid()
+		&& PlayerIdentityChangedHandle.IsValid())
+	{
+		PlayerState->OnPlayerIdentityChanged.Remove(
+			PlayerIdentityChangedHandle);
+	}
+
+	PlayerIdentityChangedHandle.Reset();
+	
 	PlayerState.Reset();
 	CombatStatsComponent.Reset();
 }
@@ -61,9 +74,7 @@ void UDRScoreboardPlayerEntryViewModel::Refresh()
 		return;
 	}
 
-	const FString DisplayName = FString::Printf(TEXT("Player %d"), PlayerState->GetPlayerId());
-
-	UE_MVVM_SET_PROPERTY_VALUE(PlayerName, FText::FromString(DisplayName));
+	UE_MVVM_SET_PROPERTY_VALUE(PlayerName, PlayerState->GetDisplayPlayerName());
 
 	if (CombatStatsComponent.IsValid())
 	{
@@ -81,6 +92,11 @@ void UDRScoreboardPlayerEntryViewModel::ApplyStats(const FDRMatchCombatStats& St
 	UE_MVVM_SET_PROPERTY_VALUE(Deaths, Stats.Deaths);
 	UE_MVVM_SET_PROPERTY_VALUE(DamageDealt, Stats.DamageDealt);
 	UE_MVVM_SET_PROPERTY_VALUE(DamageTaken, Stats.DamageTaken);
+}
+
+void UDRScoreboardPlayerEntryViewModel::HandlePlayerIdentityChanged()
+{
+	Refresh();
 }
 
 #pragma endregion

@@ -9,15 +9,6 @@ class ADRPlayerController;
 class ADRPlayerState;
 class UDRCombatStatsComponent;
 
-
-/**
- * 스코어보드 플레이어 한 줄을 표현하는 ViewModel.
- *
- * 예:
- * 김선우 | 3 Kill | 2 Death | 140 Damage
- *
- * 하나의 ADRPlayerState를 관찰한다.
- */
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRScoreboardPlayerEntryViewModel : public UMVVMViewModelBase
 {
@@ -47,6 +38,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
 	bool bIsLocalPlayer = false;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
+	float LocalHighlightOpacity = 0.f;
+	
 private:
 	UFUNCTION()
 	void HandleCombatStatsChanged(FDRMatchCombatStats NewStats);
@@ -58,6 +52,10 @@ private:
 	TWeakObjectPtr<ADRPlayerState> PlayerState;
 
 	TWeakObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;
+	
+	void HandlePlayerIdentityChanged();
+
+	FDelegateHandle PlayerIdentityChangedHandle;
 };
 
 

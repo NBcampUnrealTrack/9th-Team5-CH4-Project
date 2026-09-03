@@ -9,4 +9,13 @@ ADRZiplineEndpoint::ADRZiplineEndpoint()
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
 	SetRootComponent(Root);
+
+	RopeAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("RopeAnchor"));
+
+	RopeAnchor->SetupAttachment(Root);
+}
+
+FVector ADRZiplineEndpoint::GetAnchorLocation() const
+{
+	return IsValid(RopeAnchor) ? RopeAnchor->GetComponentLocation() : GetActorLocation();
 }

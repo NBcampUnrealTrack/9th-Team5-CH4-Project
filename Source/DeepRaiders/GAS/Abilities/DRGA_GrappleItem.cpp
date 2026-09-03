@@ -170,12 +170,14 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 	if (ActorInfo->IsNetAuthority())
 	{
 		FVector ServerTargetLocation;
+		FVector ServerTargetNormal;
 		
-		const EDRGrappleTargetValidationResult ValidationResult = ValidateServerTargetData(TargetData, ServerTargetLocation);
+		const EDRGrappleTargetValidationResult ValidationResult = 
+			ValidateServerTargetData(TargetData, ServerTargetLocation, ServerTargetNormal);
 		
 		if (ValidationResult == EDRGrappleTargetValidationResult::Succeeded)
 		{
-			if (!StartAuthoritativeMovement(ServerTargetLocation))
+			if (!StartAuthoritativeMovement(ServerTargetLocation, ServerTargetNormal))
 			{
 				QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 			}
@@ -198,7 +200,6 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 	}
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
 
 	if (ClientHit == nullptr)
@@ -209,7 +210,7 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 	
 	if (ADRGrappleTargetActor::IsValidGrappleSurface(*ClientHit))
 	{
-		if (!StartPredictedMovement(ClientHit->ImpactPoint))
+		if (!StartPredictedMovement(ClientHit->ImpactPoint, ClientHit->ImpactNormal))
 		{
 			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		}
@@ -232,19 +233,29 @@ void UDRGA_GrappleItem::HandleCancelEventReceived(FGameplayEventData Payload)
 {
 	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
-
 bool UDRGA_GrappleItem::StartPredictedMovement(
-	const FVector& InHookLocation)
+	const FVector& InHookLocation,
+	const FVector& InHookNormal)
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UWorld* World = GetWorld();
 
 	if (ActorInfo == nullptr
 		|| ActorInfo->IsNetAuthority()
-		|| !ActorInfo->IsLocallyControlled())
+		|| !ActorInfo->IsLocallyControlled()
+		|| !IsValid(World)
+		|| InHookLocation.ContainsNaN()
+		|| InHookNormal.ContainsNaN())
 	{
 		return false;
 	}
 
+	const FVector SafeHookNormal = InHookNormal.GetSafeNormal();
+	if (SafeHookNormal.IsNearlyZero())
+	{
+		return false;
+	}
+	
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
 
 	if (!IsValid(Character))
@@ -253,71 +264,94 @@ bool UDRGA_GrappleItem::StartPredictedMovement(
 	}
 
 	UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
+	UDRCharacterMovementComponent* Movement =
+		Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
 
-	UDRCharacterMovementComponent* Movement = Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
-
-	if (!IsValid(MovementAction)
-		|| !IsValid(Movement))
+	if (!IsValid(MovementAction) || !IsValid(Movement))
 	{
 		return false;
 	}
 
-	HookLocation = InHookLocation;
-
-	const FDRMovementActionState State = BuildMovementActionState(HookLocation);
+	const FDRMovementActionState State = BuildMovementActionState(InHookLocation);
 
 	if (!MovementAction->StartPredictedMovementAction(State))
 	{
 		return false;
 	}
+	
+	/*
+	 * 이동 액션 시작이 성공한 뒤 훅 위치와 표면 노멀을 함께 확정한다.
+	 * 이후 시뮬레이션 결과는 이 두 값을 같은 부착 지점의 평면으로 사용한다.
+	 */
+	HookLocation = InHookLocation;
+	HookSurfaceNormal = SafeHookNormal;
 
 	Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
 
 	MovementAction->OnMovementActionEnded.AddUObject(this, &ThisClass::HandleMovementActionEnded);
-
 	MovementAction->OnMovementActionSimulated.AddUObject(this, &ThisClass::HandleMovementActionSimulated);
 
+	MovementStartTimeSeconds = World->GetTimeSeconds();
 	bMovementStarted = true;
 	ApplyMovementActionTag();
-	StartGrappleGameplayCue(HookLocation);
+	StartGrappleGameplayCue(HookLocation, InHookNormal);
 
 	return true;
 }
-
 bool UDRGA_GrappleItem::StartAuthoritativeMovement(
-	const FVector& InHookLocation)
+	const FVector& InHookLocation,
+	const FVector& InHookNormal)
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UWorld* World = GetWorld();
 
 	if (ActorInfo == nullptr
-		|| !ActorInfo->IsNetAuthority())
+		|| !ActorInfo->IsNetAuthority()
+		|| !IsValid(World)
+		|| InHookLocation.ContainsNaN()
+		|| InHookNormal.ContainsNaN())
 	{
 		return false;
 	}
 
-	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+	const FVector SafeHookNormal = InHookNormal.GetSafeNormal();
+
+	if (SafeHookNormal.IsNearlyZero())
+	{
+		return false;
+	}
+
+	ADRPlayerCharacter* Character =
+		Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
 
 	if (!IsValid(Character))
 	{
 		return false;
 	}
 
-	UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
-
-	UDRCharacterMovementComponent* Movement = Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
+	UDRMovementActionComponent* MovementAction =
+		Character->GetMovementActionComponent();
+	UDRCharacterMovementComponent* Movement =
+		Cast<UDRCharacterMovementComponent>(
+			Character->GetCharacterMovement());
 
 	UDRInventoryComponent* Inventory = nullptr;
 	FGuid InstanceId;
 
 	if (!IsValid(MovementAction)
 		|| !IsValid(Movement)
-		|| !ResolveSelectedItem(ActorInfo, ActiveItemDefinition, Inventory, InstanceId)
+		|| !ResolveSelectedItem(
+			ActorInfo,
+			ActiveItemDefinition,
+			Inventory,
+			InstanceId)
 		|| InstanceId != ActiveInstanceId)
 	{
 		return false;
 	}
 
-	const FDRMovementActionState State = BuildMovementActionState(InHookLocation);
+	const FDRMovementActionState State =
+		BuildMovementActionState(InHookLocation);
 
 	if (!MovementAction->StartAuthoritativeMovementAction(State))
 	{
@@ -326,29 +360,39 @@ bool UDRGA_GrappleItem::StartAuthoritativeMovement(
 
 	if (!Inventory->TryRemoveItemInstance(ActiveInstanceId, 1))
 	{
-		MovementAction->EndMovementAction(EDRMovementActionEndReason::Invalidated);
+		MovementAction->EndMovementAction(
+			EDRMovementActionEndReason::Invalidated);
 
 		return false;
 	}
 
+	/*
+	 * 서버 재검증 트레이스의 위치와 노멀을 권한 있는 훅 평면으로 사용한다.
+	 * 클라이언트가 전달한 충돌 결과를 그대로 신뢰하지 않는다.
+	 */
 	HookLocation = InHookLocation;
+	HookSurfaceNormal = SafeHookNormal;
 
-	Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+	Movement->SetCustomMovementMode(
+		EDRCustomMovementMode::MovementAction);
 
-	MovementAction->OnMovementActionEnded.AddUObject(this, &ThisClass::HandleMovementActionEnded);
+	MovementAction->OnMovementActionEnded.AddUObject(
+		this,
+		&ThisClass::HandleMovementActionEnded);
+	MovementAction->OnMovementActionSimulated.AddUObject(
+		this,
+		&ThisClass::HandleMovementActionSimulated);
 
-	MovementAction->OnMovementActionSimulated.AddUObject(this, &ThisClass::HandleMovementActionSimulated);
-
+	MovementStartTimeSeconds = World->GetTimeSeconds();
 	bMovementStarted = true;
+
 	ApplyMovementActionTag();
-	StartGrappleGameplayCue(HookLocation);
+	StartGrappleGameplayCue(HookLocation, HookSurfaceNormal);
 
 	return true;
 }
 
-
-FDRMovementActionState UDRGA_GrappleItem::BuildMovementActionState(
-	const FVector& InHookLocation) const
+FDRMovementActionState UDRGA_GrappleItem::BuildMovementActionState(const FVector& InHookLocation) const
 {
 	FDRMovementActionState State;
 	State.bActive = true;
@@ -358,6 +402,8 @@ FDRMovementActionState UDRGA_GrappleItem::BuildMovementActionState(
 	State.ActionAcceleration = GrappleSettings.PullAcceleration;
 	State.MaxSpeed = GrappleSettings.MaxSpeed;
 	State.ControlScale = GrappleSettings.ControlScale;
+	State.ViewDirectionWeight = GrappleSettings.ViewPullWeight;
+	State.MinimumReferenceClosingSpeed = FMath::Max(GrappleSettings.MinimumClosingSpeed, 0.f);
 
 	return State;
 }
@@ -423,9 +469,10 @@ void UDRGA_GrappleItem::RemoveMovementActionTag()
 }
 
 UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateServerTargetData(
-	const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutTargetLocation) const
+	const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutTargetLocation, FVector& OutTargetNormal) const
 {
 	OutTargetLocation = FVector::ZeroVector;
+	OutTargetNormal = FVector::ZeroVector;
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 
@@ -488,15 +535,13 @@ UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateS
 	if (!bBlockingHit
 		|| !ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
 	{
-		OutTargetLocation = ServerHit.TraceEnd;
+		OutTargetLocation = bBlockingHit ? ServerHit.ImpactPoint : TraceEnd;
+		OutTargetNormal = bBlockingHit ? ServerHit.ImpactNormal.GetSafeNormal() : FVector::ZeroVector;
 		return EDRGrappleTargetValidationResult::Failed;
 	}
 
 	OutTargetLocation = ServerHit.ImpactPoint;
-	if (!ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
-	{
-		return EDRGrappleTargetValidationResult::Failed;
-	}
+	OutTargetNormal = ServerHit.ImpactNormal.GetSafeNormal();
 
 	return EDRGrappleTargetValidationResult::Succeeded;
 }
@@ -571,7 +616,6 @@ bool UDRGA_GrappleItem::ResolveSelectedItem(
 
 	return true;
 }
-
 void UDRGA_GrappleItem::HandleMovementActionSimulated(
 	const FDRMovementActionSimulationResult& Result)
 {
@@ -581,21 +625,59 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 		return;
 	}
 
-	const FVector ToHook = HookLocation - Result.Location;
-	const bool bArrived = ToHook.SizeSquared() <= FMath::Square(GrappleSettings.ArrivalDistance);
-	const bool bHasVelocity = Result.Velocity.SizeSquared() > KINDA_SMALL_NUMBER;
-	const bool bMovingAway = bHasVelocity && FVector::DotProduct(Result.Velocity, ToHook) <= 0.f;
+	const float ElapsedTime = GetMovementElapsedTime();
 
-	// 훅 위치에 도착
-	if (bArrived)
+	if (GrappleSettings.MaxDuration > 0.f
+		&& ElapsedTime >= GrappleSettings.MaxDuration)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
+		return;
 	}
-	// // 훅 방향과 반대 방향으로 가속
-	// else if (bMovingAway)
-	// {
-	// 	QueueEndGrapple(EDRMovementActionEndReason::Completed);
-	// }
+
+	const FVector ToHook = HookLocation - Result.Location;
+	const float ArrivalDistance =
+		FMath::Max(GrappleSettings.ArrivalDistance, 0.f);
+
+	if (ToHook.SizeSquared() <= FMath::Square(ArrivalDistance))
+	{
+		QueueEndGrapple(EDRMovementActionEndReason::Completed);
+		return;
+	}
+
+	// 그래플 시작 직후에는 훅 평면을 넘어가더라도 설정 시간까지 연결을 보장한다.
+	if (ElapsedTime < GrappleSettings.ViewDetachProtectionDuration)
+	{
+		return;
+	}
+
+	if (HookSurfaceNormal.IsNearlyZero())
+	{
+		/*
+		 * 정상적인 시작 경로에서는 발생하지 않는다.
+		 * 유효한 평면을 구성할 수 없다면 연결을 계속 유지하지 않는다.
+		 */
+		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
+		return;
+	}
+
+	const FVector HookToCharacterDirection = (Result.Location - HookLocation).GetSafeNormal();
+
+	if (HookToCharacterDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const float SurfaceSideDot = FVector::DotProduct(HookSurfaceNormal, HookToCharacterDirection);
+
+	/*
+	 * 양수: 캐릭터가 훅이 부착된 표면의 바깥쪽에 있다.
+	 * 0 이하: 캐릭터가 훅 평면과 나란하거나 반대쪽으로 넘어갔다.
+	 */
+	if (SurfaceSideDot <= 0.f)
+	{
+		QueueEndGrapple(
+			EDRMovementActionEndReason::Completed);
+	}
 }
 
 void UDRGA_GrappleItem::HandleMovementActionEnded(
@@ -684,7 +766,21 @@ void UDRGA_GrappleItem::StopMovementAction(
 	bEndingGrapple = false;
 }
 
-void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
+float UDRGA_GrappleItem::GetMovementElapsedTime() const
+{
+	const UWorld* World = GetWorld();
+	
+	if (!bMovementStarted
+		|| !IsValid(World)
+		|| MovementStartTimeSeconds < 0.f)
+	{
+		return 0.f;
+	}
+	
+	return FMath::Max(World->GetTimeSeconds() - MovementStartTimeSeconds, 0.f);
+}
+
+void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation, const FVector& InHookNormal)
 {
 	if (bGrappleGameplayCueActive)
 	{
@@ -692,9 +788,7 @@ void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
 	}
 	
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-	
 	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 	
 	if (!IsValid(ASC)
@@ -706,6 +800,7 @@ void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation)
 	
 	FGameplayCueParameters Parameters;
 	Parameters.Location = InHookLocation;
+	Parameters.Normal = InHookNormal.ContainsNaN() ? FVector::ZeroVector : InHookNormal.GetSafeNormal();
 	Parameters.Instigator = AvatarActor;
 	Parameters.EffectCauser = AvatarActor;
 	Parameters.SourceObject = ActiveItemDefinition;
@@ -750,13 +845,8 @@ void UDRGA_GrappleItem::StopGrappleGameplayCue()
 	
 	bGrappleGameplayCueActive = false;
 }
-
-void UDRGA_GrappleItem::EndAbility(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo,
-	bool bReplicateEndAbility,
-	bool bWasCancelled)
+void UDRGA_GrappleItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, 
+	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -764,13 +854,13 @@ void UDRGA_GrappleItem::EndAbility(
 	}
 
 	EndGrappleTimerHandle.Invalidate();
-	
-	const EDRMovementActionEndReason EndReason = bEndQueued ?
-		PendingEndReason : bWasCancelled ? EDRMovementActionEndReason::Cancelled :	EDRMovementActionEndReason::Completed;
-	
+
+	const EDRMovementActionEndReason EndReason = bEndQueued ? PendingEndReason : 
+		bWasCancelled ? EDRMovementActionEndReason::Cancelled : EDRMovementActionEndReason::Completed;
+
 	bEndQueued = false;
 	PendingEndReason = EDRMovementActionEndReason::Invalidated;
-	
+
 	if (IsValid(TargetDataTask))
 	{
 		TargetDataTask->EndTask();
@@ -786,10 +876,14 @@ void UDRGA_GrappleItem::EndAbility(
 	StopMovementAction(EndReason);
 	RemoveMovementActionTag();
 	StopGrappleGameplayCue();
-	
+
 	ActiveItemDefinition = nullptr;
 	ActiveInstanceId.Invalidate();
-	HookLocation = FVector::ZeroVector;
 
-	Super::EndAbility(Handle,ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	// InstancedPerActor GA가 다음 활성화에서 이전 훅 평면을 재사용하지 않도록 초기화한다.
+	HookLocation = FVector::ZeroVector;
+	HookSurfaceNormal = FVector::ZeroVector;
+	MovementStartTimeSeconds = -1.f;
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

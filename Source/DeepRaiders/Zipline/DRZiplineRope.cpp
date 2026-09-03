@@ -389,8 +389,16 @@ bool ADRZiplineRope::ResolveEndpointLocations(FVector& OutEndpointA, FVector& Ou
 		return false;
 	}
 
-	OutEndpointA = EndpointA->GetActorLocation();
-	OutEndpointB = EndpointB->GetActorLocation();
+	/*
+	 * Endpoint Actor의 Origin이 아니라,
+	 * 각 Endpoint에 배치된 실제 Cable Anchor 위치를 사용한다.
+	 *
+	 * BP에서 RopeAnchor의 Relative Transform을 조정하면
+	 * 장치 Mesh가 변경되더라도 Zipline gameplay/visual 코드는
+	 * 별도 수정 없이 동일한 Anchor를 사용한다.
+	 */
+	OutEndpointA = EndpointA->GetAnchorLocation();
+	OutEndpointB = EndpointB->GetAnchorLocation();
 
 	return !OutEndpointA.ContainsNaN() && !OutEndpointB.ContainsNaN();
 }
@@ -457,8 +465,49 @@ bool ADRZiplineRope::ShouldAutoTargetEndpointB(const ADRPlayerCharacter* Charact
 	return FVector::DotProduct(ViewDirection, RopeAxis) >= 0.f;
 }
 
+void ADRZiplineRope::OrientEndpointsTowardEachOther()
+{
+	if (!IsValid(EndpointA) || !IsValid(EndpointB) || EndpointA == EndpointB)
+	{
+		return;
+	}
+
+	FVector AToB = EndpointB->GetActorLocation() - EndpointA->GetActorLocation();
+	FVector BToA = -AToB;
+
+	// 장치가 기울어지지 않도록 Yaw(Z축 회전)만 사용한다.
+	AToB.Z = 0.f;
+	BToA.Z = 0.f;
+
+	if (!AToB.IsNearlyZero())
+	{
+		const float YawA = AToB.Rotation().Yaw;
+
+		EndpointA->SetActorRotation(FRotator(0.f, YawA, 0.f));
+	}
+
+	if (!BToA.IsNearlyZero())
+	{
+		const float YawB = BToA.Rotation().Yaw;
+
+		EndpointB->SetActorRotation(FRotator(0.f, YawB, 0.f));
+	}
+}
+
 void ADRZiplineRope::RefreshRopeGeometry()
 {
+	/*
+	 * Endpoint 장치의 local +X가 Cable 출구 방향이다.
+	 * 두 Endpoint가 서로 마주보도록 World Yaw만 자동 정렬한다.
+	 *
+	 * 회전하면 RopeAnchor의 World Location도 변경되므로
+	 * 반드시 Anchor 위치를 Resolve하기 전에 수행한다.
+	 */
+	if (bAutoOrientEndpoints)
+	{
+		OrientEndpointsTowardEachOther();
+	}
+	
 	FVector LocationA;
 	FVector LocationB;
 

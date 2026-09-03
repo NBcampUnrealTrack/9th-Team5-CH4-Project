@@ -32,11 +32,8 @@ struct FDRPublicQuickSlot
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FDRCoinsChangedSignature,
-	int32,
-	NewCoins);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCoinsChangedSignature, int32, NewCoins);
+DECLARE_MULTICAST_DELEGATE(FDROnPlayerIdentityChanged);
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerState 
@@ -80,6 +77,12 @@ public:
 		ADRPlayerState* SourcePlayerState,
 		float AppliedDamage,
 		bool bFatal);
+	
+	/*
+	 * 서버에서 다른 플레이어가 가한 유효 피격이 확정됐을 때 호출한다.
+	 * Health Damage와 FreezeGauge 증가가 공통으로 이 경로를 사용한다.
+	 */
+	void HandleHostileHitResolved(ADRPlayerState* SourcePlayerState);
 	
 	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
 	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
@@ -170,6 +173,12 @@ public:
 	void ClearFrozenState();
 	
 	void HandleFreezeGaugeResolved();
+	
+	FText GetDisplayPlayerName() const;
+	
+	FDROnPlayerIdentityChanged OnPlayerIdentityChanged;
+
+	virtual void OnRep_PlayerName() override;
 	
 protected:
 	virtual void BeginPlay() override;

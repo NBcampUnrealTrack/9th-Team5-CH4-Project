@@ -28,8 +28,29 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain")
 	TObjectPtr<AVoxelWorld> VoxelWorld = nullptr;
 
+	/** 기본값은 기존 박스 영역을 유지합니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain")
+	EDRVoxelDepositAreaShape AreaShape = EDRVoxelDepositAreaShape::Box;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain",
+		meta=(EditCondition="AreaShape == EDRVoxelDepositAreaShape::Box", EditConditionHides))
 	FVector BoxExtent = FVector(500.f, 500.f, 500.f);
+
+	/** 스피어 반지름 또는 실린더 밑면 반지름입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain",
+		meta=(ClampMin="1.0", EditCondition="AreaShape != EDRVoxelDepositAreaShape::Box",
+			EditConditionHides))
+	float AreaRadius = 500.f;
+
+	/** 실린더의 전체 높이이며 액터 위치는 높이의 중앙입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain",
+		meta=(ClampMin="1.0", EditCondition="AreaShape == EDRVoxelDepositAreaShape::Cylinder",
+			EditConditionHides))
+	float AreaHeight = 1000.f;
+
+	/** 영역 외곽선과 검사 박스를 표시합니다. 플레이 표시는 시작 전에 설정합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Debug")
+	bool bDrawDebug = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="0.01"))
 	float DepositInterval = 1.f;
@@ -58,6 +79,8 @@ protected:
 	bool bTraceComplexStaticMeshSurfaces = false;
 
 private:
+	FVector GetAreaExtent() const;
+
 	/**
 	 * 퇴적 명령을 서버와 모든 현재 클라이언트에 전달합니다.
 	 * @param Command 모든 인스턴스에서 준비할 퇴적 명령입니다.

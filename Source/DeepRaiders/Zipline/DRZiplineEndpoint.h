@@ -21,12 +21,12 @@ public:
 	ADRZiplineEndpoint();
 
 	UFUNCTION(BlueprintPure, Category = "Zipline")
-	FVector GetAnchorLocation() const
-	{
-		return GetActorLocation();
-	}
+	FVector GetAnchorLocation() const;
 
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneComponent> Root;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneComponent> RopeAnchor;
 };

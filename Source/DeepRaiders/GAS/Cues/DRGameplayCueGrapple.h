@@ -31,6 +31,10 @@ protected:
 	
 	virtual bool OnRemove_Implementation(AActor* MyTarget, const FGameplayCueParameters& Parameters) override;
 
+	// 성공한 케이블이 목표 지점에 도착한 프레임에 한 번만 호출된다.
+	UFUNCTION(BlueprintImplementableEvent, Category = "Grapple|Presentation", meta = (DisplayName = "Hook Attached"))
+	void ReceiveHookAttached(const FVector& AttachLocation, const FVector& AttachNormal);
+	
 private:
 	enum class EPresentationPhase : uint8
 	{
@@ -48,6 +52,8 @@ private:
 	float CalculatePhaseDuration(const FVector& StartLocation, const FVector& EndLocation, float Speed) const;
 	
 	void UpdateHookLocation(const FVector& NewLocation);
+	
+	void EnterAttachedPhase();
 	
 	// 현재 훅 위치에서 발사 지점으로 돌아가는 단계를 시작
 	void BeginRetraction();
@@ -100,7 +106,9 @@ private:
 		
 	FVector LaunchLocation = FVector::ZeroVector;
 	FVector TargetLocation = FVector::ZeroVector;
+	FVector TargetNormal = FVector::ZeroVector;
 	FVector RetractStartLocation = FVector::ZeroVector;
+	bool bAttachmentFeedbackPlayed = false;
 	
 	float PhaseElapsedTime = 0.f;
 	

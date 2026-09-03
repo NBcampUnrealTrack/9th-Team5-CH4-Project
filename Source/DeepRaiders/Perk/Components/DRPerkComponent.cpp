@@ -546,6 +546,45 @@ bool UDRPerkComponent::HasSkillPerk(
 			});
 }
 
+float UDRPerkComponent::GetSkillEffectValue(
+	FGameplayTag SkillId,
+	EDRSkillEffectTrigger Trigger,
+	FGameplayTag EffectValueTag) const
+{
+	if (!SkillId.IsValid() || !EffectValueTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	float TotalValue = 0.0f;
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill)
+		{
+			continue;
+		}
+
+		for (const FDRSkillEffectRule& EffectRule : PerkDefinition->EffectRules)
+		{
+			if (EffectRule.Trigger != Trigger)
+			{
+				continue;
+			}
+
+			const float* EffectValue = EffectRule.EffectValues.Find(EffectValueTag);
+			if (EffectValue != nullptr)
+			{
+				TotalValue += *EffectValue;
+			}
+		}
+	}
+
+	return TotalValue;
+}
+
 bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());

@@ -95,6 +95,12 @@ public:
 	/** 특정 스킬에 장착된 설정 변경형 퍽 태그를 반환한다. */
 	bool HasSkillPerk(FGameplayTag SkillId, FGameplayTag PerkTag) const;
 
+	/** 특정 스킬에 장착된 퍽 규칙의 설정값을 합산해 반환한다. */
+	float GetSkillEffectValue(
+		FGameplayTag SkillId,
+		EDRSkillEffectTrigger Trigger,
+		FGameplayTag EffectValueTag) const;
+
 	/** 고유 ID가 일치하는 퍽의 효과와 슬롯을 함께 제거한다. */
 	bool TryRemovePerk(FGuid PerkInstanceId);
 
