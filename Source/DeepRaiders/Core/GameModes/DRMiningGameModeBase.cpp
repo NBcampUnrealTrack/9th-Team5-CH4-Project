@@ -334,6 +334,35 @@ void ADRMiningGameModeBase::ApplyActiveTeam(bool bImmediate)
 	}
 }
 
+void ADRMiningGameModeBase::EnsureDevelopmentPlayerName(ADRPlayerState* PlayerState) const
+{
+	if (!IsValid(PlayerState))
+	{
+		return;
+	}
+
+#if WITH_EDITOR
+
+	const FString CurrentName = PlayerState->GetPlayerName().TrimStartAndEnd();
+
+	const bool bNeedsFallback = CurrentName.IsEmpty() || CurrentName.StartsWith(TEXT("DESKTOP-"), ESearchCase::IgnoreCase);
+
+	if (!bNeedsFallback)
+	{
+		return;
+	}
+
+	const int32 PlayerId = PlayerState->GetPlayerId();
+
+	const FString FallbackName = PlayerId > 0 ? FString::Printf(TEXT("Player %d"), PlayerId) : TEXT("Player");
+
+	PlayerState->SetPlayerName(FallbackName);
+
+	PlayerState->ForceNetUpdate();
+
+#endif
+}
+
 void ADRMiningGameModeBase::EndTimer()
 {
 	GetWorldTimerManager().ClearTimer(PassiveCoinTimerHandle);
@@ -415,6 +444,8 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 	{
 		if (ADRPlayerState* PlayerState = PlayerController->GetPlayerState<ADRPlayerState>())
 		{
+			EnsureDevelopmentPlayerName(PlayerState);
+			
 			const int32 AssignedTeamId = AssignBalancedTeam(PlayerState);
 
 			UE_LOG(

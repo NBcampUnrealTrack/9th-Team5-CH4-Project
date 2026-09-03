@@ -16,23 +16,7 @@
 #include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
 #include "DRPlayerController.h"
-
-namespace DRPlayerName
-{
-	static const TCHAR* AnimalNames[] =
-	{
-		TEXT("Penguin"),
-		TEXT("Fox"),
-		TEXT("Otter"),
-		TEXT("Bear"),
-		TEXT("Rabbit"),
-		TEXT("Wolf"),
-		TEXT("Seal"),
-		TEXT("Raccoon"),
-		TEXT("Panda"),
-		TEXT("Hamster")
-	};
-}
+#include "HAL/PlatformProcess.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -603,32 +587,23 @@ void ADRPlayerState::HandleFreezeGaugeResolved()
 		PlayerAttributeSet->GetHealth());
 }
 
-void ADRPlayerState::InitializeDefaultPlayerName()
+FText ADRPlayerState::GetDisplayPlayerName() const
 {
-	if (!HasAuthority())
+	const FString PlayerName = GetPlayerName().TrimStartAndEnd();
+
+	if (PlayerName.IsEmpty() || PlayerName.StartsWith(TEXT("DESKTOP-"), ESearchCase::IgnoreCase))
 	{
-		return;
+		return FText::FromString(TEXT("Player"));
 	}
 
-	const FString CurrentName = GetPlayerName().TrimStartAndEnd();
+	return FText::FromString(PlayerName);
+}
 
-	/*
-	 * 명시적으로 이름이 들어왔다면 유지.
-	 * 현재 개발 단계의 자동 PIE 이름도 기본 이름으로 취급하려면
-	 * 여기 정책을 추가하면 됨.
-	 */
-	if (!CurrentName.IsEmpty() && !CurrentName.Equals(TEXT("None"), ESearchCase::IgnoreCase))
-	{
-		return;
-	}
+void ADRPlayerState::OnRep_PlayerName()
+{
+	Super::OnRep_PlayerName();
 
-	const int32 NameCount = UE_ARRAY_COUNT(DRPlayerName::AnimalNames);
-
-	const int32 RandomIndex = FMath::RandRange(0, NameCount - 1);
-
-	const FString RandomName = FString::Printf(TEXT("%s %d"), DRPlayerName::AnimalNames[RandomIndex], GetPlayerId());
-
-	SetPlayerName(RandomName);
+	OnPlayerIdentityChanged.Broadcast();
 }
 
 void ADRPlayerState::RestartFreezeDecay()

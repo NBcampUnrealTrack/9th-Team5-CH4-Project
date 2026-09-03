@@ -112,21 +112,13 @@ void UDRPlayerNameplateComponent::RefreshDisplayData()
 	}
 
 	const ADRPlayerCharacter* TargetCharacter = Cast<ADRPlayerCharacter>(GetOwner());
-
 	const ADRPlayerState* TargetPlayerState = IsValid(TargetCharacter) ? TargetCharacter->GetPlayerState<ADRPlayerState>() : nullptr;
-
 	if (!IsValid(TargetCharacter) || !IsValid(TargetPlayerState))
 	{
 		return;
 	}
 
-	/*
-	 * 현재는 APlayerState 기본 PlayerName 사용.
-	 * 계정 닉네임이 별도 데이터라면 이 한 줄만 교체하면 된다.
-	 */
-	const FText DisplayName = FText::FromString(TargetPlayerState->GetPlayerName());
-
-	NameplateViewModel->SetDisplayData(DisplayName, TargetCharacter->GetTeamDisplayColor());
+	NameplateViewModel->SetDisplayData(TargetPlayerState->GetDisplayPlayerName(), TargetCharacter->GetTeamDisplayColor());
 }
 
 void UDRPlayerNameplateComponent::RefreshVisibility()

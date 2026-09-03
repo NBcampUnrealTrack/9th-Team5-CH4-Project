@@ -32,11 +32,8 @@ struct FDRPublicQuickSlot
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
-	FDRCoinsChangedSignature,
-	int32,
-	NewCoins);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCoinsChangedSignature, int32, NewCoins);
+DECLARE_MULTICAST_DELEGATE(FDROnPlayerIdentityChanged);
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerState 
@@ -177,7 +174,11 @@ public:
 	
 	void HandleFreezeGaugeResolved();
 	
-	void InitializeDefaultPlayerName();
+	FText GetDisplayPlayerName() const;
+	
+	FDROnPlayerIdentityChanged OnPlayerIdentityChanged;
+
+	virtual void OnRep_PlayerName() override;
 	
 protected:
 	virtual void BeginPlay() override;
