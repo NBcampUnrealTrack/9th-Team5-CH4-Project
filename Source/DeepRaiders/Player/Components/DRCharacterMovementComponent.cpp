@@ -602,6 +602,71 @@ void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
     Velocity = ExitVelocity;
 }
 
+bool UDRCharacterMovementComponent::TryHandleZiplineRiderCollision(const FHitResult& Hit)
+{
+    if (!IsValid(CharacterOwner) || !CharacterOwner->HasAuthority())
+    {
+        return false;
+    }
+
+    ACharacter* OtherCharacter = Cast<ACharacter>(Hit.GetActor());
+
+    if (!IsValid(OtherCharacter) || OtherCharacter == CharacterOwner)
+    {
+        return false;
+    }
+
+    UDRMovementActionComponent* ThisAction = GetMovementActionComponent();
+    UDRMovementActionComponent* OtherAction = OtherCharacter->FindComponentByClass<UDRMovementActionComponent>();
+    UDRCharacterMovementComponent* OtherMovement = Cast<UDRCharacterMovementComponent>(OtherCharacter->GetCharacterMovement());
+    if (!IsValid(ThisAction) || !IsValid(OtherAction) || !IsValid(OtherMovement))
+    {
+        return false;
+    }
+
+    /*
+     * 단순 Character 충돌이 아니라,
+     * 양쪽 모두 실제 Zipline 탑승 중일 때만
+     * Rider Collision으로 처리한다.
+     */
+    if (!ThisAction->IsZiplineActive() || !OtherAction->IsZiplineActive())
+    {
+        return false;
+    }
+
+    /*
+     * 서버가 두 Zipline Action을 동시에 종료한다.
+     *
+     * 한쪽만 종료하면 같은 충돌에서 상대는 계속 Rail을
+     * 진행하므로 양쪽 모두 동일한 authoritative 결과를 갖게 한다.
+     */
+    ThisAction->EndMovementAction(EDRMovementActionEndReason::Collision);
+    OtherAction->EndMovementAction(EDRMovementActionEndReason::Collision);
+
+    /*
+     * EndMovementAction은 Action State 종료이고,
+     * 실제 CMC CustomMode도 별도로 빠져나와야 한다.
+     */
+    if (IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+    {
+        ExitCustomMovementMode();
+    }
+
+    if (OtherMovement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+    {
+        OtherMovement->ExitCustomMovementMode();
+    }
+
+    /*
+     * ActionState 종료 + MovementMode 변경을
+     * 가능한 빨리 각 클라이언트에 전달한다.
+     */
+    CharacterOwner->ForceNetUpdate();
+    OtherCharacter->ForceNetUpdate();
+
+    return true;
+}
+
 void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations)
 {
     switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
@@ -889,6 +954,28 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
             const FVector SlideStartLocation = UpdatedComponent->GetComponentLocation();
             
             HandleImpact(Hit, TimeTick, Adjusted);
+            
+            /*
+             * 서버에서 Zipline Rider끼리 Capsule Blocking Hit가 발생하면
+             * 두 Rider의 Zipline을 즉시 종료한다.
+             */
+            if (TryHandleZiplineRiderCollision(Hit))
+            {
+                if (HasValidData())
+                {
+                    /*
+                     * 충돌 시점 이후 남은 이번 substep 시간 +
+                     * 아직 처리하지 않은 전체 RemainingTime을
+                     * 새 MovementMode에서 계속 처리한다.
+                     */
+                    StartNewPhysics(
+                        RemainingTime
+                            + RemainingTimeAfterHit,
+                        Iterations);
+                }
+
+                return;
+            }
             
             if (!HasValidData()
                 || !IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
