@@ -674,7 +674,7 @@ bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 
 	ASC->HandleGameplayEvent(EventData.EventTag, &EventData);
 
-	return false;
+	return true;
 }
 
 void ADRPlayerController::ResetForGameStart()
