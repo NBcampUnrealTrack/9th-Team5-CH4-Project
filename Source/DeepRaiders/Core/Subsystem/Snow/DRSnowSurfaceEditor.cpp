@@ -1086,70 +1086,88 @@ bool FDRSnowSurfaceEditor::ApplySnowMaterialPatch(
 		return false;
 	}
 
-	bool bPaintedAny = false;
-	int32 MissingSurfaceVoxelCount = 0;
+	// 패치가 이미 서버에서 확정한 정확한 voxel 좌표를 담고 있으므로
+	// 클라이언트에서 표면을 다시 검색하지 않고 32^3 청크 안의 재질을 직접 수정한다.
+	// 청크 경계를 잠금/렌더 갱신 경계로 유지해야 멀리 떨어진 청크들이 하나의 거대한
+	// Bounds로 합쳐져 한 프레임에 큰 작업이 몰리는 것을 막을 수 있다.
+	constexpr int32 MaxLocalIndex =
+		DRSnowMaterialPatchUtils::ChunkSize *
+		DRSnowMaterialPatchUtils::ChunkSize *
+		DRSnowMaterialPatchUtils::ChunkSize;
+
+	FVoxelData& Data = VoxelWorld->GetData();
+	TArray<FVoxelIntBox> EditedChunkBounds;
+	EditedChunkBounds.Reserve(MaterialPatch.Chunks.Num());
+
+	int32 InvalidLocalIndexCount = 0;
+	int32 InputVoxelCount = 0;
+	int32 AppliedVoxelCount = 0;
+	int32 MaterialSetCount = 0;
 	for (const FDRSnowMaterialChunkPatch& ChunkPatch : MaterialPatch.Chunks)
 	{
-		TMap<uint16, uint8> MaterialByLocalIndex;
-		for (const FDRSnowMaterialIndexSet& MaterialSet : ChunkPatch.MaterialSets)
-		{
-			for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
-			{
-				MaterialByLocalIndex.Add(LocalIndex, MaterialSet.MaterialIndex);
-			}
-		}
-		if (MaterialByLocalIndex.IsEmpty())
-		{
-			continue;
-		}
-
-		const FIntVector ChunkMin = ChunkPatch.ChunkCoord * DRSnowMaterialPatchUtils::ChunkSize;
+		const FIntVector ChunkMin =
+			ChunkPatch.ChunkCoord * DRSnowMaterialPatchUtils::ChunkSize;
 		const FVoxelIntBox ChunkBounds(
 			ChunkMin,
 			ChunkMin + FIntVector(DRSnowMaterialPatchUtils::ChunkSize));
-		FVoxelSurfaceEditsVoxels SurfaceVoxels;
-		UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
-			SurfaceVoxels,
-			VoxelWorld,
-			ChunkBounds,
-			true);
+		bool bEditedChunk = false;
 
-		TMap<uint8, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByMaterial;
-		for (const FVoxelSurfaceEditsVoxelBase& SourceVoxel : *SurfaceVoxels.Voxels)
 		{
-			if (!ChunkBounds.Contains(SourceVoxel.Position))
-			{
-				continue;
-			}
-			const uint16 LocalIndex = DRSnowMaterialPatchUtils::VoxelToLocalIndex(SourceVoxel.Position);
-			const uint8* MaterialIndex = MaterialByLocalIndex.Find(LocalIndex);
-			if (!MaterialIndex)
-			{
-				continue;
-			}
+			FVoxelWriteScopeLock Lock(Data, ChunkBounds, FUNCTION_FNAME);
+			FVoxelMutableDataAccelerator Accelerator(Data, ChunkBounds);
 
-			FVoxelSurfaceEditsVoxel& Voxel = VoxelsByMaterial.FindOrAdd(*MaterialIndex).Add_GetRef(
-				FVoxelSurfaceEditsVoxel(SourceVoxel));
-			Voxel.Strength = 1.f;
-			MaterialByLocalIndex.Remove(LocalIndex);
+			for (const FDRSnowMaterialIndexSet& MaterialSet : ChunkPatch.MaterialSets)
+			{
+				++MaterialSetCount;
+				InputVoxelCount += MaterialSet.LocalVoxelIndices.Num();
+				const FVoxelPaintMaterial PaintMaterial =
+					MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialSet.MaterialIndex);
+
+				for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
+				{
+					if (LocalIndex >= MaxLocalIndex)
+					{
+						++InvalidLocalIndexCount;
+						continue;
+					}
+
+					const FIntVector Position = DRSnowMaterialPatchUtils::LocalIndexToVoxel(
+						ChunkPatch.ChunkCoord,
+						LocalIndex);
+					if (Accelerator.EditMaterial(
+						Position,
+						[&PaintMaterial](FVoxelMaterial& Material)
+						{
+							PaintMaterial.ApplyToMaterial(Material, 1.f);
+						}))
+					{
+						++AppliedVoxelCount;
+						bEditedChunk = true;
+					}
+				}
+			}
 		}
-		MissingSurfaceVoxelCount += MaterialByLocalIndex.Num();
 
-		FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels;
-		ProcessedVoxels.Bounds = ChunkBounds;
-		ProcessedVoxels.Info = SurfaceVoxels.Info;
-		for (TPair<uint8, TArray<FVoxelSurfaceEditsVoxel>>& MaterialVoxels : VoxelsByMaterial)
+		if (bEditedChunk)
 		{
-			ProcessedVoxels.Voxels = MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(
-				MoveTemp(MaterialVoxels.Value));
-			bPaintedAny |= PaintProcessedMaterialSurface(
-				VoxelWorld,
-				ProcessedVoxels,
-				MaterialVoxels.Key);
+			EditedChunkBounds.Add(ChunkBounds);
 		}
 	}
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/MissingSurfaceVoxelCount"), MissingSurfaceVoxelCount);
-	return bPaintedAny;
+
+	// 데이터 잠금을 모두 해제한 뒤, 편집된 청크만 작은 Bounds로 갱신한다.
+	// 서로 멀리 떨어진 청크를 하나의 큰 Bounds로 합치지 않는 것이 핵심이다.
+	for (const FVoxelIntBox& EditedChunkBound : EditedChunkBounds)
+	{
+		UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, EditedChunkBound.Extend(1));
+	}
+
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyInputVoxelCount"), InputVoxelCount);
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyAppliedVoxelCount"), AppliedVoxelCount);
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyMaterialSetCount"), MaterialSetCount);
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyChunkCount"), EditedChunkBounds.Num());
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyRenderUpdateCount"), EditedChunkBounds.Num());
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/InvalidLocalIndexCount"), InvalidLocalIndexCount);
+	return !EditedChunkBounds.IsEmpty();
 }
 
 bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
