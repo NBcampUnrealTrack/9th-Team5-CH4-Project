@@ -54,10 +54,12 @@ private:
 	bool CanStartZiplineRide(APawn* Interactor) const;
 	bool ResolveEndpointLocations(FVector& OutEndpointA, FVector& OutEndpointB) const;
 	bool ShouldAutoTargetEndpointB(const ADRPlayerCharacter* Character, const FVector& EndpointA, const FVector& EndpointB) const;
+	void OrientEndpointsTowardEachOther();
 	void RefreshRopeGeometry();
 
 	static FVector ClosestPointOnSegmentToViewRay(const FVector& SegmentStart, const FVector& SegmentEnd, const FVector& ViewLocation, const FVector& ViewDirection);
 
+	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Zipline", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneComponent> Root;
@@ -134,4 +136,7 @@ private:
 
 	static constexpr float MinRopeLength = 50.f;
 	static constexpr float AutoEndpointSnapDistance = 30.f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Endpoints", meta = (AllowPrivateAccess = "true"))
+	bool bAutoOrientEndpoints = true;
 };
