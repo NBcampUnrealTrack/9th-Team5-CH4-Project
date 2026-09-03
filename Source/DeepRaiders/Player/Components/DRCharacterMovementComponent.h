@@ -83,15 +83,13 @@ public:
 
 	bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
 
-	/** 복셀 편집 완료 직후, collision 갱신 전에 캡슐 내부 점유도를 검사한다. */
-	void EvaluateVoxelContainment(AVoxelWorld* VoxelWorld);
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태에 진입한다. */
+	void EnterVoxelContainedMode();
+
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태를 해제한다. */
+	void ExitVoxelContainedMode();
 
 protected:
-	virtual void TickComponent(
-		float DeltaTime,
-		ELevelTick TickType,
-		FActorComponentTickFunction* ThisTickFunction) override;
-
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 
 	virtual bool CheckFall(
@@ -114,11 +112,6 @@ protected:
 	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
 
 private:
-	struct FVoxelCapsuleOccupancy
-	{
-		int32 FullySurroundedLayerCount = 0;
-	};
-
 	void UnbindAbilitySystem();
 	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
 	void ApplyMoveSpeedMultiplier(float Multiplier);
@@ -130,15 +123,11 @@ private:
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
 	bool ShouldKeepVoxelFloor(const FFindFloorResult& OldFloor, const FVector& OldLocation) const;
-	FVoxelCapsuleOccupancy GetVoxelCapsuleOccupancy(AVoxelWorld& VoxelWorld) const;
-	void EnterVoxelContainedMode(AVoxelWorld& VoxelWorld);
-	void UpdateVoxelContainedMode();
 
 	bool TryHandleZiplineRiderCollision(const FHitResult& Hit);
 	
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
 	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;
-	TWeakObjectPtr<AVoxelWorld> VoxelContainmentWorld;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
@@ -172,19 +161,6 @@ private:
 	/** VoxelWorld 하단 경계 직전에서 floor가 사라져도 자연 낙하로 전환하지 않는 여유 거리. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
 	float VoxelLowerBoundaryTolerance = 2.f;
-
-	/** 중심과 사방이 동시에 고체인 수평 단면이 이 개수 이상일 때만 매몰로 본다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel|Containment", meta = (AllowPrivateAccess = "true", ClampMin = "1", ClampMax = "3"))
-	int32 VoxelContainmentRequiredSurroundedLayers = 2;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel|Containment", meta = (AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
-	float VoxelContainmentReleaseDelay = 0.25f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel|Containment", meta = (AllowPrivateAccess = "true", ClampMin = "0.01", Units = "s"))
-	float VoxelContainmentCheckInterval = 0.05f;
-
-	float NextVoxelContainmentCheckTime = 0.f;
-	float VoxelContainmentReleaseStartTime = -1.f;
 
 	/** 제트팩 작동 직후의 초기 추진 가속도 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s^2"))

@@ -17,6 +17,7 @@
 #include "DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "DeepRaiders/Player/Components/DRVoxelContainmentComponent.h"
 #include "VoxelComponents/VoxelNoClippingComponent.h"
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
@@ -57,6 +58,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	// 플러그인의 기본 텔레포트/Impulse가 지형 충돌 보정과 경쟁하지 않게 한다.
 	VoxelNoClippingComponent->bEnableDefaultBehavior = false;
 	VoxelNoClippingComponent->Speed = 6000.f;
+	VoxelContainmentComponent = CreateDefaultSubobject<UDRVoxelContainmentComponent>(TEXT("VoxelContainmentComponent"));
 
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));

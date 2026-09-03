@@ -13,6 +13,7 @@ class UAnimMontage;
 class UDRItemDefinition;
 
 class UVoxelNoClippingComponent;
+class UDRVoxelContainmentComponent;
 class UDRCharacterMovementComponent;
 class UDRMiningComponent;
 class UDRTeleportComponent;
@@ -210,6 +211,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
 	TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
+	TObjectPtr<UDRVoxelContainmentComponent> VoxelContainmentComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRMeleeCombatComponent> MeleeCombatComponent;

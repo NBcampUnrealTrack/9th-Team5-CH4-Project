@@ -1,6 +1,6 @@
 #include "DRSnowSubsystem.h"
 
-#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "DeepRaiders/Player/Components/DRVoxelContainmentComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -52,10 +52,10 @@ namespace
 					continue;
 				}
 
-				if (UDRCharacterMovementComponent* Movement =
-					Cast<UDRCharacterMovementComponent>(Character->GetMovementComponent()))
+				if (UDRVoxelContainmentComponent* Containment =
+					Character->FindComponentByClass<UDRVoxelContainmentComponent>())
 				{
-					Movement->EvaluateVoxelContainment(&VoxelWorld);
+					Containment->EvaluateVoxelContainment(&VoxelWorld);
 					bEvaluatedAnyCharacter = true;
 				}
 			}
@@ -81,11 +81,10 @@ namespace
 		{
 			if (APawn* InstigatorPawn = Request.Context.InstigatorPawn.Get())
 			{
-				if (UDRCharacterMovementComponent* Movement =
-					Cast<UDRCharacterMovementComponent>(
-						InstigatorPawn->GetMovementComponent()))
+				if (UDRVoxelContainmentComponent* Containment =
+					InstigatorPawn->FindComponentByClass<UDRVoxelContainmentComponent>())
 				{
-					Movement->EvaluateVoxelContainment(VoxelWorld);
+					Containment->EvaluateVoxelContainment(VoxelWorld);
 				}
 			}
 		}

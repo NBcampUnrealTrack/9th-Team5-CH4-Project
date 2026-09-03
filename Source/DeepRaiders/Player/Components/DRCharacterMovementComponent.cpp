@@ -277,130 +277,8 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     GravityScale = 1.0f;
 }
 
-void UDRCharacterMovementComponent::TickComponent(
-    float DeltaTime,
-    ELevelTick TickType,
-    FActorComponentTickFunction* ThisTickFunction)
+void UDRCharacterMovementComponent::EnterVoxelContainedMode()
 {
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-    if (IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
-    {
-        UpdateVoxelContainedMode();
-    }
-}
-
-void UDRCharacterMovementComponent::EvaluateVoxelContainment(AVoxelWorld* VoxelWorld)
-{
-    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !IsValid(CharacterOwner))
-    {
-        return;
-    }
-
-    const FVoxelCapsuleOccupancy Occupancy =
-        GetVoxelCapsuleOccupancy(*VoxelWorld);
-    if (Occupancy.FullySurroundedLayerCount >=
-        FMath::Clamp(VoxelContainmentRequiredSurroundedLayers, 1, 3))
-    {
-        EnterVoxelContainedMode(*VoxelWorld);
-    }
-}
-
-UDRCharacterMovementComponent::FVoxelCapsuleOccupancy
-UDRCharacterMovementComponent::GetVoxelCapsuleOccupancy(
-    AVoxelWorld& VoxelWorld) const
-{
-    FVoxelCapsuleOccupancy Result;
-    if (!IsValid(CharacterOwner))
-    {
-        return Result;
-    }
-
-    const UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
-    if (!IsValid(Capsule))
-    {
-        return Result;
-    }
-
-    const float Radius = Capsule->GetScaledCapsuleRadius();
-    const float CylinderHalfHeight =
-        FMath::Max(0.f, Capsule->GetScaledCapsuleHalfHeight() - Radius);
-    const FVector Center = Capsule->GetComponentLocation();
-    const FVector Forward = CharacterOwner->GetActorForwardVector();
-    const FVector Right = CharacterOwner->GetActorRightVector();
-    const FVector HorizontalOffsets[] =
-    {
-        FVector::ZeroVector,
-        Forward * Radius * 0.55f,
-        -Forward * Radius * 0.55f,
-        Right * Radius * 0.55f,
-        -Right * Radius * 0.55f
-    };
-    const float VerticalOffsets[] =
-    {
-        -CylinderHalfHeight * 0.75f,
-        0.f,
-        CylinderHalfHeight * 0.75f
-    };
-
-    const FVoxelIntBox WorldBounds = VoxelWorld.GetWorldBounds();
-    FIntVector SamplePositions[UE_ARRAY_COUNT(VerticalOffsets)][UE_ARRAY_COUNT(HorizontalOffsets)];
-    FVoxelIntBoxWithValidity LockBounds;
-    for (int32 VerticalIndex = 0; VerticalIndex < UE_ARRAY_COUNT(VerticalOffsets); ++VerticalIndex)
-    {
-        for (int32 HorizontalIndex = 0; HorizontalIndex < UE_ARRAY_COUNT(HorizontalOffsets); ++HorizontalIndex)
-        {
-            const FVector SampleLocation =
-                Center + HorizontalOffsets[HorizontalIndex] +
-                FVector::UpVector * VerticalOffsets[VerticalIndex];
-            const FIntVector VoxelPosition = VoxelWorld.GlobalToLocal(SampleLocation);
-            SamplePositions[VerticalIndex][HorizontalIndex] = VoxelPosition;
-            if (WorldBounds.Contains(VoxelPosition))
-            {
-                LockBounds += VoxelPosition;
-            }
-        }
-    }
-
-    if (!LockBounds.IsValid())
-    {
-        return Result;
-    }
-
-    FVoxelData& Data = VoxelWorld.GetData();
-    FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
-
-    constexpr uint8 FullySurroundedMask =
-        (1 << UE_ARRAY_COUNT(HorizontalOffsets)) - 1;
-    for (int32 VerticalIndex = 0; VerticalIndex < UE_ARRAY_COUNT(VerticalOffsets); ++VerticalIndex)
-    {
-        uint8 SolidLayerMask = 0;
-        for (int32 HorizontalIndex = 0; HorizontalIndex < UE_ARRAY_COUNT(HorizontalOffsets); ++HorizontalIndex)
-        {
-            const FIntVector& VoxelPosition = SamplePositions[VerticalIndex][HorizontalIndex];
-            if (WorldBounds.Contains(VoxelPosition) &&
-                !Data.GetValue(VoxelPosition, 0).IsEmpty())
-            {
-                SolidLayerMask |= 1 << HorizontalIndex;
-            }
-        }
-
-        // 높이별 결과를 합치지 않는다. 경사진 한쪽 벽이 서로 다른 높이에서
-        // 반대편 표본까지 채운 것처럼 보이는 오탐을 막는다.
-        if ((SolidLayerMask & FullySurroundedMask) == FullySurroundedMask)
-        {
-            ++Result.FullySurroundedLayerCount;
-        }
-    }
-
-    return Result;
-}
-
-void UDRCharacterMovementComponent::EnterVoxelContainedMode(AVoxelWorld& VoxelWorld)
-{
-    VoxelContainmentWorld = &VoxelWorld;
-    VoxelContainmentReleaseStartTime = -1.f;
-    NextVoxelContainmentCheckTime = 0.f;
     StopMovementImmediately();
     ClearAccumulatedForces();
     SetMovementMode(
@@ -413,59 +291,12 @@ void UDRCharacterMovementComponent::EnterVoxelContainedMode(AVoxelWorld& VoxelWo
     }
 }
 
-void UDRCharacterMovementComponent::UpdateVoxelContainedMode()
+void UDRCharacterMovementComponent::ExitVoxelContainedMode()
 {
-    StopMovementImmediately();
-    ClearAccumulatedForces();
-
-    UWorld* World = GetWorld();
-    if (!IsValid(World))
+    if (!IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
     {
         return;
     }
-
-    const float Time = World->GetTimeSeconds();
-    if (Time < NextVoxelContainmentCheckTime)
-    {
-        return;
-    }
-    NextVoxelContainmentCheckTime =
-        Time + FMath::Max(0.01f, VoxelContainmentCheckInterval);
-
-    AVoxelWorld* VoxelWorld = VoxelContainmentWorld.Get();
-    if (!IsValid(VoxelWorld))
-    {
-        VoxelWorld = LastVoxelFloorWorld.Get();
-    }
-    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
-    {
-        return;
-    }
-
-    const FVoxelCapsuleOccupancy Occupancy =
-        GetVoxelCapsuleOccupancy(*VoxelWorld);
-    const bool bStillContained =
-        Occupancy.FullySurroundedLayerCount >=
-        FMath::Clamp(VoxelContainmentRequiredSurroundedLayers, 1, 3);
-    if (bStillContained)
-    {
-        VoxelContainmentReleaseStartTime = -1.f;
-        return;
-    }
-
-    if (VoxelContainmentReleaseStartTime < 0.f)
-    {
-        VoxelContainmentReleaseStartTime = Time;
-        return;
-    }
-    if (Time - VoxelContainmentReleaseStartTime <
-        FMath::Max(0.f, VoxelContainmentReleaseDelay))
-    {
-        return;
-    }
-
-    VoxelContainmentWorld.Reset();
-    VoxelContainmentReleaseStartTime = -1.f;
     RestoreDefaultMovementMode();
 }
 
@@ -655,22 +486,6 @@ void UDRCharacterMovementComponent::OnMovementModeChanged(
 		&& CustomMovementMode ==
 			static_cast<uint8>(
 				EDRCustomMovementMode::MovementAction);
-
-	const bool bWasVoxelContained =
-		PreviousMovementMode == MOVE_Custom
-		&& PreviousCustomMode ==
-			static_cast<uint8>(
-				EDRCustomMovementMode::VoxelContained);
-
-	const bool bIsVoxelContained =
-		IsCustomMovementModeActive(
-			EDRCustomMovementMode::VoxelContained);
-
-	if (bWasVoxelContained && !bIsVoxelContained)
-	{
-		VoxelContainmentWorld.Reset();
-		VoxelContainmentReleaseStartTime = -1.f;
-	}
 
 	/*
 	 * ExitCustomMovementMode()를 통하지 않고
