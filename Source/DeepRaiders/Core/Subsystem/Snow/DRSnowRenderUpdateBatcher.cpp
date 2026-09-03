@@ -1,5 +1,6 @@
 #include "DRSnowRenderUpdateBatcher.h"
 
+#include "DRSnowVoxelContainmentEvaluator.h"
 #include "Engine/World.h"
 #include "VoxelRender/IVoxelLODManager.h"
 #include "VoxelWorld.h"
@@ -7,6 +8,12 @@
 namespace
 {
 constexpr float RenderUpdateDelaySeconds = 0.1f;
+}
+
+FDRSnowRenderUpdateBatcher::FDRSnowRenderUpdateBatcher(
+	FDRSnowVoxelContainmentEvaluator& InContainmentEvaluator)
+	: ContainmentEvaluator(InContainmentEvaluator)
+{
 }
 
 FDRSnowRenderUpdateBatcher::~FDRSnowRenderUpdateBatcher()
@@ -28,7 +35,8 @@ void FDRSnowRenderUpdateBatcher::Initialize(UWorld* InWorld)
 
 void FDRSnowRenderUpdateBatcher::Enqueue(
 	AVoxelWorld* VoxelWorld,
-	const FVoxelIntBox& Bounds)
+	const FVoxelIntBox& Bounds,
+	const EDRSnowRenderUpdateType UpdateType)
 {
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !Bounds.IsValid())
 	{
@@ -46,20 +54,26 @@ void FDRSnowRenderUpdateBatcher::Enqueue(
 		PendingUpdate->VoxelWorld = VoxelWorld;
 	}
 
-	FVoxelIntBox MergedBounds = Bounds;
+	FPendingBounds MergedEntry;
+	MergedEntry.Bounds = Bounds;
+	MergedEntry.bEvaluateVoxelContainment =
+		UpdateType == EDRSnowRenderUpdateType::Geometry;
 	for (int32 Index = 0; Index < PendingUpdate->Bounds.Num();)
 	{
-		if (!MergedBounds.Intersect(PendingUpdate->Bounds[Index]))
+		if (!MergedEntry.Bounds.Intersect(PendingUpdate->Bounds[Index].Bounds))
 		{
 			++Index;
 			continue;
 		}
 
-		MergedBounds = MergedBounds + PendingUpdate->Bounds[Index];
+		MergedEntry.Bounds =
+			MergedEntry.Bounds + PendingUpdate->Bounds[Index].Bounds;
+		MergedEntry.bEvaluateVoxelContainment |=
+			PendingUpdate->Bounds[Index].bEvaluateVoxelContainment;
 		PendingUpdate->Bounds.RemoveAtSwap(Index, 1, EAllowShrinking::No);
 		Index = 0;
 	}
-	PendingUpdate->Bounds.Add(MergedBounds);
+	PendingUpdate->Bounds.Add(MoveTemp(MergedEntry));
 
 	UWorld* LocalWorld = World.Get();
 	if (IsValid(LocalWorld) && !LocalWorld->GetTimerManager().IsTimerActive(FlushTimerHandle))
@@ -88,7 +102,20 @@ void FDRSnowRenderUpdateBatcher::Flush()
 		AVoxelWorld* VoxelWorld = PendingUpdate.VoxelWorld.Get();
 		if (IsValid(VoxelWorld) && VoxelWorld->IsCreated() && !PendingUpdate.Bounds.IsEmpty())
 		{
-			VoxelWorld->GetLODManager().UpdateBounds(PendingUpdate.Bounds);
+			TArray<FVoxelIntBox> BoundsToUpdate;
+			BoundsToUpdate.Reserve(PendingUpdate.Bounds.Num());
+			for (const FPendingBounds& PendingBounds : PendingUpdate.Bounds)
+			{
+				// Directional 편집의 밀려나기가 끝난 뒤, collision 갱신 직전에 검사한다.
+				if (PendingBounds.bEvaluateVoxelContainment)
+				{
+					ContainmentEvaluator.EvaluateCharactersInEditedBounds(
+						*VoxelWorld,
+						PendingBounds.Bounds);
+				}
+				BoundsToUpdate.Add(PendingBounds.Bounds);
+			}
+			VoxelWorld->GetLODManager().UpdateBounds(BoundsToUpdate);
 		}
 	}
 	PendingUpdates.Reset();

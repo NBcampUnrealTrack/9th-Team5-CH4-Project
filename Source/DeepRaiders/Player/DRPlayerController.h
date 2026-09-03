@@ -108,6 +108,9 @@ private:
 	
 	void HandleScrollQuickSlot(const FInputActionValue& Value);	
 	
+	// Interaction 입력은 Zipline 탑승 중이면 새 상호작용 대신 현재 Zipline 해제로 사용한다.
+	bool TryToggleZiplineInteraction(int32 InputId);
+
 	void HandleGASInputStarted(int32 InputId);
 	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);

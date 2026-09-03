@@ -450,6 +450,14 @@ void ADRPlayerState::BindStatusPolicy()
 			.AddUObject(
 				this,
 				&ThisClass::HandleHealthChanged);
+
+	VoxelContainedTagChangedHandle =
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_VoxelContained,
+			EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(
+			this,
+			&ThisClass::HandleVoxelContainedTagChanged);
 }
 
 void ADRPlayerState::UnbindStatusPolicy()
@@ -478,6 +486,15 @@ void ADRPlayerState::UnbindStatusPolicy()
 			.Remove(
 				HealthChangedHandle);
 		HealthChangedHandle.Reset();
+	}
+
+	if (VoxelContainedTagChangedHandle.IsValid())
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_VoxelContained,
+			EGameplayTagEventType::NewOrRemoved)
+		.Remove(VoxelContainedTagChangedHandle);
+		VoxelContainedTagChangedHandle.Reset();
 	}
 }
 
@@ -517,6 +534,30 @@ void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
 {
 	// 비주얼용 MaxFreezeGauge 변경.
 	// Frozen 판정은 FreezeGauge / Health 변경 시 수행.
+}
+
+void ADRPlayerState::HandleVoxelContainedTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	if (NewCount > 0)
+	{
+		StopFreezeDecay();
+		return;
+	}
+
+	if (!IsFrozen() &&
+		AbilitySystemComponent->GetNumericAttribute(
+			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()) >
+		KINDA_SMALL_NUMBER)
+	{
+		RestartFreezeDecay();
+	}
 }
 
 void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
@@ -572,6 +613,16 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 
 	StopFreezeDecay();
+
+	// 매몰은 게이지가 한계에 도달한 즉시 기존 DeadEffect 경로로 사망한다.
+	// 일반 빙결은 State.VoxelContained가 없으므로 기존 Frozen 상태만 유지한다.
+	if (AbilitySystemComponent->HasMatchingGameplayTag(
+		DRGameplayTags::State_VoxelContained))
+	{
+		AbilitySystemComponent->SetNumericAttributeBase(
+			UDRPlayerAttributeSet::GetHealthAttribute(),
+			0.f);
+	}
 }
 
 void ADRPlayerState::HandleFreezeGaugeResolved()
@@ -608,7 +659,9 @@ void ADRPlayerState::OnRep_PlayerName()
 
 void ADRPlayerState::RestartFreezeDecay()
 {
-	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen())
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen() ||
+	AbilitySystemComponent->HasMatchingGameplayTag(
+		DRGameplayTags::State_VoxelContained))
 	{
 		return;
 	}
@@ -633,7 +686,9 @@ void ADRPlayerState::RestartFreezeDecay()
 
 void ADRPlayerState::TickFreezeDecay()
 {
-	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen())
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsFrozen() ||
+	AbilitySystemComponent->HasMatchingGameplayTag(
+		DRGameplayTags::State_VoxelContained))
 	{
 		StopFreezeDecay();
 		return;

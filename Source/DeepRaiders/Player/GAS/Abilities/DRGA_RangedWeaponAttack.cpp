@@ -37,6 +37,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
@@ -323,6 +324,8 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 	}
 	
 	if (AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Frozen)
+		|| AbilitySystem->HasMatchingGameplayTag(
+			DRGameplayTags::State_VoxelContained)
 		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
 	{
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);

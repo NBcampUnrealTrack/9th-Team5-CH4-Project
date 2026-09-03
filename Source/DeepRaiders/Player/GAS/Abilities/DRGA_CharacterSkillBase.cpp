@@ -19,6 +19,7 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 }
 

@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Core/Interaction/DRInteractionTypes.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRInteractionComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
@@ -16,6 +17,7 @@ UDRGA_Interact::UDRGA_Interact()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 }
 
 void UDRGA_Interact::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

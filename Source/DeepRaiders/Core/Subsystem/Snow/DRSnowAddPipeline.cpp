@@ -4,6 +4,7 @@
 #include "DRSnowRenderUpdateBatcher.h"
 #include "DRSnowSurfaceEditor.h"
 #include "DRSnowVolumeStore.h"
+#include "DRSnowVoxelContainmentEvaluator.h"
 #include "DeepRaiders/Snow/DRSnowMaterialMapping.h"
 #include "Engine/World.h"
 #include "VoxelWorld.h"
@@ -12,11 +13,13 @@ FDRSnowAddPipeline::FDRSnowAddPipeline(
 	FDRSnowSurfaceEditor& InSurfaceEditor,
 	FDRSnowOwnershipStore& InOwnershipStore,
 	FDRSnowVolumeStore& InVolumeStore,
-	FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher)
+	FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher,
+	FDRSnowVoxelContainmentEvaluator& InContainmentEvaluator)
 	: SurfaceEditor(InSurfaceEditor)
 	, OwnershipStore(InOwnershipStore)
 	, VolumeStore(InVolumeStore)
 	, RenderUpdateBatcher(InRenderUpdateBatcher)
+	, ContainmentEvaluator(InContainmentEvaluator)
 {
 }
 
@@ -65,6 +68,7 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 		}
 
 		ApplyAddedSurfaceEdit(Request, EditResult);
+		ContainmentEvaluator.EvaluateAffectedAdd(Request, EditResult);
 		return VolumeStore.AddSnow(Request);
 	}
 
@@ -73,6 +77,7 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 	{
 		const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
 		ApplyAddedSurfaceEdit(Request, EditResult);
+		ContainmentEvaluator.EvaluateAffectedAdd(Request, EditResult);
 	}
 	return Result;
 }
@@ -99,7 +104,10 @@ FDRSnowAddResult FDRSnowAddPipeline::Replay(
 		? AuthoritativeAmount
 		: EditResult.AppliedAmount;
 	ApplyAddedSurfaceEdit(Request, EditResult, AppliedAmount);
-	RenderUpdateBatcher.Enqueue(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
+	RenderUpdateBatcher.Enqueue(
+		EditResult.VoxelWorld.Get(),
+		EditResult.EditedBounds,
+		EDRSnowRenderUpdateType::Geometry);
 	Result.AddedAmount = AppliedAmount;
 	return Result;
 }
@@ -175,7 +183,10 @@ void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 	if (RequestGeneration == CurrentStateGeneration)
 	{
 		ApplyAddedSurfaceEdit(Request, EditResult);
-		RenderUpdateBatcher.Enqueue(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
+		RenderUpdateBatcher.Enqueue(
+			EditResult.VoxelWorld.Get(),
+			EditResult.EditedBounds,
+			EDRSnowRenderUpdateType::Geometry);
 		if (Completion)
 		{
 			Completion(EditResult.AppliedAmount);

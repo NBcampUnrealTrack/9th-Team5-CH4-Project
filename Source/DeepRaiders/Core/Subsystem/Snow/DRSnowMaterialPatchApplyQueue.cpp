@@ -104,7 +104,8 @@ void FDRSnowMaterialPatchApplyQueue::HandlePatchCompleted(
 		{
 			RenderUpdateBatcher->Enqueue(
 				VoxelWorld.Get(),
-				EditedChunkBoundsEntry.Extend(1));
+				EditedChunkBoundsEntry.Extend(1),
+				EDRSnowRenderUpdateType::MaterialOnly);
 		}
 	}
 

@@ -11,6 +11,7 @@ class FDRSnowOwnershipStore;
 class FDRSnowRenderUpdateBatcher;
 class FDRSnowSurfaceEditor;
 class FDRSnowVolumeStore;
+class FDRSnowVoxelContainmentEvaluator;
 class UWorld;
 
 // 눈 추가의 동기 경로와 Directional 비동기 큐를 함께 소유한다.
@@ -22,7 +23,8 @@ public:
 		FDRSnowSurfaceEditor& InSurfaceEditor,
 		FDRSnowOwnershipStore& InOwnershipStore,
 		FDRSnowVolumeStore& InVolumeStore,
-		FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher);
+		FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher,
+		FDRSnowVoxelContainmentEvaluator& InContainmentEvaluator);
 
 	void Initialize(UWorld* InWorld, int32 InitialStateGeneration);
 	FDRSnowAddResult Execute(
@@ -62,6 +64,7 @@ private:
 	FDRSnowOwnershipStore& OwnershipStore;
 	FDRSnowVolumeStore& VolumeStore;
 	FDRSnowRenderUpdateBatcher& RenderUpdateBatcher;
+	FDRSnowVoxelContainmentEvaluator& ContainmentEvaluator;
 	TQueue<FPendingDirectionalAdd> PendingDirectionalAdds;
 	int32 CurrentStateGeneration = 0;
 	bool bDirectionalAddInProgress = false;

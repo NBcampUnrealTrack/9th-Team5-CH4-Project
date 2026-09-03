@@ -236,8 +236,16 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 
 	RetractStartLocation = FVector::ZeroVector;
 	PhaseElapsedTime = 0.f;
-	CurrentPhaseDuration = CalculatePhaseDuration(LaunchLocation, TargetLocation, HookTravelSpeed);
 	
+	/*
+ 	* GA가 RawMagnitude로 전달한 시간이 있으면 이를 우선한다.
+ 	* 값이 없는 기존 호출 경로에서는 Cue의 HookTravelSpeed를 fallback으로 사용한다.
+ 	*/
+	const float RequestedDuration =	FMath::IsFinite(Parameters.RawMagnitude) ? Parameters.RawMagnitude : 0.f;
+
+	CurrentPhaseDuration = RequestedDuration > 0.f ?
+		RequestedDuration : CalculatePhaseDuration(LaunchLocation, TargetLocation, HookTravelSpeed);
+
 	CableComponent->SetAttachEndToComponent(HookRoot);
 	CableComponent->EndLocation = FVector::ZeroVector;
 	CableComponent->SetVisibility(true, true);

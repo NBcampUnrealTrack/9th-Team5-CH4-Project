@@ -15,6 +15,7 @@ class FDRSnowAddPipeline;
 class FDRSnowMaterialPatchApplyQueue;
 class FDRSnowRemovalPipeline;
 class FDRSnowRenderUpdateBatcher;
+class FDRSnowVoxelContainmentEvaluator;
 
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
@@ -84,6 +85,7 @@ private:
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
+	TSharedPtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
 	TSharedPtr<FDRSnowRenderUpdateBatcher> RenderUpdateBatcher;
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
 	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;

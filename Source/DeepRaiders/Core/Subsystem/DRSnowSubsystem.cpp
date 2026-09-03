@@ -4,20 +4,23 @@
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowMaterialPatchApplyQueue.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowRemovalPipeline.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowRenderUpdateBatcher.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVoxelContainmentEvaluator.h"
 #include "Engine/World.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "VoxelWorld.h"
 
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
-	RenderUpdateBatcher = MakeShared<FDRSnowRenderUpdateBatcher>();
+	ContainmentEvaluator = MakeShared<FDRSnowVoxelContainmentEvaluator>();
+	RenderUpdateBatcher = MakeShared<FDRSnowRenderUpdateBatcher>(*ContainmentEvaluator);
 	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(VolumeStore);
 	RemovalPipeline = MakeShared<FDRSnowRemovalPipeline>(SurfaceEditor, OwnershipStore, VolumeStore);
 	AddPipeline = MakeShared<FDRSnowAddPipeline>(
 		SurfaceEditor,
 		OwnershipStore,
 		VolumeStore,
-		*RenderUpdateBatcher);
+		*RenderUpdateBatcher,
+		*ContainmentEvaluator);
 	MaterialPatchApplyQueue = MakeShared<FDRSnowMaterialPatchApplyQueue>();
 }
 

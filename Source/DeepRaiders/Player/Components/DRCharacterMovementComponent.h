@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayTagContainer.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "DRCharacterMovementComponent.generated.h"
 
 class FSavedMove_DRCharacter;
+class AVoxelWorld;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
@@ -18,6 +20,9 @@ enum class EDRCustomMovementMode : uint8
 
 	// 특정 액션 이름이 아닌 외부 이동 액션을 처리하는 모드
 	MovementAction = 1,
+
+	// 복셀 데이터가 캡슐 내부를 충분히 채워 collision 갱신 전에 움직임을 멈춘 상태
+	VoxelContained = 2,
 };
 
 UCLASS()
@@ -68,9 +73,20 @@ public:
 	/** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
 	virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 
-	// Falling 진입 전 얻은 횡방향 관성이 MaxWalkSpeed에 의해 즉시 제한되지 않도록 한다
+	// 명시적으로 보존 중인 공중 관성만 일반 Falling 최대 속도보다 우선한다.
 	virtual float GetMaxSpeed() const override;
 
+	// 이동 액션 종료 순간의 횡방향 속도를 Falling 최대 속도의 임시 하한으로 저장한다.
+	void BeginAirborneMomentumPreservation();
+
+	// Dash나 새 이동 액션처럼 현재 관성을 명시적으로 대체하는 동작에서 호출한다.
+	void ClearAirborneMomentumPreservation();
+
+	bool IsAirborneMomentumPreservationActive() const
+	{
+		return bAirborneMomentumPreservationActive;
+	}
+	
 	// 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
 	void SetCustomMovementMode(EDRCustomMovementMode NewMode);
 
@@ -79,8 +95,24 @@ public:
 
 	bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
 
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태에 진입한다. */
+	void EnterVoxelContainedMode();
+
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태를 해제한다. */
+	void ExitVoxelContainedMode();
+
 protected:
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
+
+	virtual bool CheckFall(
+		const FFindFloorResult& OldFloor,
+		const FHitResult& Hit,
+		const FVector& Delta,
+		const FVector& OldLocation,
+		float RemainingTime,
+		float TimeTick,
+		int32 Iterations,
+		bool bMustJump) override;
 
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	
@@ -94,19 +126,26 @@ protected:
 private:
 	void UnbindAbilitySystem();
 	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
+	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void ApplyMoveSpeedMultiplier(float Multiplier);
 
 	void PhysMovementAction(float DeltaTime, int32 Iterations);
 	void UpdateZiplineFacing(const FDRMovementActionState& State, float DeltaTime);
 	UDRMovementActionComponent* GetMovementActionComponent() const;
 
+	// 네트워크 보정으로 ActionState와 MovementMode가 어긋났을 때 다음 이동 갱신에서 복구한다.
+	void ReconcileMovementActionMode();
+	
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
+	bool ShouldKeepVoxelFloor(const FFindFloorResult& OldFloor, const FVector& OldLocation) const;
 
-	bool TryHandleZiplineRiderCollision(const FHitResult& Hit);
+	bool TryHandleZiplineBlockingCollision(const FHitResult& Hit);
 	
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
+	FDelegateHandle VoxelContainedTagChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
 
@@ -133,8 +172,19 @@ private:
 	 */
 	float ZiplineRailSpeed = 0.f;
 
+	/*
+ 	* 그래플 종료 이후부터 착지 전까지만 사용하는 속도 상한 상태다.
+ 	* 그래플 자체가 아니라 해당 이동 액션이 명시적으로 요청한 경우에만 활성화된다.
+ 	*/
+	bool bAirborneMomentumPreservationActive = false;
+	float PreservedLateralSpeed = 0.f;
+	
 	/** 현재 출력 상승 진행 시간 */
 	float JetpackSpoolElapsed = 0.f;
+
+	/** VoxelWorld 하단 경계 직전에서 floor가 사라져도 자연 낙하로 전환하지 않는 여유 거리. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	float VoxelLowerBoundaryTolerance = 2.f;
 
 	/** 제트팩 작동 직후의 초기 추진 가속도 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s^2"))

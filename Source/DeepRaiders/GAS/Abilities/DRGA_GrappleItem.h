@@ -13,6 +13,17 @@ class UDRItemDefinition;
 class UAbilityTask_WaitGameplayEvent;
 struct FGameplayEventData;
 
+// Targeting과 HookFlying에는 실제 MovementAction이 존재하지 않는다.
+// Grappling부터 아이템 소비, Custom Movement, 우클릭 취소가 활성화된다.
+enum class EDRGrapplePhase : uint8
+{
+    Inactive,
+    Targeting,
+    HookFlying,
+    Grappling,
+    Ending,
+};
+
 UCLASS()
 class DEEPRAIDERS_API UDRGA_GrappleItem : public UGameplayAbility
 {
@@ -57,9 +68,20 @@ private:
 
     int32 ResolveSessionId() const;
 
+    FVector ResolveViewDirection() const;
+    
     void StartTargeting();
     void StartCancelEventTask();
 
+    // 검증된 훅 정보를 저장하고 케이블 도착까지 일반 이동 상태로 대기한다.
+    bool BeginHookFlight(const FVector& InHookLocation, const FVector& InHookNormal);
+
+    // GA와 GameplayCue가 함께 사용할 훅 비행 시간을 계산한다.
+    float CalculateHookFlightDuration(const FVector& InHookLocation) const;
+
+    // 훅 연출 도착 시 로컬 예측 또는 서버 권한 이동을 시작한다.
+    void HandleHookFlightFinished();
+    
     EDRGrappleTargetValidationResult ValidateServerTargetData(
         const FGameplayAbilityTargetDataHandle& TargetData,
         FVector& OutTargetLocation,
@@ -67,9 +89,9 @@ private:
 
     FDRMovementActionState BuildMovementActionState(const FVector& InHookLocation) const;
 
-    bool StartPredictedMovement(const FVector& HookLocation, const FVector& HookNormal);
-
-    bool StartAuthoritativeMovement(const FVector& HookLocation, const FVector& HookNormal);
+    // BeginHookFlight에서 확정한 훅 정보를 사용하므로 위치와 노멀을 다시 전달하지 않는다.
+    bool StartPredictedMovement();
+    bool StartAuthoritativeMovement();
 
     void ApplyMovementActionTag();
     void RemoveMovementActionTag();
@@ -132,7 +154,12 @@ private:
     float MovementStartTimeSeconds = -1.f;
 
     FTimerHandle EndGrappleTimerHandle;
+    // 훅 비행 완료 콜백은 EndAbility 이후 실행되지 않도록 반드시 정리한다.
+    FTimerHandle HookFlightTimerHandle;
 
+    float HookFlightDuration = 0.f;
+    EDRGrapplePhase GrapplePhase = EDRGrapplePhase::Inactive;
+    
     EDRMovementActionEndReason PendingEndReason = EDRMovementActionEndReason::Invalidated;
 
     bool bMovementStarted = false;

@@ -3,8 +3,12 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
+#include "VoxelWorld.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
 
@@ -66,16 +70,20 @@ public:
     int8 SavedManualZiplineInput = 0;
     float SavedZiplineRailSpeed = 0.f;
     float SavedJetpackSpoolElapsed = 0.f;
-
+    uint8 bSavedAirborneMomentumPreservationActive : 1;
+    float SavedPreservedLateralSpeed = 0.f;
+    
     virtual void Clear() override
     {
         Super::Clear();
 
         bSavedWantsJetpack = false;
         bSavedZiplineActive = false;
+        bSavedAirborneMomentumPreservationActive = false;
         SavedManualZiplineInput = 0;
         SavedZiplineRailSpeed = 0.f;
         SavedJetpackSpoolElapsed = 0.f;
+        SavedPreservedLateralSpeed = 0.f;
     }
 
     virtual uint8 GetCompressedFlags() const override
@@ -107,11 +115,19 @@ public:
         const FSavedMove_DRCharacter* NewDRMove = static_cast<const FSavedMove_DRCharacter*>(NewMove.Get());
 
         if (bSavedWantsJetpack != NewDRMove->bSavedWantsJetpack
-            || SavedManualZiplineInput != NewDRMove->SavedManualZiplineInput)
+            || SavedManualZiplineInput != NewDRMove->SavedManualZiplineInput
+            || bSavedAirborneMomentumPreservationActive != NewDRMove->bSavedAirborneMomentumPreservationActive)
         {
             return false;
         }
 
+        // 보존 속도가 다른 Move를 합치면 correction replay에서 잘못된 속도 상한을 사용할 수 있다.
+        if (bSavedAirborneMomentumPreservationActive
+            && !FMath::IsNearlyEqual(SavedPreservedLateralSpeed,NewDRMove->SavedPreservedLateralSpeed))
+        {
+            return false;
+        }
+        
         /*
          * Zipline 가감속은 프레임 단위 rail-speed 적분을 사용한다.
          * Move를 합치면 같은 입력이어도 적분 결과가 달라질 수 있으므로
@@ -158,7 +174,11 @@ public:
         }
 
         bSavedWantsJetpack = Movement->bWantsJetpack;
+        bSavedAirborneMomentumPreservationActive = Movement->bAirborneMomentumPreservationActive;
 
+        SavedPreservedLateralSpeed = bSavedAirborneMomentumPreservationActive
+            ? Movement->PreservedLateralSpeed : 0.f;
+        
         const UDRMovementActionComponent* MovementAction =
             Character->FindComponentByClass<UDRMovementActionComponent>();
 
@@ -249,6 +269,15 @@ public:
             Movement->ZiplineRailSpeed = 0.f;
         }
 
+        /*
+        * 서버에는 GA가 동일한 상태를 독립적으로 생성한다.
+        * SavedMove 값은 소유 클라이언트가 correction replay를 수행할 때 과거 프레임 상태를 복원한다.
+        */
+        Movement->bAirborneMomentumPreservationActive = bSavedAirborneMomentumPreservationActive;
+
+        Movement->PreservedLateralSpeed = bSavedAirborneMomentumPreservationActive
+            ? FMath::Max(SavedPreservedLateralSpeed, 0.f) : 0.f;
+        
         Movement->JetpackSpoolElapsed =
             SavedJetpackSpoolElapsed;
     }
@@ -274,13 +303,197 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     GravityScale = 1.0f;
 }
 
+void UDRCharacterMovementComponent::EnterVoxelContainedMode()
+{
+    StopMovementImmediately();
+    ClearAccumulatedForces();
+    SetMovementMode(
+        MOVE_Custom,
+        static_cast<uint8>(EDRCustomMovementMode::VoxelContained));
+
+    if (IsValid(CharacterOwner) && CharacterOwner->HasAuthority())
+    {
+        CharacterOwner->ForceNetUpdate();
+    }
+}
+
+void UDRCharacterMovementComponent::ExitVoxelContainedMode()
+{
+    if (!IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+    {
+        return;
+    }
+    RestoreDefaultMovementMode();
+}
+
 void UDRCharacterMovementComponent::OnMovementUpdated(
 	float DeltaSeconds,
 	const FVector& OldLocation,
 	const FVector& OldVelocity)
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+    
+    // RepNotify 이후 추가 보정으로 MovementMode가 다시 변경된 경우에도 상태 불일치를 복구한다.
+    ReconcileMovementActionMode();
+    
 	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
+}
+
+bool UDRCharacterMovementComponent::CheckFall(
+    const FFindFloorResult& OldFloor,
+    const FHitResult& Hit,
+    const FVector& Delta,
+    const FVector& OldLocation,
+    float RemainingTime,
+    float TimeTick,
+    int32 Iterations,
+    bool bMustJump)
+{
+    // Voxel 데이터는 발밑이 고체라고 하지만 collision floor만 일시적으로
+    // 사라진 경우에는 Falling 전환을 시작하지 않는다.
+    if (ShouldKeepVoxelFloor(OldFloor, OldLocation))
+    {
+        return false;
+    }
+
+    return Super::CheckFall(
+        OldFloor,
+        Hit,
+        Delta,
+        OldLocation,
+        RemainingTime,
+        TimeTick,
+        Iterations,
+        bMustJump);
+}
+
+bool UDRCharacterMovementComponent::ShouldKeepVoxelFloor(
+    const FFindFloorResult& OldFloor,
+    const FVector& OldLocation) const
+{
+    if (!OldFloor.IsWalkableFloor() || !IsValid(CharacterOwner))
+    {
+        return false;
+    }
+
+    AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetActor());
+    if (!IsValid(VoxelWorld) && IsValid(OldFloor.HitResult.GetComponent()))
+    {
+        VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetComponent()->GetOwner());
+    }
+    if (!IsValid(VoxelWorld))
+    {
+        VoxelWorld = LastVoxelFloorWorld.Get();
+    }
+    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+    {
+        return false;
+    }
+
+    const UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+    if (!IsValid(Capsule))
+    {
+        return false;
+    }
+
+    const FVector fGravityDirection = GetGravityDirection();
+    const FVector OldCapsuleBottom =
+        OldLocation + fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const FVector LocalOldBottom = VoxelWorld->GlobalToLocalFloat(OldCapsuleBottom).ToFloat();
+    const FVoxelIntBox WorldBounds = VoxelWorld->GetWorldBounds();
+    const float Tolerance = FMath::Max(0.f, VoxelLowerBoundaryTolerance);
+
+    const bool bInsideHorizontalBounds =
+        LocalOldBottom.X >= WorldBounds.Min.X && LocalOldBottom.X < WorldBounds.Max.X &&
+        LocalOldBottom.Y >= WorldBounds.Min.Y && LocalOldBottom.Y < WorldBounds.Max.Y;
+
+    if (bInsideHorizontalBounds && LocalOldBottom.Z <= WorldBounds.Min.Z + Tolerance)
+    {
+        return true;
+    }
+
+    if (!UpdatedComponent)
+    {
+        return false;
+    }
+
+    // OldLocation이 아닌 현재 캡슐 중심을 사용한다. 그렇지 않으면 정상적으로
+    // 복셀 절벽을 걸어 나갈 때도 이전 바닥을 지지로 오판할 수 있다.
+    const FVector CurrentCapsuleBottom =
+        UpdatedComponent->GetComponentLocation() +
+        fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const float ProbeRadius = Capsule->GetScaledCapsuleRadius() * 0.5f;
+    const FVector Forward = CharacterOwner->GetActorForwardVector();
+    const FVector Right = CharacterOwner->GetActorRightVector();
+    const FVector ColumnOffsets[] =
+    {
+        FVector::ZeroVector,
+        Forward * ProbeRadius,
+        -Forward * ProbeRadius,
+        Right * ProbeRadius,
+        -Right * ProbeRadius
+    };
+    constexpr float ProbeDepthsInVoxels[] = { 0.25f, 0.75f, 1.25f };
+    const FVector LocalGravityDirection =
+        (VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + fGravityDirection) -
+         VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom))
+        .ToFloat()
+        .GetSafeNormal();
+    if (LocalGravityDirection.IsNearlyZero())
+    {
+        return false;
+    }
+
+    FIntVector SamplePositions[UE_ARRAY_COUNT(ColumnOffsets)][UE_ARRAY_COUNT(ProbeDepthsInVoxels)];
+    FVoxelIntBoxWithValidity LockBounds;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FVector LocalColumn =
+                VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + ColumnOffsets[ColumnIndex]).ToFloat();
+            const FVector LocalSample =
+                LocalColumn + LocalGravityDirection * ProbeDepthsInVoxels[DepthIndex];
+            const FIntVector VoxelPosition(
+                FMath::RoundToInt(LocalSample.X),
+                FMath::RoundToInt(LocalSample.Y),
+                FMath::RoundToInt(LocalSample.Z));
+            SamplePositions[ColumnIndex][DepthIndex] = VoxelPosition;
+            if (WorldBounds.Contains(VoxelPosition))
+            {
+                LockBounds += VoxelPosition;
+            }
+        }
+    }
+
+    if (!LockBounds.IsValid())
+    {
+        return false;
+    }
+
+    FVoxelData& Data = VoxelWorld->GetData();
+    FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
+
+    int32 SolidColumnCount = 0;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        bool bColumnHasSolidSupport = false;
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FIntVector& VoxelPosition = SamplePositions[ColumnIndex][DepthIndex];
+            if (WorldBounds.Contains(VoxelPosition) && !Data.GetValue(VoxelPosition, 0).IsEmpty())
+            {
+                bColumnHasSolidSupport = true;
+                break;
+            }
+        }
+
+        SolidColumnCount += bColumnHasSolidSupport ? 1 : 0;
+    }
+
+    // 발가락 정도의 일부 접촉으로는 이동을 막지 않고, 캡슐 하단의
+    // 다수 영역에 실제 고체 voxel이 있을 때만 floor 소실을 무시한다.
+    return SolidColumnCount >= 3;
 }
 
 void UDRCharacterMovementComponent::OnMovementModeChanged(
@@ -319,6 +532,15 @@ void UDRCharacterMovementComponent::OnMovementModeChanged(
 		ZiplineRailSpeed = 0.f;
 	}
 
+    /*
+    * 그래플 후속 관성은 Falling에서만 유효하다.
+    * Walking, Swimming 또는 다른 이동 모드로 바뀌면 이전 속도 상한을 재사용하지 않는다.
+    */
+    if (bAirborneMomentumPreservationActive && MovementMode != MOVE_Falling)
+    {
+        ClearAirborneMomentumPreservation();
+    }
+    
 	/*
 	 * 진단 로그용 상태.
 	 */
@@ -360,9 +582,22 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             this,
             &ThisClass::HandleMoveSpeedMultiplierChanged);
 
+    VoxelContainedTagChangedDelegateHandle =
+        AbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .AddUObject(
+            this,
+            &ThisClass::HandleVoxelContainedTagChanged);
+
     ApplyMoveSpeedMultiplier(
         AbilitySystemComponent->GetNumericAttribute(
             UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
+
+    HandleVoxelContainedTagChanged(
+        DRGameplayTags::State_VoxelContained,
+        AbilitySystemComponent->GetTagCount(
+            DRGameplayTags::State_VoxelContained));
 }
 
 void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
@@ -393,7 +628,17 @@ void UDRCharacterMovementComponent::UnbindAbilitySystem()
         .Remove(MoveSpeedChangedDelegateHandle);
     }
 
+    if (BoundAbilitySystemComponent.IsValid()
+        && VoxelContainedTagChangedDelegateHandle.IsValid())
+    {
+        BoundAbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .Remove(VoxelContainedTagChangedDelegateHandle);
+    }
+
     MoveSpeedChangedDelegateHandle.Reset();
+	VoxelContainedTagChangedDelegateHandle.Reset();
     BoundAbilitySystemComponent.Reset();
 }
 
@@ -401,6 +646,19 @@ void UDRCharacterMovementComponent::HandleMoveSpeedMultiplierChanged(
     const FOnAttributeChangeData& Data)
 {
     ApplyMoveSpeedMultiplier(Data.NewValue);
+}
+
+void UDRCharacterMovementComponent::HandleVoxelContainedTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		EnterVoxelContainedMode();
+		return;
+	}
+
+	ExitVoxelContainedMode();
 }
 
 void UDRCharacterMovementComponent::ApplyMoveSpeedMultiplier(float Multiplier)
@@ -469,10 +727,12 @@ void UDRCharacterMovementComponent::SetBase(
     // MovementBase로 잡히면 FNetGUIDCache::SupportsObject 경고가 발생한다.
     if (NewBase && NewBase->IsA<UVoxelProceduralMeshComponent>())
     {
+        LastVoxelFloorWorld = Cast<AVoxelWorld>(NewBase->GetOwner());
         Super::SetBase(nullptr, NAME_None, bNotifyActor);
         return;
     }
 
+    LastVoxelFloorWorld.Reset();
     Super::SetBase(
         NewBase,
         BoneName,
@@ -489,6 +749,9 @@ void UDRCharacterMovementComponent::ProcessLanded(
         AirControl = AirControlBeforeSuperJump;
         bSuperJumpAirControlActive = false;
     }
+    
+    // 지면 충돌이 그래플 후속 관성 상태의 명확한 종료 지점이다.
+    ClearAirborneMomentumPreservation();
 
     Super::ProcessLanded(Hit, RemainingTime, Iterations);
 }
@@ -513,16 +776,32 @@ float UDRCharacterMovementComponent::GetMaxSpeed() const
 {
     const float ConfiguredMaxSpeed = Super::GetMaxSpeed();
     
-    if (MovementMode != MOVE_Falling)
+    if (MovementMode != MOVE_Falling || !bAirborneMomentumPreservationActive)
     {
         return ConfiguredMaxSpeed;
     }
     
-    // 이동 액션으로 얻은 현재 횡방향 속도는 Falling 진입 후에도 허용한다.
-    // 현재 속도보다 높은 값을 새로 제공하지 않으므로 일반 점프의 최대 이동 속도는 그대로 유지된다.
-    const float CurrentLateralSpeed = ProjectToGravityFloor(Velocity).Size();
-    
-    return FMath::Max(ConfiguredMaxSpeed, CurrentLateralSpeed);
+    /*
+     * 현재 속도를 매 프레임 읽지 않고 그래플 종료 순간 저장한 값만 사용한다.
+     * 따라서 일반 점프, Dash, Jetpack의 모든 Falling에 전역으로 관성 보존이 적용되지 않는다.
+     */
+    return FMath::Max(ConfiguredMaxSpeed, PreservedLateralSpeed);
+}
+
+void UDRCharacterMovementComponent::BeginAirborneMomentumPreservation()
+{
+    /*
+     * 수직 속도는 Falling 중력 계산에 맡긴다.
+     * 여기서는 MaxWalkSpeed에 의해 갑자기 잘리던 중력 평면상의 속도만 저장한다.
+     */
+    PreservedLateralSpeed = ProjectToGravityFloor(Velocity).Size();
+    bAirborneMomentumPreservationActive = PreservedLateralSpeed > KINDA_SMALL_NUMBER;
+}
+
+void UDRCharacterMovementComponent::ClearAirborneMomentumPreservation()
+{
+    bAirborneMomentumPreservationActive = false;
+    PreservedLateralSpeed = 0.f;
 }
 
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
@@ -532,6 +811,12 @@ void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode 
         ExitCustomMovementMode();
         return;
     }
+    
+    /*
+    * 새 이동 액션은 이전 그래플이 남긴 Falling 속도 상한을 대체한다.
+    * 그래플 종료 시에는 이 함수를 거치지 않고 ExitCustomMovementMode를 사용하므로 보존 상태가 유지된다.
+    */
+    ClearAirborneMomentumPreservation();
     
     SetMovementMode(MOVE_Custom, static_cast<uint8>(NewMode)); 
 }
@@ -563,6 +848,33 @@ UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComp
     }
     
     return CharacterOwner->FindComponentByClass<UDRMovementActionComponent>();
+}
+
+void UDRCharacterMovementComponent::ReconcileMovementActionMode()
+{
+    if (!IsValid(CharacterOwner)
+        || (!CharacterOwner->HasAuthority() && !CharacterOwner->IsLocallyControlled()))
+    {
+        return;
+    }
+
+    const UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
+    const bool bActionActive = IsValid(MovementAction) && MovementAction->IsMovementActionActive();
+    const bool bMovementModeActive = IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction);
+
+    if (bActionActive && !bMovementModeActive)
+    {
+        /*
+         * 네트워크 위치 보정이 CustomMode를 Falling 등으로 덮어써도
+         * 유효한 ActionState가 남아 있다면 다음 프레임부터 이동 시뮬레이션을 복구한다.
+         */
+        SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+    }
+    else if (!bActionActive && bMovementModeActive)
+    {
+        // 반대로 액션 상태가 끝났는데 CustomMode만 남은 경우도 일반 이동으로 복귀시킨다.
+        ExitCustomMovementMode();
+    }    
 }
 
 void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
@@ -602,67 +914,85 @@ void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
     Velocity = ExitVelocity;
 }
 
-bool UDRCharacterMovementComponent::TryHandleZiplineRiderCollision(const FHitResult& Hit)
+bool UDRCharacterMovementComponent::TryHandleZiplineBlockingCollision(const FHitResult& Hit)
 {
+    /*
+     * Zipline 충돌 종료는 authoritative state 변경이므로 서버만 판정한다.
+     * 소유 클라이언트는 서버의 ActionState / MovementMode 복제를 받아 정리된다.
+     */
     if (!IsValid(CharacterOwner) || !CharacterOwner->HasAuthority())
     {
         return false;
     }
 
+    UDRMovementActionComponent* ThisAction = GetMovementActionComponent();
+
+    if (!IsValid(ThisAction) || !ThisAction->IsZiplineActive())
+    {
+        return false;
+    }
+
+    /*
+     * 상대도 Zipline 탑승자라면 기존 정책대로 양쪽을 동시에 해제한다.
+     * 한쪽만 끝내면 상대는 Rail simulation을 계속하므로 서버에서 같은 시점에 종료한다.
+     */
     ACharacter* OtherCharacter = Cast<ACharacter>(Hit.GetActor());
 
-    if (!IsValid(OtherCharacter) || OtherCharacter == CharacterOwner)
+    if (IsValid(OtherCharacter) && OtherCharacter != CharacterOwner)
     {
-        return false;
-    }
+        UDRMovementActionComponent* OtherAction =
+            OtherCharacter->FindComponentByClass<UDRMovementActionComponent>();
 
-    UDRMovementActionComponent* ThisAction = GetMovementActionComponent();
-    UDRMovementActionComponent* OtherAction = OtherCharacter->FindComponentByClass<UDRMovementActionComponent>();
-    UDRCharacterMovementComponent* OtherMovement = Cast<UDRCharacterMovementComponent>(OtherCharacter->GetCharacterMovement());
-    if (!IsValid(ThisAction) || !IsValid(OtherAction) || !IsValid(OtherMovement))
-    {
-        return false;
+        UDRCharacterMovementComponent* OtherMovement =
+            Cast<UDRCharacterMovementComponent>(
+                OtherCharacter->GetCharacterMovement());
+
+        if (IsValid(OtherAction)
+            && IsValid(OtherMovement)
+            && OtherAction->IsZiplineActive())
+        {
+            ThisAction->EndMovementAction(
+                EDRMovementActionEndReason::Collision);
+
+            OtherAction->EndMovementAction(
+                EDRMovementActionEndReason::Collision);
+
+            if (IsCustomMovementModeActive(
+                    EDRCustomMovementMode::MovementAction))
+            {
+                ExitCustomMovementMode();
+            }
+
+            if (OtherMovement->IsCustomMovementModeActive(
+                    EDRCustomMovementMode::MovementAction))
+            {
+                OtherMovement->ExitCustomMovementMode();
+            }
+
+            CharacterOwner->ForceNetUpdate();
+            OtherCharacter->ForceNetUpdate();
+
+            return true;
+        }
     }
 
     /*
-     * 단순 Character 충돌이 아니라,
-     * 양쪽 모두 실제 Zipline 탑승 중일 때만
-     * Rider Collision으로 처리한다.
-     */
-    if (!ThisAction->IsZiplineActive() || !OtherAction->IsZiplineActive())
-    {
-        return false;
-    }
-
-    /*
-     * 서버가 두 Zipline Action을 동시에 종료한다.
+     * Zipline 이동 중 World blocking collision이 발생하면
+     * 현재 Rider만 Rail에서 해제한다.
      *
-     * 한쪽만 종료하면 같은 충돌에서 상대는 계속 Rail을
-     * 진행하므로 양쪽 모두 동일한 authoritative 결과를 갖게 한다.
+     * 눈/지형/벽 등 구체적인 Actor 타입을 CMC가 알 필요는 없다.
+     * Pawn Capsule을 실제로 Block하는 장애물이면 동일한 정책을 적용한다.
      */
-    ThisAction->EndMovementAction(EDRMovementActionEndReason::Collision);
-    OtherAction->EndMovementAction(EDRMovementActionEndReason::Collision);
+    ThisAction->EndMovementAction(
+        EDRMovementActionEndReason::Collision);
 
-    /*
-     * EndMovementAction은 Action State 종료이고,
-     * 실제 CMC CustomMode도 별도로 빠져나와야 한다.
-     */
-    if (IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+    if (IsCustomMovementModeActive(
+            EDRCustomMovementMode::MovementAction))
     {
         ExitCustomMovementMode();
     }
 
-    if (OtherMovement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
-    {
-        OtherMovement->ExitCustomMovementMode();
-    }
-
-    /*
-     * ActionState 종료 + MovementMode 변경을
-     * 가능한 빨리 각 클라이언트에 전달한다.
-     */
     CharacterOwner->ForceNetUpdate();
-    OtherCharacter->ForceNetUpdate();
 
     return true;
 }
@@ -671,6 +1001,10 @@ void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations
 {
     switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
     {
+    case EDRCustomMovementMode::VoxelContained:
+        StopMovementImmediately();
+        ClearAccumulatedForces();
+        return;
     case EDRCustomMovementMode::MovementAction:
         PhysMovementAction(deltaTime, Iterations);
         return;
@@ -956,10 +1290,10 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
             HandleImpact(Hit, TimeTick, Adjusted);
             
             /*
-             * 서버에서 Zipline Rider끼리 Capsule Blocking Hit가 발생하면
-             * 두 Rider의 Zipline을 즉시 종료한다.
+             * 서버에서 Zipline 이동이 BlockingHit에 막히면 즉시 하차한다.
+             * 상대도 Zipline Rider라면 양쪽을 동시에 하차시킨다.
              */
-            if (TryHandleZiplineRiderCollision(Hit))
+            if (TryHandleZiplineBlockingCollision(Hit))
             {
                 if (HasValidData())
                 {
