@@ -216,10 +216,59 @@ bool ADRZiplineRope::Interact_Implementation(APawn* Interactor)
 	// Facing은 이동/animation presentation에 사용하며 gameplay rail은 고정이다.
 	if (RideMode == EDRZiplineRideMode::AutoTraverse)
 	{
-		State.ZiplineAcceleration = AutoAcceleration;
-		const FVector TravelAxis = (State.GetZiplineRideTargetLocation() - State.GetZiplineRideStartLocation()).GetSafeNormal();
-		const float SafeEntrySpeedCap = FMath::Min(FMath::Max(AutoMaxEntrySpeed, 0.f), MaxSpeed);
-		State.ZiplineInitialSpeed = TravelAxis.IsNearlyZero() ? 0.f : FMath::Clamp(FVector::DotProduct(Movement->Velocity, TravelAxis), 0.f, SafeEntrySpeedCap);
+		const FVector TravelAxis =
+			(State.GetZiplineRideTargetLocation()
+				- State.GetZiplineRideStartLocation())
+			.GetSafeNormal();
+
+		const float SafeUpwardThreshold =
+			FMath::Clamp(
+				UpwardDirectionThreshold,
+				0.f,
+				1.f);
+
+		const bool bUpwardRide =
+			!TravelAxis.IsNearlyZero()
+			&& TravelAxis.Z > SafeUpwardThreshold;
+
+		/*
+		 * 상승 Auto는 반복 탑승으로 고도를 빠르게 확보하는 것을 억제하기 위해
+		 * 일반 Auto보다 낮은 가속도와 진입 속도 상한을 사용한다.
+		 *
+		 * 현재는 별도 가속 곡선을 만들지 않고 세션 State 생성 시
+		 * effective parameter만 결정해 기존 deterministic rail simulation을 그대로 재사용한다.
+		 */
+		const float AccelerationMultiplier =
+			bUpwardRide
+				? FMath::Max(
+					UpwardAutoAccelerationMultiplier,
+					0.f)
+				: 1.f;
+
+		State.ZiplineAcceleration =
+			AutoAcceleration * AccelerationMultiplier;
+
+		const float ConfiguredEntrySpeedCap =
+			bUpwardRide
+				? UpwardAutoMaxEntrySpeed
+				: AutoMaxEntrySpeed;
+
+		const float SafeEntrySpeedCap =
+			FMath::Min(
+				FMath::Max(
+					ConfiguredEntrySpeedCap,
+					0.f),
+				MaxSpeed);
+
+		State.ZiplineInitialSpeed =
+			TravelAxis.IsNearlyZero()
+				? 0.f
+				: FMath::Clamp(
+					FVector::DotProduct(
+						Movement->Velocity,
+						TravelAxis),
+					0.f,
+					SafeEntrySpeedCap);
 	}
 	else
 	{
@@ -306,8 +355,35 @@ bool ADRZiplineRope::Interact_Implementation(APawn* Interactor)
 
 bool ADRZiplineRope::GetInteractionPromptData_Implementation(APawn* Interactor, FDRInteractionPromptData& OutPromptData) const
 {
-	OutPromptData.ActionText = NSLOCTEXT("DRInteraction", "ZiplineRideAction", "탑승");
-	OutPromptData.TitleText = NSLOCTEXT("DRInteraction", "ZiplineTitle", "짚라인");
+	const ADRPlayerCharacter* Character =
+		Cast<ADRPlayerCharacter>(Interactor);
+
+	const UDRMovementActionComponent* MovementAction =
+		IsValid(Character)
+			? Character->GetMovementActionComponent()
+			: nullptr;
+
+	const bool bIsRidingZipline =
+		IsValid(MovementAction)
+		&& MovementAction->IsZiplineActive();
+
+	OutPromptData.ActionText =
+		bIsRidingZipline
+			? NSLOCTEXT(
+				"DRInteraction",
+				"ZiplineReleaseAction",
+				"해제")
+			: NSLOCTEXT(
+				"DRInteraction",
+				"ZiplineRideAction",
+				"탑승");
+
+	OutPromptData.TitleText =
+		NSLOCTEXT(
+			"DRInteraction",
+			"ZiplineTitle",
+			"짚라인");
+
 	OutPromptData.DetailText = FText::GetEmpty();
 
 	return true;

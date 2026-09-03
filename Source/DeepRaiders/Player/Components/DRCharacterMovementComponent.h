@@ -138,7 +138,7 @@ private:
 	void RestoreDefaultMovementMode();
 	bool ShouldKeepVoxelFloor(const FFindFloorResult& OldFloor, const FVector& OldLocation) const;
 
-	bool TryHandleZiplineRiderCollision(const FHitResult& Hit);
+	bool TryHandleZiplineBlockingCollision(const FHitResult& Hit);
 	
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
 	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;

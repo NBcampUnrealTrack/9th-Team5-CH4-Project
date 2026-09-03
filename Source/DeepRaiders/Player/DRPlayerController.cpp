@@ -31,6 +31,7 @@
 
 #include "DeepRaiders/Player/Components/DRTeleportComponent.h"
 #include "DeepRaiders/Player/Components/DRStartingSelectionComponent.h"
+#include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
@@ -720,8 +721,51 @@ void ADRPlayerController::HandleScoreboardCompleted(const FInputActionValue&)
 	}
 }
 
+bool ADRPlayerController::TryToggleZiplineInteraction(int32 InputId)
+{
+	if (InputId
+		!= static_cast<int32>(
+			EDRAbilityInputId::Interaction))
+	{
+		return false;
+	}
+
+	ADRPlayerCharacter* PlayerCharacter =
+		GetDRPlayerCharacter();
+
+	if (!IsValid(PlayerCharacter))
+	{
+		return false;
+	}
+
+	UDRMovementActionComponent* MovementAction =
+		PlayerCharacter->GetMovementActionComponent();
+
+	if (!IsValid(MovementAction)
+		|| !MovementAction->IsZiplineActive())
+	{
+		return false;
+	}
+
+	/*
+	 * 탑승 중 Interaction(E)은 새 GA_Interact를 발동하지 않고
+	 * 현재 Zipline Session의 취소 요청으로 소비한다.
+	 *
+	 * RequestCancelZipline이 SessionId를 서버에서 검증하므로
+	 * 별도 Interaction RPC를 추가하지 않는다.
+	 */
+	MovementAction->RequestCancelZipline();
+
+	return true;
+}
+
 void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 {
+	if (TryToggleZiplineInteraction(InputId))
+	{
+		return;
+	}
+
 	if (TrySendSecondaryMovementCancelEvent(InputId))
 	{
 		ConsumedStartedInputIds.Add(InputId);
