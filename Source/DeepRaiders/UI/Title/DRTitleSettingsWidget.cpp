@@ -1,5 +1,6 @@
 #include "DRTitleSettingsWidget.h"
 
+#include "DRTitleComboBoxSettingRowWidget.h"
 #include "DRTitleSettingRowWidget.h"
 #include "DRTitleTextSettingRowWidget.h"
 #include "Components/Overlay.h"
@@ -11,6 +12,14 @@
 namespace DRTitleSettings
 {
 	constexpr float MaxVolumeDisplay = 100.f;
+	constexpr int32 ResolutionPercentages[] = { 100, 75, 50, 25 };
+
+	const EWindowMode::Type ScreenModes[] =
+	{
+		EWindowMode::Fullscreen,
+		EWindowMode::WindowedFullscreen,
+		EWindowMode::Windowed
+	};
 }
 
 bool UDRTitleSettingsWidget::Initialize()
@@ -28,6 +37,7 @@ bool UDRTitleSettingsWidget::Initialize()
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
 	LoadSettingsIntoSliders();
 	LoadPlayerNameIntoRow();
+	LoadDisplaySettingsIntoRows();
 	if (UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
 	{
 		UserSettings->ApplyAudioSettings(this);
@@ -40,6 +50,7 @@ void UDRTitleSettingsWidget::Show()
 {
 	LoadSettingsIntoSliders();
 	LoadPlayerNameIntoRow();
+	LoadDisplaySettingsIntoRows();
 	Overlay_Settings->SetVisibility(ESlateVisibility::Visible);
 	if (ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
 	{
@@ -95,7 +106,8 @@ void UDRTitleSettingsWidget::HandleSettingsApplyClicked()
 			FText::FromString(UserSettings->GetPlayerDisplayName()));
 	}
 
-	UserSettings->ApplySettings(false);
+	ApplyDisplaySettings();
+
 	UserSettings->SaveSettings();
 	UserSettings->ApplyAudioSettings(this);
 
@@ -111,6 +123,7 @@ void UDRTitleSettingsWidget::HandleSettingsCancelClicked()
 {
 	LoadSettingsIntoSliders();
 	LoadPlayerNameIntoRow();
+	LoadDisplaySettingsIntoRows();
 	Hide();
 }
 
@@ -147,4 +160,82 @@ void UDRTitleSettingsWidget::LoadPlayerNameIntoRow()
 
 	Settings_PlayerName->SetSettingText(
 		FText::FromString(UserSettings->GetPlayerDisplayName()));
+}
+
+void UDRTitleSettingsWidget::LoadDisplaySettingsIntoRows()
+{
+	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
+	if (!IsValid(UserSettings))
+	{
+		return;
+	}
+
+	if (IsValid(Settings_ScreenMode))
+	{
+		Settings_ScreenMode->SetOptions({ TEXT("전체화면"), TEXT("Borderless"), TEXT("창모드") });
+		Settings_ScreenMode->SetSelectedIndex(static_cast<int32>(UserSettings->GetFullscreenMode()));
+	}
+
+	if (!IsValid(Settings_Resolution))
+	{
+		return;
+	}
+
+	ResolutionOptions.Reset();
+	TArray<FString> ResolutionLabels;
+	const FIntPoint DesktopResolution = UserSettings->GetDesktopResolution();
+	for (const int32 Percentage : DRTitleSettings::ResolutionPercentages)
+	{
+		const FIntPoint Resolution(
+			FMath::RoundToInt(DesktopResolution.X * Percentage / 100.f),
+			FMath::RoundToInt(DesktopResolution.Y * Percentage / 100.f));
+		ResolutionOptions.Add(Resolution);
+		ResolutionLabels.Add(FString::Printf(
+			TEXT("%d x %d (%d%%)"), Resolution.X, Resolution.Y, Percentage));
+	}
+
+	Settings_Resolution->SetOptions(ResolutionLabels);
+	int32 SelectedResolutionIndex = ResolutionOptions.IndexOfByKey(
+		UserSettings->GetScreenResolution());
+	if (SelectedResolutionIndex == INDEX_NONE)
+	{
+		SelectedResolutionIndex = 0;
+	}
+	Settings_Resolution->SetSelectedIndex(SelectedResolutionIndex);
+}
+
+void UDRTitleSettingsWidget::ApplyDisplaySettings()
+{
+	UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
+	if (!IsValid(UserSettings))
+	{
+		return;
+	}
+
+	bool bHasDisplaySetting = false;
+	if (IsValid(Settings_ScreenMode))
+	{
+		const int32 ScreenModeIndex = Settings_ScreenMode->GetSelectedIndex();
+		if (ScreenModeIndex >= 0 && ScreenModeIndex < UE_ARRAY_COUNT(DRTitleSettings::ScreenModes))
+		{
+			UserSettings->SetFullscreenMode(DRTitleSettings::ScreenModes[ScreenModeIndex]);
+			bHasDisplaySetting = true;
+		}
+	}
+
+	if (IsValid(Settings_Resolution))
+	{
+		const int32 ResolutionIndex = Settings_Resolution->GetSelectedIndex();
+		if (ResolutionOptions.IsValidIndex(ResolutionIndex))
+		{
+			UserSettings->SetScreenResolution(ResolutionOptions[ResolutionIndex]);
+			bHasDisplaySetting = true;
+		}
+	}
+
+	if (bHasDisplaySetting)
+	{
+		// 화면 옵션이 연결된 경우에만 창 상태를 변경한다.
+		UserSettings->ApplyResolutionSettings(false);
+	}
 }

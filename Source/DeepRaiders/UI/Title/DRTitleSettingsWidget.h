@@ -5,6 +5,7 @@
 #include "DRTitleSettingsWidget.generated.h"
 
 class UDRTitleSettingRowWidget;
+class UDRTitleComboBoxSettingRowWidget;
 class UDRTitleTextSettingRowWidget;
 class UOverlay;
 
@@ -49,8 +50,20 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRTitleTextSettingRowWidget> Settings_PlayerName;
 
+	/** 화면 모드 선택 Row. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleComboBoxSettingRowWidget> Settings_ScreenMode;
+
+	/** 해상도 선택 Row. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UDRTitleComboBoxSettingRowWidget> Settings_Resolution;
+
 private:
 	void Hide();
 	void LoadSettingsIntoSliders();
 	void LoadPlayerNameIntoRow();
+	void LoadDisplaySettingsIntoRows();
+	void ApplyDisplaySettings();
+
+	TArray<FIntPoint> ResolutionOptions;
 };
