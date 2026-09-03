@@ -583,6 +583,36 @@ bool ADRPlayerCharacter::CalculateGameplayFireOrigin(const FVector& AimDirection
 	return !OutFireOrigin.ContainsNaN();
 }
 
+void ADRPlayerCharacter::MulticastStartSharedSearchReveal_Implementation(
+	int32 SourceTeamId,
+	int32 SourcePlayerId,
+	FGuid RevealId,
+	float Duration,
+	int32 StencilValue)
+{
+	const APlayerController* LocalController = GetWorld()->GetFirstPlayerController();
+	const ADRPlayerState* LocalPlayerState = IsValid(LocalController)
+		? LocalController->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+	if (!IsValid(LocalPlayerState)
+		|| LocalPlayerState->GetPlayerId() == SourcePlayerId
+		|| LocalPlayerState->GetTeamId() != SourceTeamId
+		|| !IsValid(SilhouetteComponent))
+	{
+		return;
+	}
+
+	SilhouetteComponent->StartSearchReveal(RevealId, Duration, StencilValue);
+}
+
+void ADRPlayerCharacter::MulticastStopSharedSearchReveal_Implementation(FGuid RevealId)
+{
+	if (IsValid(SilhouetteComponent))
+	{
+		SilhouetteComponent->StopSearchReveal(RevealId);
+	}
+}
+
 bool ADRPlayerCharacter::CalculateSkillFireOrigin(FVector& OutFireOrigin) const
 {
 	if (!IsValid(SkillFireAnchor))

@@ -64,7 +64,7 @@ bool UDRShopComponent::CanPurchasePerk(
 {
 	return IsValid(PerkComponent)
 		&& IsValid(PerkDefinition)
-		&& PerkComponent->CanAddPerk(PerkDefinition)
+		&& PerkComponent->CanAddPerkAutomatically(PerkDefinition)
 		&& CanAfford(PerkDefinition, AvailableCoins);
 }
 

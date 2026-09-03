@@ -166,6 +166,11 @@ namespace DRGameplayTags
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_Search_TeamShare,
+		"Perk.Skill.Search.TeamShare",
+		"Shares the search skill reveal with teammates.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,

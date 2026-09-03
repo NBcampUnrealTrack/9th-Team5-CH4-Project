@@ -72,6 +72,12 @@ public:
 	/** 서버에서 퍽을 추가하고 GameplayEffect를 즉시 적용한다. */
 	bool AddPerk(UDRPerkDefinition* PerkDefinition, FGameplayTag EquippedSkillId = FGameplayTag());
 
+	/** 공용 퍽 또는 유일하게 호환되는 장착 스킬 퍽을 추가할 수 있는지 확인한다. */
+	bool CanAddPerkAutomatically(const UDRPerkDefinition* PerkDefinition) const;
+
+	/** 공용 퍽 또는 유일하게 호환되는 장착 스킬 퍽을 자동으로 추가한다. */
+	bool AddPerkAutomatically(UDRPerkDefinition* PerkDefinition);
+
 	/** 현재 장착된 스킬 정의를 검증해 퍽을 장착한다. */
 	bool AddPerkToSkill(UDRPerkDefinition* PerkDefinition, const UDRSkillDefinition* SkillDefinition);
 
@@ -105,6 +111,10 @@ public:
 	FDRPerksChangedSignature OnPerksChanged;
 
 private:
+	/** 호환되는 장착 스킬이 정확히 하나일 때 해당 스킬을 반환한다. */
+	const UDRSkillDefinition* FindUniqueCompatibleEquippedSkill(
+		const UDRPerkDefinition* PerkDefinition) const;
+
 	/** 표시 가능한 범위 안에서 비어 있는 첫 슬롯을 반환한다. */
 	int32 FindAvailableSlotIndex() const;
 

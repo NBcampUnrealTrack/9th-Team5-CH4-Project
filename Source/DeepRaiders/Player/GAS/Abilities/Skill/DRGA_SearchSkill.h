@@ -4,15 +4,6 @@
 #include "DeepRaiders/Player/GAS/Abilities/DRGA_CharacterSkillBase.h"
 #include "DRGA_SearchSkill.generated.h"
 
-class UPrimitiveComponent;
-
-struct FDRSearchSilhouetteState
-{
-	TWeakObjectPtr<UPrimitiveComponent> Component;
-	bool IsRenderCustomDepthEnabled = false;
-	int32 StencilValue = 0;
-};
-
 UCLASS()
 class DEEPRAIDERS_API UDRGA_SearchSkill : public UDRGA_CharacterSkillBase
 {
@@ -45,9 +36,12 @@ protected:
 	int32 StencilValue = 1;
 
 private:
-	void RevealEnemies(const ADRPlayerCharacter* Character);
-	void RevealActor(AActor* Actor);
-	void RestoreSilhouettes();
+	void RevealEnemies(const ADRPlayerCharacter* Character, bool IsSharedReveal);
+	void StopReveals(bool IsSharedReveal);
+	bool HasTeamSharePerk(const FGameplayAbilityActorInfo* ActorInfo) const;
 
-	TArray<FDRSearchSilhouetteState> SilhouetteStates;
+	FGuid LocalRevealId;
+	FGuid SharedRevealId;
+	TArray<TWeakObjectPtr<ADRPlayerCharacter>> LocalRevealedCharacters;
+	TArray<TWeakObjectPtr<ADRPlayerCharacter>> SharedRevealedCharacters;
 };

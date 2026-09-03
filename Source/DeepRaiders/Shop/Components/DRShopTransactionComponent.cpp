@@ -315,8 +315,7 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	}
 
 	// 검증된 퍽의 AbilitySet 적용이 성공한 경우에만 구매를 확정한다.
-	if (!IsValid(PerkDefinition)
-		|| !PerkComponent->AddPerk(PerkDefinition))
+	if (!PerkComponent->AddPerkAutomatically(PerkDefinition))
 	{
 		UE_LOG(
 			LogTemp,
