@@ -16,8 +16,9 @@ struct FDRSnowSurfaceEditResult
 	float AppliedAmount = 0.f;
 	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
 	FVoxelIntBox EditedBounds;
-	// DirectionalSurfaceTool처럼 원본 Store가 실제 변경 위치를 따라가야 할 때만 채운다.
+	// 서버 Ownership 원본이 실제로 추가/제거된 위치를 기록할 수 있도록 채운다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
+	// DirectionalSurfaceTool처럼 Volume도 실제 변경 위치를 따라가야 하는 경로만 true다.
 	bool bUseModifiedValuesForVolume = false;
 };
 

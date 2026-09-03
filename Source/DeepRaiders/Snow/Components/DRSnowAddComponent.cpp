@@ -7,6 +7,29 @@
 #include "EngineUtils.h"
 #include "VoxelWorld.h"
 
+namespace
+{
+FDRSnowAddOperation MakeSnowAddOperation(const FDRSnowSurfaceAddRequest& Request)
+{
+	FDRSnowAddOperation Operation;
+	Operation.WorldLocation = Request.WorldLocation;
+	Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
+	Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
+	Operation.Radius = Request.Radius;
+	Operation.Amount = Request.Amount;
+	Operation.BoxExtent = Request.BoxExtent;
+	Operation.BoxRotation = Request.BoxRotation;
+	Operation.EditTool = Request.EditTool;
+	Operation.bAllowVirtualSurfaceFallback = Request.bAllowVirtualSurfaceFallback;
+	Operation.bUseVirtualSurface = Request.bUseVirtualSurface;
+	Operation.TeamId = Request.Context.TeamId;
+	Operation.VoxelWorldName = IsValid(Request.TargetVoxelWorld.Get())
+		? Request.TargetVoxelWorld->GetFName()
+		: NAME_None;
+	return Operation;
+}
+}
+
 bool UDRSnowAddComponent::TryAddSnowFromHit(
 	const FHitResult& HitResult)
 {
@@ -75,29 +98,42 @@ bool UDRSnowAddComponent::ExecuteAddRequest(
 	{
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			bHandled = SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
-		}
-
-		if (bHandled)
-		{
-			if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
+			const FDRSnowAddOperation Operation = MakeSnowAddOperation(Request);
+			if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 			{
-				FDRSnowAddOperation Operation;
-				Operation.WorldLocation = Request.WorldLocation;
-				Operation.SurfaceNormal = Request.SurfaceNormal.GetSafeNormal();
-				Operation.ImpactDirection = Request.ImpactDirection.GetSafeNormal();
-			Operation.Radius = Request.Radius;
-			Operation.Amount = Request.Amount;
-			Operation.BoxExtent = Request.BoxExtent;
-			Operation.BoxRotation = Request.BoxRotation;
-			Operation.EditTool = Request.EditTool;
-				Operation.bAllowVirtualSurfaceFallback = Request.bAllowVirtualSurfaceFallback;
-				Operation.bUseVirtualSurface = Request.bUseVirtualSurface;
-				Operation.TeamId = Request.Context.TeamId;
-				Operation.VoxelWorldName = IsValid(Request.TargetVoxelWorld.Get())
-					? Request.TargetVoxelWorld->GetFName()
-					: NAME_None;
-				MiningGameState->RegisterSnowAdd(Operation);
+				const TWeakObjectPtr<UWorld> WeakWorld(World);
+				const FDRSnowAddResult SnowResult = SnowSubsystem->AddSnow(
+					Request,
+					[WeakWorld, Operation](const float AppliedAmount)
+					{
+						if (AppliedAmount <= 0.f)
+						{
+							return;
+						}
+
+						if (UWorld* CompletedWorld = WeakWorld.Get())
+						{
+							if (ADRMiningGameStateBase* MiningGameState =
+								CompletedWorld->GetGameState<ADRMiningGameStateBase>())
+							{
+								MiningGameState->RegisterSnowAdd(Operation, AppliedAmount);
+							}
+						}
+					});
+				bHandled = SnowResult.AddedAmount > 0.f;
+			}
+			else
+			{
+				const FDRSnowAddResult SnowResult = SnowSubsystem->AddSnow(Request);
+				bHandled = SnowResult.AddedAmount > 0.f;
+				if (bHandled)
+				{
+					if (ADRMiningGameStateBase* MiningGameState =
+						World->GetGameState<ADRMiningGameStateBase>())
+					{
+						MiningGameState->RegisterSnowAdd(Operation);
+					}
+				}
 			}
 		}
 	}

@@ -87,7 +87,7 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 
 	FVoxelMaterial SnowMaterial;
 	SnowMaterial.SetSingleIndex(DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
-	int32 ModifiedVoxelCount = 0;
+	TArray<FModifiedVoxelValue> ModifiedValues;
 	FVoxelData& Data = VoxelWorld->GetData();
 	{
 		FVoxelWriteScopeLock Lock(Data, CandidateBounds, FUNCTION_FNAME);
@@ -112,19 +112,22 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 						continue;
 					}
 
-					Data.SetValue(VoxelPosition, FVoxelValue::Full());
+					const FVoxelValue OldValue = Data.GetValue(VoxelPosition, 0);
+					const FVoxelValue NewValue = FVoxelValue::Full();
+					Data.SetValue(VoxelPosition, NewValue);
 					Data.SetMaterial(VoxelPosition, SnowMaterial);
-					++ModifiedVoxelCount;
+					ModifiedValues.Emplace(VoxelPosition, OldValue, NewValue);
 				}
 			}
 		}
 	}
 
-	if (ModifiedVoxelCount > 0)
+	if (!ModifiedValues.IsEmpty())
 	{
 		Result.AppliedAmount = Request.Amount;
 		Result.VoxelWorld = VoxelWorld;
 		Result.EditedBounds = CandidateBounds;
+		Result.ModifiedValues = MoveTemp(ModifiedValues);
 		UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, CandidateBounds.Extend(1));
 	}
 
@@ -377,30 +380,30 @@ void ResolveProcessedSnowMaterials(
 		Positions.Add(Voxel.Position);
 	}
 
-	TArray<int32> ResolvedTeamIds;
+	TArray<uint8> ResolvedMaterialIndices;
 	TBitArray<> FoundOwnership;
-	OwnershipStore.ResolveNearestTeamsAtVoxels(
+	OwnershipStore.ResolveNearestMaterialIndicesAtVoxels(
 		VoxelWorld,
 		Positions,
 		2,
-		ResolvedTeamIds,
+		ResolvedMaterialIndices,
 		FoundOwnership);
 
 	TMap<uint8, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByMaterial;
 	for (int32 VoxelIndex = 0; VoxelIndex < ProcessedVoxels.Voxels->Num(); ++VoxelIndex)
 	{
 		const FVoxelSurfaceEditsVoxel& Voxel = (*ProcessedVoxels.Voxels)[VoxelIndex];
-		int32 DominantTeamId = ResolvedTeamIds[VoxelIndex];
+		uint8 MaterialIndex = ResolvedMaterialIndices[VoxelIndex];
 		if (!FoundOwnership[VoxelIndex])
 		{
 			const FVector SampleWorldLocation =
 				bUseSurfacePositionForVolume && ProcessedVoxels.Info.bHasSurfacePositions
 					? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
 					: VoxelWorld->LocalToGlobal(Voxel.Position);
-			DominantTeamId = VolumeStore.GetDominantTeamAtLocation(SampleWorldLocation);
+			const int32 DominantTeamId = VolumeStore.GetDominantTeamAtLocation(SampleWorldLocation);
+			MaterialIndex = DRSnowMaterialMapping::TeamToMaterialIndex(DominantTeamId);
 		}
 
-		const uint8 MaterialIndex = DRSnowMaterialMapping::TeamToMaterialIndex(DominantTeamId);
 		VoxelsByMaterial.FindOrAdd(MaterialIndex).Add(Voxel);
 	}
 
@@ -568,6 +571,7 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 		}
 
 		Result.VoxelWorld = VoxelWorld;
+		Result.ModifiedValues = MoveTemp(ModifiedValues);
 		return Result;
 	}
 
@@ -631,6 +635,7 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	}
 
 	Result.VoxelWorld = VoxelWorld;
+	Result.ModifiedValues = MoveTemp(ModifiedValues);
 	return Result;
 }
 

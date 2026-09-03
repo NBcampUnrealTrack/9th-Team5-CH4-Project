@@ -898,8 +898,7 @@ float ADRPlayerController::GetSnowJoinSnapshotProgress() const
 
 	const int64 TotalByteCount =
 		static_cast<int64>(PendingSnowVoxelSaveByteCount) +
-		PendingSnowVolumeByteCount +
-		PendingSnowOwnershipByteCount;
+		PendingSnowVolumeByteCount;
 	if (TotalByteCount <= 0)
 	{
 		return 0.f;
@@ -907,8 +906,7 @@ float ADRPlayerController::GetSnowJoinSnapshotProgress() const
 
 	const int64 ReceivedByteCount =
 		static_cast<int64>(PendingSnowVoxelSaveData.Num()) +
-		PendingSnowVolumeData.Num() +
-		PendingSnowOwnershipData.Num();
+		PendingSnowVolumeData.Num();
 	return static_cast<float>(FMath::Clamp(
 		static_cast<double>(ReceivedByteCount) / TotalByteCount,
 		0.0,
@@ -920,10 +918,9 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	int32 CheckpointSequence,
 	FName VoxelWorldName,
 	int32 VoxelSaveByteCount,
-	int32 SnowVolumeByteCount,
-	int32 OwnershipByteCount)
+	int32 SnowVolumeByteCount)
 {
-	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0 || OwnershipByteCount <= 0)
+	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0)
 	{
 		return;
 	}
@@ -934,12 +931,10 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVoxelWorldName = VoxelWorldName;
 	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
-	PendingSnowOwnershipByteCount = OwnershipByteCount;
 	bPendingSnowSnapshotFinished = false;
 	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
-	PendingSnowOwnershipData.Reset();
 	BufferedSnowOperations.Reset();
 
 	ServerRequestSnowJoinSnapshotData(SnapshotId);
@@ -968,7 +963,6 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 	OutgoingSnowByteOffset = 0;
 	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
 	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
-	OutgoingSnowOwnershipData = MoveTemp(Checkpoint.OwnershipData);
 
 	// 한 프레임에 모든 RPC를 쌓지 않고 일정 간격으로 청크 하나씩 전송한다.
 	World->GetTimerManager().SetTimer(
@@ -994,9 +988,6 @@ void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 		break;
 	case 1:
 		Payload = &OutgoingSnowVolumeData;
-		break;
-	case 2:
-		Payload = &OutgoingSnowOwnershipData;
 		break;
 	default:
 		FinishSnowJoinSnapshotTransfer();
@@ -1041,7 +1032,6 @@ void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
 	OutgoingSnowByteOffset = 0;
 	OutgoingSnowVoxelSaveData.Reset();
 	OutgoingSnowVolumeData.Reset();
-	OutgoingSnowOwnershipData.Reset();
 }
 
 void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
@@ -1084,10 +1074,6 @@ void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
 	case 1:
 		TargetData = &PendingSnowVolumeData;
 		ExpectedByteCount = PendingSnowVolumeByteCount;
-		break;
-	case 2:
-		TargetData = &PendingSnowOwnershipData;
-		ExpectedByteCount = PendingSnowOwnershipByteCount;
 		break;
 	default:
 		return;
@@ -1138,8 +1124,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 
 	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
 		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
-		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount ||
-		PendingSnowOwnershipData.Num() != PendingSnowOwnershipByteCount)
+		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount)
 	{
 		return false;
 	}
@@ -1149,8 +1134,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	if (!IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
 		PendingSnowVoxelWorldName,
 		PendingSnowVoxelSaveData,
-		PendingSnowVolumeData,
-		PendingSnowOwnershipData))
+		PendingSnowVolumeData))
 	{
 		if (IsValid(World))
 		{
@@ -1202,24 +1186,21 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	const int32 AppliedSnapshotId = PendingSnowSnapshotId;
 	const int32 AppliedVoxelSaveByteCount = PendingSnowVoxelSaveByteCount;
 	const int32 AppliedSnowVolumeByteCount = PendingSnowVolumeByteCount;
-	const int32 AppliedOwnershipByteCount = PendingSnowOwnershipByteCount;
 	PendingSnowSnapshotId = INDEX_NONE;
 	PendingSnowCheckpointSequence = 0;
 	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
-	PendingSnowOwnershipData.Reset();
 	BufferedSnowOperations.Reset();
 	ApplySnowJoinOperations(Operations);
 
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=%d bytes RecentOperations=%d"),
+		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=ServerOnly RecentOperations=%d"),
 		AppliedSnapshotId,
 		AppliedVoxelSaveByteCount,
 		AppliedSnowVolumeByteCount,
-		AppliedOwnershipByteCount,
 		Operations.Num());
 
 	return;

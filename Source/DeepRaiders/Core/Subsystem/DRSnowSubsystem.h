@@ -20,6 +20,12 @@ struct FDRSnowPendingRenderUpdate
 	TArray<FVoxelIntBox> Bounds;
 };
 
+struct FDRSnowPendingDirectionalAdd
+{
+	FDRSnowSurfaceAddRequest Request;
+	TFunction<void(float)> Completion;
+};
+
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
 UCLASS()
@@ -32,7 +38,13 @@ public:
 
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
-	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
+	FDRSnowAddResult AddSnow(
+		const FDRSnowSurfaceAddRequest& Request,
+		TFunction<void(float)> DirectionalCompletion = {});
+	// Multicast 재생은 서버 Sequence를 보존하기 위해 Directional 작업도 동기로 적용한다.
+	FDRSnowAddResult ApplyReplicatedSnowAdd(
+		const FDRSnowSurfaceAddRequest& Request,
+		float AppliedAmount);
 	FDRSnowRemoveResult RemoveSnow(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
@@ -41,8 +53,14 @@ public:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
 	// Multicast 수신용 제거 경로다. 일반 제거와 달리 서버가 확정한 양을 Volume에 반영한다.
-	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
-	bool ApplyReplicatedSnowAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
+	bool ApplyReplicatedSnowRemoval(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		float AppliedAmount,
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch = nullptr);
+	bool ApplyReplicatedSnowAbsorbTool(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		float AppliedAmount,
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch = nullptr);
 	bool RepaintSnowMaterialsAtArea(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult);
@@ -64,14 +82,18 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow")
 	void ResetSnowState();
 
-	bool ApplyCheckpoint(FName VoxelWorldName, const TArray<uint8>& VoxelSaveData, const TArray<uint8>& SnowVolumeData, const TArray<uint8>& OwnershipData);
+	bool ApplyCheckpoint(
+		FName VoxelWorldName,
+		const TArray<uint8>& VoxelSaveData,
+		const TArray<uint8>& SnowVolumeData);
 
 private:
 	// 제거 brush는 실제로 변경된 voxel만 반환한다.
 	// 이 결과를 기준으로 해야 Volume 원본 데이터가 Voxel 표현과 같은 변화만 기록한다.
 	void ApplyAddedSurfaceEdit(
 		const FDRSnowSurfaceAddRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult);
+		const FDRSnowSurfaceEditResult& EditResult,
+		float VolumeAmount = -1.f);
 	void ApplyRemovedSurfaceEdit(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
@@ -94,7 +116,7 @@ private:
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
-	TQueue<FDRSnowSurfaceAddRequest> DirectionalAddQueue;
+	TQueue<FDRSnowPendingDirectionalAdd> DirectionalAddQueue;
 	bool bDirectionalAddInProgress = false;
 	int32 SnowStateGeneration = 0;
 	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;

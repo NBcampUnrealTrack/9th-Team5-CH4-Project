@@ -318,8 +318,7 @@ public:
 		int32 CheckpointSequence,
 		FName VoxelWorldName,
 		int32 VoxelSaveByteCount,
-		int32 SnowVolumeByteCount,
-		int32 OwnershipByteCount);
+		int32 SnowVolumeByteCount);
 
 	UFUNCTION(Client, Reliable)
 	void Client_ReceiveSnowJoinSnapshotChunk(
@@ -357,7 +356,6 @@ private:
 	int32 OutgoingSnowByteOffset = 0;
 	TArray<uint8> OutgoingSnowVoxelSaveData;
 	TArray<uint8> OutgoingSnowVolumeData;
-	TArray<uint8> OutgoingSnowOwnershipData;
 	FTimerHandle SnowJoinSnapshotSendTimer;
 	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	bool bSnowSnapshotTransferFinished = false;
@@ -367,13 +365,11 @@ private:
 	FName PendingSnowVoxelWorldName = NAME_None;
 	int32 PendingSnowVoxelSaveByteCount = 0;
 	int32 PendingSnowVolumeByteCount = 0;
-	int32 PendingSnowOwnershipByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
 	bool bPendingSnowCheckpointApplied = false;
 	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
-	TArray<uint8> PendingSnowOwnershipData;
 	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
 	FTimerHandle SnowJoinSnapshotRetryTimer;
 #pragma endregion

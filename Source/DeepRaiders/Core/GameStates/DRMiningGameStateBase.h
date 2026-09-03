@@ -110,7 +110,9 @@ private:
 
 #pragma region Snow
 public:
-	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
+	void RegisterSnowAdd(
+		const FDRSnowAddOperation& Operation,
+		float ServerAppliedAmount = 0.f);
 	void RegisterSnowRemove(
 		const FDRSnowRemoveOperation& Operation,
 		FDRSnowMaterialPatch MaterialPatch);
@@ -127,8 +129,8 @@ public:
 	void Multicast_ApplySnowOperation(const FDRSnowOperationRecord& Record);
 
 private:
-	bool ApplySnowAddOnce(const FDRSnowAddOperation& Operation);
-	bool ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation);
+	bool ApplySnowAddOnce(const FDRSnowOperationRecord& Record);
+	bool ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record);
 	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
 	bool IsSnowOperationApplied(int32 Sequence) const;
 	bool HasPendingSnowOperation(int32 Sequence) const;

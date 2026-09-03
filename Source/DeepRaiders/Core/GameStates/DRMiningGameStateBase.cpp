@@ -128,7 +128,9 @@ bool ADRMiningGameStateBase::ApplyTerrainDigOnce(const FDRTerrainDigOperation& O
 #pragma endregion
 
 #pragma region Snow
-void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operation)
+void ADRMiningGameStateBase::RegisterSnowAdd(
+	const FDRSnowAddOperation& Operation,
+	const float ServerAppliedAmount)
 {
 	if (!HasAuthority())
 	{
@@ -139,7 +141,9 @@ void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operatio
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = true;
 	Record.AddOperation = Operation;
-	Record.ServerAppliedAmount = Operation.Amount;
+	Record.ServerAppliedAmount = ServerAppliedAmount > 0.f
+		? ServerAppliedAmount
+		: Operation.Amount;
 	Multicast_ApplySnowOperation(Record);
 }
 
@@ -278,8 +282,8 @@ bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationReco
 	}
 
 	const bool bChanged = Record.bIsAddOperation
-		? ApplySnowAddOnce(Record.AddOperation)
-		: ApplySnowRemoveOnce(Record.RemoveOperation);
+		? ApplySnowAddOnce(Record)
+		: ApplySnowRemoveOnce(Record);
 
 	// 준비된 상태에서 한 번 실행한 작업은 변경량이 0이어도 소비한다.
 	// 재시도하면 비멱등 눈 작업이 중복 적용될 수 있다.
@@ -358,11 +362,11 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 
 		if (Record.bIsAddOperation)
 		{
-			ApplySnowAddOnce(Record.AddOperation);
+			ApplySnowAddOnce(Record);
 		}
 		else
 		{
-			ApplySnowRemoveOnce(Record.RemoveOperation);
+			ApplySnowRemoveOnce(Record);
 		}
 		if (Record.Sequence > 0)
 		{
@@ -402,8 +406,9 @@ void ADRMiningGameStateBase::StopPendingSnowRetry()
 	}
 }
 
-bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operation)
+bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Record)
 {
+	const FDRSnowAddOperation& Operation = Record.AddOperation;
 	const bool bUsesOrientedBox = Operation.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool;
 	if (Operation.Amount <= 0.f ||
 		(bUsesOrientedBox && (Operation.BoxExtent.X <= 0.f || Operation.BoxExtent.Y <= 0.f || Operation.BoxExtent.Z <= 0.f)) ||
@@ -444,14 +449,18 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowAddOperation& Operati
 
 	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 	{
-		return SnowSubsystem->AddSnow(Request).AddedAmount > 0.f;
+		const float ServerAppliedAmount = Record.ServerAppliedAmount > 0.f
+			? Record.ServerAppliedAmount
+			: Operation.Amount;
+		return SnowSubsystem->ApplyReplicatedSnowAdd(Request, ServerAppliedAmount).AddedAmount > 0.f;
 	}
 
 	return false;
 }
 
-bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation)
+bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record)
 {
+	const FDRSnowRemoveOperation& Operation = Record.RemoveOperation;
 	if (Operation.Radius <= 0.f || Operation.RequestedAmount <= 0.f || Operation.AppliedAmount <= 0.f)
 	{
 		return false;
@@ -494,9 +503,20 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowRemoveOperation& O
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
+	const float ServerAppliedAmount = Record.ServerAppliedAmount > 0.f
+		? Record.ServerAppliedAmount
+		: Operation.AppliedAmount;
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch =
+		Record.bHasAuthoritativeMaterialPatch ? &Record.MaterialPatch : nullptr;
 	return Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool
-		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(Request, Operation.AppliedAmount)
-		: SnowSubsystem->ApplyReplicatedSnowRemoval(Request, Operation.AppliedAmount);
+		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(
+			Request,
+			ServerAppliedAmount,
+			AuthoritativeMaterialPatch)
+		: SnowSubsystem->ApplyReplicatedSnowRemoval(
+			Request,
+			ServerAppliedAmount,
+			AuthoritativeMaterialPatch);
 }
 
 AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const

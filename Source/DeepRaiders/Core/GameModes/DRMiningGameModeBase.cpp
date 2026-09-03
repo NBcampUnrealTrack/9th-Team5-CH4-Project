@@ -502,8 +502,7 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 		Checkpoint.OperationSequence,
 		Checkpoint.VoxelWorldName,
 		Checkpoint.VoxelSaveData.Num(),
-		Checkpoint.SnowVolumeData.Num(),
-		Checkpoint.OwnershipData.Num());
+		Checkpoint.SnowVolumeData.Num());
 	return true;
 }
 

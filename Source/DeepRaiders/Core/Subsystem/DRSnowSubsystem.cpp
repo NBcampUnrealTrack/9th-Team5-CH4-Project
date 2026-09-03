@@ -1,5 +1,6 @@
 #include "DRSnowSubsystem.h"
 
+#include "DeepRaiders/Snow/DRSnowMaterialMapping.h"
 #include "Engine/World.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "VoxelRender/IVoxelLODManager.h"
@@ -7,9 +8,7 @@
 
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
-	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(
-		VolumeStore,
-		OwnershipStore);
+	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(VolumeStore);
 }
 
 bool UDRSnowSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -18,7 +17,9 @@ bool UDRSnowSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return IsValid(World) && World->IsGameWorld();
 }
 
-FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Request)
+FDRSnowAddResult UDRSnowSubsystem::AddSnow(
+	const FDRSnowSurfaceAddRequest& Request,
+	TFunction<void(float)> DirectionalCompletion)
 {
 	FDRSnowAddResult Result;
 	UWorld* World = GetWorld();
@@ -30,9 +31,12 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
 		Result.TeamId = Request.Context.TeamId;
-		DirectionalAddQueue.Enqueue(Request);
+		FDRSnowPendingDirectionalAdd PendingAdd;
+		PendingAdd.Request = Request;
+		PendingAdd.Completion = MoveTemp(DirectionalCompletion);
+		DirectionalAddQueue.Enqueue(MoveTemp(PendingAdd));
 		ProcessNextDirectionalAdd();
-		// 호출자는 비동기 작업 접수를 기준으로 네트워크 작업을 등록한다.
+		// 실제 성공 여부는 Completion에서 전달한다. 반환값은 큐 접수 여부다.
 		Result.AddedAmount = Request.Amount;
 		return Result;
 	}
@@ -45,14 +49,43 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 			return Result;
 		}
 
+		ApplyAddedSurfaceEdit(Request, EditResult);
 		return VolumeStore.AddSnow(Request);
 	}
 
 	Result = VolumeStore.AddSnow(Request);
 	if (Result.AddedAmount > 0.f)
 	{
-		SurfaceEditor.AddSnowAtArea(Request);
+		const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
+		ApplyAddedSurfaceEdit(Request, EditResult);
 	}
+	return Result;
+}
+
+FDRSnowAddResult UDRSnowSubsystem::ApplyReplicatedSnowAdd(
+	const FDRSnowSurfaceAddRequest& Request,
+	const float AppliedAmount)
+{
+	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+	{
+		return AddSnow(Request);
+	}
+
+	FDRSnowAddResult Result;
+	Result.TeamId = Request.Context.TeamId;
+	SurfaceEditor.SetWorld(GetWorld());
+	const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
+	if (EditResult.AppliedAmount <= 0.f)
+	{
+		return Result;
+	}
+
+	const float AuthoritativeAmount = AppliedAmount > 0.f
+		? AppliedAmount
+		: EditResult.AppliedAmount;
+	ApplyAddedSurfaceEdit(Request, EditResult, AuthoritativeAmount);
+	QueueRenderUpdate(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
+	Result.AddedAmount = AuthoritativeAmount;
 	return Result;
 }
 
@@ -63,11 +96,12 @@ void UDRSnowSubsystem::ProcessNextDirectionalAdd()
 		return;
 	}
 
-	FDRSnowSurfaceAddRequest Request;
-	if (!DirectionalAddQueue.Dequeue(Request))
+	FDRSnowPendingDirectionalAdd PendingAdd;
+	if (!DirectionalAddQueue.Dequeue(PendingAdd))
 	{
 		return;
 	}
+	const FDRSnowSurfaceAddRequest Request = PendingAdd.Request;
 
 	bDirectionalAddInProgress = true;
 	SurfaceEditor.SetWorld(GetWorld());
@@ -75,7 +109,7 @@ void UDRSnowSubsystem::ProcessNextDirectionalAdd()
 	const int32 RequestGeneration = SnowStateGeneration;
 	const bool bStarted = SurfaceEditor.AddDirectionalSnowAtAreaAsync(
 		Request,
-		[WeakThis, Request, RequestGeneration](FDRSnowSurfaceEditResult&& EditResult)
+		[WeakThis, Request, RequestGeneration, Completion = PendingAdd.Completion](FDRSnowSurfaceEditResult&& EditResult) mutable
 		{
 			if (UDRSnowSubsystem* SnowSubsystem = WeakThis.Get())
 			{
@@ -87,6 +121,10 @@ void UDRSnowSubsystem::ProcessNextDirectionalAdd()
 				// 완료된 실제 변경 voxel만 원본 데이터에 반영한 뒤 다음 요청을 시작한다.
 				SnowSubsystem->ApplyAddedSurfaceEdit(Request, EditResult);
 				SnowSubsystem->QueueRenderUpdate(EditResult.VoxelWorld.Get(), EditResult.EditedBounds);
+				if (Completion)
+				{
+					Completion(EditResult.AppliedAmount);
+				}
 				SnowSubsystem->bDirectionalAddInProgress = false;
 				SnowSubsystem->ProcessNextDirectionalAdd();
 			}
@@ -94,6 +132,10 @@ void UDRSnowSubsystem::ProcessNextDirectionalAdd()
 
 	if (!bStarted)
 	{
+		if (PendingAdd.Completion)
+		{
+			PendingAdd.Completion(0.f);
+		}
 		bDirectionalAddInProgress = false;
 		ProcessNextDirectionalAdd();
 	}
@@ -245,7 +287,8 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
-	float AppliedAmount)
+	const float AppliedAmount,
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
 	UWorld* World = GetWorld();
 	SurfaceEditor.SetWorld(World);
@@ -260,14 +303,24 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 		return false;
 	}
 
-	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
+	// Geometry는 로컬 VoxelWorld에서 재현하지만 Volume 감소 상한은 서버 확정량을 사용한다.
+	ApplyRemovedSurfaceEdit(Request, EditResult, AppliedAmount);
+	if (AuthoritativeMaterialPatch)
+	{
+		SurfaceEditor.ApplySnowMaterialPatch(
+			EditResult.VoxelWorld.Get(),
+			*AuthoritativeMaterialPatch);
+		return true;
+	}
 
+	// 패치 플래그가 없는 구형 record만 로컬 Store 기반 repaint로 fallback 한다.
 	return RepaintSnowMaterialsAtArea(Request, EditResult);
 }
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	const FDRSnowSurfaceRemoveRequest& Request,
-	float AppliedAmount)
+	const float AppliedAmount,
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
 	UWorld* World = GetWorld();
 	SurfaceEditor.SetWorld(World);
@@ -280,7 +333,15 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	{
 		return false;
 	}
-	ApplyRemovedSurfaceEdit(Request, EditResult, EditResult.AppliedAmount);
+	ApplyRemovedSurfaceEdit(Request, EditResult, AppliedAmount);
+	if (AuthoritativeMaterialPatch)
+	{
+		SurfaceEditor.ApplySnowMaterialPatch(
+			EditResult.VoxelWorld.Get(),
+			*AuthoritativeMaterialPatch);
+		return true;
+	}
+
 	SurfaceEditor.RepaintSnowMaterialsAtModifiedVoxels(
 		Request,
 		EditResult,
@@ -345,8 +406,8 @@ void UDRSnowSubsystem::ResetSnowState()
 	OwnershipStore.Reset();
 	PendingRenderUpdates.Reset();
 	bDirectionalAddInProgress = false;
-	FDRSnowSurfaceAddRequest PendingRequest;
-	while (DirectionalAddQueue.Dequeue(PendingRequest))
+	FDRSnowPendingDirectionalAdd PendingAdd;
+	while (DirectionalAddQueue.Dequeue(PendingAdd))
 	{
 	}
 
@@ -368,31 +429,46 @@ bool UDRSnowSubsystem::GetCheckpoint(int32 Id, FDRSnowJoinCheckpoint& Out)
 	return SnapshotSerializer->GetCheckpoint(Id, Out);
 }
 
-bool UDRSnowSubsystem::ApplyCheckpoint(FName Name, const TArray<uint8>& Voxel, const TArray<uint8>& Volume, const TArray<uint8>& Ownership)
+bool UDRSnowSubsystem::ApplyCheckpoint(
+	FName Name,
+	const TArray<uint8>& Voxel,
+	const TArray<uint8>& Volume)
 {
+	// 중도 난입 클라이언트에는 Ownership 원본을 복원하지 않는다.
+	OwnershipStore.Reset();
 	SnapshotSerializer->SetWorld(GetWorld());
-	return SnapshotSerializer->ApplyCheckpoint(Name, Voxel, Volume, Ownership);
+	return SnapshotSerializer->ApplyCheckpoint(Name, Voxel, Volume);
 }
 
 void UDRSnowSubsystem::ApplyAddedSurfaceEdit(
 	const FDRSnowSurfaceAddRequest& Request,
-	const FDRSnowSurfaceEditResult& EditResult)
+	const FDRSnowSurfaceEditResult& EditResult,
+	const float VolumeAmount)
 {
 	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
-	if (!EditResult.bUseModifiedValuesForVolume || !IsValid(VoxelWorld))
+	if (!IsValid(VoxelWorld))
 	{
 		return;
 	}
 
-	OwnershipStore.RecordAddedVoxels(
-		VoxelWorld,
-		EditResult.ModifiedValues,
-		Request.Context.TeamId);
+	// Ownership은 서버의 MaterialIndex 원본이다. 클라이언트는 authoritative patch만 적용한다.
+	if (UWorld* World = GetWorld(); IsValid(World) && World->GetNetMode() != NM_Client)
+	{
+		OwnershipStore.RecordAddedVoxels(
+			VoxelWorld,
+			EditResult.ModifiedValues,
+			DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
+	}
+	if (!EditResult.bUseModifiedValuesForVolume)
+	{
+		return;
+	}
+
 	AddVolumeFromModifiedValues(
 		*VoxelWorld,
 		Request,
 		EditResult.ModifiedValues,
-		EditResult.AppliedAmount);
+		VolumeAmount >= 0.f ? VolumeAmount : EditResult.AppliedAmount);
 }
 
 void UDRSnowSubsystem::ApplyRemovedSurfaceEdit(
@@ -407,7 +483,10 @@ void UDRSnowSubsystem::ApplyRemovedSurfaceEdit(
 		return;
 	}
 
-	OwnershipStore.RemoveClearedVoxels(VoxelWorld, EditResult.ModifiedValues);
+	if (UWorld* World = GetWorld(); IsValid(World) && World->GetNetMode() != NM_Client)
+	{
+		OwnershipStore.RemoveClearedVoxels(VoxelWorld, EditResult.ModifiedValues);
+	}
 	RemoveVolumeFromModifiedValues(
 		*VoxelWorld,
 		Request,

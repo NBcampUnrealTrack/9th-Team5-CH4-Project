@@ -3,7 +3,10 @@
 #include "ProfilingDebugging/CountersTrace.h"
 #include "VoxelWorld.h"
 
-void FDRSnowOwnershipStore::RecordAddedVoxels(AVoxelWorld* World, const TArray<FModifiedVoxelValue>& Values, int32 TeamId)
+void FDRSnowOwnershipStore::RecordAddedVoxels(
+	AVoxelWorld* World,
+	const TArray<FModifiedVoxelValue>& Values,
+	const uint8 MaterialIndex)
 {
 	if (!IsValid(World))
 	{
@@ -14,7 +17,11 @@ void FDRSnowOwnershipStore::RecordAddedVoxels(AVoxelWorld* World, const TArray<F
 	{
 		if (Value.OldValue > 0.f && Value.NewValue < Value.OldValue)
 		{
-			Data.TeamByVoxel.Add(Value.Position, TeamId);
+			const FIntVector ChunkCoord = DRSnowMaterialPatchUtils::VoxelToChunkCoord(Value.Position);
+			FChunkData& Chunk = Data.Chunks.FindOrAdd(ChunkCoord);
+			Chunk.MaterialByLocalVoxel.Add(
+				DRSnowMaterialPatchUtils::VoxelToLocalIndex(Value.Position),
+				MaterialIndex);
 		}
 	}
 }
@@ -30,22 +37,58 @@ void FDRSnowOwnershipStore::RemoveClearedVoxels(AVoxelWorld* World, const TArray
 	{
 		if (Value.OldValue <= 0.f && Value.NewValue > 0.f)
 		{
-			Data.TeamByVoxel.Remove(Value.Position);
+			const FIntVector ChunkCoord = DRSnowMaterialPatchUtils::VoxelToChunkCoord(Value.Position);
+			FChunkData* Chunk = Data.Chunks.Find(ChunkCoord);
+			if (!Chunk)
+			{
+				continue;
+			}
+
+			Chunk->MaterialByLocalVoxel.Remove(
+				DRSnowMaterialPatchUtils::VoxelToLocalIndex(Value.Position));
+			if (Chunk->MaterialByLocalVoxel.IsEmpty())
+			{
+				Data.Chunks.Remove(ChunkCoord);
+			}
 		}
 	}
 }
 
-bool FDRSnowOwnershipStore::GetNearestTeamAtVoxel(AVoxelWorld* World, const FIntVector& Position, int32 Radius, int32& OutTeamId) const
+bool FDRSnowOwnershipStore::FindExactMaterial(
+	const FWorldData& Data,
+	const FIntVector& Position,
+	uint8& OutMaterialIndex)
 {
-	OutTeamId = INDEX_NONE;
+	const FIntVector ChunkCoord = DRSnowMaterialPatchUtils::VoxelToChunkCoord(Position);
+	const FChunkData* Chunk = Data.Chunks.Find(ChunkCoord);
+	if (!Chunk)
+	{
+		return false;
+	}
+
+	if (const uint8* MaterialIndex = Chunk->MaterialByLocalVoxel.Find(
+		DRSnowMaterialPatchUtils::VoxelToLocalIndex(Position)))
+	{
+		OutMaterialIndex = *MaterialIndex;
+		return true;
+	}
+	return false;
+}
+
+bool FDRSnowOwnershipStore::GetNearestMaterialIndexAtVoxel(
+	AVoxelWorld* World,
+	const FIntVector& Position,
+	const int32 Radius,
+	uint8& OutMaterialIndex) const
+{
+	OutMaterialIndex = 0;
 	const FWorldData* Data = Find(World);
 	if (!Data)
 	{
 		return false;
 	}
-	if (const int32* Team = Data->TeamByVoxel.Find(Position))
+	if (FindExactMaterial(*Data, Position, OutMaterialIndex))
 	{
-		OutTeamId = *Team;
 		return true;
 	}
 	for (int32 CurrentRadius = 1; CurrentRadius <= Radius; ++CurrentRadius)
@@ -60,9 +103,11 @@ bool FDRSnowOwnershipStore::GetNearestTeamAtVoxel(AVoxelWorld* World, const FInt
 					{
 						continue;
 					}
-					if (const int32* Team = Data->TeamByVoxel.Find(Position + FIntVector(X, Y, Z)))
+					if (FindExactMaterial(
+						*Data,
+						Position + FIntVector(X, Y, Z),
+						OutMaterialIndex))
 					{
-						OutTeamId = *Team;
 						return true;
 					}
 				}
@@ -72,15 +117,15 @@ bool FDRSnowOwnershipStore::GetNearestTeamAtVoxel(AVoxelWorld* World, const FInt
 	return false;
 }
 
-void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
+void FDRSnowOwnershipStore::ResolveNearestMaterialIndicesAtVoxels(
 	AVoxelWorld* World,
 	const TConstArrayView<FIntVector> Positions,
 	const int32 Radius,
-	TArray<int32>& OutTeamIds,
-	TBitArray<>& OutFoundTeams) const
+	TArray<uint8>& OutMaterialIndices,
+	TBitArray<>& OutFoundMaterials) const
 {
-	OutTeamIds.Init(INDEX_NONE, Positions.Num());
-	OutFoundTeams.Init(false, Positions.Num());
+	OutMaterialIndices.Init(0, Positions.Num());
+	OutFoundMaterials.Init(false, Positions.Num());
 	const FWorldData* Data = Find(World);
 	if (!Data || Positions.IsEmpty())
 	{
@@ -107,27 +152,27 @@ void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
 	{
 		for (int32 Index = 0; Index < Positions.Num(); ++Index)
 		{
-			OutFoundTeams[Index] = GetNearestTeamAtVoxel(
+			OutFoundMaterials[Index] = GetNearestMaterialIndexAtVoxel(
 				World,
 				Positions[Index],
 				ClampedRadius,
-				OutTeamIds[Index]);
+				OutMaterialIndices[Index]);
 		}
 		return;
 	}
 
 	const int32 CacheVoxelCount = static_cast<int32>(CacheVoxelCount64);
-	TArray<int32> CachedTeamIds;
-	CachedTeamIds.Init(INDEX_NONE, CacheVoxelCount);
+	TArray<uint8> CachedMaterialIndices;
+	CachedMaterialIndices.Init(0, CacheVoxelCount);
 	TBitArray<> CachedPositions(false, CacheVoxelCount);
-	TBitArray<> CachedFoundTeams(false, CacheVoxelCount);
+	TBitArray<> CachedFoundMaterials(false, CacheVoxelCount);
 	int32 ExactMapLookupCount = 0;
 	int32 CacheReuseCount = 0;
 
-	auto FindExactTeam = [Data, CacheMin, CacheSize, &CachedTeamIds, &CachedPositions,
-		&CachedFoundTeams, &ExactMapLookupCount, &CacheReuseCount](
+	auto FindCachedMaterial = [Data, CacheMin, CacheSize, &CachedMaterialIndices, &CachedPositions,
+		&CachedFoundMaterials, &ExactMapLookupCount, &CacheReuseCount](
 		const FIntVector& Position,
-		int32& OutTeamId)
+		uint8& OutMaterialIndex)
 	{
 		const FIntVector LocalPosition = Position - CacheMin;
 		const int32 CacheIndex =
@@ -136,10 +181,11 @@ void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
 		{
 			CachedPositions[CacheIndex] = true;
 			++ExactMapLookupCount;
-			if (const int32* TeamId = Data->TeamByVoxel.Find(Position))
+			uint8 MaterialIndex = 0;
+			if (FindExactMaterial(*Data, Position, MaterialIndex))
 			{
-				CachedTeamIds[CacheIndex] = *TeamId;
-				CachedFoundTeams[CacheIndex] = true;
+				CachedMaterialIndices[CacheIndex] = MaterialIndex;
+				CachedFoundMaterials[CacheIndex] = true;
 			}
 		}
 		else
@@ -147,24 +193,24 @@ void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
 			++CacheReuseCount;
 		}
 
-		OutTeamId = CachedTeamIds[CacheIndex];
-		return CachedFoundTeams[CacheIndex];
+		OutMaterialIndex = CachedMaterialIndices[CacheIndex];
+		return CachedFoundMaterials[CacheIndex];
 	};
 
 	for (int32 PositionIndex = 0; PositionIndex < Positions.Num(); ++PositionIndex)
 	{
 		const FIntVector& Position = Positions[PositionIndex];
-		if (FindExactTeam(Position, OutTeamIds[PositionIndex]))
+		if (FindCachedMaterial(Position, OutMaterialIndices[PositionIndex]))
 		{
-			OutFoundTeams[PositionIndex] = true;
+			OutFoundMaterials[PositionIndex] = true;
 			continue;
 		}
 
-		for (int32 CurrentRadius = 1; CurrentRadius <= ClampedRadius && !OutFoundTeams[PositionIndex]; ++CurrentRadius)
+		for (int32 CurrentRadius = 1; CurrentRadius <= ClampedRadius && !OutFoundMaterials[PositionIndex]; ++CurrentRadius)
 		{
-			for (int32 Z = -CurrentRadius; Z <= CurrentRadius && !OutFoundTeams[PositionIndex]; ++Z)
+			for (int32 Z = -CurrentRadius; Z <= CurrentRadius && !OutFoundMaterials[PositionIndex]; ++Z)
 			{
-				for (int32 Y = -CurrentRadius; Y <= CurrentRadius && !OutFoundTeams[PositionIndex]; ++Y)
+				for (int32 Y = -CurrentRadius; Y <= CurrentRadius && !OutFoundMaterials[PositionIndex]; ++Y)
 				{
 					for (int32 X = -CurrentRadius; X <= CurrentRadius; ++X)
 					{
@@ -172,9 +218,11 @@ void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
 						{
 							continue;
 						}
-						if (FindExactTeam(Position + FIntVector(X, Y, Z), OutTeamIds[PositionIndex]))
+						if (FindCachedMaterial(
+							Position + FIntVector(X, Y, Z),
+							OutMaterialIndices[PositionIndex]))
 						{
-							OutFoundTeams[PositionIndex] = true;
+							OutFoundMaterials[PositionIndex] = true;
 							break;
 						}
 					}
@@ -185,23 +233,6 @@ void FDRSnowOwnershipStore::ResolveNearestTeamsAtVoxels(
 
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Ownership/ExactMapLookups"), ExactMapLookupCount);
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Ownership/CacheReuses"), CacheReuseCount);
-}
-
-void FDRSnowOwnershipStore::CopySnapshotData(AVoxelWorld* World, TMap<FIntVector, int32>& Out) const
-{
-	Out.Reset();
-	if (const FWorldData* Data = Find(World))
-	{
-		Out = Data->TeamByVoxel;
-	}
-}
-
-void FDRSnowOwnershipStore::ReplaceSnapshotData(AVoxelWorld* World, TMap<FIntVector, int32>&& In)
-{
-	if (IsValid(World))
-	{
-		FindOrCreate(World).TeamByVoxel = MoveTemp(In);
-	}
 }
 
 FDRSnowOwnershipStore::FWorldData& FDRSnowOwnershipStore::FindOrCreate(AVoxelWorld* World)
