@@ -30,10 +30,7 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.1", Units = "s"))
 	float PostPickupDestroyDelay = 0.25f;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.0", Units = "s"))
-	float UncollectedLifeSpan = 20.f;
-	
+
 private:
 	UFUNCTION()
 	void HandlePickupOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent,

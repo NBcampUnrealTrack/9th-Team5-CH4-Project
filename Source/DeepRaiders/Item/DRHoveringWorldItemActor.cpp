@@ -36,7 +36,7 @@ ADRHoveringWorldItemActor::ADRHoveringWorldItemActor()
 	InteractionSphereComponent = CreateDefaultSubobject<USphereComponent>(
 		TEXT("InteractionSphereComponent"));
 
-	InteractionSphereComponent->SetupAttachment(StaticMeshComponent);
+	InteractionSphereComponent->SetupAttachment(PresentationMeshComponent);
 	InteractionSphereComponent->SetSphereRadius(InteractionRadius);
 	InteractionSphereComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	InteractionSphereComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -55,7 +55,7 @@ ADRHoveringWorldItemActor::ADRHoveringWorldItemActor()
 	IdleAuraVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(
 		TEXT("IdleAuraVFXComponent"));
 
-	IdleAuraVFXComponent->SetupAttachment(StaticMeshComponent);
+	IdleAuraVFXComponent->SetupAttachment(PresentationMeshComponent);
 	IdleAuraVFXComponent->SetAutoActivate(false);
 	IdleAuraVFXComponent->SetIsReplicated(false);
 }
@@ -78,6 +78,12 @@ void ADRHoveringWorldItemActor::BeginPlay()
 		&& WorldItemState == EDRWorldItemState::Emerging)
 	{
 		ScheduleEmergenceCompletion();
+	}
+	
+	if (HasAuthority()
+		&& UncollectedLifeSpan > 0.f)
+	{
+		SetLifeSpan(UncollectedLifeSpan);
 	}
 }
 

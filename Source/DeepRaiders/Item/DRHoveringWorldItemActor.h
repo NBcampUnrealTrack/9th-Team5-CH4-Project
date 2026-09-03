@@ -51,6 +51,9 @@ protected:
 		meta = (ClampMin = "1.0", Units = "cm"))
 	float InteractionRadius = 100.f;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.0", Units = "s"))
+	float UncollectedLifeSpan = 30.f;
+	
 private:
 	// 서버 생성 시간 기준, 남은 Emergence Duration 계산 후 Timer 설정
 	void ScheduleEmergenceCompletion();
