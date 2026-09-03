@@ -452,7 +452,9 @@ bool ADRZiplineRope::CanStartZiplineRide(APawn* Interactor) const
 
 	const UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
 
-	return IsValid(MovementAction) && !MovementAction->IsMovementActionActive();
+	return IsValid(MovementAction)
+		&& !MovementAction->IsMovementActionActive()
+		&& MovementAction->CanUseZiplineInteraction();
 }
 
 bool ADRZiplineRope::ResolveEndpointLocations(FVector& OutEndpointA, FVector& OutEndpointB) const

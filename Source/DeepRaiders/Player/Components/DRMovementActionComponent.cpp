@@ -73,9 +73,16 @@ void UDRMovementActionComponent::EndMovementAction(EDRMovementActionEndReason En
 			return;
 		}
 
+		const bool bEndingZipline = AuthoritativeActionState.ActionType == EDRMovementActionType::Zipline;
+
 		AuthoritativeActionState.bActive = false;
 		AuthoritativeActionState.ActionType = EDRMovementActionType::None;
 		AuthoritativeActionState.LastEndReason = EndReason;
+
+		if (bEndingZipline)
+		{
+			CommitZiplineInteractionCooldown();
+		}
 
 		RefreshZiplineGameplayTags();
 		RequestReplicationUpdate();
@@ -785,6 +792,96 @@ const FDRMovementActionState& UDRMovementActionComponent::GetSimulationActionSta
 	}
 
 	return AuthoritativeActionState;
+}
+
+void UDRMovementActionComponent::RequestCancelZiplineFromInteraction()
+{
+	if (!IsLocallyControlledOwner())
+	{
+		return;
+	}
+
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	if (!State.IsActive() || State.ActionType != EDRMovementActionType::Zipline)
+	{
+		return;
+	}
+
+	ServerRequestCancelZiplineFromInteraction(State.SessionId);
+}
+
+void UDRMovementActionComponent::ServerRequestCancelZiplineFromInteraction_Implementation(int32 SessionId)
+{
+	AActor* OwnerActor = GetOwner();
+
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority())
+	{
+		return;
+	}
+
+	if (!AuthoritativeActionState.IsActive() || AuthoritativeActionState.ActionType != EDRMovementActionType::Zipline || AuthoritativeActionState.SessionId != SessionId)
+	{
+		return;
+	}
+
+	/*
+	 * E Toggle 해제만 Cooldown을 검사한다.
+	 * Space emergency release는 기존 RequestCancelZipline을 사용한다.
+	 */
+	if (!CanUseZiplineInteraction())
+	{
+		return;
+	}
+
+	EndMovementAction(EDRMovementActionEndReason::Cancelled);
+
+	ACharacter* Character = Cast<ACharacter>(OwnerActor);
+
+	UDRCharacterMovementComponent* Movement = IsValid(Character) ? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement()) : nullptr;
+
+	if (IsValid(Movement))
+	{
+		Movement->ExitCustomMovementMode();
+	}
+}
+
+bool UDRMovementActionComponent::CanUseZiplineInteraction() const
+{
+	const AActor* OwnerActor = GetOwner();
+
+	/*
+	 * 실제 쿨타임 판정은 서버가 authoritative하게 한다.
+	 * 클라이언트에서는 Interaction 대상 탐색 자체를 막지 않는다.
+	 */
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority())
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const double ElapsedTime = World->GetTimeSeconds() - LastZiplineInteractionServerTime;
+
+	return ElapsedTime >= FMath::Max(ZiplineInteractionCooldown, 0.f);
+}
+
+void UDRMovementActionComponent::CommitZiplineInteractionCooldown()
+{
+	AActor* OwnerActor = GetOwner();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority() || !IsValid(World))
+	{
+		return;
+	}
+
+	LastZiplineInteractionServerTime = World->GetTimeSeconds();
 }
 
 void UDRMovementActionComponent::OnRep_AuthoritativeActionState(

@@ -754,7 +754,7 @@ bool ADRPlayerController::TryToggleZiplineInteraction(int32 InputId)
 	 * RequestCancelZipline이 SessionId를 서버에서 검증하므로
 	 * 별도 Interaction RPC를 추가하지 않는다.
 	 */
-	MovementAction->RequestCancelZipline();
+	MovementAction->RequestCancelZiplineFromInteraction();
 
 	return true;
 }
