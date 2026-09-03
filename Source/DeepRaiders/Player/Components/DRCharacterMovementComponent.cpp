@@ -4,7 +4,10 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
+#include "VoxelWorld.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
 
@@ -299,6 +302,29 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     GravityScale = 1.0f;
 }
 
+void UDRCharacterMovementComponent::EnterVoxelContainedMode()
+{
+    StopMovementImmediately();
+    ClearAccumulatedForces();
+    SetMovementMode(
+        MOVE_Custom,
+        static_cast<uint8>(EDRCustomMovementMode::VoxelContained));
+
+    if (IsValid(CharacterOwner) && CharacterOwner->HasAuthority())
+    {
+        CharacterOwner->ForceNetUpdate();
+    }
+}
+
+void UDRCharacterMovementComponent::ExitVoxelContainedMode()
+{
+    if (!IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+    {
+        return;
+    }
+    RestoreDefaultMovementMode();
+}
+
 void UDRCharacterMovementComponent::OnMovementUpdated(
 	float DeltaSeconds,
 	const FVector& OldLocation,
@@ -310,6 +336,163 @@ void UDRCharacterMovementComponent::OnMovementUpdated(
     ReconcileMovementActionMode();
     
 	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
+}
+
+bool UDRCharacterMovementComponent::CheckFall(
+    const FFindFloorResult& OldFloor,
+    const FHitResult& Hit,
+    const FVector& Delta,
+    const FVector& OldLocation,
+    float RemainingTime,
+    float TimeTick,
+    int32 Iterations,
+    bool bMustJump)
+{
+    // Voxel 데이터는 발밑이 고체라고 하지만 collision floor만 일시적으로
+    // 사라진 경우에는 Falling 전환을 시작하지 않는다.
+    if (ShouldKeepVoxelFloor(OldFloor, OldLocation))
+    {
+        return false;
+    }
+
+    return Super::CheckFall(
+        OldFloor,
+        Hit,
+        Delta,
+        OldLocation,
+        RemainingTime,
+        TimeTick,
+        Iterations,
+        bMustJump);
+}
+
+bool UDRCharacterMovementComponent::ShouldKeepVoxelFloor(
+    const FFindFloorResult& OldFloor,
+    const FVector& OldLocation) const
+{
+    if (!OldFloor.IsWalkableFloor() || !IsValid(CharacterOwner))
+    {
+        return false;
+    }
+
+    AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetActor());
+    if (!IsValid(VoxelWorld) && IsValid(OldFloor.HitResult.GetComponent()))
+    {
+        VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetComponent()->GetOwner());
+    }
+    if (!IsValid(VoxelWorld))
+    {
+        VoxelWorld = LastVoxelFloorWorld.Get();
+    }
+    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+    {
+        return false;
+    }
+
+    const UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+    if (!IsValid(Capsule))
+    {
+        return false;
+    }
+
+    const FVector fGravityDirection = GetGravityDirection();
+    const FVector OldCapsuleBottom =
+        OldLocation + fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const FVector LocalOldBottom = VoxelWorld->GlobalToLocalFloat(OldCapsuleBottom).ToFloat();
+    const FVoxelIntBox WorldBounds = VoxelWorld->GetWorldBounds();
+    const float Tolerance = FMath::Max(0.f, VoxelLowerBoundaryTolerance);
+
+    const bool bInsideHorizontalBounds =
+        LocalOldBottom.X >= WorldBounds.Min.X && LocalOldBottom.X < WorldBounds.Max.X &&
+        LocalOldBottom.Y >= WorldBounds.Min.Y && LocalOldBottom.Y < WorldBounds.Max.Y;
+
+    if (bInsideHorizontalBounds && LocalOldBottom.Z <= WorldBounds.Min.Z + Tolerance)
+    {
+        return true;
+    }
+
+    if (!UpdatedComponent)
+    {
+        return false;
+    }
+
+    // OldLocation이 아닌 현재 캡슐 중심을 사용한다. 그렇지 않으면 정상적으로
+    // 복셀 절벽을 걸어 나갈 때도 이전 바닥을 지지로 오판할 수 있다.
+    const FVector CurrentCapsuleBottom =
+        UpdatedComponent->GetComponentLocation() +
+        fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const float ProbeRadius = Capsule->GetScaledCapsuleRadius() * 0.5f;
+    const FVector Forward = CharacterOwner->GetActorForwardVector();
+    const FVector Right = CharacterOwner->GetActorRightVector();
+    const FVector ColumnOffsets[] =
+    {
+        FVector::ZeroVector,
+        Forward * ProbeRadius,
+        -Forward * ProbeRadius,
+        Right * ProbeRadius,
+        -Right * ProbeRadius
+    };
+    constexpr float ProbeDepthsInVoxels[] = { 0.25f, 0.75f, 1.25f };
+    const FVector LocalGravityDirection =
+        (VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + fGravityDirection) -
+         VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom))
+        .ToFloat()
+        .GetSafeNormal();
+    if (LocalGravityDirection.IsNearlyZero())
+    {
+        return false;
+    }
+
+    FIntVector SamplePositions[UE_ARRAY_COUNT(ColumnOffsets)][UE_ARRAY_COUNT(ProbeDepthsInVoxels)];
+    FVoxelIntBoxWithValidity LockBounds;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FVector LocalColumn =
+                VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + ColumnOffsets[ColumnIndex]).ToFloat();
+            const FVector LocalSample =
+                LocalColumn + LocalGravityDirection * ProbeDepthsInVoxels[DepthIndex];
+            const FIntVector VoxelPosition(
+                FMath::RoundToInt(LocalSample.X),
+                FMath::RoundToInt(LocalSample.Y),
+                FMath::RoundToInt(LocalSample.Z));
+            SamplePositions[ColumnIndex][DepthIndex] = VoxelPosition;
+            if (WorldBounds.Contains(VoxelPosition))
+            {
+                LockBounds += VoxelPosition;
+            }
+        }
+    }
+
+    if (!LockBounds.IsValid())
+    {
+        return false;
+    }
+
+    FVoxelData& Data = VoxelWorld->GetData();
+    FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
+
+    int32 SolidColumnCount = 0;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        bool bColumnHasSolidSupport = false;
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FIntVector& VoxelPosition = SamplePositions[ColumnIndex][DepthIndex];
+            if (WorldBounds.Contains(VoxelPosition) && !Data.GetValue(VoxelPosition, 0).IsEmpty())
+            {
+                bColumnHasSolidSupport = true;
+                break;
+            }
+        }
+
+        SolidColumnCount += bColumnHasSolidSupport ? 1 : 0;
+    }
+
+    // 발가락 정도의 일부 접촉으로는 이동을 막지 않고, 캡슐 하단의
+    // 다수 영역에 실제 고체 voxel이 있을 때만 floor 소실을 무시한다.
+    return SolidColumnCount >= 3;
 }
 
 void UDRCharacterMovementComponent::OnMovementModeChanged(
@@ -507,10 +690,12 @@ void UDRCharacterMovementComponent::SetBase(
     // MovementBase로 잡히면 FNetGUIDCache::SupportsObject 경고가 발생한다.
     if (NewBase && NewBase->IsA<UVoxelProceduralMeshComponent>())
     {
+        LastVoxelFloorWorld = Cast<AVoxelWorld>(NewBase->GetOwner());
         Super::SetBase(nullptr, NAME_None, bNotifyActor);
         return;
     }
 
+    LastVoxelFloorWorld.Reset();
     Super::SetBase(
         NewBase,
         BoneName,
@@ -761,6 +946,10 @@ void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations
 {
     switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
     {
+    case EDRCustomMovementMode::VoxelContained:
+        StopMovementImmediately();
+        ClearAccumulatedForces();
+        return;
     case EDRCustomMovementMode::MovementAction:
         PhysMovementAction(deltaTime, Iterations);
         return;

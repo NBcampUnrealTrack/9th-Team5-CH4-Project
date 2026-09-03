@@ -6,6 +6,7 @@
 #include "DRCharacterMovementComponent.generated.h"
 
 class FSavedMove_DRCharacter;
+class AVoxelWorld;
 class UAbilitySystemComponent;
 struct FOnAttributeChangeData;
 
@@ -18,6 +19,9 @@ enum class EDRCustomMovementMode : uint8
 
 	// 특정 액션 이름이 아닌 외부 이동 액션을 처리하는 모드
 	MovementAction = 1,
+
+	// 복셀 데이터가 캡슐 내부를 충분히 채워 collision 갱신 전에 움직임을 멈춘 상태
+	VoxelContained = 2,
 };
 
 UCLASS()
@@ -90,8 +94,24 @@ public:
 
 	bool IsCustomMovementModeActive(EDRCustomMovementMode Mode) const;
 
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태에 진입한다. */
+	void EnterVoxelContainedMode();
+
+	/** 복셀 매몰 판정 컴포넌트가 요청한 이동 정지 상태를 해제한다. */
+	void ExitVoxelContainedMode();
+
 protected:
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
+
+	virtual bool CheckFall(
+		const FFindFloorResult& OldFloor,
+		const FHitResult& Hit,
+		const FVector& Delta,
+		const FVector& OldLocation,
+		float RemainingTime,
+		float TimeTick,
+		int32 Iterations,
+		bool bMustJump) override;
 
 	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 	
@@ -116,10 +136,12 @@ private:
 	
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
+	bool ShouldKeepVoxelFloor(const FFindFloorResult& OldFloor, const FVector& OldLocation) const;
 
 	bool TryHandleZiplineRiderCollision(const FHitResult& Hit);
 	
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
+	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
@@ -156,6 +178,10 @@ private:
 	
 	/** 현재 출력 상승 진행 시간 */
 	float JetpackSpoolElapsed = 0.f;
+
+	/** VoxelWorld 하단 경계 직전에서 floor가 사라져도 자연 낙하로 전환하지 않는 여유 거리. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	float VoxelLowerBoundaryTolerance = 2.f;
 
 	/** 제트팩 작동 직후의 초기 추진 가속도 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s^2"))
