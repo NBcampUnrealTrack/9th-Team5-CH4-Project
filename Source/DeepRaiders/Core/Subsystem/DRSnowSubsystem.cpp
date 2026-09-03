@@ -158,8 +158,15 @@ void UDRSnowSubsystem::FlushRenderUpdates()
 	PendingRenderUpdates.Reset();
 }
 
-FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request)
+FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	FDRSnowMaterialPatch* OutMaterialPatch)
 {
+	if (OutMaterialPatch)
+	{
+		*OutMaterialPatch = FDRSnowMaterialPatch();
+	}
+
 	FDRSnowRemoveResult Result;
 	Result.TeamId = Request.Context.TeamId;
 	UWorld* World = GetWorld();
@@ -175,13 +182,34 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(const FDRSnowSurfaceRemoveReque
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	RepaintSnowMaterialsAtArea(Request, EditResult);
+
+	FDRSnowResolvedMaterialEdit ResolvedEdit;
+	if (SurfaceEditor.ResolveSnowMaterialsAtArea(
+		Request,
+		EditResult,
+		OwnershipStore,
+		VolumeStore,
+		ResolvedEdit))
+	{
+		if (OutMaterialPatch)
+		{
+			*OutMaterialPatch = ResolvedEdit.MaterialPatch;
+		}
+		SurfaceEditor.ApplyResolvedSnowMaterials(ResolvedEdit);
+	}
 	return Result;
 }
 
-FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request)
+FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	FDRSnowMaterialPatch* OutMaterialPatch)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Pipeline_Total);
+	if (OutMaterialPatch)
+	{
+		*OutMaterialPatch = FDRSnowMaterialPatch();
+	}
+
 	FDRSnowRemoveResult Result;
 	Result.TeamId = Request.Context.TeamId;
 	UWorld* World = GetWorld();
@@ -197,11 +225,21 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(const FDRSnowSurf
 		return Result;
 	}
 	ApplyRemovedSurfaceEdit(Request, EditResult, Result.RemovedAmount);
-	SurfaceEditor.RepaintSnowMaterialsAtModifiedVoxels(
+
+	FDRSnowResolvedMaterialEdit ResolvedEdit;
+	if (SurfaceEditor.ResolveSnowMaterialsAtModifiedVoxels(
 		Request,
 		EditResult,
 		OwnershipStore,
-		VolumeStore);
+		VolumeStore,
+		ResolvedEdit))
+	{
+		if (OutMaterialPatch)
+		{
+			*OutMaterialPatch = ResolvedEdit.MaterialPatch;
+		}
+		SurfaceEditor.ApplyResolvedSnowMaterials(ResolvedEdit);
+	}
 	return Result;
 }
 

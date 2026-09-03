@@ -111,7 +111,9 @@ private:
 #pragma region Snow
 public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
-	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation);
+	void RegisterSnowRemove(
+		const FDRSnowRemoveOperation& Operation,
+		FDRSnowMaterialPatch MaterialPatch);
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);

@@ -139,10 +139,13 @@ void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operatio
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = true;
 	Record.AddOperation = Operation;
+	Record.ServerAppliedAmount = Operation.Amount;
 	Multicast_ApplySnowOperation(Record);
 }
 
-void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Operation)
+void ADRMiningGameStateBase::RegisterSnowRemove(
+	const FDRSnowRemoveOperation& Operation,
+	FDRSnowMaterialPatch MaterialPatch)
 {
 	if (!HasAuthority())
 	{
@@ -153,6 +156,9 @@ void ADRMiningGameStateBase::RegisterSnowRemove(const FDRSnowRemoveOperation& Op
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = false;
 	Record.RemoveOperation = Operation;
+	Record.ServerAppliedAmount = Operation.AppliedAmount;
+	Record.bHasAuthoritativeMaterialPatch = true;
+	Record.MaterialPatch = MoveTemp(MaterialPatch);
 	Multicast_ApplySnowOperation(Record);
 }
 

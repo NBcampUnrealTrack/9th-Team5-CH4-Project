@@ -4,6 +4,7 @@
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "DeepRaiders/Snow/DRDirectionalSurfaceTool.h"
 #include "DeepRaiders/Snow/DRSnowAbsorbTool.h"
+#include "DeepRaiders/Snow/DRSnowMaterialMapping.h"
 #include "EngineUtils.h"
 #include "ProfilingDebugging/CountersTrace.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -22,12 +23,11 @@ namespace
 constexpr float SnowSurfaceDistanceDivisor = 4.f;
 constexpr float SnowSurfaceFalloff = 0.35f;
 
-int32 GetTeamMaterialIndex(const int32 TeamId) { return TeamId == INDEX_NONE ? 0 : FMath::Max(0, TeamId) + 1; }
-
-FVoxelPaintMaterial MakeTeamPaintMaterial(const EVoxelMaterialConfig MaterialConfig, const int32 TeamId)
+FVoxelPaintMaterial MakeIndexPaintMaterial(
+	const EVoxelMaterialConfig MaterialConfig,
+	const uint8 MaterialIndex)
 {
 	FVoxelPaintMaterial PaintMaterial;
-	const int32 MaterialIndex = GetTeamMaterialIndex(TeamId);
 	if (MaterialConfig == EVoxelMaterialConfig::SingleIndex)
 	{
 		PaintMaterial.Type = EVoxelPaintMaterialType::SingleIndex;
@@ -86,7 +86,7 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 	}
 
 	FVoxelMaterial SnowMaterial;
-	SnowMaterial.SetSingleIndex(GetTeamMaterialIndex(Request.Context.TeamId));
+	SnowMaterial.SetSingleIndex(DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 	int32 ModifiedVoxelCount = 0;
 	FVoxelData& Data = VoxelWorld->GetData();
 	{
@@ -131,10 +131,10 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 	return Result;
 }
 
-bool PaintProcessedTeamSurface(
+bool PaintProcessedMaterialSurface(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
-	const int32 TeamId)
+	const uint8 MaterialIndex)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_EditMaterials);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
@@ -149,7 +149,7 @@ bool PaintProcessedTeamSurface(
 		ModifiedMaterials,
 		EditedMaterialBounds,
 		VoxelWorld,
-		MakeTeamPaintMaterial(VoxelWorld->MaterialConfig, TeamId),
+		MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialIndex),
 		ProcessedVoxels,
 		true,
 		false,
@@ -157,10 +157,10 @@ bool PaintProcessedTeamSurface(
 	return EditedMaterialBounds.IsValid();
 }
 
-void PaintProcessedTeamSurfaceAsync(
+void PaintProcessedMaterialSurfaceAsync(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
-	const int32 TeamId,
+	const uint8 MaterialIndex,
 	TFunction<void()> Completion)
 {
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
@@ -172,7 +172,7 @@ void PaintProcessedTeamSurfaceAsync(
 
 	UVoxelSurfaceEditTools::EditVoxelMaterialsAsync(
 		VoxelWorld,
-		MakeTeamPaintMaterial(VoxelWorld->MaterialConfig, TeamId),
+		MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialIndex),
 		ProcessedVoxels,
 		FOnVoxelToolComplete_WithModifiedMaterials::CreateLambda(
 			[Completion = MoveTemp(Completion)](const TArray<FModifiedVoxelMaterial>&) mutable
@@ -233,6 +233,198 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 	}
 
 	return MakeProcessedVoxelGroup(SourceVoxels, MoveTemp(NewVoxels));
+}
+
+void AddVoxelToMaterialPatch(
+	FDRSnowMaterialPatch& Patch,
+	const FIntVector& VoxelPosition,
+	const uint8 MaterialIndex)
+{
+	const FIntVector ChunkCoord = DRSnowMaterialPatchUtils::VoxelToChunkCoord(VoxelPosition);
+	FDRSnowMaterialChunkPatch* ChunkPatch = Patch.Chunks.FindByPredicate(
+		[ChunkCoord](const FDRSnowMaterialChunkPatch& Entry)
+		{
+			return Entry.ChunkCoord == ChunkCoord;
+		});
+	if (!ChunkPatch)
+	{
+		ChunkPatch = &Patch.Chunks.AddDefaulted_GetRef();
+		ChunkPatch->ChunkCoord = ChunkCoord;
+	}
+
+	FDRSnowMaterialIndexSet* MaterialSet = ChunkPatch->MaterialSets.FindByPredicate(
+		[MaterialIndex](const FDRSnowMaterialIndexSet& Entry)
+		{
+			return Entry.MaterialIndex == MaterialIndex;
+		});
+	if (!MaterialSet)
+	{
+		MaterialSet = &ChunkPatch->MaterialSets.AddDefaulted_GetRef();
+		MaterialSet->MaterialIndex = MaterialIndex;
+	}
+
+	MaterialSet->LocalVoxelIndices.Add(
+		DRSnowMaterialPatchUtils::VoxelToLocalIndex(VoxelPosition));
+}
+
+void SortMaterialPatch(FDRSnowMaterialPatch& Patch)
+{
+	Patch.Chunks.Sort([](const FDRSnowMaterialChunkPatch& A, const FDRSnowMaterialChunkPatch& B)
+	{
+		if (A.ChunkCoord.X != B.ChunkCoord.X)
+		{
+			return A.ChunkCoord.X < B.ChunkCoord.X;
+		}
+		if (A.ChunkCoord.Y != B.ChunkCoord.Y)
+		{
+			return A.ChunkCoord.Y < B.ChunkCoord.Y;
+		}
+		return A.ChunkCoord.Z < B.ChunkCoord.Z;
+	});
+
+	for (FDRSnowMaterialChunkPatch& Chunk : Patch.Chunks)
+	{
+		Chunk.MaterialSets.Sort([](const FDRSnowMaterialIndexSet& A, const FDRSnowMaterialIndexSet& B)
+		{
+			return A.MaterialIndex < B.MaterialIndex;
+		});
+		for (FDRSnowMaterialIndexSet& MaterialSet : Chunk.MaterialSets)
+		{
+			MaterialSet.LocalVoxelIndices.Sort();
+		}
+	}
+}
+
+void BuildAndValidateMaterialPatch(FDRSnowResolvedMaterialEdit& ResolvedEdit)
+{
+	TMap<FIntVector, uint8> ExpectedMaterials;
+	for (const FDRSnowResolvedMaterialGroup& Group : ResolvedEdit.Groups)
+	{
+		for (const FVoxelSurfaceEditsVoxel& Voxel : *Group.ProcessedVoxels.Voxels)
+		{
+			ExpectedMaterials.Add(Voxel.Position, Group.MaterialIndex);
+			AddVoxelToMaterialPatch(
+				ResolvedEdit.MaterialPatch,
+				Voxel.Position,
+				Group.MaterialIndex);
+		}
+	}
+	SortMaterialPatch(ResolvedEdit.MaterialPatch);
+
+	TMap<FIntVector, uint8> PatchMaterials;
+	int32 DuplicateOrConflictingCount = 0;
+	for (const FDRSnowMaterialChunkPatch& Chunk : ResolvedEdit.MaterialPatch.Chunks)
+	{
+		for (const FDRSnowMaterialIndexSet& MaterialSet : Chunk.MaterialSets)
+		{
+			for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
+			{
+				const FIntVector Position = DRSnowMaterialPatchUtils::LocalIndexToVoxel(
+					Chunk.ChunkCoord,
+					LocalIndex);
+				if (const uint8* ExistingMaterial = PatchMaterials.Find(Position))
+				{
+					if (*ExistingMaterial != MaterialSet.MaterialIndex)
+					{
+						++DuplicateOrConflictingCount;
+					}
+					continue;
+				}
+				PatchMaterials.Add(Position, MaterialSet.MaterialIndex);
+			}
+		}
+	}
+
+	int32 MismatchCount = DuplicateOrConflictingCount;
+	for (const TPair<FIntVector, uint8>& Expected : ExpectedMaterials)
+	{
+		const uint8* PatchMaterial = PatchMaterials.Find(Expected.Key);
+		if (!PatchMaterial || *PatchMaterial != Expected.Value)
+		{
+			++MismatchCount;
+		}
+	}
+	for (const TPair<FIntVector, uint8>& PatchEntry : PatchMaterials)
+	{
+		if (!ExpectedMaterials.Contains(PatchEntry.Key))
+		{
+			++MismatchCount;
+		}
+	}
+
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/VoxelCount"), ResolvedEdit.MaterialPatch.NumVoxels());
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ChunkCount"), ResolvedEdit.MaterialPatch.Chunks.Num());
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/EstimatedBytes"), ResolvedEdit.MaterialPatch.EstimateSerializedBytes());
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/MaterialMismatchCount"), MismatchCount);
+	ensureMsgf(
+		MismatchCount == 0,
+		TEXT("Snow material patch shadow validation failed with %d mismatched voxel(s)"),
+		MismatchCount);
+}
+
+void ResolveProcessedSnowMaterials(
+	AVoxelWorld* VoxelWorld,
+	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
+	const FDRSnowOwnershipStore& OwnershipStore,
+	const FDRSnowVolumeStore& VolumeStore,
+	const bool bUseSurfacePositionForVolume,
+	FDRSnowResolvedMaterialEdit& OutResolvedEdit)
+{
+	TArray<FIntVector> Positions;
+	Positions.Reserve(ProcessedVoxels.Voxels->Num());
+	for (const FVoxelSurfaceEditsVoxel& Voxel : *ProcessedVoxels.Voxels)
+	{
+		Positions.Add(Voxel.Position);
+	}
+
+	TArray<int32> ResolvedTeamIds;
+	TBitArray<> FoundOwnership;
+	OwnershipStore.ResolveNearestTeamsAtVoxels(
+		VoxelWorld,
+		Positions,
+		2,
+		ResolvedTeamIds,
+		FoundOwnership);
+
+	TMap<uint8, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByMaterial;
+	for (int32 VoxelIndex = 0; VoxelIndex < ProcessedVoxels.Voxels->Num(); ++VoxelIndex)
+	{
+		const FVoxelSurfaceEditsVoxel& Voxel = (*ProcessedVoxels.Voxels)[VoxelIndex];
+		int32 DominantTeamId = ResolvedTeamIds[VoxelIndex];
+		if (!FoundOwnership[VoxelIndex])
+		{
+			const FVector SampleWorldLocation =
+				bUseSurfacePositionForVolume && ProcessedVoxels.Info.bHasSurfacePositions
+					? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
+					: VoxelWorld->LocalToGlobal(Voxel.Position);
+			DominantTeamId = VolumeStore.GetDominantTeamAtLocation(SampleWorldLocation);
+		}
+
+		const uint8 MaterialIndex = DRSnowMaterialMapping::TeamToMaterialIndex(DominantTeamId);
+		VoxelsByMaterial.FindOrAdd(MaterialIndex).Add(Voxel);
+	}
+
+	OutResolvedEdit = FDRSnowResolvedMaterialEdit();
+	OutResolvedEdit.VoxelWorld = VoxelWorld;
+	OutResolvedEdit.Groups.Reserve(VoxelsByMaterial.Num());
+	for (TPair<uint8, TArray<FVoxelSurfaceEditsVoxel>>& MaterialVoxels : VoxelsByMaterial)
+	{
+		if (MaterialVoxels.Value.IsEmpty())
+		{
+			continue;
+		}
+
+		FDRSnowResolvedMaterialGroup& Group = OutResolvedEdit.Groups.AddDefaulted_GetRef();
+		Group.MaterialIndex = MaterialVoxels.Key;
+		Group.ProcessedVoxels = MakeProcessedVoxelGroup(
+			ProcessedVoxels,
+			MoveTemp(MaterialVoxels.Value));
+	}
+	OutResolvedEdit.Groups.Sort([](const FDRSnowResolvedMaterialGroup& A, const FDRSnowResolvedMaterialGroup& B)
+	{
+		return A.MaterialIndex < B.MaterialIndex;
+	});
+	BuildAndValidateMaterialPatch(OutResolvedEdit);
 }
 
 
@@ -304,13 +496,13 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 		{
 			if (EditedBounds.IsValid())
 			{
-				PaintProcessedTeamSurface(
+				PaintProcessedMaterialSurface(
 					VoxelWorld,
 					UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
 						EditedBounds,
 						ModifiedValues,
 						true),
-					Request.Context.TeamId);
+					DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 			}
 
 			Result.VoxelWorld = VoxelWorld;
@@ -367,10 +559,10 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 
 				const FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
 					UVoxelSurfaceTools::ApplyStack(SurfaceVoxels, SurfaceStack);
-				PaintProcessedTeamSurface(
+				PaintProcessedMaterialSurface(
 					VoxelWorld,
 					MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
-					Request.Context.TeamId);
+					DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 			}
 
 		}
@@ -431,10 +623,10 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	{
 		// 팀 소유 표현은 FVoxelValue에 섞지 않고 material index paint로만 처리한다.
 		// 단, 기존 표면과 겹친 교집합은 유지하고 이번 Add로 새로 채워진 위치만 칠한다.
-		PaintProcessedTeamSurface(
+		PaintProcessedMaterialSurface(
 			VoxelWorld,
 			MakeNewlyAddedVoxelGroup(ProcessedVoxels, ModifiedValues),
-			Request.Context.TeamId);
+			DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 
 	}
 
@@ -517,10 +709,10 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 			Result.ModifiedValues = MoveTemp(ModifiedValues);
 			Result.bUseModifiedValuesForVolume = true;
 
-			PaintProcessedTeamSurfaceAsync(
+			PaintProcessedMaterialSurfaceAsync(
 				ValidVoxelWorld,
 				PaintVoxels,
-				Request.Context.TeamId,
+				DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId),
 				[Result = MoveTemp(Result), Completion = MoveTemp(Completion)]() mutable
 				{
 					Completion(MoveTemp(Result));
@@ -682,13 +874,15 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
 	return Result;
 }
 
-bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
+bool FDRSnowSurfaceEditor::ResolveSnowMaterialsAtArea(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const FDRSnowSurfaceEditResult& EditResult,
 	const FDRSnowOwnershipStore& OwnershipStore,
-	const FDRSnowVolumeStore& VolumeStore)
+	const FDRSnowVolumeStore& VolumeStore,
+	FDRSnowResolvedMaterialEdit& OutResolvedEdit)
 {
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Total);
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_ResolveArea);
+	OutResolvedEdit = FDRSnowResolvedMaterialEdit();
 	if (!EditResult.EditedBounds.IsValid() || EditResult.ModifiedValues.IsEmpty())
 	{
 		return false;
@@ -795,67 +989,28 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
 	ProcessedVoxels.Voxels =
 		MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(MoveTemp(RepaintVoxels));
 
-	TMap<int32, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByTeam;
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_ResolveOwnership);
-		TArray<FIntVector> RepaintPositions;
-		RepaintPositions.Reserve(ProcessedVoxels.Voxels->Num());
-		for (const FVoxelSurfaceEditsVoxel& Voxel : *ProcessedVoxels.Voxels)
-		{
-			RepaintPositions.Add(Voxel.Position);
-		}
-
-		TArray<int32> ResolvedTeamIds;
-		TBitArray<> FoundOwnership;
-		OwnershipStore.ResolveNearestTeamsAtVoxels(
+		ResolveProcessedSnowMaterials(
 			VoxelWorld,
-			RepaintPositions,
-			2,
-			ResolvedTeamIds,
-			FoundOwnership);
-
-		for (int32 VoxelIndex = 0; VoxelIndex < ProcessedVoxels.Voxels->Num(); ++VoxelIndex)
-		{
-			const FVoxelSurfaceEditsVoxel& Voxel = (*ProcessedVoxels.Voxels)[VoxelIndex];
-			int32 DominantTeamId = ResolvedTeamIds[VoxelIndex];
-			// 새로 생긴 눈은 ownership 기록이 더 정확하고, 기존 표면은 Volume 우세 팀으로 fallback 한다.
-			if (!FoundOwnership[VoxelIndex])
-			{
-				const FVector SampleWorldLocation =
-					ProcessedVoxels.Info.bHasSurfacePositions
-						? VoxelWorld->LocalToGlobalFloat(FVoxelVector(Voxel.SurfacePosition))
-						: VoxelWorld->LocalToGlobal(Voxel.Position);
-				DominantTeamId = VolumeStore.GetDominantTeamAtLocation(SampleWorldLocation);
-			}
-
-			VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);
-		}
+			ProcessedVoxels,
+			OwnershipStore,
+			VolumeStore,
+			true,
+			OutResolvedEdit);
 	}
-
-	bool bPaintedAny = false;
-	for (TPair<int32, TArray<FVoxelSurfaceEditsVoxel>>& TeamVoxels : VoxelsByTeam)
-	{
-		if (TeamVoxels.Value.Num() == 0)
-		{
-			continue;
-		}
-
-		bPaintedAny |= PaintProcessedTeamSurface(
-			VoxelWorld,
-			MakeProcessedVoxelGroup(ProcessedVoxels, MoveTemp(TeamVoxels.Value)),
-			TeamVoxels.Key);
-	}
-
-	return bPaintedAny;
+	return !OutResolvedEdit.IsEmpty();
 }
 
-bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtModifiedVoxels(
+bool FDRSnowSurfaceEditor::ResolveSnowMaterialsAtModifiedVoxels(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const FDRSnowSurfaceEditResult& EditResult,
 	const FDRSnowOwnershipStore& OwnershipStore,
-	const FDRSnowVolumeStore& VolumeStore)
+	const FDRSnowVolumeStore& VolumeStore,
+	FDRSnowResolvedMaterialEdit& OutResolvedEdit)
 {
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_Total);
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_ResolveModified);
+	OutResolvedEdit = FDRSnowResolvedMaterialEdit();
 	if (!EditResult.EditedBounds.IsValid() || EditResult.ModifiedValues.IsEmpty())
 	{
 		return false;
@@ -882,47 +1037,148 @@ bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtModifiedVoxels(
 	}
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Repaint/DirtyVoxels"), DirtyVoxels.Voxels->Num());
 
-	TArray<FIntVector> DirtyPositions;
-	DirtyPositions.Reserve(DirtyVoxels.Voxels->Num());
-	for (const FVoxelSurfaceEditsVoxel& Voxel : *DirtyVoxels.Voxels)
-	{
-		DirtyPositions.Add(Voxel.Position);
-	}
-
-	TArray<int32> ResolvedTeamIds;
-	TBitArray<> FoundOwnership;
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_ResolveOwnership);
-		OwnershipStore.ResolveNearestTeamsAtVoxels(
+		ResolveProcessedSnowMaterials(
 			VoxelWorld,
-			DirtyPositions,
-			2,
-			ResolvedTeamIds,
-			FoundOwnership);
+			DirtyVoxels,
+			OwnershipStore,
+			VolumeStore,
+			false,
+			OutResolvedEdit);
 	}
+	return !OutResolvedEdit.IsEmpty();
+}
 
-	TMap<int32, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByTeam;
-	for (int32 VoxelIndex = 0; VoxelIndex < DirtyVoxels.Voxels->Num(); ++VoxelIndex)
+bool FDRSnowSurfaceEditor::ApplyResolvedSnowMaterials(
+	const FDRSnowResolvedMaterialEdit& ResolvedEdit)
+{
+	AVoxelWorld* VoxelWorld = ResolvedEdit.VoxelWorld.Get();
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
-		const FVoxelSurfaceEditsVoxel& Voxel = (*DirtyVoxels.Voxels)[VoxelIndex];
-		int32 DominantTeamId = ResolvedTeamIds[VoxelIndex];
-		if (!FoundOwnership[VoxelIndex])
-		{
-			DominantTeamId = VolumeStore.GetDominantTeamAtLocation(
-				VoxelWorld->LocalToGlobal(Voxel.Position));
-		}
-		VoxelsByTeam.FindOrAdd(DominantTeamId).Add(Voxel);
+		return false;
 	}
 
 	bool bPaintedAny = false;
-	for (TPair<int32, TArray<FVoxelSurfaceEditsVoxel>>& TeamVoxels : VoxelsByTeam)
+	for (const FDRSnowResolvedMaterialGroup& Group : ResolvedEdit.Groups)
 	{
-		bPaintedAny |= PaintProcessedTeamSurface(
+		bPaintedAny |= PaintProcessedMaterialSurface(
 			VoxelWorld,
-			MakeProcessedVoxelGroup(DirtyVoxels, MoveTemp(TeamVoxels.Value)),
-			TeamVoxels.Key);
+			Group.ProcessedVoxels,
+			Group.MaterialIndex);
 	}
 	return bPaintedAny;
+}
+
+bool FDRSnowSurfaceEditor::ApplySnowMaterialPatch(
+	AVoxelWorld* VoxelWorld,
+	const FDRSnowMaterialPatch& MaterialPatch)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_ApplyMaterialPatch);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB || MaterialPatch.IsEmpty())
+	{
+		return false;
+	}
+
+	bool bPaintedAny = false;
+	int32 MissingSurfaceVoxelCount = 0;
+	for (const FDRSnowMaterialChunkPatch& ChunkPatch : MaterialPatch.Chunks)
+	{
+		TMap<uint16, uint8> MaterialByLocalIndex;
+		for (const FDRSnowMaterialIndexSet& MaterialSet : ChunkPatch.MaterialSets)
+		{
+			for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
+			{
+				MaterialByLocalIndex.Add(LocalIndex, MaterialSet.MaterialIndex);
+			}
+		}
+		if (MaterialByLocalIndex.IsEmpty())
+		{
+			continue;
+		}
+
+		const FIntVector ChunkMin = ChunkPatch.ChunkCoord * DRSnowMaterialPatchUtils::ChunkSize;
+		const FVoxelIntBox ChunkBounds(
+			ChunkMin,
+			ChunkMin + FIntVector(DRSnowMaterialPatchUtils::ChunkSize));
+		FVoxelSurfaceEditsVoxels SurfaceVoxels;
+		UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+			SurfaceVoxels,
+			VoxelWorld,
+			ChunkBounds,
+			true);
+
+		TMap<uint8, TArray<FVoxelSurfaceEditsVoxel>> VoxelsByMaterial;
+		for (const FVoxelSurfaceEditsVoxelBase& SourceVoxel : *SurfaceVoxels.Voxels)
+		{
+			if (!ChunkBounds.Contains(SourceVoxel.Position))
+			{
+				continue;
+			}
+			const uint16 LocalIndex = DRSnowMaterialPatchUtils::VoxelToLocalIndex(SourceVoxel.Position);
+			const uint8* MaterialIndex = MaterialByLocalIndex.Find(LocalIndex);
+			if (!MaterialIndex)
+			{
+				continue;
+			}
+
+			FVoxelSurfaceEditsVoxel& Voxel = VoxelsByMaterial.FindOrAdd(*MaterialIndex).Add_GetRef(
+				FVoxelSurfaceEditsVoxel(SourceVoxel));
+			Voxel.Strength = 1.f;
+			MaterialByLocalIndex.Remove(LocalIndex);
+		}
+		MissingSurfaceVoxelCount += MaterialByLocalIndex.Num();
+
+		FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels;
+		ProcessedVoxels.Bounds = ChunkBounds;
+		ProcessedVoxels.Info = SurfaceVoxels.Info;
+		for (TPair<uint8, TArray<FVoxelSurfaceEditsVoxel>>& MaterialVoxels : VoxelsByMaterial)
+		{
+			ProcessedVoxels.Voxels = MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(
+				MoveTemp(MaterialVoxels.Value));
+			bPaintedAny |= PaintProcessedMaterialSurface(
+				VoxelWorld,
+				ProcessedVoxels,
+				MaterialVoxels.Key);
+		}
+	}
+	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/MissingSurfaceVoxelCount"), MissingSurfaceVoxelCount);
+	return bPaintedAny;
+}
+
+bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& EditResult,
+	const FDRSnowOwnershipStore& OwnershipStore,
+	const FDRSnowVolumeStore& VolumeStore)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Total);
+	FDRSnowResolvedMaterialEdit ResolvedEdit;
+	return ResolveSnowMaterialsAtArea(
+			Request,
+			EditResult,
+			OwnershipStore,
+			VolumeStore,
+			ResolvedEdit) &&
+		ApplyResolvedSnowMaterials(ResolvedEdit);
+}
+
+bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtModifiedVoxels(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& EditResult,
+	const FDRSnowOwnershipStore& OwnershipStore,
+	const FDRSnowVolumeStore& VolumeStore)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_Total);
+	FDRSnowResolvedMaterialEdit ResolvedEdit;
+	return ResolveSnowMaterialsAtModifiedVoxels(
+			Request,
+			EditResult,
+			OwnershipStore,
+			VolumeStore,
+			ResolvedEdit) &&
+		ApplyResolvedSnowMaterials(ResolvedEdit);
 }
 
 AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const

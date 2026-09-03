@@ -33,9 +33,13 @@ public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
 	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
-	FDRSnowRemoveResult RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request);
+	FDRSnowRemoveResult RemoveSnow(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
 	// 눈총 frustum 전용 제거 경로다.
-	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
+	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
 	// Multicast 수신용 제거 경로다. 일반 제거와 달리 서버가 확정한 양을 Volume에 반영한다.
 	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
 	bool ApplyReplicatedSnowAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "VoxelTools/Gen/VoxelToolsBase.h"
+#include "VoxelTools/VoxelSurfaceTools.h"
 
 class AVoxelWorld;
 class FDRSnowOwnershipStore;
@@ -18,6 +19,23 @@ struct FDRSnowSurfaceEditResult
 	// DirectionalSurfaceTool처럼 원본 Store가 실제 변경 위치를 따라가야 할 때만 채운다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	bool bUseModifiedValuesForVolume = false;
+};
+
+// 서버가 Ownership/Volume으로 결정한 최종 MaterialIndex와 실제 paint 입력을 함께 보관한다.
+// Groups는 서버 즉시 적용용이고 MaterialPatch는 네트워크 전송용이다.
+struct FDRSnowResolvedMaterialGroup
+{
+	uint8 MaterialIndex = 0;
+	FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels;
+};
+
+struct FDRSnowResolvedMaterialEdit
+{
+	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+	TArray<FDRSnowResolvedMaterialGroup> Groups;
+	FDRSnowMaterialPatch MaterialPatch;
+
+	bool IsEmpty() const { return Groups.IsEmpty(); }
 };
 
 // Voxel value/material 표현 편집만 담당한다. 원본 amount와 ownership은 Subsystem이 관리한다.
@@ -37,6 +55,23 @@ public:
 	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
 	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
+	// 서버 원본 Ownership/Volume을 읽어 최종 MaterialIndex 그룹과 전송 Patch를 만든다.
+	bool ResolveSnowMaterialsAtArea(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult,
+		const FDRSnowOwnershipStore& OwnershipStore,
+		const FDRSnowVolumeStore& VolumeStore,
+		FDRSnowResolvedMaterialEdit& OutResolvedEdit);
+	bool ResolveSnowMaterialsAtModifiedVoxels(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult,
+		const FDRSnowOwnershipStore& OwnershipStore,
+		const FDRSnowVolumeStore& VolumeStore,
+		FDRSnowResolvedMaterialEdit& OutResolvedEdit);
+	// Resolve 결과를 서버 VoxelWorld에 적용한다.
+	bool ApplyResolvedSnowMaterials(const FDRSnowResolvedMaterialEdit& ResolvedEdit);
+	// 이후 클라이언트 전환에서 사용할 MaterialIndex Patch 적용 경계다.
+	bool ApplySnowMaterialPatch(AVoxelWorld* VoxelWorld, const FDRSnowMaterialPatch& MaterialPatch);
 	// ownership을 우선하고, ownership이 없는 표면만 Volume의 우세 팀으로 다시 칠한다.
 	bool RepaintSnowMaterialsAtArea(
 		const FDRSnowSurfaceRemoveRequest& Request,

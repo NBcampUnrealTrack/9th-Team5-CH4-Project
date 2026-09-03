@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DRSnowReplicationTypes.h"
 #include "VoxelWorld.h"
 #include "DRSnowTypes.generated.h"
 
@@ -280,6 +281,18 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FDRSnowRemoveOperation RemoveOperation;
+
+	// 서버에서 실제 적용된 눈의 양
+	UPROPERTY()
+	float ServerAppliedAmount = 0.f;
+
+	// 전환 기간 중 구형 Operation과 구분
+	UPROPERTY()
+	bool bHasAuthoritativeMaterialPatch = false;
+
+	// TeamId가 아닌 MaterialIndex 패치
+	UPROPERTY()
+	FDRSnowMaterialPatch MaterialPatch;
 };
 
 // 눈 투사체나 눈 충돌체가 캐릭터/대상에게 피해를 줄 때 사용하는 요청 데이터다.

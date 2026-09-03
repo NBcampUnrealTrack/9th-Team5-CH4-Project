@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WidgetComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Snow/DRSnowMaterialMapping.h"
 #include "DeepRaiders/UI/HUD/DRPointLocationWidget.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
@@ -64,11 +65,6 @@ int32 ADRSnowControlZone::GetDominantMaterialIndex(
 	}
 
 	return INDEX_NONE;
-}
-
-int32 ADRSnowControlZone::MaterialIndexToTeamId(const int32 MaterialIndex)
-{
-	return MaterialIndex <= 0 ? INDEX_NONE : MaterialIndex - 1;
 }
 
 void ADRSnowControlZone::ExpandVoxelBoundsForWorldPoint(
@@ -359,7 +355,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 					}
 
 					++Result.MaterialVoxelCount;
-					const int32 TeamId = MaterialIndexToTeamId(MaterialIndex);
+					const int32 TeamId = DRSnowMaterialMapping::MaterialIndexToTeamId(
+						static_cast<uint8>(MaterialIndex));
 					FDRSnowVoxelMaterialTeamCount* Team = Result.Teams.FindByPredicate(
 						[TeamId](const FDRSnowVoxelMaterialTeamCount& Entry)
 						{
