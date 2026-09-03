@@ -103,6 +103,8 @@ private:
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
 
+	bool TryHandleZiplineRiderCollision(const FHitResult& Hit);
+	
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;

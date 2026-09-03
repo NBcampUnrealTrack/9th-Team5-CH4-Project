@@ -21,6 +21,7 @@ enum class EDRMovementActionEndReason : uint8
 	Cancelled UMETA(DisplayName = "Cancelled"),
 	Invalidated UMETA(DisplayName = "Invalidated"),
 	OwnerDeath UMETA(DisplayName = "Owner Death"),
+    Collision UMETA(DisplayName = "Collision"),
 };
 
 UENUM(BlueprintType)
