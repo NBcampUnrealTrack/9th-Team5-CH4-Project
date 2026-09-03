@@ -111,6 +111,24 @@ void UDRQuickSlotComponent::RequestSelectSlot(int32 SlotIndex)
 	}
 }
 
+void UDRQuickSlotComponent::RequestSelectAdjacentSlot(int32 Direction)
+{
+	if (Direction == 0 
+		|| !CachedInventoryComponent())
+	{
+		return;
+	}
+	
+	const int32 TargetSlotIndex = FindAdjacentAvailableSlotIndex(GetSelectedSlotIndex(), Direction);
+	
+	if (TargetSlotIndex == INDEX_NONE)
+	{
+		return;
+	}
+	
+	RequestSelectSlot(TargetSlotIndex);
+}
+
 void UDRQuickSlotComponent::ServerSelectSlot_Implementation(int32 SlotIndex, FGuid ExpectedInstanceId)
 {
 	SelectSlotInternal(SlotIndex, ExpectedInstanceId);
@@ -358,6 +376,43 @@ bool UDRQuickSlotComponent::SelectSlotInternal(int32 SlotIndex, FGuid ExpectedIn
 	RequestReplicationUpdate();
 	
 	return true;	
+}
+
+int32 UDRQuickSlotComponent::FindAdjacentAvailableSlotIndex(int32 StartSlotIndex, int32 Direction)
+{
+	const int32 SlotCount = GetSlotCount();
+	
+	if (SlotCount <= 0
+		|| Direction == 0)
+	{
+		return INDEX_NONE;
+	}
+	
+	const int32 Step = Direction > 0 ? 1 : -1;
+	const bool bHasValidStartIndex = StartSlotIndex >= 0 && StartSlotIndex < SlotCount;
+	const int32 SearchStartIndex = bHasValidStartIndex ? StartSlotIndex : (Step > 0 ? SlotCount -1 : 0);
+	
+	for (int32 Offset = 1; Offset <= SlotCount; ++Offset)
+	{
+		int32 CandidateSlotIndex = (SearchStartIndex + Step * Offset) % SlotCount;
+		
+		if (CandidateSlotIndex < 0)
+		{
+			CandidateSlotIndex += SlotCount;
+		}
+		
+		if (CandidateSlotIndex == StartSlotIndex)
+		{
+			continue;
+		}
+		
+		if (IsSlotItemAvailable(CandidateSlotIndex))
+		{
+			return CandidateSlotIndex;
+		}
+	}
+	
+	return INDEX_NONE;
 }
 
 bool UDRQuickSlotComponent::EnsureValidSelection()

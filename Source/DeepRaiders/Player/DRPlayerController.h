@@ -95,7 +95,9 @@ private:
 	void HandleJumpCompleted(const FInputActionValue& Value);
 
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
-
+	
+	void HandleScrollQuickSlot(const FInputActionValue& Value);	
+	
 	void HandleGASInputStarted(int32 InputId);
 	void HandleGASInputTriggered(int32 InputId);
 	void HandleGASInputReleased(int32 InputId);
@@ -139,6 +141,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> SelectQuickSlotAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
+	TObjectPtr<UInputAction> ScrollQuickSlotAction;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> PrimaryAction;
 

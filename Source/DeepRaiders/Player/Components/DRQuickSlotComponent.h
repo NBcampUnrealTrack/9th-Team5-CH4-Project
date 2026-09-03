@@ -42,6 +42,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Quick Slot")
 	void RequestSelectSlot(int32 SlotIndex);
 	
+	// Direction이 양수면 다음 슬롯, 음수면 이전 슬롯을 선택
+	// 빈 슬롯은 건너뛰고 마지막 슬롯과 첫 슬롯을 순환한다.
+	void RequestSelectAdjacentSlot(int32 Direction);
+	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	int32 GetSlotCount() const;
 	
@@ -110,6 +114,8 @@ private:
 	bool IsLocalPlayer() const;
 	
 	bool SelectSlotInternal(int32 SlotIndex, FGuid ExpectedInstanceId);
+	
+	int32 FindAdjacentAvailableSlotIndex(int32 StartSlotIndex, int32 Direction);
 	
 	// 인벤토리 내 변경에도 현재 선택중인 ItemInstance가 유효한지 검사
 	// ItemInstance가 유효하지 않아 변경이 필요한 경우, 기본 무기를 우선 선택한다.
