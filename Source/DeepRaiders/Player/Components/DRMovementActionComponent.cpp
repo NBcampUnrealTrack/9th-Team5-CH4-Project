@@ -129,18 +129,27 @@ void UDRMovementActionComponent::ReportMovementSimulation(const FVector& Locatio
 
 void UDRMovementActionComponent::EvaluateGrappleContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const
 {
-	const FVector ToReference = State.ReferenceLocation - Input.Location;
-	const float DistanceSquared = ToReference.SizeSquared();
+	const FVector ToReference = FVector(State.ReferenceLocation) - Input.Location;
 
-	if (DistanceSquared <= KINDA_SMALL_NUMBER)
+	if (ToReference.SizeSquared() <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
 	const FVector ReferenceDirection = ToReference.GetSafeNormal();
-	const FVector ActionAcceleration = ReferenceDirection * State.ActionAcceleration;
-
-	// 상태의 제어 배율에 따라 입력 가속도를 계산
+	const FVector ViewDirection = ResolveOwnerViewDirection();
+	const float ViewWeight = FMath::Max(State.ViewDirectionWeight, 0.f);	
+	
+	FVector PullDirection = ReferenceDirection + ViewDirection * ViewWeight;
+	
+	// 정반대 방향을 바라봐 혼합 결과가 0에 가까우면 훅 방향을 대체값으로 사용.
+	if (!PullDirection.Normalize())
+	{
+		PullDirection = ReferenceDirection;
+	}
+	
+	const FVector ActionAcceleration = PullDirection * State.ActionAcceleration;
+		// 상태의 제어 배율에 따라 입력 가속도를 계산
 	const FVector ControlAcceleration = Input.InputAcceleration * State.ControlScale;
 
 	OutOutput.AdditionalAcceleration = ActionAcceleration + ControlAcceleration;
@@ -840,4 +849,23 @@ bool UDRMovementActionComponent::IsLocallyControlledOwner() const
 void UDRMovementActionComponent::ClearPredictedActionState()
 {
 	PredictedActionState = FDRMovementActionState();
+}
+
+FVector UDRMovementActionComponent::ResolveOwnerViewDirection() const
+{
+	const APawn* PawnOwner = Cast<APawn>(GetOwner());
+	
+	if (IsValid(PawnOwner))
+	{
+		const FVector ViewDirection = PawnOwner->GetBaseAimRotation().Vector().GetSafeNormal();
+		
+		if (!ViewDirection.IsNearlyZero())
+		{
+			return ViewDirection;
+		}
+		
+		return PawnOwner->GetActorForwardVector().GetSafeNormal();
+	}
+	
+	return FVector::ForwardVector;
 }

@@ -86,6 +86,10 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	float ControlScale = 1.f;
 
+	// 기준 위치 방향에 소유 Pawn의 시선 방향을 혼합하는 비율이다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	float ViewDirectionWeight = 0.f;
+	
 	// 비활성 상태로 복제될 때 마지막 종료 이유를 전달한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRMovementActionEndReason LastEndReason = EDRMovementActionEndReason::Invalidated;
@@ -332,6 +336,9 @@ private:
 
 	void ClearPredictedActionState();
 
+	// 로컬과 서버가 동일한 Pawn aim 방향을 사용하도록 BaseAimRotation에서 시선 방향을 구한다.
+	FVector ResolveOwnerViewDirection() const;
+	
 	void EvaluateGrappleContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const;
 
 	void EvaluateZiplineContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const;

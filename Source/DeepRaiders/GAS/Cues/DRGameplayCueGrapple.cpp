@@ -98,7 +98,7 @@ void ADRGameplayCueGrapple::Tick(float DeltaSeconds)
 			}
 			else
 			{
-				PresentationPhase = EPresentationPhase::Attached;
+				EnterAttachedPhase();
 			}
 		}
 		
@@ -215,6 +215,15 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	LaunchLocation = GetCurrentStartLocation();
 	TargetLocation = Parameters.Location;
+	
+	const FVector CueNormal = Parameters.Normal;
+	TargetNormal = CueNormal.ContainsNaN() ? FVector::ZeroVector : CueNormal.GetSafeNormal();
+	
+	if (TargetNormal.IsNearlyZero())
+	{
+		TargetNormal = (LaunchLocation - TargetLocation).GetSafeNormal();
+	}
+	
 	FollowTargetActor = IsEffectCauserTrackingEnabled
 		? Parameters.EffectCauser
 		: nullptr;
@@ -248,14 +257,12 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	if (FollowTargetActor.IsValid())
 	{
-		PresentationPhase = EPresentationPhase::Attached;
 		TargetLocation = FollowTargetActor->GetActorLocation();
-		UpdateHookLocation(TargetLocation);
+		EnterAttachedPhase();
 	}
 	else if (CurrentPhaseDuration <= KINDA_SMALL_NUMBER)
 	{
-		PresentationPhase = EPresentationPhase::Attached;
-		UpdateHookLocation(TargetLocation);
+		EnterAttachedPhase();
 	}
 	else
 	{
@@ -355,6 +362,22 @@ void ADRGameplayCueGrapple::UpdateHookLocation(const FVector& NewLocation)
 	CableComponent->ResetSceneVelocity();
 }
 
+void ADRGameplayCueGrapple::EnterAttachedPhase()
+{
+	PresentationPhase = EPresentationPhase::Attached;
+	PhaseElapsedTime = 0.f;
+
+	UpdateHookLocation(TargetLocation);
+
+	if (bRetractAfterExtension || bAttachmentFeedbackPlayed)
+	{
+		return;
+	}
+
+	bAttachmentFeedbackPlayed = true;
+	ReceiveHookAttached(TargetLocation, TargetNormal);
+}
+
 void ADRGameplayCueGrapple::BeginRetraction()
 {
 	if (PresentationPhase == EPresentationPhase::Inactive
@@ -400,6 +423,7 @@ void ADRGameplayCueGrapple::ResetPresentationState()
 	PhaseElapsedTime = 0.f;
 	CurrentPhaseDuration = 0.f;
 	bRetractAfterExtension = false;
+	bAttachmentFeedbackPlayed = false;
 
 	StartComponent.Reset();
 	FollowTargetActor.Reset();
@@ -407,6 +431,7 @@ void ADRGameplayCueGrapple::ResetPresentationState()
 
 	LaunchLocation = FVector::ZeroVector;
 	TargetLocation = FVector::ZeroVector;
+	TargetNormal = FVector::ZeroVector;
 	RetractStartLocation = FVector::ZeroVector;
 
 	SetActorTickEnabled(false);
