@@ -1,8 +1,10 @@
 #include "DRTitleSettingsWidget.h"
 
 #include "DRTitleSettingRowWidget.h"
+#include "DRTitleTextSettingRowWidget.h"
 #include "Components/Overlay.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "Engine/LocalPlayer.h"
 
@@ -25,6 +27,7 @@ bool UDRTitleSettingsWidget::Initialize()
 
 	Overlay_Settings->SetVisibility(ESlateVisibility::Collapsed);
 	LoadSettingsIntoSliders();
+	LoadPlayerNameIntoRow();
 	if (UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get())
 	{
 		UserSettings->ApplyAudioSettings(this);
@@ -36,6 +39,7 @@ bool UDRTitleSettingsWidget::Initialize()
 void UDRTitleSettingsWidget::Show()
 {
 	LoadSettingsIntoSliders();
+	LoadPlayerNameIntoRow();
 	Overlay_Settings->SetVisibility(ESlateVisibility::Visible);
 	if (ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
 	{
@@ -83,15 +87,30 @@ void UDRTitleSettingsWidget::HandleSettingsApplyClicked()
 		Settings_SFXVolume->GetSettingValue() / DRTitleSettings::MaxVolumeDisplay,
 		Settings_MouseSensitivityX->GetSettingValue(),
 		Settings_MouseSensitivityY->GetSettingValue());
+
+	if (IsValid(Settings_PlayerName))
+	{
+		UserSettings->SetPlayerDisplayName(Settings_PlayerName->GetSettingText().ToString());
+		Settings_PlayerName->SetSettingText(
+			FText::FromString(UserSettings->GetPlayerDisplayName()));
+	}
+
 	UserSettings->ApplySettings(false);
 	UserSettings->SaveSettings();
 	UserSettings->ApplyAudioSettings(this);
+
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwningPlayer()))
+	{
+		PlayerController->RequestSetPlayerName(UserSettings->GetPlayerDisplayName());
+	}
+
 	Hide();
 }
 
 void UDRTitleSettingsWidget::HandleSettingsCancelClicked()
 {
 	LoadSettingsIntoSliders();
+	LoadPlayerNameIntoRow();
 	Hide();
 }
 
@@ -111,4 +130,21 @@ void UDRTitleSettingsWidget::LoadSettingsIntoSliders()
 		UserSettings->GetSFXVolume() * DRTitleSettings::MaxVolumeDisplay);
 	Settings_MouseSensitivityX->SetSettingValue(UserSettings->GetMouseSensitivityX());
 	Settings_MouseSensitivityY->SetSettingValue(UserSettings->GetMouseSensitivityY());
+}
+
+void UDRTitleSettingsWidget::LoadPlayerNameIntoRow()
+{
+	if (!IsValid(Settings_PlayerName))
+	{
+		return;
+	}
+
+	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
+	if (!IsValid(UserSettings))
+	{
+		return;
+	}
+
+	Settings_PlayerName->SetSettingText(
+		FText::FromString(UserSettings->GetPlayerDisplayName()));
 }

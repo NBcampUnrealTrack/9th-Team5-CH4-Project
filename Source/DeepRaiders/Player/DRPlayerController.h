@@ -78,6 +78,9 @@ public:
 
 	/** 해당 적의 이름 노출 시간이 아직 남아 있는지 확인한다. */
 	bool IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const;
+
+	/** 로컬 설정의 플레이어 이름을 현재 서버 세션에 반영한다. */
+	void RequestSetPlayerName(const FString& NewPlayerName);
 	
 protected:
 	virtual void BeginPlay() override;
@@ -128,6 +131,12 @@ private:
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	void HandleToggleMenu(const FInputActionValue&);
+
+	/** PlayerState가 준비된 뒤 저장된 로컬 이름을 서버에 제출한다. */
+	void ApplySavedPlayerName();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestSetPlayerName(const FString& NewPlayerName);
 	
 	UFUNCTION(Client, Reliable)
 	void ClientRevealEnemyName(ADRPlayerState* TargetPlayerState, float Duration);

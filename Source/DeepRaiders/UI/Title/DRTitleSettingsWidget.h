@@ -5,6 +5,7 @@
 #include "DRTitleSettingsWidget.generated.h"
 
 class UDRTitleSettingRowWidget;
+class UDRTitleTextSettingRowWidget;
 class UOverlay;
 
 UCLASS()
@@ -44,7 +45,12 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRTitleSettingRowWidget> Settings_MouseSensitivityY;
 
+	/** 텍스트 입력형 설정 Row. */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UDRTitleTextSettingRowWidget> Settings_PlayerName;
+
 private:
 	void Hide();
 	void LoadSettingsIntoSliders();
+	void LoadPlayerNameIntoRow();
 };

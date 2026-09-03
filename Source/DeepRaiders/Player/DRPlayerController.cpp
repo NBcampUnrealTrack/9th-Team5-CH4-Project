@@ -107,6 +107,67 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 	return DRPlayerState->GetAbilitySystemComponent();
 }
 
+void ADRPlayerController::RequestSetPlayerName(const FString& NewPlayerName)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	const FString SanitizedName =
+		UDRGameUserSettings::SanitizePlayerDisplayName(NewPlayerName);
+
+	if (const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>())
+	{
+		if (DRPlayerState->GetPlayerName() == SanitizedName)
+		{
+			return;
+		}
+	}
+
+	ServerRequestSetPlayerName(SanitizedName);
+}
+
+void ADRPlayerController::ServerRequestSetPlayerName_Implementation(
+	const FString& NewPlayerName)
+{
+	ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return;
+	}
+
+	// 클라이언트에서 정규화했더라도 서버에서 같은 규칙으로 다시 검증한다.
+	const FString SanitizedName =
+		UDRGameUserSettings::SanitizePlayerDisplayName(NewPlayerName);
+
+	if (DRPlayerState->GetPlayerName() == SanitizedName)
+	{
+		return;
+	}
+
+	DRPlayerState->SetPlayerName(SanitizedName);
+	DRPlayerState->ForceNetUpdate();
+}
+
+void ADRPlayerController::ApplySavedPlayerName()
+{
+	if (!IsLocalController() || !IsValid(GetPlayerState<ADRPlayerState>()))
+	{
+		return;
+	}
+
+	const UDRGameUserSettings* UserSettings = UDRGameUserSettings::Get();
+
+	if (!IsValid(UserSettings))
+	{
+		return;
+	}
+
+	RequestSetPlayerName(UserSettings->GetPlayerDisplayName());
+}
+
 void ADRPlayerController::RevealEnemyNameFromServer(ADRPlayerState* TargetPlayerState)
 {
 	if (!HasAuthority() || !IsValid(TargetPlayerState) || TargetPlayerState == GetPlayerState<ADRPlayerState>())
@@ -249,6 +310,7 @@ void ADRPlayerController::BeginPlay()
 		StartingSelectionComponent);
 
 	ApplyViewPitchLimits();
+	ApplySavedPlayerName();
 
 	/*
 	 * 서버에서 모든 플레이어의 시작 장비를 초기화.
@@ -494,6 +556,7 @@ void ADRPlayerController::OnRep_PlayerState()
 
 	SetupGASInputComponent();
 	RefreshPlayerUI();
+	ApplySavedPlayerName();
 }
 
 ADRPlayerCharacter* ADRPlayerController::GetDRPlayerCharacter() const
