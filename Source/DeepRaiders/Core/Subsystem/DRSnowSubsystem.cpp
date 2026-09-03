@@ -3,55 +3,32 @@
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowAddPipeline.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowMaterialPatchApplyQueue.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowRemovalPipeline.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowRenderUpdateBatcher.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVoxelContainmentEvaluator.h"
 #include "Engine/World.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
-#include "VoxelWorld.h"
 
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
-	ContainmentEvaluator = MakeShared<FDRSnowVoxelContainmentEvaluator>();
-	RenderUpdateBatcher = MakeShared<FDRSnowRenderUpdateBatcher>(*ContainmentEvaluator);
+	ContainmentEvaluator = MakeUnique<FDRSnowVoxelContainmentEvaluator>();
 	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(VolumeStore);
-	RemovalPipeline = MakeShared<FDRSnowRemovalPipeline>(SurfaceEditor, OwnershipStore, VolumeStore);
-	AddPipeline = MakeShared<FDRSnowAddPipeline>(
+	RemovalPipeline = MakeUnique<FDRSnowRemovalPipeline>(SurfaceEditor, OwnershipStore, VolumeStore);
+	AddPipeline = MakeUnique<FDRSnowAddPipeline>(
 		SurfaceEditor,
 		OwnershipStore,
 		VolumeStore,
-		*RenderUpdateBatcher,
 		*ContainmentEvaluator);
-	MaterialPatchApplyQueue = MakeShared<FDRSnowMaterialPatchApplyQueue>();
+	MaterialPatchApplyQueue = MakeShared<FDRSnowMaterialPatchApplyQueue>(SurfaceEditor);
 }
 
 UDRSnowSubsystem::~UDRSnowSubsystem() = default;
 
-void UDRSnowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
-{
-	Super::Initialize(Collection);
-	SurfaceEditor.SetWorld(GetWorld());
-	RenderUpdateBatcher->Initialize(GetWorld());
-	AddPipeline->Initialize(GetWorld(), SnowStateGeneration);
-	MaterialPatchApplyQueue->Initialize(
-		SurfaceEditor,
-		*RenderUpdateBatcher,
-		SnowStateGeneration);
-}
-
 void UDRSnowSubsystem::Deinitialize()
 {
-	++SnowStateGeneration;
-	if (AddPipeline)
-	{
-		AddPipeline->Reset(SnowStateGeneration);
-		AddPipeline.Reset();
-	}
 	if (MaterialPatchApplyQueue)
 	{
-		MaterialPatchApplyQueue->Reset(SnowStateGeneration);
+		MaterialPatchApplyQueue->Reset();
 		MaterialPatchApplyQueue.Reset();
 	}
-	RenderUpdateBatcher->Initialize(nullptr);
 	Super::Deinitialize();
 }
 
@@ -61,18 +38,16 @@ bool UDRSnowSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return IsValid(World) && World->IsGameWorld();
 }
 
-FDRSnowAddResult UDRSnowSubsystem::AddSnow(
-	const FDRSnowSurfaceAddRequest& Request,
-	TFunction<void(float)> DirectionalCompletion)
+FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Request)
 {
-	return AddPipeline->Execute(Request, MoveTemp(DirectionalCompletion));
+	return AddPipeline->Execute(GetWorld(), Request);
 }
 
 FDRSnowAddResult UDRSnowSubsystem::ApplyReplicatedSnowAdd(
 	const FDRSnowSurfaceAddRequest& Request,
 	const float AppliedAmount)
 {
-	return AddPipeline->Replay(Request, AppliedAmount);
+	return AddPipeline->Replay(GetWorld(), Request, AppliedAmount);
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
@@ -123,8 +98,7 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	{
 		MaterialPatchApplyQueue->Enqueue(
 			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch,
-			SnowStateGeneration);
+			*AuthoritativeMaterialPatch);
 	}
 	return ReplayResult.bApplied;
 }
@@ -144,22 +118,9 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	{
 		MaterialPatchApplyQueue->Enqueue(
 			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch,
-			SnowStateGeneration);
+			*AuthoritativeMaterialPatch);
 	}
 	return ReplayResult.bApplied;
-}
-
-bool UDRSnowSubsystem::RepaintSnowMaterialsAtArea(
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const FDRSnowSurfaceEditResult& EditResult)
-{
-	SurfaceEditor.SetWorld(GetWorld());
-	return SurfaceEditor.RepaintSnowMaterialsAtArea(
-		Request,
-		EditResult,
-		OwnershipStore,
-		VolumeStore);
 }
 
 int32 UDRSnowSubsystem::GetDominantTeamAtLocation(FVector Location) const
@@ -200,13 +161,10 @@ void UDRSnowSubsystem::ResetCheckpoints()
 
 void UDRSnowSubsystem::ResetSnowState()
 {
-	++SnowStateGeneration;
 	ResetCheckpoints();
 	VolumeStore.Reset();
 	OwnershipStore.Reset();
-	RenderUpdateBatcher->Reset();
-	AddPipeline->Reset(SnowStateGeneration);
-	MaterialPatchApplyQueue->Reset(SnowStateGeneration);
+	MaterialPatchApplyQueue->Reset();
 }
 
 bool UDRSnowSubsystem::GetLatestCheckpoint(FDRSnowJoinCheckpoint& Out)

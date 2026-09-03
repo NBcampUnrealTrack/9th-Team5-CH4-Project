@@ -2,20 +2,20 @@
 
 #include "DRSnowSurfaceEditor.h"
 #include "DeepRaiders/Player/Components/DRVoxelContainmentComponent.h"
-#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/Pawn.h"
 #include "VoxelWorld.h"
 
-bool FDRSnowVoxelContainmentEvaluator::EvaluateCharactersInEditedBounds(
+void FDRSnowVoxelContainmentEvaluator::EvaluateCharactersInEditedBounds(
 	AVoxelWorld& VoxelWorld,
 	const FVoxelIntBox& EditedBounds) const
 {
-	if (!EditedBounds.IsValid())
+	UWorld* World = VoxelWorld.GetWorld();
+	if (!IsValid(World) || World->GetNetMode() == NM_Client || !EditedBounds.IsValid())
 	{
-		return false;
+		return;
 	}
 
 	FBox EditedWorldBounds(ForceInit);
@@ -36,13 +36,12 @@ bool FDRSnowVoxelContainmentEvaluator::EvaluateCharactersInEditedBounds(
 	}
 	EditedWorldBounds = EditedWorldBounds.ExpandBy(VoxelWorld.VoxelSize);
 
-	bool bEvaluatedAnyCharacter = false;
 	if (!EditedWorldBounds.IsValid)
 	{
-		return bEvaluatedAnyCharacter;
+		return;
 	}
 
-	for (TActorIterator<ACharacter> It(VoxelWorld.GetWorld()); It; ++It)
+	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		ACharacter* Character = *It;
 		const UCapsuleComponent* Capsule =
@@ -57,39 +56,20 @@ bool FDRSnowVoxelContainmentEvaluator::EvaluateCharactersInEditedBounds(
 			Character->FindComponentByClass<UDRVoxelContainmentComponent>())
 		{
 			Containment->EvaluateVoxelContainment(&VoxelWorld);
-			bEvaluatedAnyCharacter = true;
 		}
 	}
-
-	return bEvaluatedAnyCharacter;
 }
 
-void FDRSnowVoxelContainmentEvaluator::EvaluateAffectedAdd(
-	const FDRSnowSurfaceAddRequest& Request,
+void FDRSnowVoxelContainmentEvaluator::EvaluateSurfaceEdit(
 	const FDRSnowSurfaceEditResult& EditResult) const
 {
 	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	if (EditResult.AppliedAmount <= 0.f ||
+		!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		!EditResult.EditedBounds.IsValid())
 	{
 		return;
 	}
 
-	const bool bEvaluatedAnyCharacter =
-		EvaluateCharactersInEditedBounds(*VoxelWorld, EditResult.EditedBounds);
-	if (bEvaluatedAnyCharacter)
-	{
-		return;
-	}
-
-	APawn* InstigatorPawn = Request.Context.InstigatorPawn.Get();
-	if (!IsValid(InstigatorPawn))
-	{
-		return;
-	}
-
-	if (UDRVoxelContainmentComponent* Containment =
-		InstigatorPawn->FindComponentByClass<UDRVoxelContainmentComponent>())
-	{
-		Containment->EvaluateVoxelContainment(VoxelWorld);
-	}
+	EvaluateCharactersInEditedBounds(*VoxelWorld, EditResult.EditedBounds);
 }

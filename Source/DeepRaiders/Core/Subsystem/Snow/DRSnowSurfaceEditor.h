@@ -49,9 +49,6 @@ public:
 	}
 
 	FDRSnowSurfaceEditResult AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
-	bool AddDirectionalSnowAtAreaAsync(
-		const FDRSnowSurfaceAddRequest& Request,
-		TFunction<void(FDRSnowSurfaceEditResult&&)> Completion);
 	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
 	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
@@ -72,25 +69,11 @@ public:
 	bool ApplyResolvedSnowMaterials(
 		const FDRSnowResolvedMaterialEdit& ResolvedEdit,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
-	// 이후 클라이언트 전환에서 사용할 MaterialIndex Patch 적용 경계다.
-	bool ApplySnowMaterialPatch(AVoxelWorld* VoxelWorld, const FDRSnowMaterialPatch& MaterialPatch);
 	// 정확한 patch 좌표를 작업 스레드에서 순차 적용하고, 완료 시 편집된 청크 Bounds를 반환한다.
 	bool ApplySnowMaterialPatchAsync(
 		AVoxelWorld* VoxelWorld,
 		FDRSnowMaterialPatch MaterialPatch,
 		TFunction<void(bool, TArray<FVoxelIntBox>&&)> Completion);
-	// ownership을 우선하고, ownership이 없는 표면만 Volume의 우세 팀으로 다시 칠한다.
-	bool RepaintSnowMaterialsAtArea(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		const FDRSnowOwnershipStore& OwnershipStore,
-		const FDRSnowVolumeStore& VolumeStore);
-	// 흡수처럼 연속 변경되는 경우, 실제로 비워진 Voxel만 즉시 재질 갱신한다.
-	bool RepaintSnowMaterialsAtModifiedVoxels(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		const FDRSnowOwnershipStore& OwnershipStore,
-		const FDRSnowVolumeStore& VolumeStore);
 
 private:
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const;

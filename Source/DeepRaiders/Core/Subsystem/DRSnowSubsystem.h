@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowAddPipeline.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowRemovalPipeline.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVoxelContainmentEvaluator.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
@@ -11,11 +14,7 @@
 #include "DRSnowSubsystem.generated.h"
 
 class AVoxelWorld;
-class FDRSnowAddPipeline;
 class FDRSnowMaterialPatchApplyQueue;
-class FDRSnowRemovalPipeline;
-class FDRSnowRenderUpdateBatcher;
-class FDRSnowVoxelContainmentEvaluator;
 
 // Snow 도메인의 유일한 외부 진입점이다.
 // 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
@@ -28,14 +27,11 @@ public:
 	UDRSnowSubsystem();
 	virtual ~UDRSnowSubsystem() override;
 
-	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
-	FDRSnowAddResult AddSnow(
-		const FDRSnowSurfaceAddRequest& Request,
-		TFunction<void(float)> DirectionalCompletion = {});
-	// Multicast 재생은 서버 Sequence를 보존하기 위해 Directional 작업도 동기로 적용한다.
+	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
+	// Multicast 재생은 서버 Sequence를 보존하며 서버가 확정한 양을 Volume에 반영한다.
 	FDRSnowAddResult ApplyReplicatedSnowAdd(
 		const FDRSnowSurfaceAddRequest& Request,
 		float AppliedAmount);
@@ -55,9 +51,6 @@ public:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AppliedAmount,
 		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch = nullptr);
-	bool RepaintSnowMaterialsAtArea(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult);
 
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
@@ -85,11 +78,9 @@ private:
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
-	TSharedPtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
-	TSharedPtr<FDRSnowRenderUpdateBatcher> RenderUpdateBatcher;
+	TUniquePtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
-	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
-	TSharedPtr<FDRSnowAddPipeline> AddPipeline;
+	TUniquePtr<FDRSnowRemovalPipeline> RemovalPipeline;
+	TUniquePtr<FDRSnowAddPipeline> AddPipeline;
 	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
-	int32 SnowStateGeneration = 0;
 };

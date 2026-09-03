@@ -1,55 +1,42 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Containers/Queue.h"
 #include "DRSnowSurfaceEditor.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 
 class AVoxelWorld;
 class FDRSnowOwnershipStore;
-class FDRSnowRenderUpdateBatcher;
 class FDRSnowSurfaceEditor;
 class FDRSnowVolumeStore;
 class FDRSnowVoxelContainmentEvaluator;
 class UWorld;
 
-// 눈 추가의 동기 경로와 Directional 비동기 큐를 함께 소유한다.
-// 비동기 완료 이후 Ownership/Volume/Render 갱신 순서도 이 클래스 안에서 보장한다.
-class DEEPRAIDERS_API FDRSnowAddPipeline : public TSharedFromThis<FDRSnowAddPipeline>
+// 눈 추가의 Voxel 편집과 Ownership/Volume 반영 순서를 동기적으로 조율한다.
+class DEEPRAIDERS_API FDRSnowAddPipeline
 {
 public:
 	FDRSnowAddPipeline(
 		FDRSnowSurfaceEditor& InSurfaceEditor,
 		FDRSnowOwnershipStore& InOwnershipStore,
 		FDRSnowVolumeStore& InVolumeStore,
-		FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher,
 		FDRSnowVoxelContainmentEvaluator& InContainmentEvaluator);
 
-	void Initialize(UWorld* InWorld, int32 InitialStateGeneration);
 	FDRSnowAddResult Execute(
-		const FDRSnowSurfaceAddRequest& Request,
-		TFunction<void(float)> DirectionalCompletion = {});
+		UWorld* World,
+		const FDRSnowSurfaceAddRequest& Request);
 	FDRSnowAddResult Replay(
+		UWorld* World,
 		const FDRSnowSurfaceAddRequest& Request,
 		float AuthoritativeAmount);
-	void Reset(int32 NewStateGeneration);
 
 private:
-	struct FPendingDirectionalAdd
-	{
-		FDRSnowSurfaceAddRequest Request;
-		TFunction<void(float)> Completion;
-		int32 StateGeneration = 0;
-	};
-
-	void ProcessNextDirectionalAdd();
-	void HandleDirectionalAddCompleted(
+	FDRSnowAddResult ExecuteDirectionalAdd(
+		UWorld* World,
 		const FDRSnowSurfaceAddRequest& Request,
-		int32 RequestGeneration,
-		TFunction<void(float)> Completion,
-		FDRSnowSurfaceEditResult&& EditResult);
-	void ApplyAddedSurfaceEdit(
+		float AuthoritativeAmount = -1.f);
+	void CommitAddedSurfaceEdit(
+		UWorld* World,
 		const FDRSnowSurfaceAddRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
 		float VolumeAmount = -1.f);
@@ -59,13 +46,8 @@ private:
 		const TArray<FModifiedVoxelValue>& ModifiedValues,
 		float MaxAddedAmount);
 
-	TWeakObjectPtr<UWorld> World;
 	FDRSnowSurfaceEditor& SurfaceEditor;
 	FDRSnowOwnershipStore& OwnershipStore;
 	FDRSnowVolumeStore& VolumeStore;
-	FDRSnowRenderUpdateBatcher& RenderUpdateBatcher;
 	FDRSnowVoxelContainmentEvaluator& ContainmentEvaluator;
-	TQueue<FPendingDirectionalAdd> PendingDirectionalAdds;
-	int32 CurrentStateGeneration = 0;
-	bool bDirectionalAddInProgress = false;
 };

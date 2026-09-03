@@ -122,22 +122,13 @@ bool FDRSnowRemovalPipeline::RepaintWithoutPatch(
 	const FDRSnowSurfaceEditResult& EditResult,
 	const EDRSnowRemovalPath RemovalPath) const
 {
-	if (RemovalPath == EDRSnowRemovalPath::Absorb)
-	{
-		// 기존 Absorb replay는 repaint 결과와 무관하게 geometry 적용 성공을 반환했다.
-		SurfaceEditor.RepaintSnowMaterialsAtModifiedVoxels(
-			Request,
-			EditResult,
-			OwnershipStore,
-			VolumeStore);
-		return true;
-	}
+	FDRSnowResolvedMaterialEdit ResolvedEdit;
+	const bool bRepainted =
+		ResolveMaterials(Request, EditResult, RemovalPath, ResolvedEdit) &&
+		SurfaceEditor.ApplyResolvedSnowMaterials(ResolvedEdit);
 
-	return SurfaceEditor.RepaintSnowMaterialsAtArea(
-		Request,
-		EditResult,
-		OwnershipStore,
-		VolumeStore);
+	// 기존 Absorb replay는 repaint 결과와 무관하게 geometry 적용 성공을 반환했다.
+	return RemovalPath == EDRSnowRemovalPath::Absorb || bRepainted;
 }
 
 void FDRSnowRemovalPipeline::ApplyRemovedSurfaceEdit(

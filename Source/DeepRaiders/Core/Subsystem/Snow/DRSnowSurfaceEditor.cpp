@@ -166,34 +166,6 @@ bool PaintProcessedMaterialSurface(
 	return EditedMaterialBounds.IsValid();
 }
 
-void PaintProcessedMaterialSurfaceAsync(
-	AVoxelWorld* VoxelWorld,
-	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
-	const uint8 MaterialIndex,
-	TFunction<void()> Completion)
-{
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
-		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB)
-	{
-		Completion();
-		return;
-	}
-
-	UVoxelSurfaceEditTools::EditVoxelMaterialsAsync(
-		VoxelWorld,
-		MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialIndex),
-		ProcessedVoxels,
-		FOnVoxelToolComplete_WithModifiedMaterials::CreateLambda(
-			[Completion = MoveTemp(Completion)](const TArray<FModifiedVoxelMaterial>&) mutable
-			{
-				Completion();
-			}),
-		nullptr,
-		true,
-		false,
-		false);
-}
-
 float GetModifiedValueAmount(const TArray<FModifiedVoxelValue>& ModifiedValues)
 {
 	float ModifiedValueAmount = 0.f;
@@ -501,6 +473,7 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 			}
 
 			Result.VoxelWorld = VoxelWorld;
+			Result.EditedBounds = EditedBounds;
 			Result.ModifiedValues = MoveTemp(ModifiedValues);
 			Result.bUseModifiedValuesForVolume = true;
 		}
@@ -563,6 +536,7 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 		}
 
 		Result.VoxelWorld = VoxelWorld;
+		Result.EditedBounds = EditedBounds;
 		Result.ModifiedValues = MoveTemp(ModifiedValues);
 		return Result;
 	}
@@ -627,94 +601,9 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	}
 
 	Result.VoxelWorld = VoxelWorld;
+	Result.EditedBounds = EditedBounds;
 	Result.ModifiedValues = MoveTemp(ModifiedValues);
 	return Result;
-}
-
-bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
-	const FDRSnowSurfaceAddRequest& Request,
-	TFunction<void(FDRSnowSurfaceEditResult&&)> Completion)
-{
-	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool ||
-		Request.Radius <= 0.f || Request.Amount <= 0.f || !Completion)
-	{
-		return false;
-	}
-
-	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Request);
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
-	{
-		return false;
-	}
-
-	FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint;
-	if (!Request.bUseVirtualSurface)
-	{
-		SurfaceFootprint = UDRDirectionalSurfaceTool::FindSurfaceFootprint(
-			VoxelWorld,
-			Request.WorldLocation,
-			Request.Radius,
-			SnowSurfaceFalloff,
-			Request.Amount,
-			true);
-	}
-	if (Request.bUseVirtualSurface ||
-		(Request.bAllowVirtualSurfaceFallback && SurfaceFootprint.Voxels->Num() == 0))
-	{
-		SurfaceFootprint = UDRDirectionalSurfaceTool::MakeVirtualSurfaceFootprint(
-			VoxelWorld,
-			Request.WorldLocation,
-			Request.SurfaceNormal,
-			Request.Radius,
-			SnowSurfaceFalloff,
-			Request.Amount,
-			true);
-	}
-
-	const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld = VoxelWorld;
-	return UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
-		VoxelWorld,
-		SurfaceFootprint,
-		SnowSurfaceDistanceDivisor,
-		true,
-		[WeakVoxelWorld, Request, Completion = MoveTemp(Completion)](
-			TArray<FModifiedVoxelValue>&& ModifiedValues,
-			FVoxelIntBox EditedBounds) mutable
-		{
-			FDRSnowSurfaceEditResult Result;
-			AVoxelWorld* ValidVoxelWorld = WeakVoxelWorld.Get();
-			if (!IsValid(ValidVoxelWorld) || !ValidVoxelWorld->IsCreated())
-			{
-				Completion(MoveTemp(Result));
-				return;
-			}
-
-			Result.AppliedAmount = FMath::Min(Request.Amount, GetModifiedValueAmount(ModifiedValues));
-			if (Result.AppliedAmount <= 0.f || !EditedBounds.IsValid())
-			{
-				Completion(MoveTemp(Result));
-				return;
-			}
-
-			const FVoxelSurfaceEditsProcessedVoxels PaintVoxels =
-				UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
-					EditedBounds,
-					ModifiedValues,
-					true);
-			Result.VoxelWorld = ValidVoxelWorld;
-			Result.EditedBounds = EditedBounds;
-			Result.ModifiedValues = MoveTemp(ModifiedValues);
-			Result.bUseModifiedValuesForVolume = true;
-
-			PaintProcessedMaterialSurfaceAsync(
-				ValidVoxelWorld,
-				PaintVoxels,
-				DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId),
-				[Result = MoveTemp(Result), Completion = MoveTemp(Completion)]() mutable
-				{
-					Completion(MoveTemp(Result));
-				});
-		});
 }
 
 FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
@@ -1089,101 +978,6 @@ bool FDRSnowSurfaceEditor::ApplyResolvedSnowMaterials(
 	return bPaintedAny;
 }
 
-bool FDRSnowSurfaceEditor::ApplySnowMaterialPatch(
-	AVoxelWorld* VoxelWorld,
-	const FDRSnowMaterialPatch& MaterialPatch)
-{
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_ApplyMaterialPatch);
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB || MaterialPatch.IsEmpty())
-	{
-		return false;
-	}
-
-	// 패치가 이미 서버에서 확정한 정확한 voxel 좌표를 담고 있으므로
-	// 클라이언트에서 표면을 다시 검색하지 않고 32^3 청크 안의 재질을 직접 수정한다.
-	// 청크 경계를 잠금/렌더 갱신 경계로 유지해야 멀리 떨어진 청크들이 하나의 거대한
-	// Bounds로 합쳐져 한 프레임에 큰 작업이 몰리는 것을 막을 수 있다.
-	constexpr int32 MaxLocalIndex =
-		DRSnowMaterialPatchUtils::ChunkSize *
-		DRSnowMaterialPatchUtils::ChunkSize *
-		DRSnowMaterialPatchUtils::ChunkSize;
-
-	FVoxelData& Data = VoxelWorld->GetData();
-	TArray<FVoxelIntBox> EditedChunkBounds;
-	EditedChunkBounds.Reserve(MaterialPatch.Chunks.Num());
-
-	int32 InvalidLocalIndexCount = 0;
-	int32 InputVoxelCount = 0;
-	int32 AppliedVoxelCount = 0;
-	int32 MaterialSetCount = 0;
-	for (const FDRSnowMaterialChunkPatch& ChunkPatch : MaterialPatch.Chunks)
-	{
-		const FIntVector ChunkMin =
-			ChunkPatch.ChunkCoord * DRSnowMaterialPatchUtils::ChunkSize;
-		const FVoxelIntBox ChunkBounds(
-			ChunkMin,
-			ChunkMin + FIntVector(DRSnowMaterialPatchUtils::ChunkSize));
-		bool bEditedChunk = false;
-
-		{
-			FVoxelWriteScopeLock Lock(Data, ChunkBounds, FUNCTION_FNAME);
-			FVoxelMutableDataAccelerator Accelerator(Data, ChunkBounds);
-
-			for (const FDRSnowMaterialIndexSet& MaterialSet : ChunkPatch.MaterialSets)
-			{
-				++MaterialSetCount;
-				InputVoxelCount += MaterialSet.LocalVoxelIndices.Num();
-				const FVoxelPaintMaterial PaintMaterial =
-					MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialSet.MaterialIndex);
-
-				for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
-				{
-					if (LocalIndex >= MaxLocalIndex)
-					{
-						++InvalidLocalIndexCount;
-						continue;
-					}
-
-					const FIntVector Position = DRSnowMaterialPatchUtils::LocalIndexToVoxel(
-						ChunkPatch.ChunkCoord,
-						LocalIndex);
-					if (Accelerator.EditMaterial(
-						Position,
-						[&PaintMaterial](FVoxelMaterial& Material)
-						{
-							PaintMaterial.ApplyToMaterial(Material, 1.f);
-						}))
-					{
-						++AppliedVoxelCount;
-						bEditedChunk = true;
-					}
-				}
-			}
-		}
-
-		if (bEditedChunk)
-		{
-			EditedChunkBounds.Add(ChunkBounds);
-		}
-	}
-
-	// 데이터 잠금을 모두 해제한 뒤, 편집된 청크만 작은 Bounds로 갱신한다.
-	// 서로 멀리 떨어진 청크를 하나의 큰 Bounds로 합치지 않는 것이 핵심이다.
-	for (const FVoxelIntBox& EditedChunkBound : EditedChunkBounds)
-	{
-		UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, EditedChunkBound.Extend(1));
-	}
-
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyInputVoxelCount"), InputVoxelCount);
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyAppliedVoxelCount"), AppliedVoxelCount);
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyMaterialSetCount"), MaterialSetCount);
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyChunkCount"), EditedChunkBounds.Num());
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ApplyRenderUpdateCount"), EditedChunkBounds.Num());
-	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/InvalidLocalIndexCount"), InvalidLocalIndexCount);
-	return !EditedChunkBounds.IsEmpty();
-}
-
 bool FDRSnowSurfaceEditor::ApplySnowMaterialPatchAsync(
 	AVoxelWorld* VoxelWorld,
 	FDRSnowMaterialPatch MaterialPatch,
@@ -1202,40 +996,6 @@ bool FDRSnowSurfaceEditor::ApplySnowMaterialPatchAsync(
 	State->Completion = MoveTemp(Completion);
 	State->ProcessNextMaterialSet();
 	return true;
-}
-
-bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtArea(
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const FDRSnowSurfaceEditResult& EditResult,
-	const FDRSnowOwnershipStore& OwnershipStore,
-	const FDRSnowVolumeStore& VolumeStore)
-{
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Total);
-	FDRSnowResolvedMaterialEdit ResolvedEdit;
-	return ResolveSnowMaterialsAtArea(
-			Request,
-			EditResult,
-			OwnershipStore,
-			VolumeStore,
-			ResolvedEdit) &&
-		ApplyResolvedSnowMaterials(ResolvedEdit);
-}
-
-bool FDRSnowSurfaceEditor::RepaintSnowMaterialsAtModifiedVoxels(
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const FDRSnowSurfaceEditResult& EditResult,
-	const FDRSnowOwnershipStore& OwnershipStore,
-	const FDRSnowVolumeStore& VolumeStore)
-{
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_Dirty_Total);
-	FDRSnowResolvedMaterialEdit ResolvedEdit;
-	return ResolveSnowMaterialsAtModifiedVoxels(
-			Request,
-			EditResult,
-			OwnershipStore,
-			VolumeStore,
-			ResolvedEdit) &&
-		ApplyResolvedSnowMaterials(ResolvedEdit);
 }
 
 AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const

@@ -1,26 +1,20 @@
 #include "DRSnowMaterialPatchApplyQueue.h"
 
-#include "DRSnowRenderUpdateBatcher.h"
 #include "DRSnowSurfaceEditor.h"
+#include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelWorld.h"
 
-void FDRSnowMaterialPatchApplyQueue::Initialize(
-	FDRSnowSurfaceEditor& InSurfaceEditor,
-	FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher,
-	const int32 InitialStateGeneration)
+FDRSnowMaterialPatchApplyQueue::FDRSnowMaterialPatchApplyQueue(
+	FDRSnowSurfaceEditor& InSurfaceEditor)
+	: SurfaceEditor(InSurfaceEditor)
 {
-	SurfaceEditor = &InSurfaceEditor;
-	RenderUpdateBatcher = &InRenderUpdateBatcher;
-	CurrentStateGeneration = InitialStateGeneration;
 }
 
 void FDRSnowMaterialPatchApplyQueue::Enqueue(
 	AVoxelWorld* VoxelWorld,
-	FDRSnowMaterialPatch MaterialPatch,
-	const int32 StateGeneration)
+	FDRSnowMaterialPatch MaterialPatch)
 {
-	if (!IsValid(VoxelWorld) || MaterialPatch.IsEmpty() ||
-		StateGeneration != CurrentStateGeneration)
+	if (!IsValid(VoxelWorld) || MaterialPatch.IsEmpty())
 	{
 		return;
 	}
@@ -28,14 +22,14 @@ void FDRSnowMaterialPatchApplyQueue::Enqueue(
 	FPendingPatch PendingPatch;
 	PendingPatch.VoxelWorld = VoxelWorld;
 	PendingPatch.Patch = MoveTemp(MaterialPatch);
-	PendingPatch.StateGeneration = StateGeneration;
+	PendingPatch.StateGeneration = CurrentStateGeneration;
 	PendingPatches.Enqueue(MoveTemp(PendingPatch));
 	ProcessNext();
 }
 
-void FDRSnowMaterialPatchApplyQueue::Reset(const int32 NewStateGeneration)
+void FDRSnowMaterialPatchApplyQueue::Reset()
 {
-	CurrentStateGeneration = NewStateGeneration;
+	++CurrentStateGeneration;
 
 	FPendingPatch PendingPatch;
 	while (PendingPatches.Dequeue(PendingPatch))
@@ -47,7 +41,7 @@ void FDRSnowMaterialPatchApplyQueue::Reset(const int32 NewStateGeneration)
 
 void FDRSnowMaterialPatchApplyQueue::ProcessNext()
 {
-	if (bPatchInProgress || !SurfaceEditor || !RenderUpdateBatcher)
+	if (bPatchInProgress)
 	{
 		return;
 	}
@@ -66,7 +60,7 @@ void FDRSnowMaterialPatchApplyQueue::ProcessNext()
 		const TWeakPtr<FDRSnowMaterialPatchApplyQueue> WeakQueue = AsShared();
 		const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld(VoxelWorld);
 		const int32 PatchGeneration = PendingPatch.StateGeneration;
-		const bool bStarted = SurfaceEditor->ApplySnowMaterialPatchAsync(
+		const bool bStarted = SurfaceEditor.ApplySnowMaterialPatchAsync(
 			VoxelWorld,
 			MoveTemp(PendingPatch.Patch),
 			[WeakQueue, WeakVoxelWorld, PatchGeneration](
@@ -98,14 +92,15 @@ void FDRSnowMaterialPatchApplyQueue::HandlePatchCompleted(
 	const bool bApplied,
 	TArray<FVoxelIntBox>&& EditedChunkBounds)
 {
-	if (bApplied && PatchGeneration == CurrentStateGeneration && RenderUpdateBatcher)
+	AVoxelWorld* ValidVoxelWorld = VoxelWorld.Get();
+	if (bApplied && PatchGeneration == CurrentStateGeneration &&
+		IsValid(ValidVoxelWorld) && ValidVoxelWorld->IsCreated())
 	{
 		for (const FVoxelIntBox& EditedChunkBoundsEntry : EditedChunkBounds)
 		{
-			RenderUpdateBatcher->Enqueue(
-				VoxelWorld.Get(),
-				EditedChunkBoundsEntry.Extend(1),
-				EDRSnowRenderUpdateType::MaterialOnly);
+			UVoxelBlueprintLibrary::UpdateBounds(
+				ValidVoxelWorld,
+				EditedChunkBoundsEntry.Extend(1));
 		}
 	}
 

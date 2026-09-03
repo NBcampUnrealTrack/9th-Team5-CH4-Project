@@ -1,7 +1,6 @@
 #include "DRSnowAddPipeline.h"
 
 #include "DRSnowOwnershipStore.h"
-#include "DRSnowRenderUpdateBatcher.h"
 #include "DRSnowSurfaceEditor.h"
 #include "DRSnowVolumeStore.h"
 #include "DRSnowVoxelContainmentEvaluator.h"
@@ -13,50 +12,28 @@ FDRSnowAddPipeline::FDRSnowAddPipeline(
 	FDRSnowSurfaceEditor& InSurfaceEditor,
 	FDRSnowOwnershipStore& InOwnershipStore,
 	FDRSnowVolumeStore& InVolumeStore,
-	FDRSnowRenderUpdateBatcher& InRenderUpdateBatcher,
 	FDRSnowVoxelContainmentEvaluator& InContainmentEvaluator)
 	: SurfaceEditor(InSurfaceEditor)
 	, OwnershipStore(InOwnershipStore)
 	, VolumeStore(InVolumeStore)
-	, RenderUpdateBatcher(InRenderUpdateBatcher)
 	, ContainmentEvaluator(InContainmentEvaluator)
 {
 }
 
-void FDRSnowAddPipeline::Initialize(
-	UWorld* InWorld,
-	const int32 InitialStateGeneration)
-{
-	World = InWorld;
-	CurrentStateGeneration = InitialStateGeneration;
-	SurfaceEditor.SetWorld(InWorld);
-}
-
 FDRSnowAddResult FDRSnowAddPipeline::Execute(
-	const FDRSnowSurfaceAddRequest& Request,
-	TFunction<void(float)> DirectionalCompletion)
+	UWorld* World,
+	const FDRSnowSurfaceAddRequest& Request)
 {
 	FDRSnowAddResult Result;
-	UWorld* LocalWorld = World.Get();
-	SurfaceEditor.SetWorld(LocalWorld);
-	if (!IsValid(LocalWorld))
+	SurfaceEditor.SetWorld(World);
+	if (!IsValid(World))
 	{
 		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
-		FPendingDirectionalAdd PendingAdd;
-		PendingAdd.Request = Request;
-		PendingAdd.Completion = MoveTemp(DirectionalCompletion);
-		PendingAdd.StateGeneration = CurrentStateGeneration;
-		PendingDirectionalAdds.Enqueue(MoveTemp(PendingAdd));
-		ProcessNextDirectionalAdd();
-
-		Result.TeamId = Request.Context.TeamId;
-		// Directional 경로의 실제 성공량은 Completion으로 전달하고, 반환값은 큐 접수량이다.
-		Result.AddedAmount = Request.Amount;
-		return Result;
+		return ExecuteDirectionalAdd(World, Request);
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool)
@@ -67,8 +44,7 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 			return Result;
 		}
 
-		ApplyAddedSurfaceEdit(Request, EditResult);
-		ContainmentEvaluator.EvaluateAffectedAdd(Request, EditResult);
+		CommitAddedSurfaceEdit(World, Request, EditResult);
 		return VolumeStore.AddSnow(Request);
 	}
 
@@ -76,24 +52,37 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 	if (Result.AddedAmount > 0.f)
 	{
 		const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
-		ApplyAddedSurfaceEdit(Request, EditResult);
-		ContainmentEvaluator.EvaluateAffectedAdd(Request, EditResult);
+		CommitAddedSurfaceEdit(World, Request, EditResult);
 	}
 	return Result;
 }
 
 FDRSnowAddResult FDRSnowAddPipeline::Replay(
+	UWorld* World,
 	const FDRSnowSurfaceAddRequest& Request,
 	const float AuthoritativeAmount)
 {
 	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
-		return Execute(Request);
+		return Execute(World, Request);
 	}
 
+	SurfaceEditor.SetWorld(World);
+	if (!IsValid(World))
+	{
+		return {};
+	}
+
+	return ExecuteDirectionalAdd(World, Request, AuthoritativeAmount);
+}
+
+FDRSnowAddResult FDRSnowAddPipeline::ExecuteDirectionalAdd(
+	UWorld* World,
+	const FDRSnowSurfaceAddRequest& Request,
+	const float AuthoritativeAmount)
+{
 	FDRSnowAddResult Result;
 	Result.TeamId = Request.Context.TeamId;
-	SurfaceEditor.SetWorld(World.Get());
 	const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
 	if (EditResult.AppliedAmount <= 0.f)
 	{
@@ -103,101 +92,13 @@ FDRSnowAddResult FDRSnowAddPipeline::Replay(
 	const float AppliedAmount = AuthoritativeAmount > 0.f
 		? AuthoritativeAmount
 		: EditResult.AppliedAmount;
-	ApplyAddedSurfaceEdit(Request, EditResult, AppliedAmount);
-	RenderUpdateBatcher.Enqueue(
-		EditResult.VoxelWorld.Get(),
-		EditResult.EditedBounds,
-		EDRSnowRenderUpdateType::Geometry);
+	CommitAddedSurfaceEdit(World, Request, EditResult, AppliedAmount);
 	Result.AddedAmount = AppliedAmount;
 	return Result;
 }
 
-void FDRSnowAddPipeline::Reset(const int32 NewStateGeneration)
-{
-	CurrentStateGeneration = NewStateGeneration;
-
-	FPendingDirectionalAdd PendingAdd;
-	while (PendingDirectionalAdds.Dequeue(PendingAdd))
-	{
-	}
-	// 실행 중인 작업은 완료 콜백에서 generation을 확인한 뒤 폐기한다.
-}
-
-void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
-{
-	if (bDirectionalAddInProgress)
-	{
-		return;
-	}
-
-	FPendingDirectionalAdd PendingAdd;
-	while (PendingDirectionalAdds.Dequeue(PendingAdd))
-	{
-		if (PendingAdd.StateGeneration != CurrentStateGeneration)
-		{
-			continue;
-		}
-
-		bDirectionalAddInProgress = true;
-		SurfaceEditor.SetWorld(World.Get());
-		const FDRSnowSurfaceAddRequest Request = PendingAdd.Request;
-		const int32 RequestGeneration = PendingAdd.StateGeneration;
-		TFunction<void(float)> Completion = MoveTemp(PendingAdd.Completion);
-		const TWeakPtr<FDRSnowAddPipeline> WeakPipeline = AsShared();
-		const bool bStarted = SurfaceEditor.AddDirectionalSnowAtAreaAsync(
-			Request,
-			[WeakPipeline,
-			 Request,
-			 RequestGeneration,
-			 Completion](FDRSnowSurfaceEditResult&& EditResult) mutable
-			{
-				if (const TSharedPtr<FDRSnowAddPipeline> Pipeline = WeakPipeline.Pin())
-				{
-					Pipeline->HandleDirectionalAddCompleted(
-						Request,
-						RequestGeneration,
-						MoveTemp(Completion),
-						MoveTemp(EditResult));
-				}
-			});
-
-		if (!bStarted)
-		{
-			if (Completion)
-			{
-				Completion(0.f);
-			}
-			bDirectionalAddInProgress = false;
-			continue;
-		}
-		return;
-	}
-}
-
-void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
-	const FDRSnowSurfaceAddRequest& Request,
-	const int32 RequestGeneration,
-	TFunction<void(float)> Completion,
-	FDRSnowSurfaceEditResult&& EditResult)
-{
-	if (RequestGeneration == CurrentStateGeneration)
-	{
-		ApplyAddedSurfaceEdit(Request, EditResult);
-		RenderUpdateBatcher.Enqueue(
-			EditResult.VoxelWorld.Get(),
-			EditResult.EditedBounds,
-			EDRSnowRenderUpdateType::Geometry);
-		if (Completion)
-		{
-			Completion(EditResult.AppliedAmount);
-		}
-	}
-
-	bDirectionalAddInProgress = false;
-	ProcessNextDirectionalAdd();
-}
-
-void FDRSnowAddPipeline::ApplyAddedSurfaceEdit(
+void FDRSnowAddPipeline::CommitAddedSurfaceEdit(
+	UWorld* World,
 	const FDRSnowSurfaceAddRequest& Request,
 	const FDRSnowSurfaceEditResult& EditResult,
 	const float VolumeAmount)
@@ -209,23 +110,23 @@ void FDRSnowAddPipeline::ApplyAddedSurfaceEdit(
 	}
 
 	// Ownership은 서버의 MaterialIndex 원본이다. 클라이언트는 authoritative patch만 적용한다.
-	if (UWorld* LocalWorld = World.Get(); IsValid(LocalWorld) && LocalWorld->GetNetMode() != NM_Client)
+	if (IsValid(World) && World->GetNetMode() != NM_Client)
 	{
 		OwnershipStore.RecordAddedVoxels(
 			VoxelWorld,
 			EditResult.ModifiedValues,
 			DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 	}
-	if (!EditResult.bUseModifiedValuesForVolume)
+	if (EditResult.bUseModifiedValuesForVolume)
 	{
-		return;
+		AddVolumeFromModifiedValues(
+			*VoxelWorld,
+			Request,
+			EditResult.ModifiedValues,
+			VolumeAmount >= 0.f ? VolumeAmount : EditResult.AppliedAmount);
 	}
 
-	AddVolumeFromModifiedValues(
-		*VoxelWorld,
-		Request,
-		EditResult.ModifiedValues,
-		VolumeAmount >= 0.f ? VolumeAmount : EditResult.AppliedAmount);
+	ContainmentEvaluator.EvaluateSurfaceEdit(EditResult);
 }
 
 void FDRSnowAddPipeline::AddVolumeFromModifiedValues(

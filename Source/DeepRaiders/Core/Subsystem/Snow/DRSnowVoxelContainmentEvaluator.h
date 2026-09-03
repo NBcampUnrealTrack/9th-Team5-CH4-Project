@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 
 class AVoxelWorld;
-struct FDRSnowSurfaceAddRequest;
 struct FDRSnowSurfaceEditResult;
 struct FVoxelIntBox;
 
@@ -12,12 +11,9 @@ struct FVoxelIntBox;
 class DEEPRAIDERS_API FDRSnowVoxelContainmentEvaluator
 {
 public:
-	bool EvaluateCharactersInEditedBounds(
+	void EvaluateCharactersInEditedBounds(
 		AVoxelWorld& VoxelWorld,
 		const FVoxelIntBox& EditedBounds) const;
 
-	// 동기 Add 경로에서는 EditedBounds가 없을 수 있어 요청자를 fallback으로 검사한다.
-	void EvaluateAffectedAdd(
-		const FDRSnowSurfaceAddRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult) const;
+	void EvaluateSurfaceEdit(const FDRSnowSurfaceEditResult& EditResult) const;
 };
