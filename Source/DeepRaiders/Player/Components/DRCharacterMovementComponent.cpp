@@ -3,6 +3,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "VoxelData/VoxelDataIncludes.h"
@@ -581,9 +582,22 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             this,
             &ThisClass::HandleMoveSpeedMultiplierChanged);
 
+    VoxelContainedTagChangedDelegateHandle =
+        AbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .AddUObject(
+            this,
+            &ThisClass::HandleVoxelContainedTagChanged);
+
     ApplyMoveSpeedMultiplier(
         AbilitySystemComponent->GetNumericAttribute(
             UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
+
+    HandleVoxelContainedTagChanged(
+        DRGameplayTags::State_VoxelContained,
+        AbilitySystemComponent->GetTagCount(
+            DRGameplayTags::State_VoxelContained));
 }
 
 void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
@@ -614,7 +628,17 @@ void UDRCharacterMovementComponent::UnbindAbilitySystem()
         .Remove(MoveSpeedChangedDelegateHandle);
     }
 
+    if (BoundAbilitySystemComponent.IsValid()
+        && VoxelContainedTagChangedDelegateHandle.IsValid())
+    {
+        BoundAbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .Remove(VoxelContainedTagChangedDelegateHandle);
+    }
+
     MoveSpeedChangedDelegateHandle.Reset();
+	VoxelContainedTagChangedDelegateHandle.Reset();
     BoundAbilitySystemComponent.Reset();
 }
 
@@ -622,6 +646,19 @@ void UDRCharacterMovementComponent::HandleMoveSpeedMultiplierChanged(
     const FOnAttributeChangeData& Data)
 {
     ApplyMoveSpeedMultiplier(Data.NewValue);
+}
+
+void UDRCharacterMovementComponent::HandleVoxelContainedTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		EnterVoxelContainedMode();
+		return;
+	}
+
+	ExitVoxelContainedMode();
 }
 
 void UDRCharacterMovementComponent::ApplyMoveSpeedMultiplier(float Multiplier)

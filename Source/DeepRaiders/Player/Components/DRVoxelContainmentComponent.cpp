@@ -1,21 +1,34 @@
 #include "DRVoxelContainmentComponent.h"
 
-#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "DeepRaiders/Player/GAS/Effects/DRGE_VoxelContained.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "Components/CapsuleComponent.h"
+#include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
+#include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 #include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelWorld.h"
 
 UDRVoxelContainmentComponent::UDRVoxelContainmentComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
+	PrimaryComponentTick.bCanEverTick = false;
+
+	static ConstructorHelpers::FClassFinder<UGameplayEffect> FreezeGainEffectFinder(
+		TEXT("/Game/DeepRaiders/GAS/Effects/BP_GE_FreezeGain"));
+	if (FreezeGainEffectFinder.Succeeded())
+	{
+		FreezeGainEffectClass = FreezeGainEffectFinder.Class;
+	}
 }
 
 void UDRVoxelContainmentComponent::EvaluateVoxelContainment(AVoxelWorld* VoxelWorld)
 {
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	if (!GetOwner() || !GetOwner()->HasAuthority() ||
+		!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		!IsValid(GetAbilitySystemComponent()))
 	{
 		return;
 	}
@@ -29,21 +42,23 @@ void UDRVoxelContainmentComponent::EvaluateVoxelContainment(AVoxelWorld* VoxelWo
 	}
 }
 
-void UDRVoxelContainmentComponent::TickComponent(
-	float DeltaTime,
-	ELevelTick TickType,
-	FActorComponentTickFunction* ThisTickFunction)
+void UDRVoxelContainmentComponent::BindAbilitySystem(
+	UAbilitySystemComponent* AbilitySystemComponent)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	UpdateVoxelContainedMode();
+	BoundAbilitySystemComponent = AbilitySystemComponent;
 }
 
-UDRCharacterMovementComponent* UDRVoxelContainmentComponent::GetMovementComponent() const
+void UDRVoxelContainmentComponent::EndPlay(
+	const EEndPlayReason::Type EndPlayReason)
 {
-	const ACharacter* Character = Cast<ACharacter>(GetOwner());
-	return IsValid(Character)
-		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
-		: nullptr;
+	ClearContainmentState();
+	BoundAbilitySystemComponent.Reset();
+	Super::EndPlay(EndPlayReason);
+}
+
+UAbilitySystemComponent* UDRVoxelContainmentComponent::GetAbilitySystemComponent() const
+{
+	return BoundAbilitySystemComponent.Get();
 }
 
 UDRVoxelContainmentComponent::FVoxelCapsuleOccupancy
@@ -139,24 +154,50 @@ UDRVoxelContainmentComponent::GetVoxelCapsuleOccupancy(
 
 void UDRVoxelContainmentComponent::EnterVoxelContainedMode(AVoxelWorld& VoxelWorld)
 {
-	UDRCharacterMovementComponent* Movement = GetMovementComponent();
-	if (!IsValid(Movement))
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystem))
 	{
 		return;
 	}
 
 	VoxelContainmentWorld = &VoxelWorld;
 	ReleaseStartTime = -1.f;
-	NextCheckTime = 0.f;
-	Movement->EnterVoxelContainedMode();
-	SetComponentTickEnabled(true);
+
+	if (!ContainmentEffectHandle.IsValid())
+	{
+		FGameplayEffectContextHandle Context =
+			AbilitySystem->MakeEffectContext();
+		FGameplayEffectSpecHandle Spec = AbilitySystem->MakeOutgoingSpec(
+			UDRGE_VoxelContained::StaticClass(),
+			1.f,
+			Context);
+		if (!Spec.IsValid())
+		{
+			return;
+		}
+
+		ContainmentEffectHandle =
+			AbilitySystem->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+		if (!ContainmentEffectHandle.IsValid())
+		{
+			return;
+		}
+
+		// 매몰 직전에 진행 중이던 행동도 종료한다. 눈 흡수만은 탈출 수단으로 유지한다.
+		FGameplayTagContainer AbsorbAbilityTags;
+		AbsorbAbilityTags.AddTag(DRGameplayTags::Ability_Snow_Absorb);
+		AbilitySystem->CancelAbilities(nullptr, &AbsorbAbilityTags, nullptr);
+
+		StartContainmentTimers();
+	}
 }
 
 void UDRVoxelContainmentComponent::UpdateVoxelContainedMode()
 {
-	UDRCharacterMovementComponent* Movement = GetMovementComponent();
-	if (!IsValid(Movement) ||
-		!Movement->IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystem) ||
+		!AbilitySystem->HasMatchingGameplayTag(
+			DRGameplayTags::State_VoxelContained))
 	{
 		ClearContainmentState();
 		return;
@@ -166,16 +207,11 @@ void UDRVoxelContainmentComponent::UpdateVoxelContainedMode()
 	AVoxelWorld* VoxelWorld = VoxelContainmentWorld.Get();
 	if (!IsValid(World) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
+		ClearContainmentState();
 		return;
 	}
 
 	const float Time = World->GetTimeSeconds();
-	if (Time < NextCheckTime)
-	{
-		return;
-	}
-	NextCheckTime = Time + FMath::Max(0.01f, CheckInterval);
-
 	const FVoxelCapsuleOccupancy Occupancy =
 		GetVoxelCapsuleOccupancy(*VoxelWorld);
 	if (Occupancy.FullySurroundedLayerCount >=
@@ -195,14 +231,90 @@ void UDRVoxelContainmentComponent::UpdateVoxelContainedMode()
 		return;
 	}
 
-	Movement->ExitVoxelContainedMode();
 	ClearContainmentState();
+}
+
+void UDRVoxelContainmentComponent::ApplyFreezeGain()
+{
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystem) || !FreezeGainEffectClass ||
+		!AbilitySystem->HasMatchingGameplayTag(
+			DRGameplayTags::State_VoxelContained))
+	{
+		return;
+	}
+
+	const float MaxHealth = AbilitySystem->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetMaxHealthAttribute());
+	const float Interval = FMath::Max(0.01f, FreezeTickInterval);
+	const float Duration = FMath::Max(0.01f, FreezeDeathDuration);
+	const float FreezeAmount = MaxHealth / Duration * Interval;
+	if (FreezeAmount <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = AbilitySystem->MakeEffectContext();
+	FGameplayEffectSpecHandle Spec = AbilitySystem->MakeOutgoingSpec(
+		FreezeGainEffectClass,
+		1.f,
+		Context);
+	if (!Spec.IsValid())
+	{
+		return;
+	}
+
+	Spec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Freeze_Amount,
+		FreezeAmount);
+	AbilitySystem->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+}
+
+void UDRVoxelContainmentComponent::StartContainmentTimers()
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	FTimerManager& TimerManager = World->GetTimerManager();
+	TimerManager.SetTimer(
+		ContainmentCheckTimerHandle,
+		this,
+		&ThisClass::UpdateVoxelContainedMode,
+		FMath::Max(0.01f, CheckInterval),
+		true);
+	TimerManager.SetTimer(
+		FreezeGainTimerHandle,
+		this,
+		&ThisClass::ApplyFreezeGain,
+		FMath::Max(0.01f, FreezeTickInterval),
+		true);
+}
+
+void UDRVoxelContainmentComponent::StopContainmentTimers()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ContainmentCheckTimerHandle);
+		World->GetTimerManager().ClearTimer(FreezeGainTimerHandle);
+	}
 }
 
 void UDRVoxelContainmentComponent::ClearContainmentState()
 {
+	StopContainmentTimers();
+
+	if (ContainmentEffectHandle.IsValid())
+	{
+		if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent())
+		{
+			AbilitySystem->RemoveActiveGameplayEffect(ContainmentEffectHandle);
+		}
+		ContainmentEffectHandle.Invalidate();
+	}
+
 	VoxelContainmentWorld.Reset();
 	ReleaseStartTime = -1.f;
-	NextCheckTime = 0.f;
-	SetComponentTickEnabled(false);
 }

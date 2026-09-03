@@ -862,6 +862,11 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 	{
 		MovementComponent->BindAbilitySystem(ASC);
 	}
+
+	if (IsValid(VoxelContainmentComponent))
+	{
+		VoxelContainmentComponent->BindAbilitySystem(ASC);
+	}
 	
 	if (IsValid(CharacterShadowComponent))
 	{

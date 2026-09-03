@@ -8,6 +8,11 @@ namespace DRGameplayTags
 		"Player is frozen.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_VoxelContained,
+		"State.VoxelContained",
+		"Player is fully contained by voxel terrain.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_Dead,
 		"State.Dead",
 		"Player is dead.");

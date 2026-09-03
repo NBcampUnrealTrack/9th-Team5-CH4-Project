@@ -6,6 +6,7 @@ namespace DRGameplayTags
 {
 	// State
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frozen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VoxelContained);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);

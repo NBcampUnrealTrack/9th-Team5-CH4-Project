@@ -554,7 +554,8 @@ bool UDRQuickSlotComponent::IsQuickSlotSelectionLocked() const
 {
 	const UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
 
-	return IsValid(ASC)	&& ASC->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Active);
+	return IsValid(ASC) &&
+		ASC->HasMatchingGameplayTag(DRGameplayTags::State_MovementAction_Active);
 }
 
 bool UDRQuickSlotComponent::CacheAbilitySystemComponent()

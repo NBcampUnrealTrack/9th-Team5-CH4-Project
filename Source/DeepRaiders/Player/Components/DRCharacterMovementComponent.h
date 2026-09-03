@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayTagContainer.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "DRCharacterMovementComponent.generated.h"
 
@@ -125,6 +126,7 @@ protected:
 private:
 	void UnbindAbilitySystem();
 	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
+	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void ApplyMoveSpeedMultiplier(float Multiplier);
 
 	void PhysMovementAction(float DeltaTime, int32 Iterations);
@@ -143,6 +145,7 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
 	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
+	FDelegateHandle VoxelContainedTagChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
 
