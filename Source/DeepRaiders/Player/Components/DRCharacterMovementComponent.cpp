@@ -957,6 +957,17 @@ bool UDRCharacterMovementComponent::TryHandleZiplineBlockingCollision(const FHit
             OtherAction->EndMovementAction(
                 EDRMovementActionEndReason::Collision);
 
+
+            /*
+             * 충돌 하차에서는 Zipline 진행/Attach 보정 속도를
+             * 일반 Falling으로 승계하지 않는다.
+             */
+            Velocity = FVector::ZeroVector;
+            ZiplineRailSpeed = 0.f;
+
+            OtherMovement->Velocity = FVector::ZeroVector;
+            OtherMovement->SetZiplineRailSpeed(0.f);
+
             if (IsCustomMovementModeActive(
                     EDRCustomMovementMode::MovementAction))
             {
@@ -985,7 +996,14 @@ bool UDRCharacterMovementComponent::TryHandleZiplineBlockingCollision(const FHit
      */
     ThisAction->EndMovementAction(
         EDRMovementActionEndReason::Collision);
-
+    
+    /*
+     * 장애물 충돌로 떨어질 때는 기존 Zipline Velocity를 폐기한다.
+     * 이후 Falling이 0 속도에서 시작하면서 중력을 적용한다.
+     */
+    Velocity = FVector::ZeroVector;
+    ZiplineRailSpeed = 0.f;
+    
     if (IsCustomMovementModeActive(
             EDRCustomMovementMode::MovementAction))
     {

@@ -335,6 +335,16 @@ public:
 	FDRMovementActionEnded OnMovementActionEnded;
 	FDRMovementActionSimulated OnMovementActionSimulated;
 
+	// E 상호작용으로 현재 Zipline을 해제한다.
+	// 일반 RequestCancelZipline과 달리 Interaction Cooldown을 검사한다.
+	void RequestCancelZiplineFromInteraction();
+
+	// 서버에서 Zipline 탑승 가능 여부를 판단할 때 사용한다.
+	bool CanUseZiplineInteraction() const;
+
+	// 성공적인 Zipline 진입/이탈 시 쿨타임을 시작한다.
+	void CommitZiplineInteractionCooldown();
+	
 protected:
 	UFUNCTION()
 	void OnRep_AuthoritativeActionState(const FDRMovementActionState& PreviousState);
@@ -380,4 +390,12 @@ private:
 	// 이 컴포넌트가 직접 추가한 Zipline 관련 loose tag만 정확히 한 번 제거하기 위한 로컬 상태다.
 	bool bZiplineGameplayTagsApplied = false;
 	TWeakObjectPtr<UAbilitySystemComponent> ZiplineTaggedAbilitySystem;
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestCancelZiplineFromInteraction(int32 SessionId);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Zipline|Interaction", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "s"))
+	float ZiplineInteractionCooldown = 1.0f;
+
+	double LastZiplineInteractionServerTime = -BIG_NUMBER;
 };
