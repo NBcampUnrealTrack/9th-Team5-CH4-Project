@@ -796,7 +796,11 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         RemainingTime -= TimeTick;
         bJustTeleported = false;
         
-        const FVector OldVelocity = Velocity;
+        /*
+         * 중간 속도 적분에 사용할 시작 속도다.
+         * 거리 제약을 시작/종료 속도 모두에 적용해야 이번 서브스텝부터 거리 감소가 반영된다.
+         */
+        FVector IntegrationStartVelocity = Velocity;
         
         FDRMovementActionSimulationInput Input;
         Input.Location = UpdatedComponent->GetComponentLocation();
@@ -859,7 +863,16 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
                 Velocity = Velocity.GetClampedToMaxSize(Output.MaxSpeed);
             }
 
-            Adjusted = 0.5f * (OldVelocity + Velocity) * TimeTick;
+            /*
+            * 그래플 가속도, 중력, MaxSpeed가 계산된 최종 속도에 기준점 제약을 적용한다.
+            *
+            * IntegrationStartVelocity도 함께 제약하지 않으면 중간 속도 적분에 이전의 바깥 방향
+            * 속도가 남아 첫 서브스텝 동안 캐릭터가 계속 멀어질 수 있다.
+            */
+            MovementAction->ConstrainMovementVelocity(Input.Location, IntegrationStartVelocity);
+            MovementAction->ConstrainMovementVelocity(Input.Location, Velocity);
+            
+            Adjusted = 0.5f * (IntegrationStartVelocity + Velocity) * TimeTick;
         }
 
         FHitResult Hit(1.f);

@@ -30,7 +30,12 @@ struct DEEPRAIDERS_API FDRGrappleAbilitySettings
 	// 0이면 훅을 직접 향하고, 1이면 훅 방향과 시선 방향을 같은 비율로 혼합한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Movement", meta = (ClampMin = "0.0"))
 	float ViewPullWeight = 1.f;
-
+	
+	// GuaranteeClosingSpeed에서 매 순간 보장할 훅 방향의 최소 속도다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Movement",
+		meta = (ClampMin = "0.0", Units = "cm/s"))
+	float MinimumClosingSpeed = 400.f;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Movement",
 		meta = (ClampMin = "0.0", Units = "cm"))
 	float ArrivalDistance = 100.f;

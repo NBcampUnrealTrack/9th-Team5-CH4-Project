@@ -118,6 +118,73 @@ void UDRMovementActionComponent::EvaluateMovementContribution(const FDRMovementA
 	}
 }
 
+void UDRMovementActionComponent::ConstrainMovementVelocity(const FVector& CurrentLocation, FVector& InOutVelocity) const
+{
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	if (!State.IsActive() 
+		|| State.ActionType != EDRMovementActionType::Grapple)
+	{
+		return;
+	}
+
+	/*
+	 * GA가 선택한 정책에 해당하는 상태값 하나만 활성화한다.
+	 * 두 함수는 그래플이라는 기능 대신 일반적인 기준점 제약값만 검사한다.
+	 */
+	ApplyMinimumReferenceClosingSpeed(State, CurrentLocation, InOutVelocity);
+}
+
+void UDRMovementActionComponent::ApplyMinimumReferenceClosingSpeed(const FDRMovementActionState& State,
+	const FVector& CurrentLocation, FVector& InOutVelocity) const
+{
+	if (State.MinimumReferenceClosingSpeed <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const FVector ToReference = FVector(State.ReferenceLocation) - CurrentLocation;
+	const float CurrentDistance = ToReference.Size();
+
+	if (CurrentDistance <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const FVector ReferenceDirection = ToReference / CurrentDistance;
+	const float ClosingSpeed = FVector::DotProduct(InOutVelocity, ReferenceDirection);
+
+	float DesiredClosingSpeed = State.MinimumReferenceClosingSpeed;
+
+	// 최소 접근 속도가 액션의 전체 최대 속도보다 커지는 모순을 방지한다.
+	if (State.MaxSpeed > KINDA_SMALL_NUMBER)
+	{
+		DesiredClosingSpeed = FMath::Min(DesiredClosingSpeed, State.MaxSpeed);
+	}
+
+	if (ClosingSpeed >= DesiredClosingSpeed)
+	{
+		return;
+	}
+
+	FVector TangentialVelocity = InOutVelocity - ReferenceDirection * ClosingSpeed;
+
+	if (State.MaxSpeed > KINDA_SMALL_NUMBER)
+	{
+		/*
+		 * 방사 속도를 먼저 확보한 뒤 남은 MaxSpeed 범위 안에서 접선 속도를 유지한다.
+		 * 접선 속도가 너무 크면 이 경우에만 필요한 만큼 줄어든다.
+		 */
+		const float MaxTangentialSpeedSquared = FMath::Max(
+			FMath::Square(State.MaxSpeed) - FMath::Square(DesiredClosingSpeed), 0.f);
+		const float MaxTangentialSpeed = FMath::Sqrt(MaxTangentialSpeedSquared);
+
+		TangentialVelocity = TangentialVelocity.GetClampedToMaxSize(MaxTangentialSpeed);
+	}
+
+	InOutVelocity = TangentialVelocity + ReferenceDirection * DesiredClosingSpeed;
+}
+
 void UDRMovementActionComponent::ReportMovementSimulation(const FVector& Location, const FVector& Velocity)
 {
 	FDRMovementActionSimulationResult Result;

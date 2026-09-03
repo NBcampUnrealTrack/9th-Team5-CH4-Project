@@ -89,6 +89,10 @@ public:
 	// 기준 위치 방향에 소유 Pawn의 시선 방향을 혼합하는 비율이다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	float ViewDirectionWeight = 0.f;
+
+	// 기준점을 향해 반드시 유지할 최소 방사 속도다. 0 이하면 사용하지 않는다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	float MinimumReferenceClosingSpeed = 0.f;
 	
 	// 비활성 상태로 복제될 때 마지막 종료 이유를 전달한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
@@ -273,6 +277,9 @@ public:
 	// 현재 상태를 기반으로 이번 프레임의 이동 기여도를 계산한다.
 	void EvaluateMovementContribution(const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const;
 
+	// 가속도와 중력이 반영된 속도에 현재 액션의 기준점 제약을 적용한다.
+	void ConstrainMovementVelocity(const FVector& CurrentLocation, FVector& InOutVelocity) const;
+	
 	// 이동 계산 이후 현재 위치와 속도를 GA에 전달한다.
 	void ReportMovementSimulation(const FVector& Location, const FVector& Velocity);
 
@@ -338,6 +345,10 @@ private:
 
 	// 로컬과 서버가 동일한 Pawn aim 방향을 사용하도록 BaseAimRotation에서 시선 방향을 구한다.
 	FVector ResolveOwnerViewDirection() const;
+
+	// 접선 속도를 가능한 한 유지하면서 기준점 방향의 최소 접근 속도를 보장한다.
+	void ApplyMinimumReferenceClosingSpeed(const FDRMovementActionState& State, const FVector& CurrentLocation,
+		FVector& InOutVelocity) const;
 	
 	void EvaluateGrappleContribution(const FDRMovementActionState& State, const FDRMovementActionSimulationInput& Input, FDRMovementActionSimulationOutput& OutOutput) const;
 

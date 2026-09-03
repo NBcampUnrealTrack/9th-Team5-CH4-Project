@@ -65,7 +65,7 @@ private:
         FVector& OutTargetLocation,
         FVector& OutTargetNormal) const;
 
-    FDRMovementActionState BuildMovementActionState(const FVector& HookLocation) const;
+    FDRMovementActionState BuildMovementActionState(const FVector& InHookLocation) const;
 
     bool StartPredictedMovement(const FVector& HookLocation, const FVector& HookNormal);
 
@@ -83,9 +83,6 @@ private:
     // 각 로컬 예측 및 서버 권한 인스턴스에서 이동이 시작된 이후의 경과 시간을 반환한다.
     float GetMovementElapsedTime() const;
 
-    // 시선 뒤쪽 해제 판정에 사용할 현재 Pawn aim 방향을 반환한다.
-    FVector ResolveViewDirection() const;
-    
 #pragma region GameplayCue
     // 성공한 훅 위치와 표면 방향을 모든 클라이언트의 지속형 GameplayCue에 전달한다.
     void StartGrappleGameplayCue(const FVector& InHookLocation, const FVector& InHookNormal);
@@ -129,6 +126,9 @@ private:
 
     FGuid ActiveInstanceId;
     FVector HookLocation = FVector::ZeroVector;
+    // 훅이 부착된 순간의 월드 공간 표면 노멀이다.
+    // 보호 시간이 끝난 뒤 캐릭터가 훅 평면 반대편으로 넘어갔는지 판정한다.
+    FVector HookSurfaceNormal = FVector::ZeroVector;
     float MovementStartTimeSeconds = -1.f;
 
     FTimerHandle EndGrappleTimerHandle;
