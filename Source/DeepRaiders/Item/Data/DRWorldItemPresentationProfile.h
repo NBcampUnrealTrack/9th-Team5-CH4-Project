@@ -20,9 +20,6 @@ struct DEEPRAIDERS_API FDRWorldItemRarityVisual
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Rarity", meta = (ClampMin = "0.0"))
 	float Intensity = 1.f;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Rarity", meta = (Clampmin = "0.0"))
-	float EffectScale = 1.f;
-	
 	// 비어 있으면 공통 SpawnTrailSystem 사용
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "World Item|Rarity")
 	TObjectPtr<UNiagaraSystem> SpawnTrailOverride = nullptr;

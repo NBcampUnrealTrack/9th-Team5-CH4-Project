@@ -275,8 +275,6 @@ void ADRHoveringWorldItemActor::RefreshRarityPresentation()
 	
 	Profile->ApplyRarityParameters(SpawnTrailVFXComponent, Definition->Rarity);	
 	Profile->ApplyRarityParameters(IdleAuraVFXComponent, Definition->Rarity);
-	
-	IdleAuraVFXComponent->SetVariableFloat(TEXT("User.InteractionRadius"), InteractionRadius);
 }
 
 void ADRHoveringWorldItemActor::RefreshPresentationTransform()
