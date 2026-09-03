@@ -106,6 +106,67 @@ UAbilitySystemComponent* ADRPlayerController::GetAbilitySystemComponent() const
 	return DRPlayerState->GetAbilitySystemComponent();
 }
 
+void ADRPlayerController::RevealEnemyNameFromServer(ADRPlayerState* TargetPlayerState)
+{
+	if (!HasAuthority() || !IsValid(TargetPlayerState) || TargetPlayerState == GetPlayerState<ADRPlayerState>())
+	{
+		return;
+	}
+
+	const float SafeDuration = FMath::Max(0.f, EnemyNameRevealDuration);
+
+	if (SafeDuration <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	ClientRevealEnemyName(TargetPlayerState, SafeDuration);
+}
+
+void ADRPlayerController::ClientRevealEnemyName_Implementation(ADRPlayerState* TargetPlayerState, float Duration)
+{
+	if (!IsLocalController() || !IsValid(TargetPlayerState) || Duration <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const double NewExpireTime = World->GetTimeSeconds() + Duration;
+
+	double& StoredExpireTime = EnemyNameRevealExpireTimes.FindOrAdd(TargetPlayerState);
+
+	/*
+	 * 연속 피격 시 기존 타이머를 새로 여러 개 만들지 않고,
+	 * 단일 만료 시각을 뒤로 갱신한다.
+	 */
+	StoredExpireTime = FMath::Max(StoredExpireTime, NewExpireTime);
+}
+
+bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const
+{
+	if (!IsLocalController() || !IsValid(TargetPlayerState))
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const double* ExpireTime = EnemyNameRevealExpireTimes.Find(TargetPlayerState);
+
+	return ExpireTime != nullptr && *ExpireTime > World->GetTimeSeconds();
+}
+
 void ADRPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

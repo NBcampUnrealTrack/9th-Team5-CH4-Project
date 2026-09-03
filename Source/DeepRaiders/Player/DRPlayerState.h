@@ -81,6 +81,12 @@ public:
 		float AppliedDamage,
 		bool bFatal);
 	
+	/*
+	 * 서버에서 다른 플레이어가 가한 유효 피격이 확정됐을 때 호출한다.
+	 * Health Damage와 FreezeGauge 증가가 공통으로 이 경로를 사용한다.
+	 */
+	void HandleHostileHitResolved(ADRPlayerState* SourcePlayerState);
+	
 	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
 	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
 
@@ -170,6 +176,8 @@ public:
 	void ClearFrozenState();
 	
 	void HandleFreezeGaugeResolved();
+	
+	void InitializeDefaultPlayerName();
 	
 protected:
 	virtual void BeginPlay() override;

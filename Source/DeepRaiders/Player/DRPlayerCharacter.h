@@ -31,6 +31,7 @@ class UDRHitReactionSet;
 class UDRMovementActionComponent;
 class UDRPlayerCameraComponent;
 class UDRCharacterShadowComponent;
+class UDRPlayerNameplateComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -189,6 +190,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
 	void PlayHitReaction(const FVector& ImpactLocation);
 	
+	FLinearColor GetTeamDisplayColor() const;
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -220,6 +223,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Movement", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRMovementActionComponent> MovementActionComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRPlayerNameplateComponent> PlayerNameplateComponent;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")

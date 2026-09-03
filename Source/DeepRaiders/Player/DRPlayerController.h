@@ -34,6 +34,7 @@ class UDRInteractionComponent;
 enum class EDRSkillSlot : uint8;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
+class ADRPlayerState;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
@@ -69,6 +70,15 @@ public:
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	/**
+	 * 서버에서 유효한 적 피격이 확정됐을 때 호출한다.
+	 * 실제 표시 상태는 소유 클라이언트에서만 저장한다.
+	 */
+	void RevealEnemyNameFromServer(ADRPlayerState* TargetPlayerState);
+
+	/** 해당 적의 이름 노출 시간이 아직 남아 있는지 확인한다. */
+	bool IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const;
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
@@ -115,6 +125,19 @@ private:
 	void HandleScoreboardStarted(const FInputActionValue& Value);
 	void HandleScoreboardCompleted(const FInputActionValue& Value);
 	void HandleToggleMenu(const FInputActionValue&);
+	
+	UFUNCTION(Client, Reliable)
+	void ClientRevealEnemyName(ADRPlayerState* TargetPlayerState, float Duration);
+
+	/** 적을 마지막으로 맞힌 시점부터 이름을 유지할 시간. */
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Nameplate", meta = (ClampMin = "0.0", Units = "s"))
+	float EnemyNameRevealDuration = 3.f;
+
+	/*
+	 * 관찰자별 로컬 상태다.
+	 * Target PlayerState마다 서버가 허용한 노출 만료 시각을 보관한다.
+	 */
+	TMap<TWeakObjectPtr<ADRPlayerState>, double> EnemyNameRevealExpireTimes;
 	
 private:
 	/*
