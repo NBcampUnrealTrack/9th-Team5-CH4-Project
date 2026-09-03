@@ -1,9 +1,96 @@
 #include "DRSnowSubsystem.h"
 
+#include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Character.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "VoxelRender/IVoxelLODManager.h"
 #include "VoxelWorld.h"
+
+namespace
+{
+	bool EvaluateCharactersInEditedBounds(
+		AVoxelWorld& VoxelWorld,
+		const FVoxelIntBox& EditedBounds)
+	{
+		if (!EditedBounds.IsValid())
+		{
+			return false;
+		}
+
+		FBox EditedWorldBounds(ForceInit);
+		const FIntVector Min = EditedBounds.Min;
+		const FIntVector Max = EditedBounds.Max;
+		for (int32 X = 0; X < 2; ++X)
+		{
+			for (int32 Y = 0; Y < 2; ++Y)
+			{
+				for (int32 Z = 0; Z < 2; ++Z)
+				{
+					EditedWorldBounds += VoxelWorld.LocalToGlobal(FIntVector(
+						X == 0 ? Min.X : Max.X,
+						Y == 0 ? Min.Y : Max.Y,
+						Z == 0 ? Min.Z : Max.Z));
+				}
+			}
+		}
+		EditedWorldBounds = EditedWorldBounds.ExpandBy(VoxelWorld.VoxelSize);
+
+		bool bEvaluatedAnyCharacter = false;
+		if (EditedWorldBounds.IsValid)
+		{
+			for (TActorIterator<ACharacter> It(VoxelWorld.GetWorld()); It; ++It)
+			{
+				ACharacter* Character = *It;
+				const UCapsuleComponent* Capsule =
+					IsValid(Character) ? Character->GetCapsuleComponent() : nullptr;
+				if (!IsValid(Capsule) ||
+					!EditedWorldBounds.Intersect(Capsule->Bounds.GetBox()))
+				{
+					continue;
+				}
+
+				if (UDRCharacterMovementComponent* Movement =
+					Cast<UDRCharacterMovementComponent>(Character->GetMovementComponent()))
+				{
+					Movement->EvaluateVoxelContainment(&VoxelWorld);
+					bEvaluatedAnyCharacter = true;
+				}
+			}
+		}
+		return bEvaluatedAnyCharacter;
+	}
+
+	void EvaluateAffectedVoxelContainment(
+		const FDRSnowSurfaceAddRequest& Request,
+		const FDRSnowSurfaceEditResult& EditResult)
+	{
+		AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
+		if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+		{
+			return;
+		}
+
+		const bool bEvaluatedAnyCharacter =
+			EvaluateCharactersInEditedBounds(*VoxelWorld, EditResult.EditedBounds);
+
+		// 일부 동기 편집 경로는 EditedBounds를 제공하지 않으므로 요청자를 fallback으로 검사한다.
+		if (!bEvaluatedAnyCharacter)
+		{
+			if (APawn* InstigatorPawn = Request.Context.InstigatorPawn.Get())
+			{
+				if (UDRCharacterMovementComponent* Movement =
+					Cast<UDRCharacterMovementComponent>(
+						InstigatorPawn->GetMovementComponent()))
+				{
+					Movement->EvaluateVoxelContainment(VoxelWorld);
+				}
+			}
+		}
+	}
+}
 
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
@@ -45,13 +132,16 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Reque
 			return Result;
 		}
 
+		EvaluateAffectedVoxelContainment(Request, EditResult);
 		return VolumeStore.AddSnow(Request);
 	}
 
 	Result = VolumeStore.AddSnow(Request);
 	if (Result.AddedAmount > 0.f)
 	{
-		SurfaceEditor.AddSnowAtArea(Request);
+		const FDRSnowSurfaceEditResult EditResult =
+			SurfaceEditor.AddSnowAtArea(Request);
+		EvaluateAffectedVoxelContainment(Request, EditResult);
 	}
 	return Result;
 }
@@ -152,6 +242,11 @@ void UDRSnowSubsystem::FlushRenderUpdates()
 		AVoxelWorld* VoxelWorld = PendingUpdate.VoxelWorld.Get();
 		if (IsValid(VoxelWorld) && VoxelWorld->IsCreated() && !PendingUpdate.Bounds.IsEmpty())
 		{
+			// 발사 직후의 밀려나기가 끝난 위치에서, collision 갱신 바로 전에 검사한다.
+			for (const FVoxelIntBox& Bounds : PendingUpdate.Bounds)
+			{
+				EvaluateCharactersInEditedBounds(*VoxelWorld, Bounds);
+			}
 			VoxelWorld->GetLODManager().UpdateBounds(PendingUpdate.Bounds);
 		}
 	}

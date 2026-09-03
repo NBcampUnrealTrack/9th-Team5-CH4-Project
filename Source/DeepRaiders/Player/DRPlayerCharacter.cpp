@@ -54,7 +54,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	VoxelNoClippingComponent->SetupAttachment(GetCapsuleComponent());
 	VoxelNoClippingComponent->TickRate = 0.03f;
 	VoxelNoClippingComponent->SearchRange = 8;
-	VoxelNoClippingComponent->bEnableDefaultBehavior = true;
+	// 플러그인의 기본 텔레포트/Impulse가 지형 충돌 보정과 경쟁하지 않게 한다.
+	VoxelNoClippingComponent->bEnableDefaultBehavior = false;
 	VoxelNoClippingComponent->Speed = 6000.f;
 
 	TeleportComponent = CreateDefaultSubobject<UDRTeleportComponent>(TEXT("TeleportComponent"));
@@ -233,6 +234,11 @@ void ADRPlayerCharacter::Landed(const FHitResult& Hit)
 	const float LandingSpeed = FMath::Max(0.f, -GetVelocity().Z);
 
 	Super::Landed(Hit);
+
+	if (HasAuthority())
+	{
+		LastLandedLocation = GetActorLocation();
+	}
 
 	if (IsValid(PlayerLifecycleComponent))
 	{
@@ -804,6 +810,12 @@ FLinearColor ADRPlayerCharacter::GetTeamDisplayColor() const
 void ADRPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Blueprint component template에 예전 값이 남아 있어도 기본 텔레포트/Impulse는 실행하지 않는다.
+	if (IsValid(VoxelNoClippingComponent))
+	{
+		VoxelNoClippingComponent->bEnableDefaultBehavior = false;
+	}
 
 	if (IsValid(PlayerCameraComponent))
 	{

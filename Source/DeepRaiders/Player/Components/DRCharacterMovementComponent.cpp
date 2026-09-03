@@ -4,7 +4,10 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelRender/VoxelProceduralMeshComponent.h"
+#include "VoxelWorld.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
 
@@ -274,13 +277,363 @@ UDRCharacterMovementComponent::UDRCharacterMovementComponent()
     GravityScale = 1.0f;
 }
 
+void UDRCharacterMovementComponent::TickComponent(
+    float DeltaTime,
+    ELevelTick TickType,
+    FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+    {
+        UpdateVoxelContainedMode();
+    }
+}
+
+void UDRCharacterMovementComponent::EvaluateVoxelContainment(AVoxelWorld* VoxelWorld)
+{
+    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !IsValid(CharacterOwner))
+    {
+        return;
+    }
+
+    const FVoxelCapsuleOccupancy Occupancy =
+        GetVoxelCapsuleOccupancy(*VoxelWorld);
+    if (Occupancy.FullySurroundedLayerCount >=
+        FMath::Clamp(VoxelContainmentRequiredSurroundedLayers, 1, 3))
+    {
+        EnterVoxelContainedMode(*VoxelWorld);
+    }
+}
+
+UDRCharacterMovementComponent::FVoxelCapsuleOccupancy
+UDRCharacterMovementComponent::GetVoxelCapsuleOccupancy(
+    AVoxelWorld& VoxelWorld) const
+{
+    FVoxelCapsuleOccupancy Result;
+    if (!IsValid(CharacterOwner))
+    {
+        return Result;
+    }
+
+    const UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+    if (!IsValid(Capsule))
+    {
+        return Result;
+    }
+
+    const float Radius = Capsule->GetScaledCapsuleRadius();
+    const float CylinderHalfHeight =
+        FMath::Max(0.f, Capsule->GetScaledCapsuleHalfHeight() - Radius);
+    const FVector Center = Capsule->GetComponentLocation();
+    const FVector Forward = CharacterOwner->GetActorForwardVector();
+    const FVector Right = CharacterOwner->GetActorRightVector();
+    const FVector HorizontalOffsets[] =
+    {
+        FVector::ZeroVector,
+        Forward * Radius * 0.55f,
+        -Forward * Radius * 0.55f,
+        Right * Radius * 0.55f,
+        -Right * Radius * 0.55f
+    };
+    const float VerticalOffsets[] =
+    {
+        -CylinderHalfHeight * 0.75f,
+        0.f,
+        CylinderHalfHeight * 0.75f
+    };
+
+    const FVoxelIntBox WorldBounds = VoxelWorld.GetWorldBounds();
+    FIntVector SamplePositions[UE_ARRAY_COUNT(VerticalOffsets)][UE_ARRAY_COUNT(HorizontalOffsets)];
+    FVoxelIntBoxWithValidity LockBounds;
+    for (int32 VerticalIndex = 0; VerticalIndex < UE_ARRAY_COUNT(VerticalOffsets); ++VerticalIndex)
+    {
+        for (int32 HorizontalIndex = 0; HorizontalIndex < UE_ARRAY_COUNT(HorizontalOffsets); ++HorizontalIndex)
+        {
+            const FVector SampleLocation =
+                Center + HorizontalOffsets[HorizontalIndex] +
+                FVector::UpVector * VerticalOffsets[VerticalIndex];
+            const FIntVector VoxelPosition = VoxelWorld.GlobalToLocal(SampleLocation);
+            SamplePositions[VerticalIndex][HorizontalIndex] = VoxelPosition;
+            if (WorldBounds.Contains(VoxelPosition))
+            {
+                LockBounds += VoxelPosition;
+            }
+        }
+    }
+
+    if (!LockBounds.IsValid())
+    {
+        return Result;
+    }
+
+    FVoxelData& Data = VoxelWorld.GetData();
+    FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
+
+    constexpr uint8 FullySurroundedMask =
+        (1 << UE_ARRAY_COUNT(HorizontalOffsets)) - 1;
+    for (int32 VerticalIndex = 0; VerticalIndex < UE_ARRAY_COUNT(VerticalOffsets); ++VerticalIndex)
+    {
+        uint8 SolidLayerMask = 0;
+        for (int32 HorizontalIndex = 0; HorizontalIndex < UE_ARRAY_COUNT(HorizontalOffsets); ++HorizontalIndex)
+        {
+            const FIntVector& VoxelPosition = SamplePositions[VerticalIndex][HorizontalIndex];
+            if (WorldBounds.Contains(VoxelPosition) &&
+                !Data.GetValue(VoxelPosition, 0).IsEmpty())
+            {
+                SolidLayerMask |= 1 << HorizontalIndex;
+            }
+        }
+
+        // 높이별 결과를 합치지 않는다. 경사진 한쪽 벽이 서로 다른 높이에서
+        // 반대편 표본까지 채운 것처럼 보이는 오탐을 막는다.
+        if ((SolidLayerMask & FullySurroundedMask) == FullySurroundedMask)
+        {
+            ++Result.FullySurroundedLayerCount;
+        }
+    }
+
+    return Result;
+}
+
+void UDRCharacterMovementComponent::EnterVoxelContainedMode(AVoxelWorld& VoxelWorld)
+{
+    VoxelContainmentWorld = &VoxelWorld;
+    VoxelContainmentReleaseStartTime = -1.f;
+    NextVoxelContainmentCheckTime = 0.f;
+    StopMovementImmediately();
+    ClearAccumulatedForces();
+    SetMovementMode(
+        MOVE_Custom,
+        static_cast<uint8>(EDRCustomMovementMode::VoxelContained));
+
+    if (IsValid(CharacterOwner) && CharacterOwner->HasAuthority())
+    {
+        CharacterOwner->ForceNetUpdate();
+    }
+}
+
+void UDRCharacterMovementComponent::UpdateVoxelContainedMode()
+{
+    StopMovementImmediately();
+    ClearAccumulatedForces();
+
+    UWorld* World = GetWorld();
+    if (!IsValid(World))
+    {
+        return;
+    }
+
+    const float Time = World->GetTimeSeconds();
+    if (Time < NextVoxelContainmentCheckTime)
+    {
+        return;
+    }
+    NextVoxelContainmentCheckTime =
+        Time + FMath::Max(0.01f, VoxelContainmentCheckInterval);
+
+    AVoxelWorld* VoxelWorld = VoxelContainmentWorld.Get();
+    if (!IsValid(VoxelWorld))
+    {
+        VoxelWorld = LastVoxelFloorWorld.Get();
+    }
+    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+    {
+        return;
+    }
+
+    const FVoxelCapsuleOccupancy Occupancy =
+        GetVoxelCapsuleOccupancy(*VoxelWorld);
+    const bool bStillContained =
+        Occupancy.FullySurroundedLayerCount >=
+        FMath::Clamp(VoxelContainmentRequiredSurroundedLayers, 1, 3);
+    if (bStillContained)
+    {
+        VoxelContainmentReleaseStartTime = -1.f;
+        return;
+    }
+
+    if (VoxelContainmentReleaseStartTime < 0.f)
+    {
+        VoxelContainmentReleaseStartTime = Time;
+        return;
+    }
+    if (Time - VoxelContainmentReleaseStartTime <
+        FMath::Max(0.f, VoxelContainmentReleaseDelay))
+    {
+        return;
+    }
+
+    VoxelContainmentWorld.Reset();
+    VoxelContainmentReleaseStartTime = -1.f;
+    RestoreDefaultMovementMode();
+}
+
 void UDRCharacterMovementComponent::OnMovementUpdated(
 	float DeltaSeconds,
 	const FVector& OldLocation,
 	const FVector& OldVelocity)
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+
 	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
+}
+
+bool UDRCharacterMovementComponent::CheckFall(
+    const FFindFloorResult& OldFloor,
+    const FHitResult& Hit,
+    const FVector& Delta,
+    const FVector& OldLocation,
+    float RemainingTime,
+    float TimeTick,
+    int32 Iterations,
+    bool bMustJump)
+{
+    // Voxel 데이터는 발밑이 고체라고 하지만 collision floor만 일시적으로
+    // 사라진 경우에는 Falling 전환을 시작하지 않는다.
+    if (ShouldKeepVoxelFloor(OldFloor, OldLocation))
+    {
+        return false;
+    }
+
+    return Super::CheckFall(
+        OldFloor,
+        Hit,
+        Delta,
+        OldLocation,
+        RemainingTime,
+        TimeTick,
+        Iterations,
+        bMustJump);
+}
+
+bool UDRCharacterMovementComponent::ShouldKeepVoxelFloor(
+    const FFindFloorResult& OldFloor,
+    const FVector& OldLocation) const
+{
+    if (!OldFloor.IsWalkableFloor() || !IsValid(CharacterOwner))
+    {
+        return false;
+    }
+
+    AVoxelWorld* VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetActor());
+    if (!IsValid(VoxelWorld) && IsValid(OldFloor.HitResult.GetComponent()))
+    {
+        VoxelWorld = Cast<AVoxelWorld>(OldFloor.HitResult.GetComponent()->GetOwner());
+    }
+    if (!IsValid(VoxelWorld))
+    {
+        VoxelWorld = LastVoxelFloorWorld.Get();
+    }
+    if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+    {
+        return false;
+    }
+
+    const UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+    if (!IsValid(Capsule))
+    {
+        return false;
+    }
+
+    const FVector fGravityDirection = GetGravityDirection();
+    const FVector OldCapsuleBottom =
+        OldLocation + fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const FVector LocalOldBottom = VoxelWorld->GlobalToLocalFloat(OldCapsuleBottom).ToFloat();
+    const FVoxelIntBox WorldBounds = VoxelWorld->GetWorldBounds();
+    const float Tolerance = FMath::Max(0.f, VoxelLowerBoundaryTolerance);
+
+    const bool bInsideHorizontalBounds =
+        LocalOldBottom.X >= WorldBounds.Min.X && LocalOldBottom.X < WorldBounds.Max.X &&
+        LocalOldBottom.Y >= WorldBounds.Min.Y && LocalOldBottom.Y < WorldBounds.Max.Y;
+
+    if (bInsideHorizontalBounds && LocalOldBottom.Z <= WorldBounds.Min.Z + Tolerance)
+    {
+        return true;
+    }
+
+    if (!UpdatedComponent)
+    {
+        return false;
+    }
+
+    // OldLocation이 아닌 현재 캡슐 중심을 사용한다. 그렇지 않으면 정상적으로
+    // 복셀 절벽을 걸어 나갈 때도 이전 바닥을 지지로 오판할 수 있다.
+    const FVector CurrentCapsuleBottom =
+        UpdatedComponent->GetComponentLocation() +
+        fGravityDirection * Capsule->GetScaledCapsuleHalfHeight();
+    const float ProbeRadius = Capsule->GetScaledCapsuleRadius() * 0.5f;
+    const FVector Forward = CharacterOwner->GetActorForwardVector();
+    const FVector Right = CharacterOwner->GetActorRightVector();
+    const FVector ColumnOffsets[] =
+    {
+        FVector::ZeroVector,
+        Forward * ProbeRadius,
+        -Forward * ProbeRadius,
+        Right * ProbeRadius,
+        -Right * ProbeRadius
+    };
+    constexpr float ProbeDepthsInVoxels[] = { 0.25f, 0.75f, 1.25f };
+    const FVector LocalGravityDirection =
+        (VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + fGravityDirection) -
+         VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom))
+        .ToFloat()
+        .GetSafeNormal();
+    if (LocalGravityDirection.IsNearlyZero())
+    {
+        return false;
+    }
+
+    FIntVector SamplePositions[UE_ARRAY_COUNT(ColumnOffsets)][UE_ARRAY_COUNT(ProbeDepthsInVoxels)];
+    FVoxelIntBoxWithValidity LockBounds;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FVector LocalColumn =
+                VoxelWorld->GlobalToLocalFloat(CurrentCapsuleBottom + ColumnOffsets[ColumnIndex]).ToFloat();
+            const FVector LocalSample =
+                LocalColumn + LocalGravityDirection * ProbeDepthsInVoxels[DepthIndex];
+            const FIntVector VoxelPosition(
+                FMath::RoundToInt(LocalSample.X),
+                FMath::RoundToInt(LocalSample.Y),
+                FMath::RoundToInt(LocalSample.Z));
+            SamplePositions[ColumnIndex][DepthIndex] = VoxelPosition;
+            if (WorldBounds.Contains(VoxelPosition))
+            {
+                LockBounds += VoxelPosition;
+            }
+        }
+    }
+
+    if (!LockBounds.IsValid())
+    {
+        return false;
+    }
+
+    FVoxelData& Data = VoxelWorld->GetData();
+    FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
+
+    int32 SolidColumnCount = 0;
+    for (int32 ColumnIndex = 0; ColumnIndex < UE_ARRAY_COUNT(ColumnOffsets); ++ColumnIndex)
+    {
+        bool bColumnHasSolidSupport = false;
+        for (int32 DepthIndex = 0; DepthIndex < UE_ARRAY_COUNT(ProbeDepthsInVoxels); ++DepthIndex)
+        {
+            const FIntVector& VoxelPosition = SamplePositions[ColumnIndex][DepthIndex];
+            if (WorldBounds.Contains(VoxelPosition) && !Data.GetValue(VoxelPosition, 0).IsEmpty())
+            {
+                bColumnHasSolidSupport = true;
+                break;
+            }
+        }
+
+        SolidColumnCount += bColumnHasSolidSupport ? 1 : 0;
+    }
+
+    // 발가락 정도의 일부 접촉으로는 이동을 막지 않고, 캡슐 하단의
+    // 다수 영역에 실제 고체 voxel이 있을 때만 floor 소실을 무시한다.
+    return SolidColumnCount >= 3;
 }
 
 void UDRCharacterMovementComponent::OnMovementModeChanged(
@@ -302,6 +655,22 @@ void UDRCharacterMovementComponent::OnMovementModeChanged(
 		&& CustomMovementMode ==
 			static_cast<uint8>(
 				EDRCustomMovementMode::MovementAction);
+
+	const bool bWasVoxelContained =
+		PreviousMovementMode == MOVE_Custom
+		&& PreviousCustomMode ==
+			static_cast<uint8>(
+				EDRCustomMovementMode::VoxelContained);
+
+	const bool bIsVoxelContained =
+		IsCustomMovementModeActive(
+			EDRCustomMovementMode::VoxelContained);
+
+	if (bWasVoxelContained && !bIsVoxelContained)
+	{
+		VoxelContainmentWorld.Reset();
+		VoxelContainmentReleaseStartTime = -1.f;
+	}
 
 	/*
 	 * ExitCustomMovementMode()를 통하지 않고
@@ -469,10 +838,12 @@ void UDRCharacterMovementComponent::SetBase(
     // MovementBase로 잡히면 FNetGUIDCache::SupportsObject 경고가 발생한다.
     if (NewBase && NewBase->IsA<UVoxelProceduralMeshComponent>())
     {
+        LastVoxelFloorWorld = Cast<AVoxelWorld>(NewBase->GetOwner());
         Super::SetBase(nullptr, NAME_None, bNotifyActor);
         return;
     }
 
+    LastVoxelFloorWorld.Reset();
     Super::SetBase(
         NewBase,
         BoneName,
@@ -671,6 +1042,10 @@ void UDRCharacterMovementComponent::PhysCustom(float deltaTime, int32 Iterations
 {
     switch (static_cast<EDRCustomMovementMode>(CustomMovementMode))
     {
+    case EDRCustomMovementMode::VoxelContained:
+        StopMovementImmediately();
+        ClearAccumulatedForces();
+        return;
     case EDRCustomMovementMode::MovementAction:
         PhysMovementAction(deltaTime, Iterations);
         return;
