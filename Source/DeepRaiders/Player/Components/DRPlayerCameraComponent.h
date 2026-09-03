@@ -50,8 +50,50 @@ private:
 		const FVector& OldVelocity);
 
 	void UpdateVerticalFollow(bool bAllowInterpolation, float DeltaSeconds);
+	void ApplyCameraCollisionSettings() const;
+	void ApplyTargetLagSettings() const;
 	void ApplyCameraBoomLocation() const;
 	bool IsLocallyControlledOwner() const;
+
+	/** Spring Arm이 카메라와 지형 사이의 충돌을 검사한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision")
+	bool bEnableCameraCollision = true;
+
+	/** 카메라 중심뿐 아니라 근접 클리핑 면까지 지형을 넘지 않도록 검사할 구체 반경. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision", meta = (EditCondition = "bEnableCameraCollision", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float CameraCollisionProbeSize = 24.f;
+
+	/** 카메라 충돌 검사에 사용할 Trace Channel. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision", meta = (EditCondition = "bEnableCameraCollision"))
+	TEnumAsByte<ECollisionChannel> CameraCollisionProbeChannel = ECC_Camera;
+
+	/** VoxelWorld가 선택한 카메라 채널을 반드시 Block하도록 보장한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision", meta = (EditCondition = "bEnableCameraCollision"))
+	bool bForceVoxelWorldCameraBlocking = true;
+
+	/** 캐릭터 이동을 카메라가 약간 늦게 따라가도록 한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag")
+	bool bEnableTargetPositionLag = true;
+
+	/** 값이 클수록 카메라가 이동 타겟을 더 빠르게 따라간다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag", meta = (EditCondition = "bEnableTargetPositionLag", ClampMin = "0.0", UIMin = "0.0"))
+	float TargetPositionLagSpeed = 10.f;
+
+	/** 이동 타겟과 카메라 피벗 사이에 허용할 최대 거리. 0이면 제한하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag", meta = (EditCondition = "bEnableTargetPositionLag", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float TargetPositionLagMaxDistance = 100.f;
+
+	/** 시점 회전을 카메라가 약간 늦게 따라가도록 한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag")
+	bool bEnableTargetRotationLag = true;
+
+	/** 값이 클수록 카메라가 회전 타겟을 더 빠르게 따라간다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag", meta = (EditCondition = "bEnableTargetRotationLag", ClampMin = "0.0", UIMin = "0.0"))
+	float TargetRotationLagSpeed = 12.f;
+
+	/** 프레임 간격이 커져도 랙 보간이 급격히 달라지지 않도록 세부 스텝을 사용한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag", meta = (EditCondition = "bEnableTargetPositionLag || bEnableTargetRotationLag"))
+	bool bUseTargetLagSubstepping = true;
 
 	/** 캐릭터의 작은 지형 높이 변화는 카메라에 전달하지 않는 Z축 허용 범위. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))

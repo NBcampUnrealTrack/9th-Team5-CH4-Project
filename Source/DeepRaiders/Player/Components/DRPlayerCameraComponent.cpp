@@ -4,9 +4,11 @@
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "VoxelWorld.h"
 
 UDRPlayerCameraComponent::UDRPlayerCameraComponent()
 {
@@ -36,6 +38,8 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 
 	if (CameraBoom.IsValid())
 	{
+		ApplyCameraCollisionSettings();
+		ApplyTargetLagSettings();
 		CameraBoomBaseRelativeLocation = CameraBoom->GetRelativeLocation();
 		SmoothedCameraPivotZ =
 			GetOwner()->GetActorLocation().Z + CameraBoomBaseRelativeLocation.Z;
@@ -49,6 +53,51 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 				this,
 				&ThisClass::HandleCharacterMovementUpdated);
 	}
+}
+
+void UDRPlayerCameraComponent::ApplyCameraCollisionSettings() const
+{
+	if (!CameraBoom.IsValid())
+	{
+		return;
+	}
+
+	CameraBoom->bDoCollisionTest = bEnableCameraCollision;
+	CameraBoom->ProbeSize = CameraCollisionProbeSize;
+	CameraBoom->ProbeChannel = CameraCollisionProbeChannel;
+
+	if (!bEnableCameraCollision || !bForceVoxelWorldCameraBlocking)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+	{
+		It->SetCollisionResponseToChannel(
+			CameraCollisionProbeChannel,
+			ECR_Block);
+	}
+}
+
+void UDRPlayerCameraComponent::ApplyTargetLagSettings() const
+{
+	if (!CameraBoom.IsValid())
+	{
+		return;
+	}
+
+	CameraBoom->bEnableCameraLag = bEnableTargetPositionLag;
+	CameraBoom->CameraLagSpeed = TargetPositionLagSpeed;
+	CameraBoom->CameraLagMaxDistance = TargetPositionLagMaxDistance;
+	CameraBoom->bEnableCameraRotationLag = bEnableTargetRotationLag;
+	CameraBoom->CameraRotationLagSpeed = TargetRotationLagSpeed;
+	CameraBoom->bUseCameraLagSubstepping = bUseTargetLagSubstepping;
 }
 
 UCameraShakeBase* UDRPlayerCameraComponent::PlayCameraShake(
@@ -112,7 +161,7 @@ void UDRPlayerCameraComponent::TickComponent(
 	if (!IsValid(CharacterMovement) || !CharacterMovement->IsMovingOnGround())
 	{
 		// 점프, 낙하, 제트팩 중의 높이 변화는 의도된 이동이므로
-		// 지면 보정 없이 카메라가 캐릭터를 즉시 따라가게 한다.
+		// Z축 데드존 보정 없이 Spring Arm의 타겟 랙으로만 따라가게 한다.
 		SmoothedCameraPivotZ =
 			GetOwner()->GetActorLocation().Z + CameraBoomBaseRelativeLocation.Z;
 		bVerticalFollowActive = false;
