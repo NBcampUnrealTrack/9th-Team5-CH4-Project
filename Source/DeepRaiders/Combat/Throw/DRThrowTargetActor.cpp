@@ -170,7 +170,10 @@ void ADRThrowTargetActor::UpdateTrajectoryVFX(const TArray<FVector>& PathPoints,
 	if (!PathPoints.IsEmpty())
 	{
 		TrajectoryComponent->SetVariablePosition(ActionSettings.SpherePointParameter, PathPoints.Last());	
-	}	
+	}
+	
+	FVector TrajectorySphereScale = ResolveTrajectorySphereScale();
+	TrajectoryComponent->SetVariableVec3(ActionSettings.SphereScaleParameter, TrajectorySphereScale);
 }
 
 void ADRThrowTargetActor::DestroyTrajectoryVFX()
@@ -181,6 +184,14 @@ void ADRThrowTargetActor::DestroyTrajectoryVFX()
 		TrajectoryComponent->DestroyComponent();
 		TrajectoryComponent = nullptr;
 	}
+}
+
+FVector ADRThrowTargetActor::ResolveTrajectorySphereScale()
+{
+	float ImpactRadius = ItemSettings.ExplosionRadius;
+	float SphereScalar = FMath::Clamp(ImpactRadius / TrajectoryPreviewSphereRadius, 0, 5);
+	
+	return FVector::OneVector * SphereScalar;
 }
 
 void ADRThrowTargetActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
