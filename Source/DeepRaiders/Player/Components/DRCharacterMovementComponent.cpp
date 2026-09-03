@@ -66,16 +66,20 @@ public:
     int8 SavedManualZiplineInput = 0;
     float SavedZiplineRailSpeed = 0.f;
     float SavedJetpackSpoolElapsed = 0.f;
-
+    uint8 bSavedAirborneMomentumPreservationActive : 1;
+    float SavedPreservedLateralSpeed = 0.f;
+    
     virtual void Clear() override
     {
         Super::Clear();
 
         bSavedWantsJetpack = false;
         bSavedZiplineActive = false;
+        bSavedAirborneMomentumPreservationActive = false;
         SavedManualZiplineInput = 0;
         SavedZiplineRailSpeed = 0.f;
         SavedJetpackSpoolElapsed = 0.f;
+        SavedPreservedLateralSpeed = 0.f;
     }
 
     virtual uint8 GetCompressedFlags() const override
@@ -107,11 +111,19 @@ public:
         const FSavedMove_DRCharacter* NewDRMove = static_cast<const FSavedMove_DRCharacter*>(NewMove.Get());
 
         if (bSavedWantsJetpack != NewDRMove->bSavedWantsJetpack
-            || SavedManualZiplineInput != NewDRMove->SavedManualZiplineInput)
+            || SavedManualZiplineInput != NewDRMove->SavedManualZiplineInput
+            || bSavedAirborneMomentumPreservationActive != NewDRMove->bSavedAirborneMomentumPreservationActive)
         {
             return false;
         }
 
+        // 보존 속도가 다른 Move를 합치면 correction replay에서 잘못된 속도 상한을 사용할 수 있다.
+        if (bSavedAirborneMomentumPreservationActive
+            && !FMath::IsNearlyEqual(SavedPreservedLateralSpeed,NewDRMove->SavedPreservedLateralSpeed))
+        {
+            return false;
+        }
+        
         /*
          * Zipline 가감속은 프레임 단위 rail-speed 적분을 사용한다.
          * Move를 합치면 같은 입력이어도 적분 결과가 달라질 수 있으므로
@@ -158,7 +170,11 @@ public:
         }
 
         bSavedWantsJetpack = Movement->bWantsJetpack;
+        bSavedAirborneMomentumPreservationActive = Movement->bAirborneMomentumPreservationActive;
 
+        SavedPreservedLateralSpeed = bSavedAirborneMomentumPreservationActive
+            ? Movement->PreservedLateralSpeed : 0.f;
+        
         const UDRMovementActionComponent* MovementAction =
             Character->FindComponentByClass<UDRMovementActionComponent>();
 
@@ -249,6 +265,15 @@ public:
             Movement->ZiplineRailSpeed = 0.f;
         }
 
+        /*
+        * 서버에는 GA가 동일한 상태를 독립적으로 생성한다.
+        * SavedMove 값은 소유 클라이언트가 correction replay를 수행할 때 과거 프레임 상태를 복원한다.
+        */
+        Movement->bAirborneMomentumPreservationActive = bSavedAirborneMomentumPreservationActive;
+
+        Movement->PreservedLateralSpeed = bSavedAirborneMomentumPreservationActive
+            ? FMath::Max(SavedPreservedLateralSpeed, 0.f) : 0.f;
+        
         Movement->JetpackSpoolElapsed =
             SavedJetpackSpoolElapsed;
     }
@@ -280,6 +305,10 @@ void UDRCharacterMovementComponent::OnMovementUpdated(
 	const FVector& OldVelocity)
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
+    
+    // RepNotify 이후 추가 보정으로 MovementMode가 다시 변경된 경우에도 상태 불일치를 복구한다.
+    ReconcileMovementActionMode();
+    
 	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
 }
 
@@ -319,6 +348,15 @@ void UDRCharacterMovementComponent::OnMovementModeChanged(
 		ZiplineRailSpeed = 0.f;
 	}
 
+    /*
+    * 그래플 후속 관성은 Falling에서만 유효하다.
+    * Walking, Swimming 또는 다른 이동 모드로 바뀌면 이전 속도 상한을 재사용하지 않는다.
+    */
+    if (bAirborneMomentumPreservationActive && MovementMode != MOVE_Falling)
+    {
+        ClearAirborneMomentumPreservation();
+    }
+    
 	/*
 	 * 진단 로그용 상태.
 	 */
@@ -489,6 +527,9 @@ void UDRCharacterMovementComponent::ProcessLanded(
         AirControl = AirControlBeforeSuperJump;
         bSuperJumpAirControlActive = false;
     }
+    
+    // 지면 충돌이 그래플 후속 관성 상태의 명확한 종료 지점이다.
+    ClearAirborneMomentumPreservation();
 
     Super::ProcessLanded(Hit, RemainingTime, Iterations);
 }
@@ -513,16 +554,32 @@ float UDRCharacterMovementComponent::GetMaxSpeed() const
 {
     const float ConfiguredMaxSpeed = Super::GetMaxSpeed();
     
-    if (MovementMode != MOVE_Falling)
+    if (MovementMode != MOVE_Falling || !bAirborneMomentumPreservationActive)
     {
         return ConfiguredMaxSpeed;
     }
     
-    // 이동 액션으로 얻은 현재 횡방향 속도는 Falling 진입 후에도 허용한다.
-    // 현재 속도보다 높은 값을 새로 제공하지 않으므로 일반 점프의 최대 이동 속도는 그대로 유지된다.
-    const float CurrentLateralSpeed = ProjectToGravityFloor(Velocity).Size();
-    
-    return FMath::Max(ConfiguredMaxSpeed, CurrentLateralSpeed);
+    /*
+     * 현재 속도를 매 프레임 읽지 않고 그래플 종료 순간 저장한 값만 사용한다.
+     * 따라서 일반 점프, Dash, Jetpack의 모든 Falling에 전역으로 관성 보존이 적용되지 않는다.
+     */
+    return FMath::Max(ConfiguredMaxSpeed, PreservedLateralSpeed);
+}
+
+void UDRCharacterMovementComponent::BeginAirborneMomentumPreservation()
+{
+    /*
+     * 수직 속도는 Falling 중력 계산에 맡긴다.
+     * 여기서는 MaxWalkSpeed에 의해 갑자기 잘리던 중력 평면상의 속도만 저장한다.
+     */
+    PreservedLateralSpeed = ProjectToGravityFloor(Velocity).Size();
+    bAirborneMomentumPreservationActive = PreservedLateralSpeed > KINDA_SMALL_NUMBER;
+}
+
+void UDRCharacterMovementComponent::ClearAirborneMomentumPreservation()
+{
+    bAirborneMomentumPreservationActive = false;
+    PreservedLateralSpeed = 0.f;
 }
 
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
@@ -532,6 +589,12 @@ void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode 
         ExitCustomMovementMode();
         return;
     }
+    
+    /*
+    * 새 이동 액션은 이전 그래플이 남긴 Falling 속도 상한을 대체한다.
+    * 그래플 종료 시에는 이 함수를 거치지 않고 ExitCustomMovementMode를 사용하므로 보존 상태가 유지된다.
+    */
+    ClearAirborneMomentumPreservation();
     
     SetMovementMode(MOVE_Custom, static_cast<uint8>(NewMode)); 
 }
@@ -563,6 +626,33 @@ UDRMovementActionComponent* UDRCharacterMovementComponent::GetMovementActionComp
     }
     
     return CharacterOwner->FindComponentByClass<UDRMovementActionComponent>();
+}
+
+void UDRCharacterMovementComponent::ReconcileMovementActionMode()
+{
+    if (!IsValid(CharacterOwner)
+        || (!CharacterOwner->HasAuthority() && !CharacterOwner->IsLocallyControlled()))
+    {
+        return;
+    }
+
+    const UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
+    const bool bActionActive = IsValid(MovementAction) && MovementAction->IsMovementActionActive();
+    const bool bMovementModeActive = IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction);
+
+    if (bActionActive && !bMovementModeActive)
+    {
+        /*
+         * 네트워크 위치 보정이 CustomMode를 Falling 등으로 덮어써도
+         * 유효한 ActionState가 남아 있다면 다음 프레임부터 이동 시뮬레이션을 복구한다.
+         */
+        SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+    }
+    else if (!bActionActive && bMovementModeActive)
+    {
+        // 반대로 액션 상태가 끝났는데 CustomMode만 남은 경우도 일반 이동으로 복귀시킨다.
+        ExitCustomMovementMode();
+    }    
 }
 
 void UDRCharacterMovementComponent::RestoreDefaultMovementMode()

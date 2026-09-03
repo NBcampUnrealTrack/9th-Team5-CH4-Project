@@ -68,9 +68,20 @@ public:
 	/** 커스텀 SavedMove를 생성하는 예측 데이터를 반환한다. */
 	virtual FNetworkPredictionData_Client* GetPredictionData_Client() const override;
 
-	// Falling 진입 전 얻은 횡방향 관성이 MaxWalkSpeed에 의해 즉시 제한되지 않도록 한다
+	// 명시적으로 보존 중인 공중 관성만 일반 Falling 최대 속도보다 우선한다.
 	virtual float GetMaxSpeed() const override;
 
+	// 이동 액션 종료 순간의 횡방향 속도를 Falling 최대 속도의 임시 하한으로 저장한다.
+	void BeginAirborneMomentumPreservation();
+
+	// Dash나 새 이동 액션처럼 현재 관성을 명시적으로 대체하는 동작에서 호출한다.
+	void ClearAirborneMomentumPreservation();
+
+	bool IsAirborneMomentumPreservationActive() const
+	{
+		return bAirborneMomentumPreservationActive;
+	}
+	
 	// 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
 	void SetCustomMovementMode(EDRCustomMovementMode NewMode);
 
@@ -100,6 +111,9 @@ private:
 	void UpdateZiplineFacing(const FDRMovementActionState& State, float DeltaTime);
 	UDRMovementActionComponent* GetMovementActionComponent() const;
 
+	// 네트워크 보정으로 ActionState와 MovementMode가 어긋났을 때 다음 이동 갱신에서 복구한다.
+	void ReconcileMovementActionMode();
+	
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
 
@@ -133,6 +147,13 @@ private:
 	 */
 	float ZiplineRailSpeed = 0.f;
 
+	/*
+ 	* 그래플 종료 이후부터 착지 전까지만 사용하는 속도 상한 상태다.
+ 	* 그래플 자체가 아니라 해당 이동 액션이 명시적으로 요청한 경우에만 활성화된다.
+ 	*/
+	bool bAirborneMomentumPreservationActive = false;
+	float PreservedLateralSpeed = 0.f;
+	
 	/** 현재 출력 상승 진행 시간 */
 	float JetpackSpoolElapsed = 0.f;
 
