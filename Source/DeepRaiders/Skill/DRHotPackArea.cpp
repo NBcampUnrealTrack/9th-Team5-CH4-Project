@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Net/UnrealNetwork.h"
 
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -38,7 +39,21 @@ ADRHotPackArea::ADRHotPackArea()
 		&ThisClass::HandleEndOverlap);
 }
 
-void ADRHotPackArea::Initialize(ADRPlayerCharacter* SourceCharacter)
+void ADRHotPackArea::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ADRHotPackArea, AreaRadius);
+}
+
+void ADRHotPackArea::Initialize(
+	ADRPlayerCharacter* SourceCharacter,
+	float InAreaRadius,
+	float InAreaDuration,
+	TSubclassOf<UGameplayEffect> InRecoveryEffectClass,
+	float InHealthRecoveryAmount,
+	float InFreezeGaugeRecoveryAmount)
 {
 	if (!HasAuthority() || !IsValid(SourceCharacter))
 	{
@@ -47,6 +62,11 @@ void ADRHotPackArea::Initialize(ADRPlayerCharacter* SourceCharacter)
 
 	SourceAbilitySystem = SourceCharacter->GetAbilitySystemComponent();
 	SourceTeamId = DRCombatTeam::GetActorTeamId(SourceCharacter);
+	AreaRadius = FMath::Max(0.0f, InAreaRadius);
+	AreaDuration = FMath::Max(0.1f, InAreaDuration);
+	RecoveryEffectClass = InRecoveryEffectClass;
+	HealthRecoveryAmount = FMath::Max(0.0f, InHealthRecoveryAmount);
+	FreezeGaugeRecoveryAmount = FMath::Max(0.0f, InFreezeGaugeRecoveryAmount);
 }
 
 void ADRHotPackArea::OnConstruction(const FTransform& Transform)
@@ -54,6 +74,17 @@ void ADRHotPackArea::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	RecoveryArea->SetSphereRadius(AreaRadius);
+}
+
+void ADRHotPackArea::OnRep_AreaRadius()
+{
+	RefreshArea();
+}
+
+void ADRHotPackArea::RefreshArea()
+{
+	RecoveryArea->SetSphereRadius(AreaRadius);
+	ProcessUserConstructionScript();
 }
 
 void ADRHotPackArea::BeginPlay()
@@ -136,6 +167,13 @@ void ADRHotPackArea::ApplyRecovery(AActor* TargetActor)
 	{
 		return;
 	}
+
+	EffectSpec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Health_Heal,
+		HealthRecoveryAmount);
+	EffectSpec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Freeze_Amount,
+		-FreezeGaugeRecoveryAmount);
 
 	const FActiveGameplayEffectHandle EffectHandle =
 		SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(
