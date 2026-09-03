@@ -5,6 +5,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/NetConnection.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "InputMappingContext.h"
@@ -62,7 +63,7 @@
 
 namespace DRSnowSnapshotTransfer
 {
-	constexpr int32 ChunkByteSize = 48 * 1024;
+	constexpr int32 ChunkByteSize = 12 * 1024;
 	constexpr float ChunkSendInterval = 0.05f;
 	constexpr uint64 ProgressMessageKey = 0x4452534E;
 }
@@ -246,6 +247,7 @@ void ADRPlayerController::Tick(float DeltaSeconds)
 		if (IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled())
 		{
 			SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Complete;
+			UE_LOG(LogTemp, Log, TEXT("[JoinSnapshot] Control ready Pawn=%s"), *GetNameSafe(ControlledPawn));
 		}
 	}
 
@@ -414,7 +416,7 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(ScrollQuickSlotAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandleScrollQuickSlot);
 	}
-	
+
 	if (IsValid(ScoreboardAction))
 	{
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Started, this, &ThisClass::HandleScoreboardStarted);
@@ -426,7 +428,7 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(MenuAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleMenu);
 	}
-	
+
 	SetupGASInputComponent();
 }
 
@@ -949,17 +951,17 @@ void ADRPlayerController::HandleScrollQuickSlot(const FInputActionValue& Value)
 	{
 		return;
 	}
-	
+
 	const float WheelDelta = Value.Get<float>();
-	
+
 	if (FMath::IsNearlyZero(WheelDelta))
 	{
 		return;
 	}
-	
+
 	// 휠 Up : 이전 슬롯, 휠 Down : 다음 슬롯
 	const int32 Direction = WheelDelta > 0.f ? -1 : 1;
-	
+
 	QuickSlotComponent->RequestSelectAdjacentSlot(Direction);
 }
 
@@ -1100,7 +1102,6 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
 	bPendingSnowSnapshotFinished = false;
-	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	BufferedSnowOperations.Reset();
@@ -1144,6 +1145,14 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 {
 	if (OutgoingSnowSnapshotId == INDEX_NONE)
+	{
+		return;
+	}
+
+	// Reliable RPCs bypass the engine's normal saturation rejection. Pace the
+	// snapshot explicitly so actor replication can continue on this connection.
+	if (const UNetConnection* Connection = GetNetConnection();
+		Connection != nullptr && !Connection->IsNetReady())
 	{
 		return;
 	}
@@ -1213,10 +1222,7 @@ void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int
 	ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	if (ADRMiningGameModeBase* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>() : nullptr)
 	{
-		if (GameMode->HandleSnowJoinSnapshotApplied(this))
-		{
-			Client_ResumeSnowJoinOperations(SnapshotId);
-		}
+		GameMode->HandleSnowJoinSnapshotApplied(this);
 	}
 }
 
@@ -1285,11 +1291,6 @@ bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& R
 
 bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 {
-	if (bPendingSnowCheckpointApplied)
-	{
-		return true;
-	}
-
 	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
 		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
 		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount)
@@ -1321,19 +1322,9 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
 	}
 
-	bPendingSnowCheckpointApplied = true;
 	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
-	return true;
-}
-
-void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 SnapshotId)
-{
-	if (!bPendingSnowCheckpointApplied || SnapshotId != PendingSnowSnapshotId)
-	{
-		return;
-	}
 
 	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
 	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
@@ -1356,7 +1347,6 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	const int32 AppliedSnowVolumeByteCount = PendingSnowVolumeByteCount;
 	PendingSnowSnapshotId = INDEX_NONE;
 	PendingSnowCheckpointSequence = 0;
-	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	BufferedSnowOperations.Reset();
@@ -1371,7 +1361,7 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 		AppliedSnowVolumeByteCount,
 		Operations.Num());
 
-	return;
+	return true;
 }
 
 void ADRPlayerController::RetryPendingSnowJoinSnapshot()

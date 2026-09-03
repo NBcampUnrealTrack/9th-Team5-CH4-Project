@@ -365,9 +365,6 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_FinishSnowJoinSnapshot(int32 SnapshotId);
 
-	UFUNCTION(Client, Reliable)
-	void Client_ResumeSnowJoinOperations(int32 SnapshotId);
-
 	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
 	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
 
@@ -401,7 +398,6 @@ private:
 	int32 PendingSnowVoxelSaveByteCount = 0;
 	int32 PendingSnowVolumeByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
-	bool bPendingSnowCheckpointApplied = false;
 	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;

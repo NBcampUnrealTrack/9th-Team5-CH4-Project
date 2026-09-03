@@ -541,20 +541,29 @@ bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 	APlayerController* PlayerController,
 	bool bNotifySnapshotFinished)
 {
+	bool bPlayerRestarted = false;
+	if (IsValid(PlayerController) && !IsValid(PlayerController->GetPawn()))
+	{
+		PlayerController->ChangeState(NAME_Playing);
+		PlayerController->ClientGotoState(NAME_Playing);
+		RestartPlayer(PlayerController);
+
+		if (APawn* SpawnedPawn = PlayerController->GetPawn(); IsValid(SpawnedPawn))
+		{
+			// Prioritize the initial Pawn and possession state before deposits are
+			// allowed to resume and generate more replicated snow operations.
+			SpawnedPawn->ForceNetUpdate();
+			PlayerController->ForceNetUpdate();
+			bPlayerRestarted = true;
+		}
+	}
+
 	if (bNotifySnapshotFinished)
 	{
 		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::Applied);
 	}
 
-	if (!IsValid(PlayerController) || IsValid(PlayerController->GetPawn()))
-	{
-		return false;
-	}
-
-	PlayerController->ChangeState(NAME_Playing);
-	PlayerController->ClientGotoState(NAME_Playing);
-	RestartPlayer(PlayerController);
-	return IsValid(PlayerController->GetPawn());
+	return bPlayerRestarted;
 }
 
 void ADRMiningGameModeBase::Logout(AController* Exiting)
