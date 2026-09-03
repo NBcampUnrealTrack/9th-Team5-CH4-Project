@@ -57,6 +57,8 @@ private:
 
     int32 ResolveSessionId() const;
 
+    FVector ResolveViewDirection() const;
+    
     void StartTargeting();
     void StartCancelEventTask();
 

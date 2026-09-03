@@ -553,6 +553,22 @@ int32 UDRGA_GrappleItem::ResolveSessionId() const
 	return FMath::Max(PredictionKey, 1);
 }
 
+FVector UDRGA_GrappleItem::ResolveViewDirection() const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const ADRPlayerCharacter* Character = ActorInfo != nullptr ?
+		Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	
+	if (!IsValid(Character))
+	{
+		return FVector::ZeroVector;
+	}
+	
+	const FVector ViewDirection = Character->GetBaseAimRotation().Vector().GetSafeNormal();
+	
+	return !ViewDirection.IsNearlyZero() ? ViewDirection : Character->GetActorForwardVector().GetSafeNormal();
+}
+
 int32 UDRGA_GrappleItem::ResolveInputId(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo) const
@@ -675,8 +691,22 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 	 */
 	if (SurfaceSideDot <= 0.f)
 	{
-		QueueEndGrapple(
-			EDRMovementActionEndReason::Completed);
+		QueueEndGrapple(EDRMovementActionEndReason::Completed);
+		return;
+	}
+	
+	const FVector ToHookDirection = ToHook.GetSafeNormal();
+	const FVector ViewDirection = ResolveViewDirection();
+	
+	if (ToHookDirection.IsNearlyZero()
+		|| ViewDirection.IsNearlyZero())
+	{
+		return;
+	}
+	
+	if (FVector::DotProduct(ViewDirection, ToHookDirection) <= 0.f)
+	{
+		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 	}
 }
 
