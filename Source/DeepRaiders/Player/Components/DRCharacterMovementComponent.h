@@ -82,6 +82,8 @@ public:
 protected:
 	virtual void OnMovementUpdated(float DeltaSeconds, const FVector& OldLocation, const FVector& OldVelocity) override;
 
+	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
+	
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** 낙하 물리 안에서 예측 가능한 제트팩 추진력을 적용한다. */
