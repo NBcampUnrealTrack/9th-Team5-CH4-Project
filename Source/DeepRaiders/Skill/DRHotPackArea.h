@@ -19,8 +19,16 @@ class DEEPRAIDERS_API ADRHotPackArea : public AActor
 
 public:
 	ADRHotPackArea();
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void Initialize(ADRPlayerCharacter* SourceCharacter);
+	void Initialize(
+		ADRPlayerCharacter* SourceCharacter,
+		float InAreaRadius,
+		float InAreaDuration,
+		TSubclassOf<UGameplayEffect> InRecoveryEffectClass,
+		float InHealthRecoveryAmount,
+		float InFreezeGaugeRecoveryAmount);
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -36,16 +44,27 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hot Pack")
 	TObjectPtr<UStaticMeshComponent> HotPackMesh;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hot Pack", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, ReplicatedUsing = OnRep_AreaRadius, Category = "Hot Pack")
 	float AreaRadius = 400.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hot Pack", meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hot Pack")
 	float AreaDuration = 8.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Hot Pack")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hot Pack")
 	TSubclassOf<UGameplayEffect> RecoveryEffectClass;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hot Pack")
+	float HealthRecoveryAmount = 0.0f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Hot Pack")
+	float FreezeGaugeRecoveryAmount = 0.0f;
+
 private:
+	void RefreshArea();
+
+	UFUNCTION()
+	void OnRep_AreaRadius();
+
 	UFUNCTION()
 	void HandleBeginOverlap(
 		UPrimitiveComponent* OverlappedComponent,

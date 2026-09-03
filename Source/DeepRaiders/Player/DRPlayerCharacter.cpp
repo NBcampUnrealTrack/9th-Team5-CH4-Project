@@ -34,6 +34,7 @@
 #include "DeepRaiders/Player/Components/DRCharacterShadowComponent.h"
 #include "Animation/AnimInstance.h"
 #include "DeepRaiders/Item/Animation/DRHitReactionSet.h"
+#include "DeepRaiders/UI/Nameplate/DRPlayerNameplateComponent.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -64,7 +65,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
 	SilhouetteComponent = CreateDefaultSubobject<UDRSilhouetteComponent>(TEXT("SilhouetteComponent"));
 	MovementActionComponent = CreateDefaultSubobject<UDRMovementActionComponent>(TEXT("MovementActionComponent"));
-	
+	PlayerNameplateComponent = CreateDefaultSubobject<UDRPlayerNameplateComponent>(TEXT("PlayerNameplateComponent"));
+
 	CharacterShadowComponent = CreateDefaultSubobject<UDRCharacterShadowComponent>(TEXT("CharacterShadowComponent"));
 	CharacterShadowComponent->SetupAttachment(GetCapsuleComponent());
 	
@@ -118,6 +120,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetOwnerNoSee(false);
 	WorldBackEquipmentMesh->SetCastHiddenShadow(true);
 	WorldBackEquipmentMesh->SetIsReplicated(false);
+	
+	PlayerNameplateComponent->SetupAttachment(GetCapsuleComponent());
 }
 
 UAbilitySystemComponent* ADRPlayerCharacter::GetAbilitySystemComponent() const
@@ -328,8 +332,9 @@ void ADRPlayerCharacter::RefreshTeamColor()
 	{
 		return;
 	}
-
-	const FLinearColor TeamColor = TeamId == 0 ? Team0Color : Team1Color;
+	
+	const FLinearColor TeamColor = GetTeamDisplayColor();
+	
 	for (int32 MaterialIndex = 0; MaterialIndex < GetMesh()->GetNumMaterials(); ++MaterialIndex)
 	{
 		if (UMaterialInstanceDynamic* Material = GetMesh()->CreateDynamicMaterialInstance(MaterialIndex))
@@ -583,6 +588,36 @@ bool ADRPlayerCharacter::CalculateGameplayFireOrigin(const FVector& AimDirection
 	return !OutFireOrigin.ContainsNaN();
 }
 
+void ADRPlayerCharacter::MulticastStartSharedSearchReveal_Implementation(
+	int32 SourceTeamId,
+	int32 SourcePlayerId,
+	FGuid RevealId,
+	float Duration,
+	int32 StencilValue)
+{
+	const APlayerController* LocalController = GetWorld()->GetFirstPlayerController();
+	const ADRPlayerState* LocalPlayerState = IsValid(LocalController)
+		? LocalController->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+	if (!IsValid(LocalPlayerState)
+		|| LocalPlayerState->GetPlayerId() == SourcePlayerId
+		|| LocalPlayerState->GetTeamId() != SourceTeamId
+		|| !IsValid(SilhouetteComponent))
+	{
+		return;
+	}
+
+	SilhouetteComponent->StartSearchReveal(RevealId, Duration, StencilValue);
+}
+
+void ADRPlayerCharacter::MulticastStopSharedSearchReveal_Implementation(FGuid RevealId)
+{
+	if (IsValid(SilhouetteComponent))
+	{
+		SilhouetteComponent->StopSearchReveal(RevealId);
+	}
+}
+
 bool ADRPlayerCharacter::CalculateSkillFireOrigin(FVector& OutFireOrigin) const
 {
 	if (!IsValid(SkillFireAnchor))
@@ -742,6 +777,28 @@ void ADRPlayerCharacter::PlayHitReaction(
 		HitReactionSet->BlendOutTime,
 		1.f,
 		1);
+}
+
+FLinearColor ADRPlayerCharacter::GetTeamDisplayColor() const
+{
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState))
+	{
+		return FLinearColor::White;
+	}
+
+	switch (DRPlayerState->GetTeamId())
+	{
+	case 0:
+		return Team0Color;
+
+	case 1:
+		return Team1Color;
+
+	default:
+		return FLinearColor::White;
+	}
 }
 
 void ADRPlayerCharacter::BeginPlay()

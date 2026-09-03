@@ -166,6 +166,11 @@ namespace DRGameplayTags
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_Search_TeamShare,
+		"Perk.Skill.Search.TeamShare",
+		"Shares the search skill reveal with teammates.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,
@@ -321,6 +326,26 @@ namespace DRGameplayTags
 		Data_QuickSlot_ActivationInterval_Duration,
 		"Data.QuickSlot.ActivationInterval.Duration",
 		"Quick-slot activation interval duration passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_HotPack_AreaRadius,
+		"Data.Perk.HotPack.AreaRadius",
+		"Additional radius granted to the hot pack area by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_HotPack_AreaDuration,
+		"Data.Perk.HotPack.AreaDuration",
+		"Additional duration granted to the hot pack area by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_HotPack_HealthRecovery,
+		"Data.Perk.HotPack.HealthRecovery",
+		"Additional health recovery granted to the hot pack by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_HotPack_FreezeGaugeRecovery,
+		"Data.Perk.HotPack.FreezeGaugeRecovery",
+		"Additional freeze gauge recovery granted to the hot pack by an equipped perk.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

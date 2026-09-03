@@ -41,6 +41,7 @@ namespace
 	struct FDRVoxelDepositBuildContext
 	{
 		AVoxelWorld* VoxelWorld = nullptr;
+		const FDRVoxelDepositCommand* Command = nullptr;
 		FIntVector CoreVoxelMin = FIntVector::ZeroValue;
 		FIntVector CoreVoxelMax = FIntVector::ZeroValue;
 		FIntVector WriteVoxelMin = FIntVector::ZeroValue;
@@ -244,6 +245,7 @@ namespace
 		}
 
 		OutContext.VoxelWorld = VoxelWorld;
+		OutContext.Command = &Command;
 		OutContext.Settings = SanitizeDepositSettings(Command.Settings);
 		OutContext.RandomStream.Initialize(OutContext.Settings.RandomSeed);
 		OutContext.WorldBoxTopZ = Command.AreaCenter.Z + AreaExtent.Z;
@@ -380,6 +382,13 @@ namespace
 		return SurfaceZ;
 	}
 
+	// 후보와 퍼진 퇴적 위치 모두 동일한 모양 경계로 제한합니다.
+	bool IsInsideDepositArea(const FDRVoxelDepositBuildContext& Context, const FIntVector& Position)
+	{
+		const FVector WorldPosition = Context.VoxelWorld->LocalToGlobalFloatBP(FVector(Position));
+		return Context.Command->ContainsWorldPosition(WorldPosition);
+	}
+
 	void OfferSurfaceCandidate(
 		FDRVoxelDepositBuildContext& Context,
 		const FDRSurfaceCandidate& Candidate)
@@ -387,7 +396,7 @@ namespace
 		if (!IsInsideBounds(
 			Candidate.Position,
 			Context.CoreVoxelMin,
-			Context.CoreVoxelMax))
+			Context.CoreVoxelMax) || !IsInsideDepositArea(Context, Candidate.Position))
 		{
 			return;
 		}
@@ -637,7 +646,7 @@ namespace
 		const float* StaticMeshSurfaceZ = nullptr)
 	{
 		if (!IsInsideBounds(Position, Context.WriteVoxelMin, Context.WriteVoxelMax) ||
-			Position.Z <= Context.WriteVoxelMin.Z)
+			Position.Z <= Context.WriteVoxelMin.Z || !IsInsideDepositArea(Context, Position))
 		{
 			return;
 		}
@@ -654,6 +663,8 @@ namespace
 		{
 			FDRVoxelDepositWrite NewWrite;
 			NewWrite.Position = Position;
+			NewWrite.bAllowBelowSupport = IsInsideDepositArea(
+				Context, Position - FIntVector(0, 0, 1));
 			NewWrite.AmountScale = FMath::Max(0.f, AmountScale);
 			Context.WritesByPosition.Add(Position, NewWrite);
 			Write = Context.WritesByPosition.Find(Position);
@@ -975,7 +986,7 @@ namespace
 					0.f,
 					1.f));
 
-			if (BelowValue > 0.f &&
+			if (BelowValue > 0.f && Write.bAllowBelowSupport &&
 				IsInsideBounds(BelowPosition, Plan.WriteVoxelMin, Plan.WriteVoxelMax) &&
 				!WrittenPositions.Contains(BelowPosition))
 			{

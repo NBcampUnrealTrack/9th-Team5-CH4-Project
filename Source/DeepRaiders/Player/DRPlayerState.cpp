@@ -15,6 +15,8 @@
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
+#include "DRPlayerController.h"
+#include "HAL/PlatformProcess.h"
 
 ADRPlayerState::ADRPlayerState()
 {
@@ -51,26 +53,35 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
 }
 
-void ADRPlayerState::HandleDamageResolved(
-	ADRPlayerState* SourcePlayerState,
-	float AppliedDamage,
-	bool bFatal)
+void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, float AppliedDamage, bool bFatal)
 {
-	if (!HasAuthority() || !IsValid(CombatStatsComponent) || AppliedDamage <= KINDA_SMALL_NUMBER)
+	if (!HasAuthority() || AppliedDamage <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	// 피해자는 DamageTaken을 항상 기록. - 낙뎀도 포함
+	/*
+	 * CombatStats 유효 여부와 무관하게
+	 * 적중에 따른 이름 노출은 처리한다.
+	 */
+	HandleHostileHitResolved(SourcePlayerState);
+
+	if (!IsValid(CombatStatsComponent))
+	{
+		return;
+	}
+
+	// 피해자는 DamageTaken을 항상 기록.
 	CombatStatsComponent->RecordDamageTaken(AppliedDamage, bFatal);
 
-	// Source가 없거나 자기 자신이면 DamageDealt / Kill로 인정하지 않는다. -> Fall Damage 걸러짐
+	// 환경 피해, 자해, 낙하 피해는 공격자 통계 없음.
 	if (!IsValid(SourcePlayerState) || SourcePlayerState == this)
 	{
 		return;
 	}
 
 	UDRCombatStatsComponent* SourceStats = SourcePlayerState->GetCombatStatsComponent();
+
 	if (!IsValid(SourceStats))
 	{
 		return;
@@ -80,6 +91,48 @@ void ADRPlayerState::HandleDamageResolved(
 
 	UE_LOG(LogTemp, Log, TEXT( "[CombatStats] Source=%s Target=%s " "AppliedDamage=%.1f Fatal=%d"), 
 		*GetNameSafe(SourcePlayerState), *GetNameSafe(this), AppliedDamage, bFatal);
+}
+
+void ADRPlayerState::HandleHostileHitResolved(
+	ADRPlayerState* SourcePlayerState)
+{
+	if (!HasAuthority()
+		|| !IsValid(SourcePlayerState)
+		|| SourcePlayerState == this)
+	{
+		return;
+	}
+
+	/*
+	 * 같은 팀의 Friendly Fire가 실제로 발생하더라도
+	 * 적 이름 Reveal 대상으로 취급하지 않는다.
+	 */
+	if (SourcePlayerState->GetTeamId() == GetTeamId())
+	{
+		return;
+	}
+
+	ADRPlayerController* SourceController =
+		Cast<ADRPlayerController>(
+			SourcePlayerState->GetOwner());
+
+	if (!IsValid(SourceController))
+	{
+		if (APawn* SourcePawn =
+			SourcePlayerState->GetPawn())
+		{
+			SourceController =
+				Cast<ADRPlayerController>(
+					SourcePawn->GetController());
+		}
+	}
+
+	if (!IsValid(SourceController))
+	{
+		return;
+	}
+
+	SourceController->RevealEnemyNameFromServer(this);
 }
 
 void ADRPlayerState::UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent)
@@ -532,6 +585,25 @@ void ADRPlayerState::HandleFreezeGaugeResolved()
 	EvaluateFrozenState(
 		PlayerAttributeSet->GetFreezeGauge(),
 		PlayerAttributeSet->GetHealth());
+}
+
+FText ADRPlayerState::GetDisplayPlayerName() const
+{
+	const FString PlayerName = GetPlayerName().TrimStartAndEnd();
+
+	if (PlayerName.IsEmpty() || PlayerName.StartsWith(TEXT("DESKTOP-"), ESearchCase::IgnoreCase))
+	{
+		return FText::FromString(TEXT("Player"));
+	}
+
+	return FText::FromString(PlayerName);
+}
+
+void ADRPlayerState::OnRep_PlayerName()
+{
+	Super::OnRep_PlayerName();
+
+	OnPlayerIdentityChanged.Broadcast();
 }
 
 void ADRPlayerState::RestartFreezeDecay()

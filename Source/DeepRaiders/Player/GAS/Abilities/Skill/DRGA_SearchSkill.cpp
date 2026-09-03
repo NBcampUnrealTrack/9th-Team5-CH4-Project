@@ -1,13 +1,17 @@
 #include "DRGA_SearchSkill.h"
 
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
-#include "Components/PrimitiveComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 
 void UDRGA_SearchSkill::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -27,7 +31,14 @@ void UDRGA_SearchSkill::ActivateAbility(
 
 	if (ActorInfo->IsLocallyControlled())
 	{
-		RevealEnemies(Character);
+		LocalRevealId = FGuid::NewGuid();
+		RevealEnemies(Character, false);
+	}
+
+	if (ActorInfo->IsNetAuthority() && HasTeamSharePerk(ActorInfo))
+	{
+		SharedRevealId = FGuid::NewGuid();
+		RevealEnemies(Character, true);
 	}
 
 	UAbilityTask_WaitDelay* WaitTask = UAbilityTask_WaitDelay::WaitDelay(this, RevealDuration);
@@ -48,7 +59,16 @@ void UDRGA_SearchSkill::EndAbility(
 	bool IsReplicateEndAbility,
 	bool IsWasCancelled)
 {
-	RestoreSilhouettes();
+	if (ActorInfo != nullptr && ActorInfo->IsLocallyControlled())
+	{
+		StopReveals(false);
+	}
+
+	if (ActorInfo != nullptr && ActorInfo->IsNetAuthority())
+	{
+		StopReveals(true);
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, IsReplicateEndAbility, IsWasCancelled);
 }
 
@@ -60,7 +80,9 @@ void UDRGA_SearchSkill::HandleSearchFinished()
 	}
 }
 
-void UDRGA_SearchSkill::RevealEnemies(const ADRPlayerCharacter* Character)
+void UDRGA_SearchSkill::RevealEnemies(
+	const ADRPlayerCharacter* Character,
+	bool IsSharedReveal)
 {
 	UWorld* World = IsValid(Character) ? Character->GetWorld() : nullptr;
 	const int32 SourceTeamId = DRCombatTeam::GetActorTeamId(Character);
@@ -81,59 +103,95 @@ void UDRGA_SearchSkill::RevealEnemies(const ADRPlayerCharacter* Character)
 		FCollisionShape::MakeSphere(SearchRadius),
 		QueryParams);
 
-	TSet<AActor*> RevealedActors;
+	TSet<ADRPlayerCharacter*> RevealedActors;
+	const ADRPlayerState* SourcePlayerState = Character->GetPlayerState<ADRPlayerState>();
+	const int32 SourcePlayerId = IsValid(SourcePlayerState)
+		? SourcePlayerState->GetPlayerId()
+		: INDEX_NONE;
 	for (const FOverlapResult& OverlapResult : OverlapResults)
 	{
-		AActor* TargetActor = OverlapResult.GetActor();
-		const int32 TargetTeamId = DRCombatTeam::GetActorTeamId(TargetActor);
-		if (!IsValid(TargetActor)
+		ADRPlayerCharacter* TargetCharacter = Cast<ADRPlayerCharacter>(OverlapResult.GetActor());
+		const int32 TargetTeamId = DRCombatTeam::GetActorTeamId(TargetCharacter);
+		if (!IsValid(TargetCharacter)
 			|| TargetTeamId == INDEX_NONE
 			|| TargetTeamId == SourceTeamId
-			|| RevealedActors.Contains(TargetActor))
+			|| RevealedActors.Contains(TargetCharacter))
 		{
 			continue;
 		}
 
-		RevealedActors.Add(TargetActor);
-		RevealActor(TargetActor);
+		RevealedActors.Add(TargetCharacter);
+		if (IsSharedReveal)
+		{
+			TargetCharacter->MulticastStartSharedSearchReveal(
+				SourceTeamId,
+				SourcePlayerId,
+				SharedRevealId,
+				RevealDuration,
+				StencilValue);
+			SharedRevealedCharacters.Add(TargetCharacter);
+		}
+		else if (UDRSilhouetteComponent* SilhouetteComponent =
+			TargetCharacter->GetSilhouetteComponent())
+		{
+			SilhouetteComponent->StartSearchReveal(
+				LocalRevealId,
+				RevealDuration,
+				StencilValue);
+			LocalRevealedCharacters.Add(TargetCharacter);
+		}
 	}
 }
 
-void UDRGA_SearchSkill::RevealActor(AActor* Actor)
+void UDRGA_SearchSkill::StopReveals(bool IsSharedReveal)
 {
-	TArray<UPrimitiveComponent*> PrimitiveComponents;
-	Actor->GetComponents(PrimitiveComponents);
-
-	for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+	TArray<TWeakObjectPtr<ADRPlayerCharacter>>& RevealedCharacters = IsSharedReveal
+		? SharedRevealedCharacters
+		: LocalRevealedCharacters;
+	const FGuid RevealId = IsSharedReveal ? SharedRevealId : LocalRevealId;
+	for (const TWeakObjectPtr<ADRPlayerCharacter>& RevealedCharacter : RevealedCharacters)
 	{
-		if (!IsValid(PrimitiveComponent))
+		ADRPlayerCharacter* Character = RevealedCharacter.Get();
+		if (!IsValid(Character))
 		{
 			continue;
 		}
 
-		FDRSearchSilhouetteState& State = SilhouetteStates.AddDefaulted_GetRef();
-		State.Component = PrimitiveComponent;
-		State.IsRenderCustomDepthEnabled = PrimitiveComponent->bRenderCustomDepth;
-		State.StencilValue = PrimitiveComponent->CustomDepthStencilValue;
+		if (IsSharedReveal)
+		{
+			Character->MulticastStopSharedSearchReveal(RevealId);
+		}
+		else if (UDRSilhouetteComponent* SilhouetteComponent =
+			Character->GetSilhouetteComponent())
+		{
+			SilhouetteComponent->StopSearchReveal(RevealId);
+		}
+	}
 
-		PrimitiveComponent->SetCustomDepthStencilValue(StencilValue);
-		PrimitiveComponent->SetRenderCustomDepth(true);
+	RevealedCharacters.Reset();
+	if (IsSharedReveal)
+	{
+		SharedRevealId.Invalidate();
+	}
+	else
+	{
+		LocalRevealId.Invalidate();
 	}
 }
 
-void UDRGA_SearchSkill::RestoreSilhouettes()
+bool UDRGA_SearchSkill::HasTeamSharePerk(
+	const FGameplayAbilityActorInfo* ActorInfo) const
 {
-	for (const FDRSearchSilhouetteState& State : SilhouetteStates)
-	{
-		UPrimitiveComponent* PrimitiveComponent = State.Component.Get();
-		if (!IsValid(PrimitiveComponent))
-		{
-			continue;
-		}
-
-		PrimitiveComponent->SetCustomDepthStencilValue(State.StencilValue);
-		PrimitiveComponent->SetRenderCustomDepth(State.IsRenderCustomDepthEnabled);
-	}
-
-	SilhouetteStates.Reset();
+	const ADRPlayerState* PlayerState = ActorInfo != nullptr
+		? Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get())
+		: nullptr;
+	const UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	const UDRSkillDefinition* SkillDefinition = GetCurrentSkillDefinition();
+	return IsValid(PerkComponent)
+		&& IsValid(SkillDefinition)
+		&& PerkComponent->HasSkillPerk(
+			SkillDefinition->SkillId,
+			DRGameplayTags::Perk_Skill_Search_TeamShare);
 }

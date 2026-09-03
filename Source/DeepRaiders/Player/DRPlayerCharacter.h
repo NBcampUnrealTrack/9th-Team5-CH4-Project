@@ -31,6 +31,7 @@ class UDRHitReactionSet;
 class UDRMovementActionComponent;
 class UDRPlayerCameraComponent;
 class UDRCharacterShadowComponent;
+class UDRPlayerNameplateComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -128,6 +129,17 @@ public:
 		return SilhouetteComponent;
 	}
 
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartSharedSearchReveal(
+		int32 SourceTeamId,
+		int32 SourcePlayerId,
+		FGuid RevealId,
+		float Duration,
+		int32 StencilValue);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStopSharedSearchReveal(FGuid RevealId);
+
 	UDRJetpackComponent* GetJetpackComponent() const
 	{
 		return JetpackComponent;
@@ -189,6 +201,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
 	void PlayHitReaction(const FVector& ImpactLocation);
 	
+	FLinearColor GetTeamDisplayColor() const;
+	
 protected:
 	virtual void BeginPlay() override;
 	
@@ -220,6 +234,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Movement", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRMovementActionComponent> MovementActionComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRPlayerNameplateComponent> PlayerNameplateComponent;
 	
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
