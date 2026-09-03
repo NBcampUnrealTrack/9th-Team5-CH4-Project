@@ -98,6 +98,21 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Auto", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
 	float AutoMaxEntrySpeed = 800.f;
 
+	// 상승 Auto Zipline은 연속 재탑승으로 고도를 빠르게 확보하지 못하도록 가속도를 낮춘다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Auto|Upward",
+		meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "1.0"))
+	float UpwardAutoAccelerationMultiplier = 0.3f;
+
+	// 상승 Auto 탑승 시 기존 Velocity에서 계승할 수 있는 진행방향 속도의 상한.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Auto|Upward",
+		meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
+	float UpwardAutoMaxEntrySpeed = 200.f;
+
+	// TravelAxis.Z가 이 값보다 클 때 상승 Zipline으로 판정한다. 0.2 ~= 약 11.5도.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Auto|Upward",
+		meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", ClampMax = "1.0"))
+	float UpwardDirectionThreshold = 0.2f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Manual", meta = (AllowPrivateAccess = "true"))
 	EDRZiplineManualControlMode ManualControlMode = EDRZiplineManualControlMode::Vertical;
 

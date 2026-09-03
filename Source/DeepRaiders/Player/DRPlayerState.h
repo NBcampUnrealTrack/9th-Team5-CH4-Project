@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
 #include "TimerManager.h"
@@ -221,6 +222,7 @@ protected:
 
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	
 	void EvaluateFrozenState(float FreezeGauge, float Health);
 
@@ -240,6 +242,7 @@ protected:
 
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle VoxelContainedTagChangedHandle;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;

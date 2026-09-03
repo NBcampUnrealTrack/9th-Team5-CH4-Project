@@ -10,6 +10,7 @@
 #include "DeepRaiders/Item/DRWorldItemTypes.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 
@@ -17,6 +18,7 @@ UDRGA_DropSelectedItem::UDRGA_DropSelectedItem()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;	
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 }
 
 void UDRGA_DropSelectedItem::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

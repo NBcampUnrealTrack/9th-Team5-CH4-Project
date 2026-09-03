@@ -3,6 +3,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "VoxelData/VoxelDataIncludes.h"
@@ -581,9 +582,22 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             this,
             &ThisClass::HandleMoveSpeedMultiplierChanged);
 
+    VoxelContainedTagChangedDelegateHandle =
+        AbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .AddUObject(
+            this,
+            &ThisClass::HandleVoxelContainedTagChanged);
+
     ApplyMoveSpeedMultiplier(
         AbilitySystemComponent->GetNumericAttribute(
             UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
+
+    HandleVoxelContainedTagChanged(
+        DRGameplayTags::State_VoxelContained,
+        AbilitySystemComponent->GetTagCount(
+            DRGameplayTags::State_VoxelContained));
 }
 
 void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
@@ -614,7 +628,17 @@ void UDRCharacterMovementComponent::UnbindAbilitySystem()
         .Remove(MoveSpeedChangedDelegateHandle);
     }
 
+    if (BoundAbilitySystemComponent.IsValid()
+        && VoxelContainedTagChangedDelegateHandle.IsValid())
+    {
+        BoundAbilitySystemComponent->RegisterGameplayTagEvent(
+            DRGameplayTags::State_VoxelContained,
+            EGameplayTagEventType::NewOrRemoved)
+        .Remove(VoxelContainedTagChangedDelegateHandle);
+    }
+
     MoveSpeedChangedDelegateHandle.Reset();
+	VoxelContainedTagChangedDelegateHandle.Reset();
     BoundAbilitySystemComponent.Reset();
 }
 
@@ -622,6 +646,19 @@ void UDRCharacterMovementComponent::HandleMoveSpeedMultiplierChanged(
     const FOnAttributeChangeData& Data)
 {
     ApplyMoveSpeedMultiplier(Data.NewValue);
+}
+
+void UDRCharacterMovementComponent::HandleVoxelContainedTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		EnterVoxelContainedMode();
+		return;
+	}
+
+	ExitVoxelContainedMode();
 }
 
 void UDRCharacterMovementComponent::ApplyMoveSpeedMultiplier(float Multiplier)
@@ -877,67 +914,85 @@ void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
     Velocity = ExitVelocity;
 }
 
-bool UDRCharacterMovementComponent::TryHandleZiplineRiderCollision(const FHitResult& Hit)
+bool UDRCharacterMovementComponent::TryHandleZiplineBlockingCollision(const FHitResult& Hit)
 {
+    /*
+     * Zipline 충돌 종료는 authoritative state 변경이므로 서버만 판정한다.
+     * 소유 클라이언트는 서버의 ActionState / MovementMode 복제를 받아 정리된다.
+     */
     if (!IsValid(CharacterOwner) || !CharacterOwner->HasAuthority())
     {
         return false;
     }
 
+    UDRMovementActionComponent* ThisAction = GetMovementActionComponent();
+
+    if (!IsValid(ThisAction) || !ThisAction->IsZiplineActive())
+    {
+        return false;
+    }
+
+    /*
+     * 상대도 Zipline 탑승자라면 기존 정책대로 양쪽을 동시에 해제한다.
+     * 한쪽만 끝내면 상대는 Rail simulation을 계속하므로 서버에서 같은 시점에 종료한다.
+     */
     ACharacter* OtherCharacter = Cast<ACharacter>(Hit.GetActor());
 
-    if (!IsValid(OtherCharacter) || OtherCharacter == CharacterOwner)
+    if (IsValid(OtherCharacter) && OtherCharacter != CharacterOwner)
     {
-        return false;
-    }
+        UDRMovementActionComponent* OtherAction =
+            OtherCharacter->FindComponentByClass<UDRMovementActionComponent>();
 
-    UDRMovementActionComponent* ThisAction = GetMovementActionComponent();
-    UDRMovementActionComponent* OtherAction = OtherCharacter->FindComponentByClass<UDRMovementActionComponent>();
-    UDRCharacterMovementComponent* OtherMovement = Cast<UDRCharacterMovementComponent>(OtherCharacter->GetCharacterMovement());
-    if (!IsValid(ThisAction) || !IsValid(OtherAction) || !IsValid(OtherMovement))
-    {
-        return false;
+        UDRCharacterMovementComponent* OtherMovement =
+            Cast<UDRCharacterMovementComponent>(
+                OtherCharacter->GetCharacterMovement());
+
+        if (IsValid(OtherAction)
+            && IsValid(OtherMovement)
+            && OtherAction->IsZiplineActive())
+        {
+            ThisAction->EndMovementAction(
+                EDRMovementActionEndReason::Collision);
+
+            OtherAction->EndMovementAction(
+                EDRMovementActionEndReason::Collision);
+
+            if (IsCustomMovementModeActive(
+                    EDRCustomMovementMode::MovementAction))
+            {
+                ExitCustomMovementMode();
+            }
+
+            if (OtherMovement->IsCustomMovementModeActive(
+                    EDRCustomMovementMode::MovementAction))
+            {
+                OtherMovement->ExitCustomMovementMode();
+            }
+
+            CharacterOwner->ForceNetUpdate();
+            OtherCharacter->ForceNetUpdate();
+
+            return true;
+        }
     }
 
     /*
-     * 단순 Character 충돌이 아니라,
-     * 양쪽 모두 실제 Zipline 탑승 중일 때만
-     * Rider Collision으로 처리한다.
-     */
-    if (!ThisAction->IsZiplineActive() || !OtherAction->IsZiplineActive())
-    {
-        return false;
-    }
-
-    /*
-     * 서버가 두 Zipline Action을 동시에 종료한다.
+     * Zipline 이동 중 World blocking collision이 발생하면
+     * 현재 Rider만 Rail에서 해제한다.
      *
-     * 한쪽만 종료하면 같은 충돌에서 상대는 계속 Rail을
-     * 진행하므로 양쪽 모두 동일한 authoritative 결과를 갖게 한다.
+     * 눈/지형/벽 등 구체적인 Actor 타입을 CMC가 알 필요는 없다.
+     * Pawn Capsule을 실제로 Block하는 장애물이면 동일한 정책을 적용한다.
      */
-    ThisAction->EndMovementAction(EDRMovementActionEndReason::Collision);
-    OtherAction->EndMovementAction(EDRMovementActionEndReason::Collision);
+    ThisAction->EndMovementAction(
+        EDRMovementActionEndReason::Collision);
 
-    /*
-     * EndMovementAction은 Action State 종료이고,
-     * 실제 CMC CustomMode도 별도로 빠져나와야 한다.
-     */
-    if (IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+    if (IsCustomMovementModeActive(
+            EDRCustomMovementMode::MovementAction))
     {
         ExitCustomMovementMode();
     }
 
-    if (OtherMovement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
-    {
-        OtherMovement->ExitCustomMovementMode();
-    }
-
-    /*
-     * ActionState 종료 + MovementMode 변경을
-     * 가능한 빨리 각 클라이언트에 전달한다.
-     */
     CharacterOwner->ForceNetUpdate();
-    OtherCharacter->ForceNetUpdate();
 
     return true;
 }
@@ -1235,10 +1290,10 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
             HandleImpact(Hit, TimeTick, Adjusted);
             
             /*
-             * 서버에서 Zipline Rider끼리 Capsule Blocking Hit가 발생하면
-             * 두 Rider의 Zipline을 즉시 종료한다.
+             * 서버에서 Zipline 이동이 BlockingHit에 막히면 즉시 하차한다.
+             * 상대도 Zipline Rider라면 양쪽을 동시에 하차시킨다.
              */
-            if (TryHandleZiplineRiderCollision(Hit))
+            if (TryHandleZiplineBlockingCollision(Hit))
             {
                 if (HasValidData())
                 {

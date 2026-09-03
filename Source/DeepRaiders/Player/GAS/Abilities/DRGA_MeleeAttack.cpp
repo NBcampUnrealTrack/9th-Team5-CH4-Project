@@ -23,6 +23,7 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_MovementAction_Zipline);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
