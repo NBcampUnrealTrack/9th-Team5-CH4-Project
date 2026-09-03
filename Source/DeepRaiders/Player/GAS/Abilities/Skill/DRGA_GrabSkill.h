@@ -1,13 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DeepRaiders/Player/GAS/Abilities/DRGA_CharacterSkillBase.h"
+#include "DRGA_ProjectileSkillBase.h"
 #include "DRGA_GrabSkill.generated.h"
 
 class ADRGrabProjectile;
 
 UCLASS()
-class DEEPRAIDERS_API UDRGA_GrabSkill : public UDRGA_CharacterSkillBase
+class DEEPRAIDERS_API UDRGA_GrabSkill : public UDRGA_ProjectileSkillBase
 {
 	GENERATED_BODY()
 

@@ -711,26 +711,84 @@ const FDRMovementActionState& UDRMovementActionComponent::GetSimulationActionSta
 	return AuthoritativeActionState;
 }
 
-void UDRMovementActionComponent::OnRep_AuthoritativeActionState()
+void UDRMovementActionComponent::OnRep_AuthoritativeActionState(
+	const FDRMovementActionState& PreviousState)
 {
-	// 복제 상태 반영 전, 클라이언트 상태 저장
-	const bool bWasActive = IsMovementActionActive();
+	ACharacter* Character =
+	Cast<ACharacter>(GetOwner());
 
-	const bool bPredictedSessionMatches = AuthoritativeActionState.IsActive() && PredictedActionState.IsActive() && AuthoritativeActionState.SessionId == PredictedActionState.SessionId;
+	UDRCharacterMovementComponent* Movement =
+		IsValid(Character)
+			? Cast<UDRCharacterMovementComponent>(
+				Character->GetCharacterMovement())
+			: nullptr;
 
-	// 서버 상태가 다른 세션이면 서버 상태를 우선한다.
-	if (PredictedActionState.IsActive() && !bPredictedSessionMatches)
+	/*
+	 * RepNotify 호출 시 AuthoritativeActionState에는 이미 새 값이 들어 있다.
+	 *
+	 * PreviousState:
+	 *   이번 replication 직전 클라이언트가 가지고 있던 authoritative state
+	 *
+	 * PredictedActionState:
+	 *   로컬 prediction이 존재하는 경우 이전 simulation state가 될 수 있다.
+	 */
+	const bool bPredictedWasActive =
+		PredictedActionState.IsActive();
+
+	const bool bWasActive =
+		PreviousState.IsActive()
+		|| bPredictedWasActive;
+
+	/*
+	 * 이미 같은 Session을 로컬 prediction 중이었다면
+	 * 서버 승인 후 InitialVelocity를 다시 적용하면 안 된다.
+	 */
+	const bool bPredictedSessionMatches =
+		AuthoritativeActionState.IsActive()
+		&& bPredictedWasActive
+		&& AuthoritativeActionState.SessionId
+			== PredictedActionState.SessionId;
+
+	/*
+	 * 이번 replication 이전에도 동일한 authoritative session을
+	 * 이미 simulation 중이었는지 확인한다.
+	 *
+	 * 동일 session의 일반 상태 갱신에서는
+	 * InitialVelocity를 다시 적용하지 않는다.
+	 */
+	const bool bPreviousAuthoritativeSessionMatches =
+		PreviousState.IsActive()
+		&& AuthoritativeActionState.IsActive()
+		&& PreviousState.SessionId
+			== AuthoritativeActionState.SessionId;
+
+	const bool bHadSameSessionBeforeReplication =
+		bPredictedSessionMatches
+		|| bPreviousAuthoritativeSessionMatches;
+
+	/*
+	 * 서버 상태가 다른 세션이면
+	 * 기존 predicted state를 폐기하고 서버 상태를 우선한다.
+	 */
+	if (PredictedActionState.IsActive()
+		&& !bPredictedSessionMatches)
 	{
 		ClearPredictedActionState();
 	}
 
-	// 같은 세션이면 서버가 예측을 승인한 것으로 간주한다.
+	/*
+	 * 같은 세션이면 서버가 prediction을 승인한 것.
+	 * 이제 authoritative state를 사용한다.
+	 */
 	if (bPredictedSessionMatches)
 	{
 		ClearPredictedActionState();
 	}
 
-	// 서버가 비활성 상태를 보냈다면 로컬 예측도 폐기한다.
+	/*
+	 * 서버가 비활성 상태를 보냈다면
+	 * 남아 있는 prediction도 제거한다.
+	 */
 	if (!AuthoritativeActionState.IsActive())
 	{
 		ClearPredictedActionState();
@@ -738,17 +796,37 @@ void UDRMovementActionComponent::OnRep_AuthoritativeActionState()
 
 	RefreshZiplineGameplayTags();
 
-	if (!bWasActive && IsLocallyControlledOwner())
+	const bool bActionIsActive =
+		IsMovementActionActive();
+
+	/*
+	 * 새 authoritative session이 처음 들어온 owning client.
+	 *
+	 * 현재 Zipline은 entry prediction을 사용하지 않으므로
+	 * 정상적인 새 탑승에서는 여기로 들어온다.
+	 *
+	 * 특히 Auto에서는 서버가 결정한 ZiplineInitialSpeed로
+	 * stale ZiplineRailSpeed를 덮어써야 한다.
+	 */
+	if (bActionIsActive
+		&& !bHadSameSessionBeforeReplication
+		&& IsLocallyControlledOwner())
 	{
-		ApplyZiplineInitialVelocity(GetSimulationActionState());
+		ApplyZiplineInitialVelocity(
+			GetSimulationActionState());
 	}
 
 	ReconcileLocallyControlledMovementMode();
 
-	// 기존에는 활성 상태였지만 서버 상태 반영 후 종료된 경우다.
-	if (bWasActive && !IsMovementActionActive())
+	/*
+	 * replication 전에는 활성 상태였지만
+	 * 서버 상태 적용 후 종료된 경우.
+	 */
+	if (bWasActive
+		&& !IsMovementActionActive())
 	{
-		OnMovementActionEnded.Broadcast(AuthoritativeActionState.LastEndReason);
+		OnMovementActionEnded.Broadcast(
+			AuthoritativeActionState.LastEndReason);
 	}
 }
 

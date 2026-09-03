@@ -25,6 +25,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	UFUNCTION()
+	void HideStartingSelection();
+
 	void ShowStartingSelection();
 
 	UFUNCTION()
@@ -32,9 +35,6 @@ private:
 		int32 RemainingSeconds,
 		bool IsGameStarted,
 		bool IsGameEnded);
-
-	UFUNCTION()
-	void HideStartingSelection();
 
 	UPROPERTY(Transient)
 	TObjectPtr<ADRPlayerController> PlayerController;

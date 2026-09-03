@@ -18,20 +18,19 @@ void UDRGA_SpearThrowSkill::ActivateAbility(
 	ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
 	UAbilitySystemComponent* AbilitySystem =
 		ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
-	const FVector ProjectileDirection =
-		IsValid(Character) ? Character->GetBaseAimRotation().Vector().GetSafeNormal() : FVector::ZeroVector;
-
 	FVector SpawnLocation;
-	const bool IsSpawnLocationValid =
-		IsValid(Character)
-		&& Character->CalculateGameplayFireOrigin(ProjectileDirection, SpawnLocation);
+	FVector ProjectileDirection;
+	const bool IsLaunchValid = ResolveProjectileLaunch(
+		ActorInfo,
+		MaxAimDistance,
+		SpawnLocation,
+		ProjectileDirection);
 
 	if (!IsValid(Character)
 		|| !IsValid(AbilitySystem)
 		|| !ProjectileClass
 		|| KnockbackStrength < 0.f
-		|| ProjectileDirection.IsNearlyZero()
-		|| !IsSpawnLocationValid
+		|| !IsLaunchValid
 		|| !CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);

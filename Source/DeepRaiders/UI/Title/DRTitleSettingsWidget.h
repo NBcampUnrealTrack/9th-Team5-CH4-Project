@@ -24,6 +24,8 @@ public:
 	void HandleSettingsCancelClicked();
 
 protected:
+	virtual void NativeDestruct() override;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_Settings;
 
@@ -43,5 +45,6 @@ protected:
 	TObjectPtr<UDRTitleSettingRowWidget> Settings_MouseSensitivityY;
 
 private:
+	void Hide();
 	void LoadSettingsIntoSliders();
 };

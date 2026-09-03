@@ -228,6 +228,33 @@ bool ADRZiplineRope::Interact_Implementation(APawn* Interactor)
 		State.ZiplineInitialSpeed = 0.f;
 	}
 
+	UE_LOG(
+	LogTemp,
+	Warning,
+	TEXT(
+		"[ZIPDBG][SERVER_START] "
+		"Time=%.3f "
+		"Character=%s "
+		"Session=%d RideMode=%d "
+		"Start=%s Target=%s "
+		"CharacterLoc=%s "
+		"VelocityBefore=%s "
+		"InitialRailSpeed=%.2f "
+		"MaxSpeed=%.2f Accel=%.2f"),
+	GetWorld()
+		? GetWorld()->GetTimeSeconds()
+		: -1.f,
+	*GetNameSafe(Character),
+	State.SessionId,
+	static_cast<int32>(State.ZiplineRideMode),
+	*FVector(State.ZiplineStartLocation).ToCompactString(),
+	*FVector(State.ReferenceLocation).ToCompactString(),
+	*Character->GetActorLocation().ToCompactString(),
+	*Movement->Velocity.ToCompactString(),
+	State.ZiplineInitialSpeed,
+	State.MaxSpeed,
+	State.ZiplineAcceleration);
+	
 	if (!MovementAction->StartAuthoritativeMovementAction(State))
 	{
 		return false;
@@ -251,7 +278,28 @@ bool ADRZiplineRope::Interact_Implementation(APawn* Interactor)
 		Movement->Velocity = TravelAxis * State.ZiplineInitialSpeed;
 	}
 
-	Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
+	Movement->SetCustomMovementMode(
+		EDRCustomMovementMode::MovementAction);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT(
+			"[ZIPDBG][SERVER_CUSTOM] "
+			"Time=%.3f "
+			"Character=%s Session=%d "
+			"Mode=%d Custom=%d "
+			"Loc=%s Vel=%s RailSpeed=%.2f"),
+		GetWorld()
+			? GetWorld()->GetTimeSeconds()
+			: -1.f,
+		*GetNameSafe(Character),
+		State.SessionId,
+		static_cast<int32>(Movement->MovementMode),
+		static_cast<int32>(Movement->CustomMovementMode),
+		*Character->GetActorLocation().ToCompactString(),
+		*Movement->Velocity.ToCompactString(),
+		Movement->GetZiplineRailSpeed());
 
 	return true;
 }

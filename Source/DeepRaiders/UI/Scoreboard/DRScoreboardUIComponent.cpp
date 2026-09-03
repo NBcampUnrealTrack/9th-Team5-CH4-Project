@@ -70,6 +70,7 @@ void UDRScoreboardUIComponent::BeginPlay()
 	 * Widget은 미리 만들어두되
 	 * 처음에는 숨긴다.
 	 */
+	// 생성 시 변경된 입력 모드는 초기 숨김에서 한 번 정리한다.
 	UIManager->SetManagedWidgetVisible(ScoreboardWidget, false);
 }
 
@@ -110,7 +111,7 @@ void UDRScoreboardUIComponent::ShowScoreboard()
 	 */
 	ScoreboardWidget->RefreshPlayers();
 
-	UIManager->SetManagedWidgetVisible(ScoreboardWidget, true);
+	UIManager->SetManagedWidgetVisibilityOnly(ScoreboardWidget, true);
 }
 
 void UDRScoreboardUIComponent::HideScoreboard()
@@ -120,7 +121,7 @@ void UDRScoreboardUIComponent::HideScoreboard()
 		return;
 	}
 
-	UIManager->SetManagedWidgetVisible(ScoreboardWidget, false);
+	UIManager->SetManagedWidgetVisibilityOnly(ScoreboardWidget, false);
 }
 
 bool UDRScoreboardUIComponent::IsScoreboardVisible() const

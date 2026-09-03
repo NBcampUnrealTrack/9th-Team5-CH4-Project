@@ -320,9 +320,8 @@ void ADRPlayerController::HandleToggleMenu(const FInputActionValue&)
 		return;
 	}
 
-	if (UIManager->IsScreenOpen(DRGameplayTags::UI_Screen_Menu))
+	if (UIManager->PopTopScreen())
 	{
-		UIManager->PopScreen(DRGameplayTags::UI_Screen_Menu);
 		return;
 	}
 

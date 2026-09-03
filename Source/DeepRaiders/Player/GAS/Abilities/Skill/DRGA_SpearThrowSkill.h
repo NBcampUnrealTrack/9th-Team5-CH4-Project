@@ -2,14 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "DeepRaiders/GAS/DRGameplayEffectData.h"
-#include "DeepRaiders/Player/GAS/Abilities/DRGA_CharacterSkillBase.h"
+#include "DRGA_ProjectileSkillBase.h"
 #include "DRGA_SpearThrowSkill.generated.h"
 
 class ADRSpearProjectile;
 class UAbilitySystemComponent;
 
 UCLASS()
-class DEEPRAIDERS_API UDRGA_SpearThrowSkill : public UDRGA_CharacterSkillBase
+class DEEPRAIDERS_API UDRGA_SpearThrowSkill : public UDRGA_ProjectileSkillBase
 {
 	GENERATED_BODY()
 
@@ -25,6 +25,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw", meta = (ClampMin = "0.0", Units = "cm/s"))
 	float KnockbackStrength = 1200.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw", meta = (ClampMin = "1.0", Units = "cm"))
+	float MaxAimDistance = 15000.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;

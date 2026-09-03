@@ -179,9 +179,16 @@ public:
                     *ActionState,
                     NewAccel)
                 : 0;
-
+        /*
+         * ZiplineRailSpeed는 활성 Zipline SavedMove에서만 의미가 있다.
+         *
+         * 비활성 Move에 이전 Zipline 속도를 저장하면 correction/replay 시
+         * 종료된 세션의 RailSpeed가 다시 살아날 수 있다.
+         */
         SavedZiplineRailSpeed =
-            Movement->ZiplineRailSpeed;
+            bSavedZiplineActive
+                ? Movement->ZiplineRailSpeed
+                : 0.f;
 
         SavedJetpackSpoolElapsed = Movement->JetpackSpoolElapsed;
     }
@@ -200,14 +207,47 @@ public:
             return;
         }
 
-        Movement->bWantsJetpack =
-            bSavedWantsJetpack;
+        /*
+         * SavedMove의 Zipline transient state는
+         * "그 SavedMove가 Zipline이었음"만으로 복원하면 안 된다.
+         *
+         * correction/replay 시 이미 서버 authoritative state에서
+         * Zipline이 종료된 뒤 과거 Zipline Move를 replay할 수도 있다.
+         *
+         * 따라서 현재 simulation state와 MovementMode까지
+         * 실제 Zipline 상태일 때만 복원한다.
+         */
+        const UDRMovementActionComponent* MovementAction =
+            Character->FindComponentByClass<
+                UDRMovementActionComponent>();
 
-        Movement->ManualZiplineInput =
-            SavedManualZiplineInput;
+        const FDRMovementActionState* ActionState =
+            IsValid(MovementAction)
+                ? &MovementAction->GetSimulationActionState()
+                : nullptr;
 
-        Movement->ZiplineRailSpeed =
-            SavedZiplineRailSpeed;
+        const bool bCanRestoreZiplineState =
+            bSavedZiplineActive
+            && ActionState != nullptr
+            && ActionState->IsActive()
+            && ActionState->ActionType
+                == EDRMovementActionType::Zipline
+            && Movement->IsCustomMovementModeActive(
+                EDRCustomMovementMode::MovementAction);
+
+        if (bCanRestoreZiplineState)
+        {
+            Movement->ManualZiplineInput =
+                SavedManualZiplineInput;
+
+            Movement->ZiplineRailSpeed =
+                SavedZiplineRailSpeed;
+        }
+        else
+        {
+            Movement->ManualZiplineInput = 0;
+            Movement->ZiplineRailSpeed = 0.f;
+        }
 
         Movement->JetpackSpoolElapsed =
             SavedJetpackSpoolElapsed;
@@ -241,6 +281,59 @@ void UDRCharacterMovementComponent::OnMovementUpdated(
 {
 	Super::OnMovementUpdated(DeltaSeconds, OldLocation, OldVelocity);
 	OnCharacterMovementUpdated.Broadcast(DeltaSeconds, OldLocation, OldVelocity);
+}
+
+void UDRCharacterMovementComponent::OnMovementModeChanged(
+	EMovementMode PreviousMovementMode,
+	uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(
+		PreviousMovementMode,
+		PreviousCustomMode);
+
+	const bool bWasMovementAction =
+		PreviousMovementMode == MOVE_Custom
+		&& PreviousCustomMode ==
+			static_cast<uint8>(
+				EDRCustomMovementMode::MovementAction);
+
+	const bool bIsMovementAction =
+		MovementMode == MOVE_Custom
+		&& CustomMovementMode ==
+			static_cast<uint8>(
+				EDRCustomMovementMode::MovementAction);
+
+	/*
+	 * ExitCustomMovementMode()를 통하지 않고
+	 * network correction / replicated movement가 직접
+	 * MovementMode를 변경할 수도 있다.
+	 *
+	 * ZiplineRailSpeed와 ManualZiplineInput은
+	 * MovementAction CustomMode 안에서만 유효한 transient state이므로
+	 * 어떤 경로로 빠져나가든 여기서 반드시 정리한다.
+	 */
+	if (bWasMovementAction
+		&& !bIsMovementAction)
+	{
+		ManualZiplineInput = 0;
+		ZiplineRailSpeed = 0.f;
+	}
+
+	/*
+	 * 진단 로그용 상태.
+	 */
+	const UDRMovementActionComponent* MovementAction =
+		GetMovementActionComponent();
+
+	const FDRMovementActionState* State =
+		IsValid(MovementAction)
+			? &MovementAction->GetSimulationActionState()
+			: nullptr;
+
+	const float WorldTime =
+		GetWorld() != nullptr
+			? GetWorld()->GetTimeSeconds()
+			: -1.f;
 }
 
 void UDRCharacterMovementComponent::BindAbilitySystem(
@@ -669,14 +762,25 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         || !UpdatedComponent
         || !MovementAction->IsMovementActionActive())
     {
+        const FDRMovementActionState* State =
+            IsValid(MovementAction)
+                ? &MovementAction->GetSimulationActionState()
+                : nullptr;
+
+        const float WorldTime =
+            GetWorld() != nullptr
+                ? GetWorld()->GetTimeSeconds()
+                : -1.f;
+
         RestoreDefaultMovementMode();
-        
+
         if (HasValidData())
         {
-            // 이동 모드가 전환된 같은 프레임의 남은 시간도 새 물리 모드로 처리한다.
-            StartNewPhysics(DeltaTime, Iterations);
+            StartNewPhysics(
+                DeltaTime,
+                Iterations);
         }
-        
+
         return;
     }
     

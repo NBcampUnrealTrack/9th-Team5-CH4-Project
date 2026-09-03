@@ -325,7 +325,7 @@ public:
 
 protected:
 	UFUNCTION()
-	void OnRep_AuthoritativeActionState();
+	void OnRep_AuthoritativeActionState(const FDRMovementActionState& PreviousState);
 
 private:
 	bool IsLocallyControlledOwner() const;

@@ -103,6 +103,10 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	GameplayFireAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("GameplayFireAnchor"));
 	GameplayFireAnchor->SetupAttachment(GetCapsuleComponent());
 	GameplayFireAnchor->SetRelativeLocation(FVector(0.f, 10.f, 55.f));
+
+	SkillFireAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("SkillFireAnchor"));
+	SkillFireAnchor->SetupAttachment(GetCapsuleComponent());
+	SkillFireAnchor->SetRelativeLocation(FVector(100.f, 10.f, 55.f));
 	
 	// 등 뒤에 달릴 장비 - 제트팩
 	WorldBackEquipmentMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WorldBackEquipmentMesh"));
@@ -575,6 +579,18 @@ bool ADRPlayerCharacter::CalculateGameplayFireOrigin(const FVector& AimDirection
 
 	const FVector AnchorLocation = GameplayFireAnchor->GetComponentLocation();
 	OutFireOrigin = AnchorLocation + SafeAimDirection * GameplayFireForwardDistance;
+
+	return !OutFireOrigin.ContainsNaN();
+}
+
+bool ADRPlayerCharacter::CalculateSkillFireOrigin(FVector& OutFireOrigin) const
+{
+	if (!IsValid(SkillFireAnchor))
+	{
+		return false;
+	}
+
+	OutFireOrigin = SkillFireAnchor->GetComponentLocation();
 
 	return !OutFireOrigin.ContainsNaN();
 }
