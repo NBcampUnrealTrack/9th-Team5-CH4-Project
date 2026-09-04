@@ -1,6 +1,7 @@
 #include "DRHUDUIComponent.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -10,6 +11,41 @@
 #include "Engine/LocalPlayer.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
+
+namespace DRHUDUI
+{
+	int32 RegisterViewModelRecursively(
+		UUserWidget* Widget,
+		FName ViewModelName,
+		UDRHUDViewModel* ViewModel,
+		TSet<UUserWidget*>& VisitedWidgets)
+	{
+		if (!IsValid(Widget) || VisitedWidgets.Contains(Widget))
+		{
+			return 0;
+		}
+
+		VisitedWidgets.Add(Widget);
+		int32 RegisteredCount = 0;
+		if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(Widget))
+		{
+			RegisteredCount += View->SetViewModel(ViewModelName, ViewModel) ? 1 : 0;
+		}
+
+		TArray<UWidget*> ChildWidgets;
+		Widget->WidgetTree->GetAllWidgets(ChildWidgets);
+		for (UWidget* ChildWidget : ChildWidgets)
+		{
+			RegisteredCount += RegisterViewModelRecursively(
+				Cast<UUserWidget>(ChildWidget),
+				ViewModelName,
+				ViewModel,
+				VisitedWidgets);
+		}
+
+		return RegisteredCount;
+	}
+}
 
 UDRHUDUIComponent::UDRHUDUIComponent()
 {
@@ -45,10 +81,13 @@ void UDRHUDUIComponent::BeginPlay()
 	}
 
 	HUDViewModel = NewObject<UDRHUDViewModel>(this);
-	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(HUDWidget);
-	const bool IsViewModelRegistered = IsValid(View)
-		&& View->SetViewModel(UIConfig->HUDViewModelName, HUDViewModel);
-	if (!IsViewModelRegistered)
+	TSet<UUserWidget*> VisitedWidgets;
+	const int32 RegisteredViewCount = DRHUDUI::RegisterViewModelRecursively(
+		HUDWidget,
+		UIConfig->HUDViewModelName,
+		HUDViewModel,
+		VisitedWidgets);
+	if (RegisteredViewCount == 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("HUD ViewModels were not registered on %s"),
 			*GetNameSafe(HUDWidget));
