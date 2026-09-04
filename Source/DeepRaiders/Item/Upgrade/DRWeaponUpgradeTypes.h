@@ -20,8 +20,9 @@ struct DEEPRAIDERS_API FDRWeaponUpgradeLevelData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Upgrade", meta = (ClampMin = "0", UIMin = "0"))
 	int32 Price = 0;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Upgrade")
-	float SetByCallerMagnitude = 0.0f;
+	/** 기본 스탯에 곱할 해당 레벨의 누적 배율이다. 1.0은 기본값과 동일하다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Upgrade", meta = (ClampMin = "0.0"))
+	float SetByCallerMagnitude = 1.0f;
 };
 
 /**
@@ -48,6 +49,12 @@ public:
 	const FDRWeaponUpgradeLevelData* FindLevelData(int32 TargetLevel) const
 	{
 		return IsValidTargetLevel(TargetLevel) ? &Levels[TargetLevel - 1] : nullptr;
+	}
+
+	float GetStatMultiplier(int32 Level) const
+	{
+		const FDRWeaponUpgradeLevelData* LevelData = FindLevelData(Level);
+		return LevelData != nullptr ? LevelData->SetByCallerMagnitude : 1.0f;
 	}
 
 	/** RuntimeState에서 업그레이드 트랙과 현재 레벨을 식별하는 태그다. */

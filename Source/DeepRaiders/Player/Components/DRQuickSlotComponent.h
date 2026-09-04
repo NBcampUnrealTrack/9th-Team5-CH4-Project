@@ -10,6 +10,7 @@
 
 class UDRInventoryComponent;
 class UDRItemDefinition;
+class UDRWeaponUpgradeProfile;
 class UAbilitySystemComponent;
 struct FAbilityEndedData;
 
@@ -126,6 +127,8 @@ private:
 	void RefreshDerivedState();	
 	// 손에 든 장비에 따라 ASC의 Ability, Effect 또한 함께 새로고침
 	void RefreshHeldItem();
+	void RefreshEquippedWeaponUpgrade(const FDRItemInstance* SelectedItem);
+	void RemoveEquippedWeaponUpgradeEffect();
 	void RequestReplicationUpdate() const;
 	
 	// 특정 액션을 직접 알지 않고, 공통 이동 액션 활성 태그만 검사한다.
@@ -208,6 +211,8 @@ private:
 	
 	FGuid EquippedInstanceId;
 	FDRAbilitySet_GrantedHandles GrantedHandles;
+	FActiveGameplayEffectHandle EquippedWeaponUpgradeEffectHandle;
+	TWeakObjectPtr<UDRWeaponUpgradeProfile> EquippedWeaponUpgradeProfile;
 	
 	/*
  	* Ability Spec보다 오래 유지되어 무기 교체 후에도 이전 무기의

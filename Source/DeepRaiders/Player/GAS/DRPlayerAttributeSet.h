@@ -34,6 +34,11 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
 
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponDamageMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponFireIntervalMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowCostMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier)
+
 protected:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Player|Health")
 	FGameplayAttributeData Health;
@@ -62,6 +67,18 @@ protected:
 		ReplicatedUsing = OnRep_MoveSpeedMultiplier,
 		Category = "Player|Movement")
 	FGameplayAttributeData MoveSpeedMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponDamageMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponDamageMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponFireIntervalMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponFireIntervalMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowCostMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowCostMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponProjectileCountMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponProjectileCountMultiplier;
 	
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);
@@ -81,7 +98,15 @@ protected:
 	UFUNCTION()
 	void OnRep_DamageReduction(
 		const FGameplayAttributeData& OldDamageReduction);
-	
+	UFUNCTION()
+	void OnRep_WeaponDamageMultiplier(const FGameplayAttributeData& OldWeaponDamageMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponFireIntervalMultiplier(const FGameplayAttributeData& OldWeaponFireIntervalMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowCostMultiplier(const FGameplayAttributeData& OldWeaponSnowCostMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponProjectileCountMultiplier(const FGameplayAttributeData& OldWeaponProjectileCountMultiplier);
+
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;

@@ -16,6 +16,11 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 
 	InitDamageReduction(0.f);
 	InitMoveSpeedMultiplier(1.f);
+
+	InitWeaponDamageMultiplier(1.f);
+	InitWeaponFireIntervalMultiplier(1.f);
+	InitWeaponSnowCostMultiplier(1.f);
+	InitWeaponProjectileCountMultiplier(1.f);
 }
 
 void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -29,6 +34,11 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, DamageReduction, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponDamageMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponFireIntervalMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponSnowCostMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier, COND_OwnerOnly,
+		REPNOTIFY_Always);
 }
 
 void UDRPlayerAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth)
@@ -72,6 +82,31 @@ void UDRPlayerAttributeSet::OnRep_DamageReduction(
 		UDRPlayerAttributeSet,
 		DamageReduction,
 		OldDamageReduction);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponDamageMultiplier(
+	const FGameplayAttributeData& OldWeaponDamageMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponDamageMultiplier, OldWeaponDamageMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponFireIntervalMultiplier(
+	const FGameplayAttributeData& OldWeaponFireIntervalMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponFireIntervalMultiplier, OldWeaponFireIntervalMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponSnowCostMultiplier(
+	const FGameplayAttributeData& OldWeaponSnowCostMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponSnowCostMultiplier, OldWeaponSnowCostMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponProjectileCountMultiplier(
+	const FGameplayAttributeData& OldWeaponProjectileCountMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier,
+		OldWeaponProjectileCountMultiplier);
 }
 
 void UDRPlayerAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)

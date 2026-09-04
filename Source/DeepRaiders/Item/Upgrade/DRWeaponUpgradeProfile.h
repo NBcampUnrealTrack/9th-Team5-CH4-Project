@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/DataAsset.h"
+#include "DeepRaiders/Upgrade/DRUpgradeProfile.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeTypes.h"
 #include "DRWeaponUpgradeProfile.generated.h"
 
@@ -14,11 +14,13 @@ class UGameplayEffect;
  * 동일한 Profile을 데이터 원본으로 사용한다.
  */
 UCLASS(BlueprintType)
-class DEEPRAIDERS_API UDRWeaponUpgradeProfile : public UDataAsset
+class DEEPRAIDERS_API UDRWeaponUpgradeProfile : public UDRUpgradeProfile
 {
 	GENERATED_BODY()
 
 public:
+	UDRWeaponUpgradeProfile();
+
 	const TArray<FDRWeaponStatUpgradeData>& GetStatUpgrades() const
 	{
 		return StatUpgrades;
@@ -29,6 +31,8 @@ public:
 	const FDRWeaponUpgradeLevelData* FindLevelData(const FGameplayTag& UpgradeTag, int32 TargetLevel) const;
 
 	int32 GetMaxLevel(const FGameplayTag& UpgradeTag) const;
+
+	virtual bool IsUsable() const override;
 
 	/**
 	 * RuntimeState를 장착 중인 ASC 상태로 투영하는 Infinite GameplayEffect.

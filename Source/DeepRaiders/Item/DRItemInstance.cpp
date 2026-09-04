@@ -20,9 +20,17 @@ FDRItemInstance DRItemInstanceFactory::Create(UDRItemDefinition* Definition, int
 	
 	// 현재 인스턴스화가 필요한 아이템은 ProjectileWeapon이 유일하다.
 	const UDRProjectileWeaponItemDefinition* ProjectileDefinition = Cast<UDRProjectileWeaponItemDefinition>(Definition);
-	
-	if (IsValid(ProjectileDefinition)
-		&& ProjectileDefinition->ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo)
+
+	if (!IsValid(ProjectileDefinition))
+	{
+		return Result;
+	}
+
+	if (ProjectileDefinition->ResourceType == EDRProjectileWeaponResourceType::SnowGauge)
+	{
+		Result.RuntimeState.InitializeAs<FDRSnowProjectileWeaponRuntimeState>();
+	}
+	else if (ProjectileDefinition->ResourceType == EDRProjectileWeaponResourceType::InstanceAmmo)
 	{
 		Result.RuntimeState.InitializeAs<FDRProjectileWeaponRuntimeState>();
 		

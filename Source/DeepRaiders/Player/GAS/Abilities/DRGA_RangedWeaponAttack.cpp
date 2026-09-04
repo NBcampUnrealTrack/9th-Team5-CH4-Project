@@ -148,7 +148,7 @@ void UDRGA_RangedWeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Ha
 		return;
 	}
 	
-	CooldownSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Cooldown_Duration, WeaponDefinition->BaseFireInterval);
+	CooldownSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Cooldown_Duration, GetWeaponFireInterval());
 	
 	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
 }
@@ -175,7 +175,9 @@ bool UDRGA_RangedWeaponAttack::CheckCost(const FGameplayAbilitySpecHandle Handle
 	{
 	case EDRProjectileWeaponResourceType::SnowGauge:
 	{
-		if (WeaponDefinition->SnowCostPerShot <= 0.0f)
+		const float SnowCost = GetWeaponSnowCostPerShot();
+
+		if (SnowCost <= KINDA_SMALL_NUMBER)
 		{
 			return true;
 		}
@@ -196,8 +198,7 @@ bool UDRGA_RangedWeaponAttack::CheckCost(const FGameplayAbilitySpecHandle Handle
 		const float CurrentSnow = AbilitySystem->GetNumericAttribute(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 
-		return CurrentSnow + KINDA_SMALL_NUMBER >=
-			WeaponDefinition->SnowCostPerShot;
+		return CurrentSnow + KINDA_SMALL_NUMBER >= SnowCost;
 	}
 	case EDRProjectileWeaponResourceType::InstanceAmmo:
 	{
@@ -239,8 +240,14 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 	{
 	case EDRProjectileWeaponResourceType::SnowGauge:
 	{
-		if (WeaponDefinition->SnowCostPerShot <= 0.0f 
-			|| !WeaponDefinition->SnowCostEffectClass)
+		const float SnowCost = GetWeaponSnowCostPerShot();
+
+		if (SnowCost <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		if (!WeaponDefinition->SnowCostEffectClass)
 		{
 			return;
 		}
@@ -253,7 +260,7 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 			return;
 		}
 
-		CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -WeaponDefinition->SnowCostPerShot);
+		CostSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, -SnowCost);
 
 		ApplyGameplayEffectSpecToOwner(Handle,ActorInfo,ActivationInfo,CostSpec);
 
@@ -399,7 +406,7 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
  	*/
 	QuickSlot->RecordLocalWeaponShot(
 		WeaponInstanceId,
-		WeaponDefinition->BaseFireInterval);
+		GetWeaponFireInterval());
 }
 
 bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
@@ -635,7 +642,10 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 		{
 			if (Pair.Key.IsValid())
 			{
-				EffectSpec.Data->SetSetByCallerMagnitude(Pair.Key, Pair.Value);
+				const float Magnitude = Pair.Key == DRGameplayTags::Data_Damage
+					? Pair.Value * GetWeaponStatMultiplier(UDRPlayerAttributeSet::GetWeaponDamageMultiplierAttribute())
+					: Pair.Value;
+				EffectSpec.Data->SetSetByCallerMagnitude(Pair.Key, Magnitude);
 			}
 		}
 		
@@ -646,8 +656,37 @@ void UDRGA_RangedWeaponAttack::BuildImpactEffectSpecs(TArray<FGameplayEffectSpec
 float UDRGA_RangedWeaponAttack::GetBreakableDamageAmount() const
 {
 	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
-	
-	return IsValid(WeaponDefinition) ? FMath::Max(0.f, WeaponDefinition->BreakableDamage) : 0.f;
+	const float DamageMultiplier = GetWeaponStatMultiplier(UDRPlayerAttributeSet::GetWeaponDamageMultiplierAttribute());
+
+	return IsValid(WeaponDefinition)
+		? FMath::Max(0.f, WeaponDefinition->BreakableDamage * DamageMultiplier)
+		: 0.f;
+}
+
+float UDRGA_RangedWeaponAttack::GetWeaponFireInterval() const
+{
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	const float Multiplier = GetWeaponStatMultiplier(UDRPlayerAttributeSet::GetWeaponFireIntervalMultiplierAttribute());
+
+	return IsValid(WeaponDefinition) ? FMath::Max(0.01f, WeaponDefinition->BaseFireInterval * Multiplier) : 0.01f;
+}
+
+float UDRGA_RangedWeaponAttack::GetWeaponSnowCostPerShot() const
+{
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	const float Multiplier = GetWeaponStatMultiplier(UDRPlayerAttributeSet::GetWeaponSnowCostMultiplierAttribute());
+
+	return IsValid(WeaponDefinition) ? FMath::Max(0.0f, WeaponDefinition->SnowCostPerShot * Multiplier) : 0.0f;
+}
+
+int32 UDRGA_RangedWeaponAttack::GetWeaponProjectileCount() const
+{
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	const float Multiplier = GetWeaponStatMultiplier(
+		UDRPlayerAttributeSet::GetWeaponProjectileCountMultiplierAttribute());
+	const float ProjectileCount = IsValid(WeaponDefinition) ? WeaponDefinition->ProjectileCount * Multiplier : 1.0f;
+
+	return FMath::Max(1, FMath::RoundToInt(ProjectileCount));
 }
 
 bool UDRGA_RangedWeaponAttack::TryApplyBreakableDamage(const FHitResult& HitResult) const
@@ -906,6 +945,16 @@ void UDRGA_RangedWeaponAttack::PlayFireMontage()
 		GetCurrentActivationInfo(),
 		FireMontage,
 		1.f);
+}
+
+float UDRGA_RangedWeaponAttack::GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const UAbilitySystemComponent* ASC = ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	return IsValid(ASC) && Attribute.IsValid()
+		? FMath::Max(0.0f, ASC->GetNumericAttribute(Attribute))
+		: 1.0f;
 }
 
 float UDRGA_RangedWeaponAttack::GetMaxAttackDistance() const
