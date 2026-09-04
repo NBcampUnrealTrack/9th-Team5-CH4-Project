@@ -119,6 +119,7 @@ private:
 		FDRSnowSurfaceRemoveRequest Request;
 		FDRSnowSurfaceEditResult SurfaceEdit;
 		EDRSnowRemovalPath RemovalPath;
+		uint64 LocalOrder = 0;
 	};
 
 	FDRSnowRemoveResult PredictSnowRemovalInternal(
@@ -130,8 +131,22 @@ private:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath) const;
 
-	// authoritative 작업 전에 모든 로컬 예측을 역순 롤백하고 목록을 분리합니다.
+	// authoritative add처럼 정확한 영향 경계를 알 수 없는 경로에서 전체 예측을 분리합니다.
 	TArray<FPendingRemovalPrediction> SuspendRemovalPredictions();
+
+	// 선택한 예측만 역순 롤백하고 나머지는 현재 geometry에 그대로 유지합니다.
+	TArray<FPendingRemovalPrediction> SuspendRemovalPredictions(
+		const TArray<int32>& PredictionIndices);
+
+	FVoxelIntBox GetRemovalRequestBounds(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath) const;
+
+	// seed와 공간적으로 연결된 예측들의 전이적 묶음을 찾습니다.
+	TArray<int32> FindAffectedRemovalPredictionIndices(
+		AVoxelWorld* VoxelWorld,
+		const FVoxelIntBox& SeedBounds,
+		int32 RequiredPredictionIndex = INDEX_NONE) const;
 
 	// authoritative 작업 이후 아직 응답받지 않은 예측을 원래 순서대로 다시 적용합니다.
 	void ResumeRemovalPredictions(TArray<FPendingRemovalPrediction>&& Predictions);
@@ -172,5 +187,6 @@ private:
 	// 서버 확인을 기다리는 클라이언트 예측 목록 (최대 32개)
 	TArray<FPendingRemovalPrediction> PendingRemovalPredictions;
 	bool bPredictionCapacityWarningLogged = false;
+	uint64 NextRemovalPredictionOrder = 0;
 	int32 SnowStateGeneration = 0;
 };

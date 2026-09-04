@@ -98,6 +98,34 @@ FDRSnowSurfaceEditResult FDRSnowRemovalPipeline::PredictSurface(
 		: FDRSnowSurfaceEditResult();
 }
 
+FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::ConfirmPrediction(
+	UWorld* World,
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const FDRSnowSurfaceEditResult& PredictedSurfaceEdit,
+	const float AuthoritativeAmount,
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
+	const EDRSnowRemovalPath RemovalPath)
+{
+	FDRSnowRemovalReplayResult Result;
+	SurfaceEditor.SetWorld(World);
+	if (!IsValid(World) || AuthoritativeAmount <= 0.f ||
+		PredictedSurfaceEdit.AppliedAmount <= 0.f)
+	{
+		return Result;
+	}
+
+	ApplyRemovedSurfaceEdit(World, Request, PredictedSurfaceEdit, AuthoritativeAmount);
+	Result.VoxelWorld = PredictedSurfaceEdit.VoxelWorld;
+	if (AuthoritativeMaterialPatch)
+	{
+		Result.bApplied = true;
+		return Result;
+	}
+
+	Result.bApplied = RepaintWithoutPatch(Request, PredictedSurfaceEdit, RemovalPath);
+	return Result;
+}
+
 FDRSnowSurfaceEditResult FDRSnowRemovalPipeline::RemoveSurface(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const EDRSnowRemovalPath RemovalPath) const

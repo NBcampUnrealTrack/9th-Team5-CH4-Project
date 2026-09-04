@@ -38,9 +38,10 @@ struct FDRSnowRemovalReplayResult
 //   2. 점령 부피 차감 및 소유권 갱신 (VolumeStore, OwnershipStore)
 //   3. 새로 드러난 표면에 팀 색상 칠하기 (MaterialPatch 생성 또는 적용)
 //
-// 상황별 3가지 실행 함수:
+// 상황별 4가지 실행 함수:
 //   Execute: 서버에서 위 1, 2, 3 단계를 모두 수행하고 클라이언트용 색상 패치 생성
 //   PredictSurface: 클라이언트에서 입력 즉시 1단계(지형 깎기)만 먼저 수행하여 렉을 숨김
+//   ConfirmPrediction: 예측과 서버 결과가 일치할 때 geometry를 유지하고 2, 3단계만 확정
 //   Replay: 로컬 예측을 롤백한 authoritative 상태에서 1, 2, 3단계를 순서대로 재현
 class DEEPRAIDERS_API FDRSnowRemovalPipeline
 {
@@ -67,6 +68,16 @@ public:
 	FDRSnowRemovalReplayResult Replay(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
+		float AuthoritativeAmount,
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
+		EDRSnowRemovalPath RemovalPath);
+
+	// 예측한 geometry가 서버 결과와 일치할 때 지형을 다시 편집하지 않고
+	// 점령 부피와 material만 확정하는 빠른 경로입니다.
+	FDRSnowRemovalReplayResult ConfirmPrediction(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& PredictedSurfaceEdit,
 		float AuthoritativeAmount,
 		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath RemovalPath);
