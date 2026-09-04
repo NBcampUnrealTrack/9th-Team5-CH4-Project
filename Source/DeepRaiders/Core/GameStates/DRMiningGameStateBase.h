@@ -169,12 +169,12 @@ public:
 private:
 	// 눈 작업 배치 전송 시스템 (서버 전용)
 	// 매 작업마다 RPC를 보내면 연사나 산탄 시 패킷 폭주가 발생하므로,
-	// 대기열에 모아두었다가 30Hz 주기로 묶어서 전송합니다 (16개 초과 시 즉시 전송).
+	// 대기열에 모아두었다가 제한된 크기의 배치로 나누어 전송합니다.
 
-	// 작업을 대기열에 추가하고 30Hz 타이머를 예약합니다 (16개 이상이면 즉시 전송).
-	void QueueSnowOperationBroadcast(FDRSnowOperationRecord&& Record);
+	// 작업을 대기열에 추가하고 배치 전송 타이머를 예약합니다.
+	void QueueSnowOperationForBroadcast(FDRSnowOperationRecord&& Record);
 
-	// 타이머가 꺼져 있을 때만 30Hz 타이머를 새로 시작합니다.
+	// 타이머가 꺼져 있을 때만 다음 배치 전송을 예약합니다.
 	void ScheduleSnowOperationBroadcast();
 
 	// 대기열의 작업들을 분리하여 Multicast_ApplySnowOperations RPC로 일괄 발송합니다.
@@ -197,10 +197,6 @@ private:
 	// 서버 전송용: 아직 클라이언트로 전송되지 않은 눈 작업 묶음 대기열
 	TArray<FDRSnowOperationRecord> PendingSnowBroadcastOperations;
 	FTimerHandle SnowOperationBroadcastTimer;
-
-	// 기본 전송 주기 (초당 30회) 및 순간 폭주시 즉시 발송하는 상한 개수
-	static constexpr float SnowOperationBroadcastInterval = 1.f / 30.f;
-	static constexpr int32 MaxSnowOperationsPerBatch = 16;
 
 	// 공통: 눈 작업 고유 번호 (서버: 순차 발급, 클라이언트: 중복 처리 방지용)
 	int32 NextSnowOperationSequence = 0;

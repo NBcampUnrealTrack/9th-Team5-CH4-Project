@@ -23,12 +23,14 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Zipline);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stealthed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Aiming_Throw);
 	
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Throw);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MovementAction);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Grapple);
@@ -46,6 +48,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SlowProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SnowWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grab);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grapple);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
@@ -95,6 +98,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_HotPack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grab);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grapple);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);

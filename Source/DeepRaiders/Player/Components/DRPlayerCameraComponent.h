@@ -19,6 +19,25 @@ enum class EDRCameraPerspectiveState : uint8
 	ExitingFirstPerson
 };
 
+UENUM(BlueprintType)
+enum class EDRPlayerCameraState : uint8
+{
+	Default,
+	ThrowAim
+};
+
+USTRUCT(BlueprintType)
+struct FDRPlayerCameraStateSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = "0.0", Units = "cm"))
+	float TargetArmLength = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (Units = "cm"))
+	FVector SocketOffset = FVector(0.f, 90.f, 30.f);
+};
+
 /**
  * 로컬 플레이어 카메라의 추적 보정, 흔들림과 화면 전환을 한 곳에서 관리한다.
  * Scene Component인 CameraBoom / FollowCamera는 소유 Character가 생성하고,
@@ -60,6 +79,7 @@ private:
 		const FVector& OldVelocity);
 
 	void UpdateVerticalFollow(bool bAllowInterpolation, float DeltaSeconds);
+	void UpdateCameraState(float DeltaSeconds);
 	void UpdateAutomaticFirstPersonView(float DeltaSeconds);
 	void UpdateCameraSpace(float DeltaSeconds);
 	void UpdatePerspectiveState(float DeltaSeconds);
@@ -67,7 +87,7 @@ private:
 	void FinishFirstPersonTransition();
 	void UpdateFirstPersonVisualVisibility();
 	USceneComponent* FindFirstPersonCameraAnchor() const;
-	FTransform GetDesiredThirdPersonCameraTransform(float ArmLength) const;
+	FTransform GetDesiredThirdPersonCameraTransform(float ArmLength, const FVector& SocketOffset) const;
 	float EvaluateCameraSpace(
 		const FVector& TraceStart,
 		const FTransform& DesiredCameraTransform,
@@ -87,7 +107,16 @@ private:
 	void ApplyCameraCollisionSettings() const;
 	void ApplyTargetLagSettings() const;
 	void ApplyCameraBoomLocation() const;
+	EDRPlayerCameraState ResolveDesiredCameraState() const;
+	const FDRPlayerCameraStateSettings& GetCameraStateSettings(EDRPlayerCameraState CameraState) const;
 	bool IsLocallyControlledOwner() const;
+
+	/** 투척 조준 중 사용할 3인칭 오버숄더 카메라 설정이다. 자동 1인칭 전환이 활성화되면 1인칭이 우선한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|State")
+	FDRPlayerCameraStateSettings ThrowAimCameraSettings;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|State", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float CameraStateBlendSpeed = 5.f;
 
 	/** 카메라 컴포넌트가 지형 충돌을 직접 검사한다. Spring Arm 자체 충돌은 사용하지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision")
@@ -248,6 +277,11 @@ private:
 	FDelegateHandle MovementUpdatedDelegateHandle;
 
 	FVector CameraBoomBaseRelativeLocation = FVector::ZeroVector;
+	FDRPlayerCameraStateSettings DefaultCameraSettings;
+	float CurrentCameraStateArmLength = 450.f;
+	FVector CurrentCameraStateSocketOffset = FVector::ZeroVector;
+	EDRPlayerCameraState TargetCameraState = EDRPlayerCameraState::Default;
+	bool bCameraStateInitialized = false;
 	float SmoothedCameraPivotZ = 0.f;
 	bool bVerticalFollowInitialized = false;
 	bool bVerticalFollowActive = false;

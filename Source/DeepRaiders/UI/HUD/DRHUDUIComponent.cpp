@@ -11,6 +11,7 @@
 #include "Engine/LocalPlayer.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
+#include "View/MVVMViewClass.h"
 
 namespace DRHUDUI
 {
@@ -29,7 +30,16 @@ namespace DRHUDUI
 		int32 RegisteredCount = 0;
 		if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(Widget))
 		{
-			RegisteredCount += View->SetViewModel(ViewModelName, ViewModel) ? 1 : 0;
+			const UMVVMViewClass* ViewClass = View->GetViewClass();
+			const bool bHasViewModel = IsValid(ViewClass) && ViewClass->GetSources().ContainsByPredicate(
+				[ViewModelName](const FMVVMViewClass_Source& Source)
+				{
+					return Source.IsViewModel() && Source.GetName() == ViewModelName;
+				});
+			if (bHasViewModel)
+			{
+				RegisteredCount += View->SetViewModel(ViewModelName, ViewModel) ? 1 : 0;
+			}
 		}
 
 		TArray<UWidget*> ChildWidgets;

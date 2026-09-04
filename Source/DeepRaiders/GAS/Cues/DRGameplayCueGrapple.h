@@ -46,7 +46,11 @@ private:
 	
 	bool BeginPresentation(AActor* Target, const FGameplayCueParameters& Parameters);
 	
-	bool ResolveStartAttachment(AActor* Target, USceneComponent*& OutComponent, FName& OutSocketName) const;
+	bool ResolveStartAttachment(
+		AActor* Target,
+		const UObject* SourceObject,
+		USceneComponent*& OutComponent,
+		FName& OutSocketName) const;
 	
 	FVector GetCurrentStartLocation() const;
 	float CalculatePhaseDuration(const FVector& StartLocation, const FVector& EndLocation, float Speed) const;
@@ -78,6 +82,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
 	FName LaunchSocketName = TEXT("VFXPoint");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
+	FName SkillLaunchSocketName = TEXT("S_HandGrip_R");
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
 		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))

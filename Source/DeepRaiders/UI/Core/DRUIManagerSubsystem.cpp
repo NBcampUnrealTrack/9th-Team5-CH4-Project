@@ -354,6 +354,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 
 	if (IsValid(ActiveModal))
 	{
+		ActiveModal->SetIsFocusable(true);
 		FInputModeUIOnly InputMode;
 		InputMode.SetWidgetToFocus(ActiveModal->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -365,6 +366,7 @@ void UDRUIManagerSubsystem::RefreshInputMode()
 	if (IsValid(ActiveMenu))
 	{
 		// 메뉴 조작 중에는 게임 입력을 막고 UI 입력만 받는다.
+		ActiveMenu->SetIsFocusable(true);
 		FInputModeUIOnly InputMode;
 		InputMode.SetWidgetToFocus(ActiveMenu->TakeWidget());
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);

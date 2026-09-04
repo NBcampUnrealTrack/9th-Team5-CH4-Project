@@ -1,36 +1,24 @@
-﻿
-#include "DRGA_GrappleItem.h"
+#include "DRGA_GrappleSkill.h"
 
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Grapple/DRGrappleTargetActor.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Input/DRInputTypes.h"
-#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
-#include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
-#include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
 
-UDRGA_GrappleItem::UDRGA_GrappleItem()
+UDRGA_GrappleSkill::UDRGA_GrappleSkill()
 {
-	InstancingPolicy =
-		EGameplayAbilityInstancingPolicy::InstancedPerActor;
-
-	NetExecutionPolicy =
-		EGameplayAbilityNetExecutionPolicy::LocalPredicted;
-
 	FGameplayTagContainer InitialAbilityTags;
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill_Grapple);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_MovementAction);
-	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Item_Grapple);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Input_SecondaryCancel);
-
 	SetAssetTags(InitialAbilityTags);
 
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_MovementAction);
@@ -42,42 +30,36 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack);
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 
-	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
-	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
-	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
-	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
-
 	TargetActorClass = ADRGrappleTargetActor::StaticClass();
 }
 
-bool UDRGA_GrappleItem::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+bool UDRGA_GrappleSkill::CanActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTagContainer* SourceTags,
+	const FGameplayTagContainer* TargetTags,
+	FGameplayTagContainer* OptionalRelevantTags) const
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
 	{
 		return false;
 	}
 
-	if (ResolveInputId(Handle, ActorInfo) != static_cast<int32>(EDRAbilityInputId::Primary))
-	{
-		return false;
-	}
+	const UDRSkillDefinition* SkillDefinition = ActorInfo != nullptr
+		? Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo))
+		: nullptr;
+	const ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
+	const UDRMovementActionComponent* MovementAction = IsValid(Character)
+		? Character->GetMovementActionComponent()
+		: nullptr;
 
-	const UDRItemDefinition* Definition = Cast<UDRItemDefinition>(GetSourceObject(Handle, ActorInfo));
-
-	if (!IsValid(Definition)
-		|| !TargetActorClass)
-	{
-		return false;
-	}
-
-	UDRInventoryComponent* Inventory = nullptr;
-	FGuid InstanceId;
-
-	return ResolveSelectedItem(ActorInfo, Definition, Inventory, InstanceId);
+	return IsValid(SkillDefinition)
+		&& TargetActorClass
+		&& IsValid(MovementAction)
+		&& !MovementAction->IsMovementActionActive();
 }
 
-void UDRGA_GrappleItem::ActivateAbility(
+void UDRGA_GrappleSkill::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo,
@@ -85,38 +67,30 @@ void UDRGA_GrappleItem::ActivateAbility(
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	ActiveItemDefinition = Cast<UDRItemDefinition>(GetSourceObject(Handle, ActorInfo));
-
-	UDRInventoryComponent* Inventory = nullptr;
-
-	if (!IsValid(ActiveItemDefinition)
-		|| !ResolveSelectedItem(ActorInfo, ActiveItemDefinition, Inventory, ActiveInstanceId))
+	ActiveSkillDefinition = Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo));
+	if (!IsValid(ActiveSkillDefinition))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	GrapplePhase = EDRGrapplePhase::Targeting;
-
-	/*
-	 * HookFlying에서는 우클릭 취소를 받지 않는다.
-	 * StartCancelEventTask는 실제 Grappling 진입에 성공한 뒤 호출한다.
-	 */
+	GrapplePhase = EDRGrappleSkillPhase::Targeting;
 	StartTargeting();
 }
 
-void UDRGA_GrappleItem::StartTargeting()
+void UDRGA_GrappleSkill::StartTargeting()
 {
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	
-	if (ActorInfo == nullptr)
+	if (GetCurrentActorInfo() == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
-	
-	TargetDataTask = UAbilityTask_WaitTargetData::WaitTargetData(this,
-		TEXT("GrappleTargetData"), EGameplayTargetingConfirmation::Instant, TargetActorClass);
+
+	TargetDataTask = UAbilityTask_WaitTargetData::WaitTargetData(
+		this,
+		TEXT("GrappleSkillTargetData"),
+		EGameplayTargetingConfirmation::Instant,
+		TargetActorClass);
 
 	if (!IsValid(TargetDataTask))
 	{
@@ -128,17 +102,12 @@ void UDRGA_GrappleItem::StartTargeting()
 	TargetDataTask->Cancelled.AddDynamic(this, &ThisClass::HandleTargetDataCanceled);
 
 	AGameplayAbilityTargetActor* SpawnedTargetActor = nullptr;
-	
-	// 원격 클라이언트의 경우 BeginSpawningActor()에 항상 실패한다.
-	// 실패에도 그냥 넘어가고 서버가 보내주는 TargetDelegate를 기다린다.
 	if (TargetDataTask->BeginSpawningActor(this, TargetActorClass, SpawnedTargetActor))
 	{
 		ADRGrappleTargetActor* GrappleTargetActor = Cast<ADRGrappleTargetActor>(SpawnedTargetActor);
-
 		if (!IsValid(GrappleTargetActor))
 		{
 			SpawnedTargetActor->Destroy();
-
 			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 			return;
 		}
@@ -148,16 +117,20 @@ void UDRGA_GrappleItem::StartTargeting()
 	}
 }
 
-void UDRGA_GrappleItem::StartCancelEventTask()
+void UDRGA_GrappleSkill::StartCancelEventTask()
 {
 	if (IsValid(CancelEventTask))
 	{
 		return;
 	}
-	
-	CancelEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this,
-		DRGameplayTags::Event_MovementAction_Cancel, nullptr, true, true);
-	
+
+	CancelEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+		this,
+		DRGameplayTags::Event_MovementAction_Cancel,
+		nullptr,
+		true,
+		true);
+
 	if (!IsValid(CancelEventTask))
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
@@ -168,10 +141,10 @@ void UDRGA_GrappleItem::StartCancelEventTask()
 	CancelEventTask->ReadyForActivation();
 }
 
-bool UDRGA_GrappleItem::BeginHookFlight(const FVector& InHookLocation, const FVector& InHookNormal)
+bool UDRGA_GrappleSkill::BeginHookFlight(const FVector& InHookLocation, const FVector& InHookNormal)
 {
 	if (!IsActive()
-		|| GrapplePhase != EDRGrapplePhase::Targeting
+		|| GrapplePhase != EDRGrappleSkillPhase::Targeting
 		|| InHookLocation.ContainsNaN()
 		|| InHookNormal.ContainsNaN())
 	{
@@ -179,29 +152,17 @@ bool UDRGA_GrappleItem::BeginHookFlight(const FVector& InHookLocation, const FVe
 	}
 
 	const FVector SafeHookNormal = InHookNormal.GetSafeNormal();
-
-	if (SafeHookNormal.IsNearlyZero())
-	{
-		return false;
-	}
-
 	UWorld* World = GetWorld();
-
-	if (!IsValid(World))
+	if (SafeHookNormal.IsNearlyZero() || !IsValid(World))
 	{
 		return false;
 	}
 
-	/*
-	 * 훅 위치와 표면 노멀은 비행 시작 시 한 번만 확정한다.
-	 * 이후 이동 시작, 평면 이탈 검사, GameplayCue가 모두 같은 값을 사용한다.
-	 */
 	HookLocation = InHookLocation;
 	HookSurfaceNormal = SafeHookNormal;
 	HookFlightDuration = CalculateHookFlightDuration(HookLocation);
-	GrapplePhase = EDRGrapplePhase::HookFlying;
+	GrapplePhase = EDRGrappleSkillPhase::HookFlying;
 
-	// 훅 비행 중에도 아이템 변경과 다른 이동 액션은 막되, 실제 캐릭터 이동은 아직 시작하지 않는다.
 	ApplyMovementActionTag();
 	StartGrappleGameplayCue(HookLocation, HookSurfaceNormal);
 
@@ -211,47 +172,45 @@ bool UDRGA_GrappleItem::BeginHookFlight(const FVector& InHookLocation, const FVe
 		return true;
 	}
 
-	World->GetTimerManager().SetTimer(HookFlightTimerHandle,this, &ThisClass::HandleHookFlightFinished,
-		HookFlightDuration, false);
-
+	World->GetTimerManager().SetTimer(
+		HookFlightTimerHandle,
+		this,
+		&ThisClass::HandleHookFlightFinished,
+		HookFlightDuration,
+		false);
 	return true;
 }
 
-float UDRGA_GrappleItem::CalculateHookFlightDuration(const FVector& InHookLocation) const
+float UDRGA_GrappleSkill::CalculateHookFlightDuration(const FVector& InHookLocation) const
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	const AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
-
 	const float MinimumDuration = FMath::Max(GrappleSettings.MinimumHookFlightDuration, 0.f);
 
-	if (!IsValid(AvatarActor) 
-		|| InHookLocation.ContainsNaN())
+	if (!IsValid(AvatarActor) || InHookLocation.ContainsNaN())
 	{
 		return MinimumDuration;
 	}
 
 	const float TravelSpeed = FMath::Max(GrappleSettings.HookTravelSpeed, 0.f);
-
 	if (TravelSpeed <= KINDA_SMALL_NUMBER)
 	{
 		return MinimumDuration;
 	}
 
-	const float Distance = FVector::Distance(AvatarActor->GetActorLocation(), InHookLocation);
-	return FMath::Max(Distance / TravelSpeed, MinimumDuration);
+	return FMath::Max(FVector::Distance(AvatarActor->GetActorLocation(), InHookLocation) / TravelSpeed, MinimumDuration);
 }
 
-void UDRGA_GrappleItem::HandleHookFlightFinished()
+void UDRGA_GrappleSkill::HandleHookFlightFinished()
 {
 	HookFlightTimerHandle.Invalidate();
 
-	if (!IsActive() || GrapplePhase != EDRGrapplePhase::HookFlying)
+	if (!IsActive() || GrapplePhase != EDRGrappleSkillPhase::HookFlying)
 	{
 		return;
 	}
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
 	if (ActorInfo == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
@@ -259,7 +218,6 @@ void UDRGA_GrappleItem::HandleHookFlightFinished()
 	}
 
 	bool bMovementStartedSuccessfully = false;
-
 	if (ActorInfo->IsNetAuthority())
 	{
 		bMovementStartedSuccessfully = StartAuthoritativeMovement();
@@ -275,19 +233,15 @@ void UDRGA_GrappleItem::HandleHookFlightFinished()
 	}
 }
 
-void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleSkill::HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData)
 {
-	if (!IsActive()
-		|| GrapplePhase != EDRGrapplePhase::Targeting
-		|| TargetData.Num() != 1)
+	if (!IsActive() || GrapplePhase != EDRGrappleSkillPhase::Targeting || TargetData.Num() != 1)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
-
 		return;
 	}
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
 	if (ActorInfo == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
@@ -298,25 +252,23 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 	{
 		FVector ServerTargetLocation;
 		FVector ServerTargetNormal;
-		
-		const EDRGrappleTargetValidationResult ValidationResult = 
+		const EDRTargetValidationResult ValidationResult =
 			ValidateServerTargetData(TargetData, ServerTargetLocation, ServerTargetNormal);
-		
-		if (ValidationResult == EDRGrappleTargetValidationResult::Succeeded)
+
+		if (ValidationResult == EDRTargetValidationResult::Succeeded)
 		{
 			if (!BeginHookFlight(ServerTargetLocation, ServerTargetNormal))
 			{
 				QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 			}
-			
 			return;
 		}
 
-		if (ValidationResult == EDRGrappleTargetValidationResult::Failed)
+		if (ValidationResult == EDRTargetValidationResult::Failed)
 		{
 			PlayFailedGrappleGameplayCue(ServerTargetLocation);
 		}
-		
+
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
@@ -328,176 +280,138 @@ void UDRGA_GrappleItem::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
 	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
-
 	if (ClientHit == nullptr)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
-	
+
 	if (ADRGrappleTargetActor::IsValidGrappleSurface(*ClientHit))
 	{
 		if (!BeginHookFlight(ClientHit->ImpactPoint, ClientHit->ImpactNormal))
 		{
 			QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		}
-		
 		return;
 	}
-	
+
 	const FVector FailedLocation = ClientHit->IsValidBlockingHit() ? ClientHit->ImpactPoint : ClientHit->TraceEnd;
-	
 	PlayFailedGrappleGameplayCue(FailedLocation);
 	QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 }
 
-void UDRGA_GrappleItem::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
+void UDRGA_GrappleSkill::HandleTargetDataCanceled(const FGameplayAbilityTargetDataHandle& TargetData)
 {
 	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
 
-void UDRGA_GrappleItem::HandleCancelEventReceived(FGameplayEventData Payload)
+void UDRGA_GrappleSkill::HandleCancelEventReceived(FGameplayEventData Payload)
 {
-	// HookFlying에서 발생했던 취소 이벤트가 이동 시작 후까지 영향을 주지 않도록 실제 이동 단계만 허용한다.
-	if (GrapplePhase != EDRGrapplePhase::Grappling 
-		|| !bMovementStarted)
+	if (GrapplePhase == EDRGrappleSkillPhase::Grappling && bMovementStarted)
 	{
-		return;
+		QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 	}
-	
-	QueueEndGrapple(EDRMovementActionEndReason::Cancelled);
 }
-bool UDRGA_GrappleItem::StartPredictedMovement()
+
+bool UDRGA_GrappleSkill::StartPredictedMovement()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	UWorld* World = GetWorld();
-
 	if (ActorInfo == nullptr
 		|| ActorInfo->IsNetAuthority()
 		|| !ActorInfo->IsLocallyControlled()
-		|| !IsValid(World)		
-		|| GrapplePhase != EDRGrapplePhase::HookFlying
+		|| !IsValid(World)
+		|| GrapplePhase != EDRGrappleSkillPhase::HookFlying
 		|| HookLocation.ContainsNaN()
 		|| HookSurfaceNormal.IsNearlyZero())
 	{
 		return false;
 	}
 
-	const FVector SafeHookNormal = HookSurfaceNormal.GetSafeNormal();
-	if (SafeHookNormal.IsNearlyZero())
-	{
-		return false;
-	}
-	
-	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
-
-	if (!IsValid(Character))
-	{
-		return false;
-	}
-
-	UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
-	UDRCharacterMovementComponent* Movement =
-		Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
-
+	ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
+	UDRMovementActionComponent* MovementAction = IsValid(Character) ? Character->GetMovementActionComponent() : nullptr;
+	UDRCharacterMovementComponent* Movement = IsValid(Character)
+		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
+		: nullptr;
 	if (!IsValid(MovementAction) || !IsValid(Movement))
 	{
 		return false;
 	}
 
-	const FDRMovementActionState State = BuildMovementActionState(HookLocation);
-
-	if (!MovementAction->StartPredictedMovementAction(State))
+	if (!MovementAction->StartPredictedMovementAction(BuildMovementActionState(HookLocation)))
 	{
 		return false;
 	}
 
+	if (!CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo()))
+	{
+		MovementAction->EndMovementAction(EDRMovementActionEndReason::Invalidated);
+		return false;
+	}
 
 	MovementAction->OnMovementActionEnded.RemoveAll(this);
 	MovementAction->OnMovementActionSimulated.RemoveAll(this);
 	MovementAction->OnMovementActionEnded.AddUObject(this, &ThisClass::HandleMovementActionEnded);
 	MovementAction->OnMovementActionSimulated.AddUObject(this, &ThisClass::HandleMovementActionSimulated);
-
 	Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
-	
+
 	MovementStartTimeSeconds = World->GetTimeSeconds();
 	bMovementStarted = true;
-	GrapplePhase = EDRGrapplePhase::Grappling;
-	
-	// 우클릭 취소는 훅이 도착하고 실제 이동이 시작된 이후에만 활성화
+	GrapplePhase = EDRGrappleSkillPhase::Grappling;
 	StartCancelEventTask();
-
 	return true;
 }
-bool UDRGA_GrappleItem::StartAuthoritativeMovement()
+
+bool UDRGA_GrappleSkill::StartAuthoritativeMovement()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	UWorld* World = GetWorld();
-
 	if (ActorInfo == nullptr
 		|| !ActorInfo->IsNetAuthority()
 		|| !IsValid(World)
-		|| GrapplePhase != EDRGrapplePhase::HookFlying
+		|| !IsValid(ActiveSkillDefinition)
+		|| GrapplePhase != EDRGrappleSkillPhase::HookFlying
 		|| HookLocation.ContainsNaN()
 		|| HookSurfaceNormal.IsNearlyZero())
 	{
 		return false;
 	}
 
-	ADRPlayerCharacter* Character =	Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
-
-	if (!IsValid(Character))
+	ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
+	UDRMovementActionComponent* MovementAction = IsValid(Character) ? Character->GetMovementActionComponent() : nullptr;
+	UDRCharacterMovementComponent* Movement = IsValid(Character)
+		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
+		: nullptr;
+	if (!IsValid(MovementAction) || !IsValid(Movement))
 	{
 		return false;
 	}
 
-	UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
-	UDRCharacterMovementComponent* Movement = Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
-
-	UDRInventoryComponent* Inventory = nullptr;
-	FGuid InstanceId;
-
-	if (!IsValid(MovementAction)
-		|| !IsValid(Movement)
-		|| !ResolveSelectedItem(ActorInfo, ActiveItemDefinition, Inventory,InstanceId)
-		|| InstanceId != ActiveInstanceId)
+	if (!MovementAction->StartAuthoritativeMovementAction(BuildMovementActionState(HookLocation)))
 	{
 		return false;
 	}
 
-	const FDRMovementActionState State = BuildMovementActionState(HookLocation);
-
-	if (!MovementAction->StartAuthoritativeMovementAction(State))
+	if (!CommitAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo()))
 	{
+		MovementAction->EndMovementAction(EDRMovementActionEndReason::Invalidated);
 		return false;
 	}
 
-	if (!Inventory->TryRemoveItemInstance(ActiveInstanceId, 1))
-	{
-		MovementAction->EndMovementAction(
-			EDRMovementActionEndReason::Invalidated);
-
-		return false;
-	}
-
-	
 	MovementAction->OnMovementActionEnded.RemoveAll(this);
 	MovementAction->OnMovementActionSimulated.RemoveAll(this);
 	MovementAction->OnMovementActionEnded.AddUObject(this, &ThisClass::HandleMovementActionEnded);
 	MovementAction->OnMovementActionSimulated.AddUObject(this, &ThisClass::HandleMovementActionSimulated);
-	
 	Movement->SetCustomMovementMode(EDRCustomMovementMode::MovementAction);
-	
+
 	MovementStartTimeSeconds = World->GetTimeSeconds();
 	bMovementStarted = true;
-	GrapplePhase = EDRGrapplePhase::Grappling;
-	
+	GrapplePhase = EDRGrappleSkillPhase::Grappling;
 	StartCancelEventTask();
-	
 	return true;
 }
 
-FDRMovementActionState UDRGA_GrappleItem::BuildMovementActionState(const FVector& InHookLocation) const
+FDRMovementActionState UDRGA_GrappleSkill::BuildMovementActionState(const FVector& InHookLocation) const
 {
 	FDRMovementActionState State;
 	State.bActive = true;
@@ -509,11 +423,10 @@ FDRMovementActionState UDRGA_GrappleItem::BuildMovementActionState(const FVector
 	State.ControlScale = GrappleSettings.ControlScale;
 	State.ViewDirectionWeight = GrappleSettings.ViewPullWeight;
 	State.MinimumReferenceClosingSpeed = FMath::Max(GrappleSettings.MinimumClosingSpeed, 0.f);
-
 	return State;
 }
 
-void UDRGA_GrappleItem::ApplyMovementActionTag()
+void UDRGA_GrappleSkill::ApplyMovementActionTag()
 {
 	if (bMovementActionTagApplied)
 	{
@@ -521,18 +434,17 @@ void UDRGA_GrappleItem::ApplyMovementActionTag()
 	}
 
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	if (!IsValid(ASC)
-		|| ActorInfo == nullptr)
+	if (!IsValid(ASC) || ActorInfo == nullptr)
 	{
 		return;
 	}
 
 	if (ActorInfo->IsNetAuthority())
 	{
-		ASC->AddLooseGameplayTag(DRGameplayTags::State_MovementAction_Active, 1, 
+		ASC->AddLooseGameplayTag(
+			DRGameplayTags::State_MovementAction_Active,
+			1,
 			EGameplayTagReplicationState::TagAndCountToAll);
 	}
 	else if (ActorInfo->IsLocallyControlled())
@@ -543,7 +455,7 @@ void UDRGA_GrappleItem::ApplyMovementActionTag()
 	bMovementActionTagApplied = true;
 }
 
-void UDRGA_GrappleItem::RemoveMovementActionTag()
+void UDRGA_GrappleSkill::RemoveMovementActionTag()
 {
 	if (!bMovementActionTagApplied)
 	{
@@ -551,18 +463,17 @@ void UDRGA_GrappleItem::RemoveMovementActionTag()
 	}
 
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
-
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	if (!IsValid(ASC)
-		|| ActorInfo == nullptr)
+	if (!IsValid(ASC) || ActorInfo == nullptr)
 	{
 		return;
 	}
 
 	if (ActorInfo->IsNetAuthority())
 	{
-		ASC->RemoveLooseGameplayTag(DRGameplayTags::State_MovementAction_Active, 1, 
+		ASC->RemoveLooseGameplayTag(
+			DRGameplayTags::State_MovementAction_Active,
+			1,
 			EGameplayTagReplicationState::TagAndCountToAll);
 	}
 	else if (ActorInfo->IsLocallyControlled())
@@ -573,20 +484,21 @@ void UDRGA_GrappleItem::RemoveMovementActionTag()
 	bMovementActionTagApplied = false;
 }
 
-UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateServerTargetData(
-	const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutTargetLocation, FVector& OutTargetNormal) const
+UDRGA_GrappleSkill::EDRTargetValidationResult UDRGA_GrappleSkill::ValidateServerTargetData(
+	const FGameplayAbilityTargetDataHandle& TargetData,
+	FVector& OutTargetLocation,
+	FVector& OutTargetNormal) const
 {
 	OutTargetLocation = FVector::ZeroVector;
 	OutTargetNormal = FVector::ZeroVector;
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
 	if (ActorInfo == nullptr
 		|| !ActorInfo->IsNetAuthority()
 		|| TargetData.Num() != 1
-		|| !IsValid(ActiveItemDefinition))
+		|| !IsValid(ActiveSkillDefinition))
 	{
-		return EDRGrappleTargetValidationResult::InvalidRequest;
+		return EDRTargetValidationResult::InvalidRequest;
 	}
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
@@ -594,13 +506,12 @@ UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateS
 	APlayerController* PlayerController = ActorInfo->PlayerController.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
 	UWorld* World = GetWorld();
-
 	if (ClientHit == nullptr
 		|| !IsValid(PlayerController)
 		|| !IsValid(AvatarActor)
 		|| !IsValid(World))
 	{
-		return EDRGrappleTargetValidationResult::InvalidRequest;
+		return EDRTargetValidationResult::InvalidRequest;
 	}
 
 	FVector ServerViewLocation;
@@ -609,148 +520,75 @@ UDRGA_GrappleItem::EDRGrappleTargetValidationResult UDRGA_GrappleItem::ValidateS
 
 	if (FVector::Dist(ServerViewLocation, ClientHit->TraceStart) > GrappleSettings.ServerViewOriginTolerance)
 	{
-		return EDRGrappleTargetValidationResult::InvalidRequest;
+		return EDRTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector ClientAimDirection = (ClientHit->TraceEnd - ClientHit->TraceStart).GetSafeNormal();
-
 	if (ClientAimDirection.IsNearlyZero())
 	{
-		return EDRGrappleTargetValidationResult::InvalidRequest;
+		return EDRTargetValidationResult::InvalidRequest;
 	}
 
 	const float MaxAngle = FMath::Clamp(GrappleSettings.ServerAimAngleTolerance, 0.f, 90.f);
 	const float MinimumDot = FMath::Cos(FMath::DegreesToRadians(MaxAngle));
-
 	if (FVector::DotProduct(ClientAimDirection, ServerViewRotation.Vector()) < MinimumDot)
 	{
-		return EDRGrappleTargetValidationResult::InvalidRequest;
+		return EDRTargetValidationResult::InvalidRequest;
 	}
 
 	const FVector TraceEnd = ServerViewLocation + ClientAimDirection * GrappleSettings.MaxDistance;
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRGrappleServerAim), false);
-
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRGrappleSkillServerAim), false);
 	QueryParams.AddIgnoredActor(AvatarActor);
 
 	FHitResult ServerHit;
+	const bool bBlockingHit = World->LineTraceSingleByChannel(
+		ServerHit,
+		ServerViewLocation,
+		TraceEnd,
+		GrappleSettings.AimTraceChannel,
+		QueryParams);
 
-	const bool bBlockingHit = World->LineTraceSingleByChannel(ServerHit,ServerViewLocation,
-			TraceEnd, GrappleSettings.AimTraceChannel, QueryParams);
-
-	if (!bBlockingHit
-		|| !ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
+	if (!bBlockingHit || !ADRGrappleTargetActor::IsValidGrappleSurface(ServerHit))
 	{
 		OutTargetLocation = bBlockingHit ? ServerHit.ImpactPoint : TraceEnd;
 		OutTargetNormal = bBlockingHit ? ServerHit.ImpactNormal.GetSafeNormal() : FVector::ZeroVector;
-		return EDRGrappleTargetValidationResult::Failed;
+		return EDRTargetValidationResult::Failed;
 	}
 
 	OutTargetLocation = ServerHit.ImpactPoint;
 	OutTargetNormal = ServerHit.ImpactNormal.GetSafeNormal();
-
-	return EDRGrappleTargetValidationResult::Succeeded;
+	return EDRTargetValidationResult::Succeeded;
 }
 
-int32 UDRGA_GrappleItem::ResolveSessionId() const
+int32 UDRGA_GrappleSkill::ResolveSessionId() const
 {
-	const int32 PredictionKey =	static_cast<int32>(GetCurrentActivationInfo().GetActivationPredictionKey().Current);
-
+	const int32 PredictionKey = static_cast<int32>(GetCurrentActivationInfo().GetActivationPredictionKey().Current);
 	return FMath::Max(PredictionKey, 1);
 }
 
-FVector UDRGA_GrappleItem::ResolveViewDirection() const
+FVector UDRGA_GrappleSkill::ResolveViewDirection() const
 {
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	const ADRPlayerCharacter* Character = ActorInfo != nullptr ?
-		Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
-	
+	const ADRPlayerCharacter* Character = GetPlayerCharacter(GetCurrentActorInfo());
 	if (!IsValid(Character))
 	{
 		return FVector::ZeroVector;
 	}
-	
+
 	const FVector ViewDirection = Character->GetBaseAimRotation().Vector().GetSafeNormal();
-	
 	return !ViewDirection.IsNearlyZero() ? ViewDirection : Character->GetActorForwardVector().GetSafeNormal();
 }
 
-int32 UDRGA_GrappleItem::ResolveInputId(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo) const
+void UDRGA_GrappleSkill::HandleMovementActionSimulated(const FDRMovementActionSimulationResult& Result)
 {
-	if (ActorInfo == nullptr
-		|| !ActorInfo->AbilitySystemComponent.IsValid())
-	{
-		return INDEX_NONE;
-	}
-
-	const FGameplayAbilitySpec* Spec = ActorInfo->AbilitySystemComponent->FindAbilitySpecFromHandle(Handle);
-
-	return Spec != nullptr ? Spec->InputID : INDEX_NONE;
-}
-
-bool UDRGA_GrappleItem::ResolveSelectedItem(
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const UDRItemDefinition* ExpectedDefinition,
-	UDRInventoryComponent*& OutInventory,
-	FGuid& OutInstanceId) const
-{
-	OutInventory = nullptr;
-	OutInstanceId.Invalidate();
-
-	if (ActorInfo == nullptr
-		|| !IsValid(ExpectedDefinition))
-	{
-		return false;
-	}
-
-	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
-
-	if (!IsValid(PlayerController))
-	{
-		return false;
-	}
-
-	UDRInventoryComponent* Inventory = PlayerController->GetInventoryComponent();
-
-	UDRQuickSlotComponent* QuickSlot = PlayerController->GetQuickSlotComponent();
-
-	if (!IsValid(Inventory)
-		|| !IsValid(QuickSlot))
-	{
-		return false;
-	}
-
-	const FGuid InstanceId = QuickSlot->GetSelectedInstanceId();
-
-	const FDRItemInstance* ItemInstance = Inventory->FindItemInstance(InstanceId);
-
-	if (ItemInstance == nullptr
-		|| ItemInstance->Definition.Get() != ExpectedDefinition
-		|| ItemInstance->Quantity <= 0)
-	{
-		return false;
-	}
-
-	OutInventory = Inventory;
-	OutInstanceId = InstanceId;
-
-	return true;
-}
-void UDRGA_GrappleItem::HandleMovementActionSimulated(
-	const FDRMovementActionSimulationResult& Result)
-{
-	if (GrapplePhase != EDRGrapplePhase::Grappling
+	if (GrapplePhase != EDRGrappleSkillPhase::Grappling
 		|| !bMovementStarted
-		|| !IsValid(ActiveItemDefinition))
+		|| !IsValid(ActiveSkillDefinition))
 	{
 		return;
 	}
 
 	const float ElapsedTime = GetMovementElapsedTime();
-
-	if (GrappleSettings.MaxDuration > 0.f
-		&& ElapsedTime >= GrappleSettings.MaxDuration)
+	if (GrappleSettings.MaxDuration > 0.f && ElapsedTime >= GrappleSettings.MaxDuration)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 		return;
@@ -758,14 +596,12 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 
 	const FVector ToHook = HookLocation - Result.Location;
 	const float ArrivalDistance = FMath::Max(GrappleSettings.ArrivalDistance, 0.f);
-
 	if (ToHook.SizeSquared() <= FMath::Square(ArrivalDistance))
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 		return;
 	}
 
-	// 그래플 시작 직후에는 훅 평면을 넘어가더라도 설정 시간까지 연결을 보장한다.
 	if (ElapsedTime < GrappleSettings.ViewDetachProtectionDuration)
 	{
 		return;
@@ -773,64 +609,43 @@ void UDRGA_GrappleItem::HandleMovementActionSimulated(
 
 	if (HookSurfaceNormal.IsNearlyZero())
 	{
-		/*
-		 * 정상적인 시작 경로에서는 발생하지 않는다.
-		 * 유효한 평면을 구성할 수 없다면 연결을 계속 유지하지 않는다.
-		 */
 		QueueEndGrapple(EDRMovementActionEndReason::Invalidated);
 		return;
 	}
 
 	const FVector HookToCharacterDirection = (Result.Location - HookLocation).GetSafeNormal();
-
 	if (HookToCharacterDirection.IsNearlyZero())
 	{
 		return;
 	}
 
-	const float SurfaceSideDot = FVector::DotProduct(HookSurfaceNormal, HookToCharacterDirection);
-
-	/*
-	 * 양수: 캐릭터가 훅이 부착된 표면의 바깥쪽에 있다.
-	 * 0 이하: 캐릭터가 훅 평면과 나란하거나 반대쪽으로 넘어갔다.
-	 */
-	if (SurfaceSideDot <= 0.f)
+	if (FVector::DotProduct(HookSurfaceNormal, HookToCharacterDirection) <= 0.f)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 		return;
 	}
-	
+
 	const FVector ToHookDirection = ToHook.GetSafeNormal();
 	const FVector ViewDirection = ResolveViewDirection();
-	
-	if (ToHookDirection.IsNearlyZero()
-		|| ViewDirection.IsNearlyZero())
-	{
-		return;
-	}
-	
-	if (FVector::DotProduct(ViewDirection, ToHookDirection) <= 0.f)
+	if (!ToHookDirection.IsNearlyZero()
+		&& !ViewDirection.IsNearlyZero()
+		&& FVector::DotProduct(ViewDirection, ToHookDirection) <= 0.f)
 	{
 		QueueEndGrapple(EDRMovementActionEndReason::Completed);
 	}
 }
 
-void UDRGA_GrappleItem::HandleMovementActionEnded(
-	EDRMovementActionEndReason EndReason)
+void UDRGA_GrappleSkill::HandleMovementActionEnded(EDRMovementActionEndReason EndReason)
 {
-	if (bEndingGrapple)
+	if (!bEndingGrapple)
 	{
-		return;
+		QueueEndGrapple(EndReason);
 	}
-
-	QueueEndGrapple(EndReason);
 }
 
-void UDRGA_GrappleItem::QueueEndGrapple(
-	EDRMovementActionEndReason EndReason)
+void UDRGA_GrappleSkill::QueueEndGrapple(EDRMovementActionEndReason EndReason)
 {
-	if (bEndQueued
-		|| bEndingGrapple)
+	if (bEndQueued || bEndingGrapple)
 	{
 		return;
 	}
@@ -839,78 +654,66 @@ void UDRGA_GrappleItem::QueueEndGrapple(
 	PendingEndReason = EndReason;
 
 	UWorld* World = GetWorld();
-
 	if (!IsValid(World))
 	{
 		ApplyQueuedGrappleEnd();
 		return;
 	}
 
-	// 다음 프레임에 그래플 종료를 예약한다.
-	// 캐릭터에게 부여된 어빌리티를 정상 회수한 후에 어빌리티가 종료될 수 있도록
-	EndGrappleTimerHandle =
-		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ThisClass::ApplyQueuedGrappleEnd));
+	EndGrappleTimerHandle = World->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateUObject(this, &ThisClass::ApplyQueuedGrappleEnd));
 }
 
-void UDRGA_GrappleItem::ApplyQueuedGrappleEnd()
+void UDRGA_GrappleSkill::ApplyQueuedGrappleEnd()
 {
 	EndGrappleTimerHandle.Invalidate();
-	
 
-	if (!IsActive()
-		|| bEndingGrapple)
+	if (!IsActive() || bEndingGrapple)
 	{
 		bEndQueued = false;
 		PendingEndReason = EDRMovementActionEndReason::Invalidated;
 		return;
 	}
 
-	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), true,
+	EndAbility(
+		GetCurrentAbilitySpecHandle(),
+		GetCurrentActorInfo(),
+		GetCurrentActivationInfo(),
+		true,
 		PendingEndReason != EDRMovementActionEndReason::Completed);
 }
 
-void UDRGA_GrappleItem::StopMovementAction(
-	EDRMovementActionEndReason EndReason)
+void UDRGA_GrappleSkill::StopMovementAction(EDRMovementActionEndReason EndReason)
 {
 	bEndingGrapple = true;
 
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	ADRPlayerCharacter* Character = ActorInfo != nullptr ?
-		Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
-
+	ADRPlayerCharacter* Character = GetPlayerCharacter(GetCurrentActorInfo());
 	if (IsValid(Character))
 	{
 		UDRMovementActionComponent* MovementAction = Character->GetMovementActionComponent();
-		UDRCharacterMovementComponent* Movement = Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
+		UDRCharacterMovementComponent* Movement =
+			Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement());
+		const bool bShouldPreserveMomentum = bMovementStarted
+			&& (EndReason == EDRMovementActionEndReason::Completed
+				|| EndReason == EDRMovementActionEndReason::Cancelled);
 
-		const bool bShouldPreserveMomentum = bMovementStarted 
-			&& (EndReason == EDRMovementActionEndReason::Completed || EndReason == EDRMovementActionEndReason::Cancelled);
-		
-		/*
-		 * Custom Movement에서 벗어나기 전에 현재 횡방향 속도를 저장한다.
-		 * ExitCustomMovementMode 이후 저장하면 Falling의 일반 속도 제한이 먼저 적용될 수 있다.
-		 */
-		if (IsValid(Movement)
-			&& bShouldPreserveMomentum)
+		if (IsValid(Movement) && bShouldPreserveMomentum)
 		{
 			Movement->BeginAirborneMomentumPreservation();
 		}
-		
-		if (IsValid(MovementAction)
-			&& MovementAction->IsMovementActionActive())
+
+		if (IsValid(MovementAction) && MovementAction->IsMovementActionActive())
 		{
 			MovementAction->EndMovementAction(EndReason);
 		}
-		
+
 		if (IsValid(MovementAction))
 		{
 			MovementAction->OnMovementActionEnded.RemoveAll(this);
 			MovementAction->OnMovementActionSimulated.RemoveAll(this);
 		}
 
-		if (IsValid(Movement)
-			&& Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+		if (IsValid(Movement) && Movement->IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
 		{
 			Movement->ExitCustomMovementMode();
 		}
@@ -920,61 +723,50 @@ void UDRGA_GrappleItem::StopMovementAction(
 	bEndingGrapple = false;
 }
 
-float UDRGA_GrappleItem::GetMovementElapsedTime() const
+float UDRGA_GrappleSkill::GetMovementElapsedTime() const
 {
 	const UWorld* World = GetWorld();
-	
-	if (!bMovementStarted
-		|| !IsValid(World)
-		|| MovementStartTimeSeconds < 0.f)
+	if (!bMovementStarted || !IsValid(World) || MovementStartTimeSeconds < 0.f)
 	{
 		return 0.f;
 	}
-	
+
 	return FMath::Max(World->GetTimeSeconds() - MovementStartTimeSeconds, 0.f);
 }
 
-void UDRGA_GrappleItem::StartGrappleGameplayCue(const FVector& InHookLocation, const FVector& InHookNormal)
+void UDRGA_GrappleSkill::StartGrappleGameplayCue(
+	const FVector& InHookLocation,
+	const FVector& InHookNormal)
 {
 	if (bGrappleGameplayCueActive)
 	{
 		return;
 	}
-	
+
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
-	
-	if (!IsValid(ASC)
-		|| !IsValid(AvatarActor)
-		|| !IsValid(ActiveItemDefinition))
+	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(ActiveSkillDefinition))
 	{
 		return;
 	}
-	
+
 	FGameplayCueParameters Parameters;
 	Parameters.Location = InHookLocation;
 	Parameters.Normal = InHookNormal.ContainsNaN() ? FVector::ZeroVector : InHookNormal.GetSafeNormal();
 	Parameters.RawMagnitude = HookFlightDuration;
 	Parameters.Instigator = AvatarActor;
 	Parameters.EffectCauser = AvatarActor;
-	Parameters.SourceObject = ActiveItemDefinition;
-	
-	/*
- 	* RawMagnitude로 GA가 계산한 훅 비행 시간을 전달한다.
- 	* Cue와 실제 이동 시작 타이머가 같은 시간을 사용하므로 부착 연출과 이동 시작이 맞춰진다.
- 	*/
+	Parameters.SourceObject = ActiveSkillDefinition;
 	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active, Parameters);
-	
-	bGrappleGameplayCueActive = true;	
+	bGrappleGameplayCueActive = true;
 }
 
-void UDRGA_GrappleItem::PlayFailedGrappleGameplayCue(const FVector& FailedLocation)
+void UDRGA_GrappleSkill::PlayFailedGrappleGameplayCue(const FVector& FailedLocation)
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
 	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
-
 	if (!IsValid(ASC) || !IsValid(AvatarActor) || FailedLocation.ContainsNaN())
 	{
 		return;
@@ -985,31 +777,34 @@ void UDRGA_GrappleItem::PlayFailedGrappleGameplayCue(const FVector& FailedLocati
 	Parameters.RawMagnitude = CalculateHookFlightDuration(FailedLocation);
 	Parameters.Instigator = AvatarActor;
 	Parameters.EffectCauser = AvatarActor;
-	Parameters.SourceObject = ActiveItemDefinition;
-
-	// 실패 연출은 어빌리티 수명과 무관하게 스스로 재생을 끝내는 일회성 Cue다.
+	Parameters.SourceObject = ActiveSkillDefinition;
 	ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Failed, Parameters);
 }
 
-void UDRGA_GrappleItem::StopGrappleGameplayCue()
+void UDRGA_GrappleSkill::StopGrappleGameplayCue()
 {
 	if (!bGrappleGameplayCueActive)
 	{
 		return;
 	}
-	
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
 	{
 		ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_MovementAction_Grapple_Active);
 	}
-	
+
 	bGrappleGameplayCueActive = false;
 }
-void UDRGA_GrappleItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, 
-	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
+
+void UDRGA_GrappleSkill::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled)
 {
-	GrapplePhase = EDRGrapplePhase::Ending;
-	
+	GrapplePhase = EDRGrappleSkillPhase::Ending;
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(HookFlightTimerHandle);
@@ -1019,8 +814,11 @@ void UDRGA_GrappleItem::EndAbility(const FGameplayAbilitySpecHandle Handle, cons
 	HookFlightTimerHandle.Invalidate();
 	EndGrappleTimerHandle.Invalidate();
 
-	const EDRMovementActionEndReason EndReason = bEndQueued ? PendingEndReason : 
-		bWasCancelled ? EDRMovementActionEndReason::Cancelled : EDRMovementActionEndReason::Completed;
+	const EDRMovementActionEndReason EndReason = bEndQueued
+		? PendingEndReason
+		: bWasCancelled
+			? EDRMovementActionEndReason::Cancelled
+			: EDRMovementActionEndReason::Completed;
 
 	bEndQueued = false;
 	PendingEndReason = EDRMovementActionEndReason::Invalidated;
@@ -1041,15 +839,12 @@ void UDRGA_GrappleItem::EndAbility(const FGameplayAbilitySpecHandle Handle, cons
 	RemoveMovementActionTag();
 	StopGrappleGameplayCue();
 
-	ActiveItemDefinition = nullptr;
-	ActiveInstanceId.Invalidate();
-
-	// InstancedPerActor GA가 다음 활성화에서 이전 훅과 타이밍을 재사용하지 않도록 모두 초기화
+	ActiveSkillDefinition = nullptr;
 	HookLocation = FVector::ZeroVector;
 	HookSurfaceNormal = FVector::ZeroVector;
 	HookFlightDuration = 0.f;
 	MovementStartTimeSeconds = -1.f;
-	GrapplePhase = EDRGrapplePhase::Inactive;
+	GrapplePhase = EDRGrappleSkillPhase::Inactive;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

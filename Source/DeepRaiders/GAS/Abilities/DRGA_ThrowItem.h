@@ -35,6 +35,7 @@ private:
 	
 	void StartTargeting(int32 InputId);
 	void StartBlockingStateTasks();
+	void SetThrowAimState(bool bEnable);
 	void ExecuteConfirmedThrow();
 	
 	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutAimDirection) const;
@@ -93,6 +94,8 @@ private:
 	TObjectPtr<UAbilityTask_WaitInputRelease> AimReleaseTask;
 	
 	bool bReleaseEventReceived = false;
+	bool bUsingThrowAimState = false;
+	bool bEndingThrow = false;
 	
 	FGuid ActiveInstanceId;	
 	

@@ -79,6 +79,11 @@ namespace DRGameplayTags
 		State_Stealthed,
 		"State.Stealthed",
 		"Player is currently stealthed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_Aiming_Throw,
+		"State.Aiming.Throw",
+		"Player is aiming a throwable action.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
@@ -124,6 +129,11 @@ namespace DRGameplayTags
 		Ability_Snow_Absorb,
 		"Ability.Snow.Absorb",
 		"Snow absorption ability.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Throw,
+		"Ability.Throw",
+		"Active throwable action regardless of its source.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Item_Throw,
@@ -184,6 +194,11 @@ namespace DRGameplayTags
 		Ability_Skill_Grab,
 		"Ability.Skill.Grab",
 		"Grab skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Grapple,
+		"Ability.Skill.Grapple",
+		"Grapple skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
@@ -384,6 +399,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_Grab,
 		"Cooldown.Skill.Grab",
 		"Cooldown for the grab skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Grapple,
+		"Cooldown.Skill.Grapple",
+		"Cooldown for the grapple skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SnowWall,
