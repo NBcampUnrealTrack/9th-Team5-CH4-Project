@@ -7,6 +7,7 @@
 #include "DeepRaiders/UI/ViewModel/DRSkillViewModel.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
+#include "View/MVVMViewClass.h"
 
 namespace DRSkillUI
 {
@@ -24,7 +25,17 @@ namespace DRSkillUI
 		int32 RegisteredCount = 0;
 		if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(Widget))
 		{
-			RegisteredCount += View->SetViewModel(TEXT("DRSkillViewModel"), ViewModel) ? 1 : 0;
+			const FName ViewModelName = TEXT("DRSkillViewModel");
+			const UMVVMViewClass* ViewClass = View->GetViewClass();
+			const bool bHasViewModel = IsValid(ViewClass) && ViewClass->GetSources().ContainsByPredicate(
+				[ViewModelName](const FMVVMViewClass_Source& Source)
+				{
+					return Source.IsViewModel() && Source.GetName() == ViewModelName;
+				});
+			if (bHasViewModel)
+			{
+				RegisteredCount += View->SetViewModel(ViewModelName, ViewModel) ? 1 : 0;
+			}
 		}
 
 		TArray<UWidget*> ChildWidgets;

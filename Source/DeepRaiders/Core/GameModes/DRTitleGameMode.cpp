@@ -34,6 +34,7 @@ void ADRTitleGameMode::PostLogin(APlayerController* NewPlayer)
 		FInputModeUIOnly InputModeData;
 		if (HostOrJoinWidgetInstance)
 		{
+			HostOrJoinWidgetInstance->SetIsFocusable(true);
 			InputModeData.SetWidgetToFocus(HostOrJoinWidgetInstance->TakeWidget());
 		}
 		InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
