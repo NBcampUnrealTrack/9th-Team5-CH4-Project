@@ -38,14 +38,9 @@ private:
 	UFUNCTION()
 	void HandleAbsorbDelayFinished();
 
-	void StartAbsorbTick();
-
-	UFUNCTION()
 	void PerformAbsorbTick();
 	void ScheduleNextAbsorbTick();
 
 	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
 	void ApplySnowGaugeGain(UAbilitySystemComponent* AbilitySystemComponent, float RemovedAmount) const;
-
-	int32 AbsorbPredictionTick = 0;
 };

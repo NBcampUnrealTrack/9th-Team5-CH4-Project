@@ -24,7 +24,7 @@ class FDRSnowVoxelContainmentEvaluator;
 //
 // 기본 동기화 흐름:
 //   서버: AddSnow, RemoveSnow 실행 -> GameState를 통해 Multicast 배치 전송
-//   클라이언트: PredictSnowRemoval로 즉각 지형을 먼저 파내고, 서버 RPC 수신 시 점령량과 색상을 확정
+//   클라이언트: 서버에서 확정된 작업을 수신한 뒤 지형, 점령량, 색상을 적용
 UCLASS()
 class DEEPRAIDERS_API UDRSnowSubsystem : public UWorldSubsystem
 {
@@ -55,12 +55,7 @@ public:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
 
-	// 클라이언트 예측: 지연 시간 없이 반응하도록 외형(Surface)만 먼저 파냅니다.
-	// 실제 점령량과 표면 색상은 서버 확정 수신 시 동기화됩니다.
-	FDRSnowRemoveResult PredictSnowRemoval(
-		const FDRSnowSurfaceRemoveRequest& Request);
-
-	// 클라이언트 복제: 서버 확정 데이터를 받아 예측과 대조 후 확정하거나, 처음부터 다시 적용합니다.
+	// 클라이언트 복제: 서버 확정 데이터를 받아 지형, 점령량, 색상을 적용합니다.
 	bool ApplyReplicatedSnowRemoval(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AppliedAmount,
@@ -71,10 +66,6 @@ public:
 	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
-
-	// 클라이언트 예측: 눈총 흡수 시 시각적 지형을 즉시 파냅니다.
-	FDRSnowRemoveResult PredictSnowAbsorbTool(
-		const FDRSnowSurfaceRemoveRequest& Request);
 
 	// 클라이언트 복제: 눈총 흡수 결과를 로컬 상태에 동기화합니다.
 	bool ApplyReplicatedSnowAbsorbTool(
@@ -127,7 +118,7 @@ private:
 	// 네트워크로 받은 팀 색상 패치를 차례대로 안전하게 렌더링에 적용하는 큐
 	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
 
-	// 눈 파내기 단계별 조율자와 클라이언트 예측 관리자
+	// 눈 파내기 단계별 조율자 (지형 파기 -> 부피 삭감 -> 색상 재도색)
 	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
 
 	// 눈 쌓기 단계별 조율자 (지형 생성 -> 부피 누적 -> 색상 적용)

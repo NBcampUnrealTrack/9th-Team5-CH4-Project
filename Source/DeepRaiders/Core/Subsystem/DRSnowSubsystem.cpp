@@ -17,8 +17,7 @@ UDRSnowSubsystem::UDRSnowSubsystem()
 	RemovalPipeline = MakeShared<FDRSnowRemovalPipeline>(
 		SurfaceEditor,
 		OwnershipStore,
-		VolumeStore,
-		MaterialPatchApplyQueue.ToSharedRef());
+		VolumeStore);
 	AddPipeline = MakeShared<FDRSnowAddPipeline>(
 		SurfaceEditor,
 		OwnershipStore,
@@ -36,7 +35,6 @@ void UDRSnowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UDRSnowSubsystem::Deinitialize()
 {
-	RemovalPipeline->ResetPredictions();
 	++SnowStateGeneration;
 	if (AddPipeline)
 	{
@@ -67,11 +65,7 @@ FDRSnowAddResult UDRSnowSubsystem::ApplyReplicatedSnowAdd(
 	const FDRSnowSurfaceAddRequest& Request,
 	const float AppliedAmount)
 {
-	return RemovalPipeline->ReconcileServerAdd(
-		GetWorld(),
-		*AddPipeline,
-		Request,
-		AppliedAmount);
+	return AddPipeline->Replay(GetWorld(), Request, AppliedAmount);
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
@@ -88,12 +82,6 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
 		*OutMaterialPatch = MoveTemp(Execution.MaterialPatch);
 	}
 	return Execution.RemoveResult;
-}
-
-FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowRemoval(
-	const FDRSnowSurfaceRemoveRequest& Request)
-{
-	return RemovalPipeline->Predict(GetWorld(), Request, EDRSnowRemovalPath::Standard);
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
@@ -113,24 +101,24 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 	return Execution.RemoveResult;
 }
 
-FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowAbsorbTool(
-	const FDRSnowSurfaceRemoveRequest& Request)
-{
-	return RemovalPipeline->Predict(GetWorld(), Request, EDRSnowRemovalPath::Absorb);
-}
-
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
-	return RemovalPipeline->ApplyServerUpdate(
+	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
-		FDRSnowServerResponse(
-			AppliedAmount,
-			AuthoritativeMaterialPatch,
-			EDRSnowRemovalPath::Standard));
+		AppliedAmount,
+		AuthoritativeMaterialPatch,
+		EDRSnowRemovalPath::Standard);
+	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
+	{
+		MaterialPatchApplyQueue->Enqueue(
+			ReplayResult.VoxelWorld.Get(),
+			*AuthoritativeMaterialPatch);
+	}
+	return ReplayResult.bApplied;
 }
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
@@ -138,13 +126,19 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
-	return RemovalPipeline->ApplyServerUpdate(
+	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
-		FDRSnowServerResponse(
-			AppliedAmount,
-			AuthoritativeMaterialPatch,
-			EDRSnowRemovalPath::Absorb));
+		AppliedAmount,
+		AuthoritativeMaterialPatch,
+		EDRSnowRemovalPath::Absorb);
+	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
+	{
+		MaterialPatchApplyQueue->Enqueue(
+			ReplayResult.VoxelWorld.Get(),
+			*AuthoritativeMaterialPatch);
+	}
+	return ReplayResult.bApplied;
 }
 
 int32 UDRSnowSubsystem::GetDominantTeamAtLocation(FVector Location) const
@@ -187,7 +181,6 @@ void UDRSnowSubsystem::ResetCheckpoints()
 
 void UDRSnowSubsystem::ResetSnowState()
 {
-	RemovalPipeline->ResetPredictions();
 	++SnowStateGeneration;
 	AddPipeline->Reset(SnowStateGeneration);
 	ResetCheckpoints();
@@ -214,7 +207,6 @@ bool UDRSnowSubsystem::ApplyCheckpoint(
 	const TArray<uint8>& Volume)
 {
 	// 중도 난입 클라이언트에는 Ownership 원본을 복원하지 않는다.
-	RemovalPipeline->ResetPredictions();
 	OwnershipStore.Reset();
 	SnapshotSerializer->SetWorld(GetWorld());
 	return SnapshotSerializer->ApplyCheckpoint(Name, Voxel, Volume);

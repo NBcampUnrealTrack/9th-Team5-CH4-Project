@@ -574,11 +574,8 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Reco
 bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record)
 {
 	const FDRSnowRemoveOperation& Operation = Record.RemoveOperation;
-	const bool bIsRejectedPrediction =
-		Operation.AppliedAmount == 0.f && Operation.PredictionKey.IsValid();
 	if (Operation.Radius <= 0.f || Operation.RequestedAmount <= 0.f ||
-		Operation.AppliedAmount < 0.f ||
-		(Operation.AppliedAmount == 0.f && !bIsRejectedPrediction))
+		Operation.AppliedAmount <= 0.f)
 	{
 		return false;
 	}
@@ -611,7 +608,6 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 	Request.AbsorbMaxSweepsPerTick = Operation.AbsorbMaxSweepsPerTick;
 	Request.bUseAdaptiveAbsorbQuery = Operation.bUseAdaptiveAbsorbQuery;
 	Request.Context.TeamId = Operation.TeamId;
-	Request.PredictionKey = Operation.PredictionKey;
 
 	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
 	if (!IsValid(SnowSubsystem))

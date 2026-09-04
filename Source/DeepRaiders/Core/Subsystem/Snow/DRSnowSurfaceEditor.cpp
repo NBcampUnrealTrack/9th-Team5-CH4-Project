@@ -729,39 +729,6 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 		});
 }
 
-int32 FDRSnowSurfaceEditor::RestoreSurfaceEdit(const FDRSnowSurfaceEditResult& EditResult)
-{
-	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		!EditResult.EditedBounds.IsValid() || EditResult.ModifiedValues.IsEmpty())
-	{
-		return 0;
-	}
-
-	int32 RestoredVoxelCount = 0;
-	FVoxelData& Data = VoxelWorld->GetData();
-	{
-		FVoxelWriteScopeLock Lock(Data, EditResult.EditedBounds, FUNCTION_FNAME);
-		for (const FModifiedVoxelValue& ModifiedValue : EditResult.ModifiedValues)
-		{
-			const FVoxelValue CurrentValue = Data.GetValue(ModifiedValue.Position, 0);
-			if (CurrentValue != FVoxelValue(ModifiedValue.NewValue))
-			{
-				continue;
-			}
-
-			Data.SetValue(ModifiedValue.Position, FVoxelValue(ModifiedValue.OldValue));
-			++RestoredVoxelCount;
-		}
-	}
-
-	if (RestoredVoxelCount > 0)
-	{
-		UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, EditResult.EditedBounds.Extend(1));
-	}
-	return RestoredVoxelCount;
-}
-
 FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 	const FDRSnowSurfaceRemoveRequest& Request)
 {

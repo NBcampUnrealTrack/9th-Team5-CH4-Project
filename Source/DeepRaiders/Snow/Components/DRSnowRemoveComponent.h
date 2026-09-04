@@ -87,29 +87,8 @@ public:
 		FVector BrushOrigin,
 		FVector Direction,
 		const FDRSnowRemovalSpec& RemovalSpec);
-	// LocalPredicted GA가 클라이언트와 서버에서 공유하는 식별 순번을 전달한다.
-	float TryRemoveSnowAlongDirectionPredicted(
-		FVector BrushOrigin,
-		FVector Direction,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		int32 PredictionSequence);
 
 protected:
-	float TryRemoveSnowFromHitInternal(
-		const FHitResult& HitResult,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		FDRSnowPredictionKey PredictionKey);
-	float TryRemoveSnowAtLocationInternal(
-		FVector WorldLocation,
-		FVector SurfaceNormal,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		FDRSnowPredictionKey PredictionKey);
-	float TryRemoveSnowAlongDirectionInternal(
-		FVector BrushOrigin,
-		FVector Direction,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		FDRSnowPredictionKey PredictionKey);
-
 	// Hit 위치와 현재 흡수 수치를 조합해 중앙 표면 제거 요청으로 변환한다.
 	FDRSnowSurfaceRemoveRequest MakeRemoveRequest(
 		FVector WorldLocation,
@@ -126,21 +105,13 @@ protected:
 	bool CanRemoveNow(const FDRSnowRemovalSpec& RemovalSpec) const;
 
 	UFUNCTION(Server, Reliable)
-	void ServerTryRemoveSnowFromHit(
-		const FHitResult& HitResult,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		FDRSnowPredictionKey PredictionKey);
+	void ServerTryRemoveSnowFromHit(const FHitResult& HitResult, const FDRSnowRemovalSpec& RemovalSpec);
 
 	UFUNCTION(Server, Reliable)
 	void ServerTryRemoveSnowAtLocation(
 		FVector_NetQuantize WorldLocation,
 		FVector_NetQuantizeNormal SurfaceNormal,
-		const FDRSnowRemovalSpec& RemovalSpec,
-		FDRSnowPredictionKey PredictionKey);
-
-	FDRSnowPredictionKey MakePredictionKey();
-	void SynchronizePredictionSequence(const FDRSnowPredictionKey& PredictionKey);
-	int32 ResolvePredictionOwnerId() const;
+		const FDRSnowRemovalSpec& RemovalSpec);
 
 	// Voxel collision component를 맞춘 경우 Owner인 AVoxelWorld까지 거슬러 올라간다.
 	AVoxelWorld* GetVoxelWorldFromHit(const FHitResult& HitResult) const;
@@ -151,5 +122,4 @@ public:
 
 protected:
 	float LastRemoveTime = -BIG_NUMBER;
-	int32 NextPredictionSequence = 0;
 };
