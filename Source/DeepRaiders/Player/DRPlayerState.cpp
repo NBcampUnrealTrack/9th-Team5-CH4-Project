@@ -47,8 +47,6 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 
-	// 실제 코인 값은 서버와 해당 PlayerState의 소유 클라이언트만 공유한다.
-	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
 }
@@ -216,41 +214,22 @@ bool ADRPlayerState::RefillJetpackFuel()
 	return true;
 }
 
-int32 ADRPlayerState::GetCoins() const
+float ADRPlayerState::GetSnowGauge() const
 {
-	return Coins;
+	return IsValid(PlayerAttributeSet) ? PlayerAttributeSet->GetSnowGauge() : 0.f;
 }
 
-void ADRPlayerState::SetCoins(int32 NewCoins)
+void ADRPlayerState::AddSnowGauge(float Amount)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !IsValid(PlayerAttributeSet))
 	{
 		return;
 	}
 
-	const int32 PreviousCoins = Coins;
-	const int32 ClampedCoins = FMath::Max(0, NewCoins);
-
-	if (PreviousCoins == ClampedCoins)
-	{
-		return;
-	}
-
-	Coins = ClampedCoins;
-	OnRep_Coins(PreviousCoins);
-	ForceNetUpdate();
-}
-
-void ADRPlayerState::AddCoins(int32 Amount)
-{
-	if (!HasAuthority() || Amount <= 0)
-	{
-		return;
-	}
-
-	// int32 덧셈 전에 int64로 확장해 오버플로를 방지한다.
-	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
-	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
+	AbilitySystemComponent->ApplyModToAttribute(
+		UDRPlayerAttributeSet::GetSnowGaugeAttribute(),
+		EGameplayModOp::Additive,
+		Amount);
 }
 
 void ADRPlayerState::ResetForGameStart()
@@ -260,7 +239,6 @@ void ADRPlayerState::ResetForGameStart()
 		return;
 	}
 
-	SetCoins(GetClass()->GetDefaultObject<ADRPlayerState>()->GetCoins());
 	if (IsValid(PerkComponent))
 	{
 		PerkComponent->ResetPerks();
@@ -710,20 +688,6 @@ void ADRPlayerState::TickFreezeDecay()
 void ADRPlayerState::StopFreezeDecay()
 {
 	GetWorldTimerManager().ClearTimer(FreezeDecayTimerHandle);
-}
-
-void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
-{
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[Coin] Player=%s Previous=%d New=%d Delta=%d"),
-		*GetNameSafe(this),
-		PreviousCoins,
-		Coins,
-		Coins - PreviousCoins);
-
-	OnCoinsChanged.Broadcast(Coins);
 }
 
 void ADRPlayerState::OnRep_HasJetpack()

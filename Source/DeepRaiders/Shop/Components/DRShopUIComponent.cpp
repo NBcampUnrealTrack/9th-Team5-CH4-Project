@@ -4,6 +4,7 @@
 #include "DRShopTransactionComponent.h"
 #include "DRUpgradeComponent.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
@@ -206,9 +207,12 @@ void UDRShopUIComponent::BindShopEvents()
 
 	if (IsValid(PlayerState))
 	{
-		PlayerState->OnCoinsChanged.AddDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
+		if (UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent())
+		{
+			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
+					this, &ThisClass::HandleSnowGaugeChanged);
+		}
 	}
 }
 
@@ -243,9 +247,11 @@ void UDRShopUIComponent::UnbindShopEvents()
 
 	if (IsValid(PlayerState))
 	{
-		PlayerState->OnCoinsChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
+		if (UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent())
+		{
+			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).RemoveAll(this);
+		}
 	}
 }
 
@@ -300,7 +306,7 @@ void UDRShopUIComponent::HandlePerksChanged()
 	RefreshOffers(EDRShopOfferType::Perk);
 }
 
-void UDRShopUIComponent::HandleCoinsChanged(int32)
+void UDRShopUIComponent::HandleSnowGaugeChanged(const FOnAttributeChangeData&)
 {
 	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshUpgradeOffers();
@@ -399,20 +405,20 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			OfferView.IsPurchasable = ShopComponent->CanPurchaseItem(
 				InventoryComponent,
 				Offer.ItemDefinition,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 
 		case EDRShopOfferType::Perk:
 			OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
 				PerkDefinition,
 				PerkComponent,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 
 		default:
 			OfferView.IsPurchasable = ShopComponent->CanAfford(
 				Offer.ItemDefinition,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 		}
 	}

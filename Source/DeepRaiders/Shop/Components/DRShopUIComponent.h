@@ -6,6 +6,8 @@
 #include "DeepRaiders/Shop/DRShopSellTypes.h"
 #include "DRShopUIComponent.generated.h"
 
+struct FOnAttributeChangeData;
+
 class AActor;
 class ADRPlayerController;
 class ADRPlayerState;
@@ -74,9 +76,8 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
-	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
-	UFUNCTION()
-	void HandleCoinsChanged(int32 NewCoins);
+	/** 보유 눈이 변경되면 구매 가능 상태를 다시 계산한다. */
+	void HandleSnowGaugeChanged(const FOnAttributeChangeData& Data);
 
 	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
 	void RefreshUpgradeOffers();

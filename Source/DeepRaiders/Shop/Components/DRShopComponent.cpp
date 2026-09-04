@@ -60,27 +60,27 @@ bool UDRShopComponent::GetPerkDefinition(
 bool UDRShopComponent::CanPurchasePerk(
 	const UDRPerkDefinition* PerkDefinition,
 	const UDRPerkComponent* PerkComponent,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(PerkComponent)
 		&& IsValid(PerkDefinition)
 		&& PerkComponent->CanAddPerkAutomatically(PerkDefinition)
-		&& CanAfford(PerkDefinition, AvailableCoins);
+		&& CanAfford(PerkDefinition, AvailableSnowGauge);
 }
 
 bool UDRShopComponent::CanAfford(
 	const UDRItemDefinition* ItemDefinition,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(ItemDefinition)
 		&& ItemDefinition->Price >= 0
-		&& AvailableCoins >= ItemDefinition->Price;
+		&& AvailableSnowGauge >= ItemDefinition->Price;
 }
 
 bool UDRShopComponent::CanPurchaseItem(
 	const UDRInventoryComponent* Inventory,
 	UDRItemDefinition* ItemDefinition,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(Inventory)
 		&& IsValid(ItemDefinition)
@@ -90,7 +90,7 @@ bool UDRShopComponent::CanPurchaseItem(
 				return ItemOffer.OfferType == EDRShopOfferType::Purchase
 					&& ItemOffer.ItemDefinition == ItemDefinition;
 			})
-		&& CanAfford(ItemDefinition, AvailableCoins)
+		&& CanAfford(ItemDefinition, AvailableSnowGauge)
 		&& Inventory->CanAddItem(ItemDefinition, 1);
 }
 
