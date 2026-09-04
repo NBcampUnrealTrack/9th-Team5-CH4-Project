@@ -19,6 +19,8 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
 	bStartPlayersAsSpectators = true;
+	GamePhases.AddDefaulted();
+	RecalculateGameDuration();
 }
 
 void ADRMiningGameModeBase::BeginPlay()
@@ -26,7 +28,17 @@ void ADRMiningGameModeBase::BeginPlay()
 	Super::BeginPlay();
 	bIsGameStart = false;
 	bIsGameEnd = false;
+	RecalculateGameDuration();
 }
+
+#if WITH_EDITOR
+void ADRMiningGameModeBase::PostEditChangeChainProperty(
+	FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+	RecalculateGameDuration();
+}
+#endif
 
 bool ADRMiningGameModeBase::ShouldSpawnAtStartSpot(AController*)
 {
@@ -42,17 +54,26 @@ bool ADRMiningGameModeBase::StartGame()
 	}
 
 	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
+	RecalculateGameDuration();
+	if (GameDuration <= 0.f || GamePhases.IsEmpty())
+	{
+		return false;
+	}
+
 	ResetGameState();
 	bIsGameStart = true;
 	bIsGameEnd = false;
 	StartTeamSwitchTimer();
-	GameRemainingSeconds = FMath::Max(1, FMath::CeilToInt(GameDuration));
+	GameRemainingSeconds = FMath::CeilToInt(GameDuration);
+	CurrentPhaseArrayIndex = 0;
+	PhaseRemainingSeconds = FMath::Max(1, GamePhases[CurrentPhaseArrayIndex].DurationSeconds);
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString());
 		MiningGameState->SetGameResultText(FText::GetEmpty());
 		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
 	}
+	UpdateReplicatedGamePhase();
 	GetWorldTimerManager().SetTimer(
 		GameTimerHandle,
 		this,
@@ -70,15 +91,62 @@ void ADRMiningGameModeBase::TickGameTimer()
 	}
 
 	--GameRemainingSeconds;
+	--PhaseRemainingSeconds;
 	if (GameRemainingSeconds <= 0)
 	{
 		EndGame();
 		return;
 	}
+	if (PhaseRemainingSeconds <= 0)
+	{
+		AdvanceGamePhase();
+	}
 
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
+	}
+	UpdateReplicatedGamePhase();
+}
+
+void ADRMiningGameModeBase::AdvanceGamePhase()
+{
+	++CurrentPhaseArrayIndex;
+	if (!GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
+	{
+		CurrentPhaseArrayIndex = INDEX_NONE;
+		PhaseRemainingSeconds = 0;
+		return;
+	}
+
+	PhaseRemainingSeconds = FMath::Max(1, GamePhases[CurrentPhaseArrayIndex].DurationSeconds);
+}
+
+void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
+{
+	ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>();
+	if (!IsValid(MiningGameState) || !GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
+	{
+		if (IsValid(MiningGameState))
+		{
+			MiningGameState->SetGamePhaseState(INDEX_NONE, 0, TArray<FText>());
+		}
+		return;
+	}
+
+	const FDRGamePhaseConfig& Phase = GamePhases[CurrentPhaseArrayIndex];
+	MiningGameState->SetGamePhaseState(
+		Phase.PhaseIndex,
+		PhaseRemainingSeconds,
+		Phase.PlayerMessages);
+}
+
+void ADRMiningGameModeBase::RecalculateGameDuration()
+{
+	GameDuration = 0.f;
+	for (const FDRGamePhaseConfig& Phase : GamePhases)
+	{
+		GameDuration += FMath::Max(1, Phase.DurationSeconds);
 	}
 }
 
@@ -94,10 +162,13 @@ void ADRMiningGameModeBase::EndGame()
 	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameTimerHandle);
 	GameRemainingSeconds = 0;
+	CurrentPhaseArrayIndex = INDEX_NONE;
+	PhaseRemainingSeconds = 0;
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameTimerState(0, false, true);
 	}
+	UpdateReplicatedGamePhase();
 
 	double WeightedTeamScores[2] = {0.0, 0.0};
 	TArray<FString> ZoneDebugTexts;

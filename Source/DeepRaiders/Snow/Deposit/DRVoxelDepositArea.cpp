@@ -4,6 +4,7 @@
 #include "DrawDebugHelpers.h"
 #endif
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "VoxelWorld.h"
@@ -187,15 +188,16 @@ void ADRVoxelDepositArea::BeginPlay()
 			&ThisClass::HandleJoinSnapshotFinished);
 	}
 
-	if (DepositInterval > 0.f)
+	MiningGameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	if (MiningGameState.IsValid())
 	{
-		GetWorldTimerManager().SetTimer(
-			DepositTimerHandle,
+		MiningGameState->OnGamePhaseChanged.AddDynamic(
 			this,
-			&ThisClass::RequestDepositArea,
-			DepositInterval,
-			true,
-			0.f);
+			&ThisClass::HandleGamePhaseChanged);
+		HandleGamePhaseChanged(
+			MiningGameState->GetCurrentPhaseIndex(),
+			MiningGameState->GetPhaseRemainingSeconds(),
+			MiningGameState->GetCurrentPhaseMessages());
 	}
 }
 
@@ -210,9 +212,56 @@ void ADRVoxelDepositArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		GameMode->OnJoinSnapshotStarted.RemoveAll(this);
 		GameMode->OnJoinSnapshotFinished.RemoveAll(this);
 	}
+	if (MiningGameState.IsValid())
+	{
+		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGamePhaseChanged);
+	}
 
-	CancelDepositPipeline();
+	StopDepositing();
+	MiningGameState.Reset();
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRVoxelDepositArea::HandleGamePhaseChanged(
+	int32 PhaseIndex,
+	int32,
+	const TArray<FText>&)
+{
+	if (PhaseIndex == INDEX_NONE)
+	{
+		StopDepositing();
+		return;
+	}
+	if (!bDepositStarted && PhaseIndex == StartPhaseIndex)
+	{
+		StartDepositing();
+	}
+}
+
+void ADRVoxelDepositArea::StartDepositing()
+{
+	if (bDepositStarted || DepositInterval <= 0.f)
+	{
+		return;
+	}
+
+	bDepositStarted = true;
+	GetWorldTimerManager().SetTimer(
+		DepositTimerHandle,
+		this,
+		&ThisClass::RequestDepositArea,
+		DepositInterval,
+		true,
+		0.f);
+}
+
+void ADRVoxelDepositArea::StopDepositing()
+{
+	bDepositStarted = false;
+	GetWorldTimerManager().ClearTimer(DepositTimerHandle);
+	CancelDepositPipeline();
 }
 
 void ADRVoxelDepositArea::HandleJoinSnapshotStarted()
