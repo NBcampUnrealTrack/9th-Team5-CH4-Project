@@ -95,6 +95,7 @@ private:
 	
 	bool bReleaseEventReceived = false;
 	bool bUsingThrowAimState = false;
+	bool bEndingThrow = false;
 	
 	FGuid ActiveInstanceId;	
 	

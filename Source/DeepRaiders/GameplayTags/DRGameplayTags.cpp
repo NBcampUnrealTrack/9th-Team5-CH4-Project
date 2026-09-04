@@ -129,6 +129,11 @@ namespace DRGameplayTags
 		Ability_Snow_Absorb,
 		"Ability.Snow.Absorb",
 		"Snow absorption ability.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Throw,
+		"Ability.Throw",
+		"Active throwable action regardless of its source.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Item_Throw,

@@ -30,10 +30,12 @@ UDRGA_ThrowItem::UDRGA_ThrowItem()
 	
 	FGameplayTagContainer DefaultTags;
 	DefaultTags.AddTag(DRGameplayTags::Ability_Attack);
+	DefaultTags.AddTag(DRGameplayTags::Ability_Throw);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Item_Throw);
 	SetAssetTags(DefaultTags);
 	
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Item_Throw);
+	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Throw);
 	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
@@ -92,6 +94,7 @@ void UDRGA_ThrowItem::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	}
 	
 	bReleaseEventReceived = false;
+	bEndingThrow = false;
 	
 	StartBlockingStateTasks();
 	StartTargeting(ResolveInputId(Handle, ActorInfo));	
@@ -713,7 +716,18 @@ void UDRGA_ThrowItem::CancelThrow()
 void UDRGA_ThrowItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (bEndingThrow)
+	{
+		return;
+	}
+	bEndingThrow = true;
+
 	SetThrowAimState(false);
+
+	if (bWasCancelled)
+	{
+		MontageStop();
+	}
 
 	if (IsValid(TargetDataTask))
 	{
@@ -739,5 +753,6 @@ void UDRGA_ThrowItem::EndAbility(const FGameplayAbilitySpecHandle Handle, const 
 	bReleaseEventReceived = false;
 	
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	bEndingThrow = false;
 }
 

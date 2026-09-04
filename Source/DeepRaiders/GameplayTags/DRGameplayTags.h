@@ -30,6 +30,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Throw);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MovementAction);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Grapple);
