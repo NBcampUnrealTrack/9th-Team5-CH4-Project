@@ -7,6 +7,7 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
@@ -238,7 +239,13 @@ bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) cons
 	}
 
 	const FDRProjectileWeaponSnowAbsorbSettings& SnowAbsorbSettings = WeaponDefinition->SnowAbsorbSettings;
-	OutRemovalSpec.SnowAbsorbPower = SnowAbsorbSettings.Power;
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const UAbilitySystemComponent* ASC = ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	const float AbsorbPowerMultiplier = IsValid(ASC)
+		? FMath::Max(0.f, ASC->GetNumericAttribute(
+			UDRPlayerAttributeSet::GetWeaponSnowAbsorbPowerMultiplierAttribute()))
+		: 1.f;
+	OutRemovalSpec.SnowAbsorbPower = SnowAbsorbSettings.Power * AbsorbPowerMultiplier;
 	OutRemovalSpec.SnowAbsorbRadius = SnowAbsorbSettings.Radius;
 	OutRemovalSpec.SnowAbsorbSpeed = SnowAbsorbSettings.Speed;
 	OutRemovalSpec.SnowAbsorbRange = SnowAbsorbSettings.Range;
