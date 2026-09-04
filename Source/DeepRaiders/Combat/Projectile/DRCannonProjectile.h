@@ -14,6 +14,9 @@ class DEEPRAIDERS_API ADRCannonProjectile : public ADRProjectile
 public:
 	ADRCannonProjectile(const FObjectInitializer& ObjectInitializer);
 
+	virtual float GetConfiguredInitialSpeed() const override;
+	virtual float GetConfiguredGravityScale() const override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
