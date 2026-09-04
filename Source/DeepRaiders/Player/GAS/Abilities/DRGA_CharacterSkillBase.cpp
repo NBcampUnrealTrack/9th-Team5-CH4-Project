@@ -17,6 +17,10 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
+	FGameplayTagContainer InitialAbilityTags;
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
+	SetAssetTags(InitialAbilityTags);
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);

@@ -196,6 +196,11 @@ namespace DRGameplayTags
 		"Grab skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Grapple,
+		"Ability.Skill.Grapple",
+		"Grapple skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
@@ -394,6 +399,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_Grab,
 		"Cooldown.Skill.Grab",
 		"Cooldown for the grab skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Grapple,
+		"Cooldown.Skill.Grapple",
+		"Cooldown for the grapple skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SnowWall,

@@ -19,6 +19,7 @@
 UDRGA_ThrowSkill::UDRGA_ThrowSkill()
 {
 	FGameplayTagContainer DefaultTags;
+	DefaultTags.AddTag(DRGameplayTags::Ability_Skill);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Attack);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Throw);
 	SetAssetTags(DefaultTags);

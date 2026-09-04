@@ -3,9 +3,11 @@
 
 #include "CableComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 
@@ -196,7 +198,7 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	USceneComponent* ResolvedStartComponent = nullptr;
 	FName ResolvedSocketName = NAME_None;
 	
-	if (!ResolveStartAttachment(Target, ResolvedStartComponent, ResolvedSocketName))
+	if (!ResolveStartAttachment(Target, Parameters.SourceObject.Get(), ResolvedStartComponent, ResolvedSocketName))
 	{
 		return false;
 	}
@@ -282,7 +284,10 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	return true;
 }
 
-bool ADRGameplayCueGrapple::ResolveStartAttachment(AActor* Target, USceneComponent*& OutComponent,
+bool ADRGameplayCueGrapple::ResolveStartAttachment(
+	AActor* Target,
+	const UObject* SourceObject,
+	USceneComponent*& OutComponent,
 	FName& OutSocketName) const
 {
 	OutComponent = nullptr;
@@ -296,20 +301,35 @@ bool ADRGameplayCueGrapple::ResolveStartAttachment(AActor* Target, USceneCompone
 	const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(Target);
 	if (IsValid(Character))
 	{
-		UStaticMeshComponent* EquipmentMesh = Character->GetWorldHandEquipmentMesh();
-		
-		if (IsValid(EquipmentMesh)
-			&& IsValid(EquipmentMesh->GetStaticMesh()))
+		if (IsValid(Cast<UDRSkillDefinition>(SourceObject)))
 		{
-			OutComponent = EquipmentMesh;
-			
-			if (!LaunchSocketName.IsNone()
-				&& EquipmentMesh->DoesSocketExist(LaunchSocketName))
+			USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
+			if (IsValid(CharacterMesh)
+				&& !SkillLaunchSocketName.IsNone()
+				&& CharacterMesh->DoesSocketExist(SkillLaunchSocketName))
 			{
-				OutSocketName = LaunchSocketName;
+				OutComponent = CharacterMesh;
+				OutSocketName = SkillLaunchSocketName;
+				return true;
 			}
-			
-			return true;
+		}
+		else
+		{
+			UStaticMeshComponent* EquipmentMesh = Character->GetWorldHandEquipmentMesh();
+
+			if (IsValid(EquipmentMesh)
+				&& IsValid(EquipmentMesh->GetStaticMesh()))
+			{
+				OutComponent = EquipmentMesh;
+
+				if (!LaunchSocketName.IsNone()
+					&& EquipmentMesh->DoesSocketExist(LaunchSocketName))
+				{
+					OutSocketName = LaunchSocketName;
+				}
+
+				return true;
+			}
 		}
 	}
 	
