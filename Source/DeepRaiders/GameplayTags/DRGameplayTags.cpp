@@ -226,6 +226,16 @@ namespace DRGameplayTags
 		"Rifle heat generation upgrade track.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_SnowAbsorbPower,
+		"Weapon.Upgrade.Rifle.SnowAbsorbPower",
+		"Rifle snow absorb power upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_SnowAddAmount,
+		"Weapon.Upgrade.Rifle.SnowAddAmount",
+		"Rifle snow add amount upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Shotgun,
 		"Weapon.Upgrade.Shotgun",
 		"Parent tag for shotgun stat upgrade tracks.");
@@ -256,6 +266,16 @@ namespace DRGameplayTags
 		"Shotgun heat generation upgrade track.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_SnowAbsorbPower,
+		"Weapon.Upgrade.Shotgun.SnowAbsorbPower",
+		"Shotgun snow absorb power upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_SnowAddAmount,
+		"Weapon.Upgrade.Shotgun.SnowAddAmount",
+		"Shotgun snow add amount upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Cannon,
 		"Weapon.Upgrade.Cannon",
 		"Parent tag for cannon stat upgrade tracks.");
@@ -279,6 +299,16 @@ namespace DRGameplayTags
 		Weapon_Upgrade_Cannon_HeatGeneration,
 		"Weapon.Upgrade.Cannon.HeatGeneration",
 		"Cannon heat generation upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_SnowAbsorbPower,
+		"Weapon.Upgrade.Cannon.SnowAbsorbPower",
+		"Cannon snow absorb power upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_SnowAddAmount,
+		"Weapon.Upgrade.Cannon.SnowAddAmount",
+		"Cannon snow add amount upgrade track.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,
@@ -479,6 +509,16 @@ namespace DRGameplayTags
 		Data_Weapon_HeatGenerationModifier,
 		"Data.Weapon.HeatGenerationModifier",
 		"Equipped weapon heat generation modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_SnowAbsorbPowerModifier,
+		"Data.Weapon.SnowAbsorbPowerModifier",
+		"Equipped weapon snow absorb power modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_SnowAddAmountModifier,
+		"Data.Weapon.SnowAddAmountModifier",
+		"Equipped weapon snow add amount modifier passed through SetByCaller.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

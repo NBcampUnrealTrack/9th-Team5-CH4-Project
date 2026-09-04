@@ -3,6 +3,7 @@
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -602,7 +603,9 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	FDRProjectileWorldImpactData WorldImpactData;
 	WorldImpactData.bAddSnow = SnowAddSettings.bEnabled;
 	WorldImpactData.SnowRadius = SnowAddSettings.Radius;
-	WorldImpactData.SnowAmount = SnowAddSettings.Amount;
+	const float SnowAddAmountMultiplier = FMath::Max(0.f, AbilitySystem->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetWeaponSnowAddAmountMultiplierAttribute()));
+	WorldImpactData.SnowAmount = SnowAddSettings.Amount * SnowAddAmountMultiplier;
 	WorldImpactData.SnowEditTool = SnowAddSettings.EditTool;
 	WorldImpactData.bAllowVirtualSurfaceFallback =
 		SnowAddSettings.bAllowVirtualSurfaceFallback;

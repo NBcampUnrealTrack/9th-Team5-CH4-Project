@@ -798,6 +798,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_HeatGeneration;
 		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowAddAmount;
+		}
 	}
 	else if (WeaponKey == TEXT("shotgun"))
 	{
@@ -823,6 +831,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_HeatGeneration;
 		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowAddAmount;
+		}
 	}
 	else if (WeaponKey == TEXT("cannon"))
 	{
@@ -843,6 +859,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_HeatGeneration;
+		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowAddAmount;
 		}
 	}
 
