@@ -19,6 +19,7 @@ class DEEPRAIDERS_API ADRProjectile : public AActor
 	
 public:
 	ADRProjectile(const FObjectInitializer& ObjectInitializer);
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
 	void InitializeProjectile(
@@ -27,10 +28,14 @@ public:
 		float InBreakableDamageAmount,
 		const FDRProjectileWorldImpactData& InWorldImpactData,
 		int32 InSourceTeamId,
-		const UObject* InPresentationSourceObject);
+		const UObject* InPresentationSourceObject,
+		float InEffectiveMaxRange = 0.f,
+		const FDRProjectileFalloffSettings& InFalloffSettings = FDRProjectileFalloffSettings());
 	
 protected:
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	
 	// ProjectileMovement가 Blocking Hit로 정지했을 때
 	UFUNCTION()
@@ -56,6 +61,7 @@ protected:
 
 	const FDRProjectileWorldImpactData& GetWorldImpactData() const { return WorldImpactData; }
 	int32 GetSourceTeamId() const {	return SourceTeamId; }
+	float GetCurrentFalloffStrength() const { return CurrentFalloffStrength; }
 	
 	// 아군 충돌 무시 설정
 	void RefreshFriendlyCollisionIgnores();
@@ -82,8 +88,18 @@ protected:
 	{
 		return true;
 	}
+
+	float EvaluateFalloffStrengthAtLocation(const FVector& Location) const;
 	
 private:
+	void UpdateFalloffAtLocation(const FVector& Location);
+	void ApplyFalloffScale(float Strength);
+	void ApplySizeMultiplier(float SizeMultiplier);
+	void ScaleImpactSetByCallerMagnitude(FGameplayEffectSpec& ImpactSpec, const FGameplayTag& DataTag) const;
+
+	UFUNCTION()
+	void OnRep_SizeMultiplier();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 	
@@ -104,4 +120,16 @@ private:
 	bool bImpactHandled = false;	
 	
 	TWeakObjectPtr<UObject> PresentationSourceObject;
+
+	UPROPERTY(Transient)
+	FDRProjectileFalloffSettings FalloffSettings;
+
+	FVector LaunchLocation = FVector::ZeroVector;
+	FVector InitialActorScale = FVector::OneVector;
+	float EffectiveMaxRange = 0.f;
+	float CurrentFalloffStrength = 1.f;
+	float LastAppliedSizeMultiplier = INDEX_NONE;
+
+	UPROPERTY(ReplicatedUsing = OnRep_SizeMultiplier)
+	uint8 ReplicatedSizeMultiplier = MAX_uint8;
 };

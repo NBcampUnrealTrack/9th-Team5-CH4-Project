@@ -307,7 +307,9 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		GetBreakableDamageAmount(),
 		WorldImpactData,
 		GetSourceTeamId(),
-		WeaponDefinition);
+		WeaponDefinition,
+		GetMaxAttackDistance(),
+		WeaponDefinition->FalloffSettings);
 
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 
