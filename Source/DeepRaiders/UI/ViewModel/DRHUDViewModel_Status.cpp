@@ -69,6 +69,30 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 			? TargetValue
 			: FMath::FInterpTo(DisplayValue, TargetValue, DeltaSeconds, InterpolationSpeed);
 	};
+	constexpr float SnowGaugeHideDelay = 2.f;
+	constexpr float SnowGaugeFadeDuration = 0.3f;
+	if (bSnowGaugeFadeActive)
+	{
+		SnowGaugeIdleDuration += DeltaSeconds;
+	}
+	const float TargetSnowGaugeOpacity = bSnowGaugeFadeActive
+		&& SnowGaugeIdleDuration < SnowGaugeHideDelay
+		? 1.f
+		: 0.f;
+	UE_MVVM_SET_PROPERTY_VALUE(
+		SnowGaugeOpacity,
+		FMath::FInterpConstantTo(
+			SnowGaugeOpacity,
+			TargetSnowGaugeOpacity,
+			DeltaSeconds,
+			1.f / SnowGaugeFadeDuration));
+	if (bSnowGaugeFadeActive
+		&& SnowGaugeIdleDuration >= SnowGaugeHideDelay
+		&& SnowGaugeOpacity <= KINDA_SMALL_NUMBER)
+	{
+		bSnowGaugeFadeActive = false;
+	}
+
 	constexpr float HeatGaugeHideDelay = 2.f;
 	constexpr float HeatGaugeFadeDuration = 0.3f;
 	const bool bHasHeat = TargetHeatGauge > KINDA_SMALL_NUMBER;
@@ -145,6 +169,8 @@ void UDRHUDViewModel::HandleMaxHealthChanged(const FOnAttributeChangeData& Chang
 
 void UDRHUDViewModel::HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData)
 {
+	bSnowGaugeFadeActive = true;
+	SnowGaugeIdleDuration = 0.f;
 	RefreshSnowGaugeText();
 }
 

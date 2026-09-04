@@ -235,14 +235,17 @@ void UDRHUDViewModel::Deinitialize()
 	TargetCurrentHealth = 0.f;
 	TargetHeatGauge = 0.f;
 	TargetFreezeGauge = 0.f;
+	SnowGaugeIdleDuration = 0.f;
 	HeatGaugeZeroDuration = 0.f;
 	HeatGaugeBlinkElapsed = 0.f;
 	bHeatGaugeWasActive = false;
+	bSnowGaugeFadeActive = false;
 	bHoldHeatGaugeEndColor = false;
 	bInterpolateGauges = false;
 
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(0));
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeOpacity, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, 100.f);
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeColor, FLinearColor::White);
