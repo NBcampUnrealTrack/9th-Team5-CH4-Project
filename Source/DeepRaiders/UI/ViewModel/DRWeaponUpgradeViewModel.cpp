@@ -18,7 +18,7 @@ void UDRWeaponUpgradeEntryViewModel::Initialize(const FDRShopOfferView& NewOffer
 	UE_MVVM_SET_PROPERTY_VALUE(LevelStepsText, FText::FromString(Steps.TrimEnd()));
 	UE_MVVM_SET_PROPERTY_VALUE(UpgradeButtonText, Offer.Request.ExpectedLevel >= Offer.MaxLevel
 		? NSLOCTEXT("Shop", "WeaponUpgradeComplete", "최대 레벨")
-		: FText::Format(NSLOCTEXT("Shop", "WeaponUpgradeCost", "강화 · {0}"), FText::AsNumber(Offer.Price)));
+		: FText::Format(NSLOCTEXT("Shop", "WeaponUpgradeCost", "강화 {0}"), FText::AsNumber(Offer.Price)));
 	UE_MVVM_SET_PROPERTY_VALUE(IsPurchasable, Offer.IsPurchasable);
 }
 
