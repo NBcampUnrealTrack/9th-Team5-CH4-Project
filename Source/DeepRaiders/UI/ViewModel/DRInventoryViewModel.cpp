@@ -132,7 +132,6 @@ void UDRInventoryViewModel::Initialize(UDRQuickSlotComponent* InQuickSlotCompone
 	ADRPlayerState* OwnerPlayerState = IsValid(OwnerController)
 		? OwnerController->GetPlayerState<ADRPlayerState>()
 		: nullptr;
-	InitializeCoins(OwnerPlayerState);
 	UE_MVVM_SET_PROPERTY_VALUE(
 		PlayerName,
 		IsValid(OwnerPlayerState)
@@ -162,7 +161,6 @@ void UDRInventoryViewModel::Initialize(UDRInventoryComponent* InInventoryCompone
 	ADRPlayerState* OwnerPlayerState = IsValid(OwnerController)
 		? OwnerController->GetPlayerState<ADRPlayerState>()
 		: nullptr;
-	InitializeCoins(OwnerPlayerState);
 	UE_MVVM_SET_PROPERTY_VALUE(
 		PlayerName,
 		IsValid(OwnerPlayerState)
@@ -221,12 +219,6 @@ void UDRInventoryViewModel::Deinitialize()
 		PlayerState->OnPublicQuickSlotsChanged.RemoveDynamic(this, &ThisClass::HandleInventoryChanged);
 	}
 	PlayerState.Reset();
-	if (CoinsPlayerState.IsValid())
-	{
-		CoinsPlayerState->OnCoinsChanged.RemoveDynamic(this, &ThisClass::HandleCoinsChanged);
-	}
-	CoinsPlayerState.Reset();
-	UE_MVVM_SET_PROPERTY_VALUE(CoinsText, FText::GetEmpty());
 	UE_MVVM_SET_PROPERTY_VALUE(
 		QuickSlotEntries,
 		TArray<TObjectPtr<UDRInventorySlotEntryViewModel>>());
@@ -235,24 +227,6 @@ void UDRInventoryViewModel::Deinitialize()
 void UDRInventoryViewModel::HandleInventoryChanged()
 {
 	RebuildQuickSlotEntries();
-}
-
-void UDRInventoryViewModel::HandleCoinsChanged(int32 NewCoins)
-{
-	UE_MVVM_SET_PROPERTY_VALUE(CoinsText, FText::AsNumber(NewCoins));
-}
-
-void UDRInventoryViewModel::InitializeCoins(ADRPlayerState* InPlayerState)
-{
-	CoinsPlayerState = InPlayerState;
-	if (!IsValid(InPlayerState))
-	{
-		UE_MVVM_SET_PROPERTY_VALUE(CoinsText, FText::GetEmpty());
-		return;
-	}
-
-	InPlayerState->OnCoinsChanged.AddUniqueDynamic(this, &ThisClass::HandleCoinsChanged);
-	HandleCoinsChanged(InPlayerState->GetCoins());
 }
 
 void UDRInventoryViewModel::RebuildQuickSlotEntries()

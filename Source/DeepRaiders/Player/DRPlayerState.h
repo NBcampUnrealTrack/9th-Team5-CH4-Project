@@ -33,7 +33,6 @@ struct FDRPublicQuickSlot
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCoinsChangedSignature, int32, NewCoins);
 DECLARE_MULTICAST_DELEGATE(FDROnPlayerIdentityChanged);
 
 UCLASS()
@@ -149,22 +148,16 @@ public:
 	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
 	bool RefillJetpackFuel();
 
-	UFUNCTION(BlueprintPure, Category = "Player|Coin")
-	int32 GetCoins() const;
+	UFUNCTION(BlueprintPure, Category = "Player|Snow")
+	float GetSnowGauge() const;
 
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
-	void SetCoins(int32 NewCoins);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
-	void AddCoins(int32 Amount);
-
-	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
-	FDRCoinsChangedSignature OnCoinsChanged;
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Snow")
+	void AddSnowGauge(float Amount);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
 	void ResetForRespawn();
 
-	/** 새 경기용 코인과 퍽 상태를 기본값으로 되돌린다. */
+	/** 새 경기용 퍽 상태를 기본값으로 되돌린다. */
 	void ResetForGameStart();
 	
 	UFUNCTION(BlueprintPure, Category = "GAS|Status")
@@ -267,12 +260,6 @@ protected:
 
 	UFUNCTION()
 	void OnRep_JetpackFuel();
-
-	UFUNCTION()
-	void OnRep_Coins(int32 PreviousCoins);
-
-	UPROPERTY(EditDefaultsOnly, ReplicatedUsing = OnRep_Coins, Category = "Player|Coin", meta = (ClampMin = "0"))
-	int32 Coins = 1000;
 
 private:
 	UFUNCTION()

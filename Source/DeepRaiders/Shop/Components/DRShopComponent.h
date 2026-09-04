@@ -33,22 +33,22 @@ public:
 		FName RowName,
 		UDRPerkDefinition*& OutPerkDefinition) const;
 
-	/** 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
+	/** 퍽 개수 제한, 가격과 보유 눈을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
 		const UDRPerkDefinition* PerkDefinition,
 		const UDRPerkComponent* PerkComponent,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
-	/** 가격과 보유 코인을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
+	/** 가격과 보유 눈을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
 	bool CanAfford(
 		const UDRItemDefinition* ItemDefinition,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
-	/** 판매 목록, 가격, 보유 코인과 인벤토리 공간을 기준으로 구매 가능 여부를 판단한다. */
+	/** 판매 목록, 가격, 보유 눈과 인벤토리 공간을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchaseItem(
 		const UDRInventoryComponent* Inventory,
 		UDRItemDefinition* ItemDefinition,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
 	/** 플레이어가 현재 상점 범위 안에 있는지 확인한다. */
 	bool IsTransactionAllowed(const APawn* Pawn) const;

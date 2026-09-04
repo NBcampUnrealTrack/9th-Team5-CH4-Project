@@ -139,7 +139,7 @@ void UDRShopTransactionComponent::ServerRequestSell_Implementation(
 
 	if (Inventory->TryRemoveItemInstance(InstanceId, 1))
 	{
-		PlayerState->AddCoins(SellPrice);
+		PlayerState->AddSnowGauge(SellPrice);
 	}
 }
 
@@ -171,7 +171,7 @@ void UDRShopTransactionComponent::ServerRequestSellPerk_Implementation(
 	const int32 SellPrice = PerkDefinition->GetSellPrice();
 	if (PerkComponent->TryRemovePerk(PerkInstanceId))
 	{
-		PlayerState->AddCoins(SellPrice);
+		PlayerState->AddSnowGauge(SellPrice);
 		UE_LOG(
 			LogTemp,
 			Log,
@@ -234,7 +234,7 @@ bool UDRShopTransactionComponent::TryPurchase(
 {
 	UDRItemDefinition* ItemDefinition = ItemRow.ItemDefinition;
 
-	// 가격, 판매 목록, 코인, 인벤토리 공간을 모두 검증한 뒤 아이템을 추가한다.
+	// 가격, 판매 목록, 눈, 인벤토리 공간을 모두 검증한 뒤 아이템을 추가한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
@@ -243,13 +243,13 @@ bool UDRShopTransactionComponent::TryPurchase(
 		|| !ShopComponent->CanPurchaseItem(
 			Inventory,
 			ItemDefinition,
-			PlayerState->GetCoins())
+			PlayerState->GetSnowGauge())
 		|| !Inventory->TryAddItem(ItemDefinition, 1))
 	{
 		return false;
 	}
 
-	PlayerState->SetCoins(PlayerState->GetCoins() - ItemDefinition->Price);
+	PlayerState->AddSnowGauge(-ItemDefinition->Price);
 	return true;
 }
 bool UDRShopTransactionComponent::TryUpgrade(
@@ -275,14 +275,13 @@ bool UDRShopTransactionComponent::TryUpgrade(
 		|| !IsValid(Operation.TargetDefinition)
 		|| !ShopComponent->CanAfford(
 			Operation.TargetDefinition,
-			PlayerState->GetCoins())
+			PlayerState->GetSnowGauge())
 		|| !UpgradeComponent->ApplyUpgrade(Inventory, Operation))
 	{
 		return false;
 	}
 
-	PlayerState->SetCoins(
-		PlayerState->GetCoins() - Operation.TargetDefinition->Price);
+	PlayerState->AddSnowGauge(-Operation.TargetDefinition->Price);
 	return true;
 }
 
@@ -302,15 +301,15 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		|| !ShopComponent->CanPurchasePerk(
 			PerkDefinition,
 			PerkComponent,
-			PlayerState->GetCoins()))
+			PlayerState->GetSnowGauge()))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s Coins=%d Reason=PurchaseValidationFailed"),
+			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s SnowGauge=%.2f Reason=PurchaseValidationFailed"),
 			*GetNameSafe(PlayerState),
 			*RowName.ToString(),
-			IsValid(PlayerState) ? PlayerState->GetCoins() : 0);
+			IsValid(PlayerState) ? PlayerState->GetSnowGauge() : 0);
 		return false;
 	}
 
@@ -328,19 +327,19 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	}
 
 	// 퍽 적용이 완료된 뒤 비용을 차감한다.
-	const int32 PreviousCoins = PlayerState->GetCoins();
-	PlayerState->SetCoins(PreviousCoins - PerkDefinition->Price);
+	const float PreviousSnowGauge = PlayerState->GetSnowGauge();
+	PlayerState->AddSnowGauge(-PerkDefinition->Price);
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
+		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d SnowGauge=%.2f->%.2f"),
 		*GetNameSafe(PlayerState),
 		*RowName.ToString(),
 		*GetNameSafe(PerkDefinition),
 		PerkComponent->GetPerkCount(PerkDefinition),
 		PerkDefinition->Price,
-		PreviousCoins,
-		PlayerState->GetCoins());
+		PreviousSnowGauge,
+		PlayerState->GetSnowGauge());
 	return true;
 }
 
