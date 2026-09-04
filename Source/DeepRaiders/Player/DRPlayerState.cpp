@@ -1,4 +1,5 @@
 #include "DRPlayerState.h"
+#include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
 
 #include "DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
@@ -27,6 +28,7 @@ ADRPlayerState::ADRPlayerState()
 	AbilitySystemComponent->GenericCancelInputID = static_cast<int32>(EDRAbilityInputId::Secondary);
 
 	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
+	CharacterUpgradeComponent = CreateDefaultSubobject<UDRCharacterUpgradeComponent>(TEXT("CharacterUpgradeComponent"));
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
 	SkillComponent = CreateDefaultSubobject<UDRSkillComponent>(TEXT("SkillComponent"));
 	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
@@ -244,6 +246,7 @@ void ADRPlayerState::ResetForGameStart()
 	{
 		PerkComponent->ResetPerks();
 	}
+	CharacterUpgradeComponent->ResetUpgrades();
 }
 
 void ADRPlayerState::ResetForRespawn()

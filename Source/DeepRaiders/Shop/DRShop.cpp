@@ -3,7 +3,6 @@
 #include "Components/SceneComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopAreaComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopComponent.h"
-#include "DeepRaiders/Shop/Components/DRUpgradeComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Sound/SoundBase.h"
@@ -24,9 +23,6 @@ ADRShop::ADRShop()
 
 	ShopComponent = CreateDefaultSubobject<UDRShopComponent>(
 		TEXT("ShopComponent"));
-
-	UpgradeComponent = CreateDefaultSubobject<UDRUpgradeComponent>(
-		TEXT("UpgradeComponent"));
 
 	static ConstructorHelpers::FObjectFinder<USoundBase> PurchaseSoundAsset(
 		TEXT("/Game/DeepRaiders/Sound/SoundWave/Shop_Buy.Shop_Buy"));

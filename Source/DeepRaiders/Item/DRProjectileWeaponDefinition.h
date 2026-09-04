@@ -6,6 +6,7 @@
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRRangedWeaponDefinition.h"
 #include "DRWeaponPresentationTypes.h"
+#include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "DeepRaiders/GAS/DRGameplayEffectData.h"
 #include "DRProjectileWeaponDefinition.generated.h"
 
@@ -105,6 +106,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess,
 		ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
 	float SpreadHalfAngleDegrees = 0.f;
+
+	// 실제 MaxAttackDistance를 기준으로 Projectile의 크기와 충돌 위력을 감쇠한다.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile|Falloff")
+	FDRProjectileFalloffSettings FalloffSettings;
 	
 	// 관통 가능 여부
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan", meta = (AllowPrivateAccess))

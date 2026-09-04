@@ -1,6 +1,9 @@
 #include "DRShopBuyPanelWidget.h"
 
 #include "Components/Button.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/PanelWidget.h"
+#include "Components/TextBlock.h"
 #include "Components/ScrollBox.h"
 #include "DeepRaiders/UI/Inventory/DRInventoryWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRShopViewModel.h"
@@ -82,21 +85,38 @@ void UDRShopBuyPanelWidget::NativeOnInitialized()
 		ConsumableButton->OnClicked.AddDynamic(this, &ThisClass::HandleConsumableButtonClicked);
 	}
 
-	if (IsValid(UpgradeButton))
-	{
-		UpgradeButton->OnClicked.AddDynamic(this, &ThisClass::HandleUpgradeButtonClicked);
-	}
-
 	if (IsValid(PerkButton))
 	{
 		PerkButton->OnClicked.AddDynamic(this, &ThisClass::HandlePerkButtonClicked);
 	}
 
+	if (!IsValid(CharacterUpgradeButton) && IsValid(PerkButton) && PerkButton->GetParent())
+	{
+		CharacterUpgradeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("CharacterUpgradeButton"));
+		CharacterUpgradeButton->SetStyle(PerkButton->GetStyle());
+		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
+		Label->SetText(NSLOCTEXT("Shop", "CharacterUpgradeTab", "스탯 강화"));
+		if (const UTextBlock* PerkLabel = Cast<UTextBlock>(PerkButton->GetContent()))
+		{
+			Label->SetFont(PerkLabel->GetFont());
+			Label->SetColorAndOpacity(PerkLabel->GetColorAndOpacity());
+		}
+		CharacterUpgradeButton->AddChild(Label);
+		PerkButton->GetParent()->AddChild(CharacterUpgradeButton);
+	}
+	if (IsValid(CharacterUpgradeButton))
+	{
+		CharacterUpgradeButton->OnClicked.AddDynamic(this, &ThisClass::HandleCharacterUpgradeButtonClicked);
+	}
 	SelectSection(SelectedSection);
 }
 
 void UDRShopBuyPanelWidget::NativeDestruct()
 {
+	if (IsValid(CharacterUpgradeButton))
+	{
+		CharacterUpgradeButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleCharacterUpgradeButtonClicked);
+	}
 	if (IsValid(ShopViewModel))
 	{
 		ShopViewModel->Deinitialize();
@@ -112,11 +132,6 @@ void UDRShopBuyPanelWidget::NativeDestruct()
 		ConsumableButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleConsumableButtonClicked);
 	}
 
-	if (IsValid(UpgradeButton))
-	{
-		UpgradeButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleUpgradeButtonClicked);
-	}
-
 	if (IsValid(PerkButton))
 	{
 		PerkButton->OnClicked.RemoveDynamic(this, &ThisClass::HandlePerkButtonClicked);
@@ -129,7 +144,6 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 {
 	if (!IsValid(EquipmentButton)
 		|| !IsValid(ConsumableButton)
-		|| !IsValid(UpgradeButton)
 		|| !IsValid(PerkButton))
 	{
 		return;
@@ -145,8 +159,16 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 
 	EquipmentButton->SetIsEnabled(Section != EDRShopOfferSection::Equipment);
 	ConsumableButton->SetIsEnabled(Section != EDRShopOfferSection::Consumable);
-	UpgradeButton->SetIsEnabled(Section != EDRShopOfferSection::Upgrade);
 	PerkButton->SetIsEnabled(Section != EDRShopOfferSection::Perk);
+	if (IsValid(CharacterUpgradeButton))
+	{
+		CharacterUpgradeButton->SetIsEnabled(Section != EDRShopOfferSection::CharacterUpgrade);
+	}
+}
+
+void UDRShopBuyPanelWidget::HandleCharacterUpgradeButtonClicked()
+{
+	SelectSection(EDRShopOfferSection::CharacterUpgrade);
 }
 
 void UDRShopBuyPanelWidget::HandleEquipmentButtonClicked()
@@ -159,10 +181,6 @@ void UDRShopBuyPanelWidget::HandleConsumableButtonClicked()
 	SelectSection(EDRShopOfferSection::Consumable);
 }
 
-void UDRShopBuyPanelWidget::HandleUpgradeButtonClicked()
-{
-	SelectSection(EDRShopOfferSection::Upgrade);
-}
 
 void UDRShopBuyPanelWidget::HandlePerkButtonClicked()
 {

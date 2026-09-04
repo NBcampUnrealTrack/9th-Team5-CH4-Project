@@ -22,7 +22,7 @@ public:
 	/** 상점 데이터와 거래 범위 참조를 관리하는 컴포넌트를 초기화한다. */
 	UDRShopComponent();
 
-	/** DataTable에서 생성된 구매 및 업그레이드 Offer 목록을 반환한다. */
+	/** DataTable에서 생성된 상품 Offer 목록을 반환한다. */
 	const TArray<FDRShopItemOffer>& GetItemOffers() const;
 
 	/** RowName에 해당하는 원본 상점 데이터를 반환한다. */
@@ -61,7 +61,7 @@ private:
 	/** DataTable 전체를 읽어 런타임 Offer 목록을 재구성한다. */
 	void LoadItemOffers();
 
-	/** 일반 상품 또는 단계별 업그레이드 Offer를 목록에 추가한다. */
+	/** 상품 Offer를 목록에 추가한다. */
 	void AddItemOffers(FName RowName, const FDRShopItemTableRow& ItemRow);
 
 	void AddOffer(
