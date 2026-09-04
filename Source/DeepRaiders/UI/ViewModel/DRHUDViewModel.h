@@ -178,12 +178,19 @@ private:
 	void HandleGameTimerChanged(int32 RemainingSeconds, bool bGameStarted, bool bGameEnded);
 
 	UFUNCTION()
+	void HandleGamePhaseChanged(
+		int32 PhaseIndex,
+		int32 PhaseRemainingSeconds,
+		const TArray<FText>& PlayerMessages);
+
+	UFUNCTION()
 	void HandleGameEndDebugTextChanged(const FString& DebugText);
 
 	UFUNCTION()
 	void HandleGameResultTextChanged(const FText& ResultText);
 
 	void RefreshGameStartStatus();
+	void RefreshGameStateText();
 
 	TWeakObjectPtr<ADRGameStartActor> GameStartActor;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
@@ -191,6 +198,8 @@ private:
 	int32 TotalPlayerCount = 0;
 	int32 GameStartCountdown = 0;
 	int32 GameRemainingSeconds = 0;
+	FText CurrentPhaseMessageText;
+	FText CurrentGameResultText;
 	bool bGameStarted = false;
 	bool bGameEnded = false;
 #pragma endregion

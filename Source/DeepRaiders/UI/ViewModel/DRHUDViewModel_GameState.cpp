@@ -33,6 +33,19 @@ void UDRHUDViewModel::HandleGameTimerChanged(
 	bGameStarted = bInGameStarted;
 	bGameEnded = bInGameEnded;
 	RefreshGameStartStatus();
+	RefreshGameStateText();
+}
+
+void UDRHUDViewModel::HandleGamePhaseChanged(
+	int32 PhaseIndex,
+	int32,
+	const TArray<FText>& PlayerMessages)
+{
+	// 현재 페이즈의 안내 문구를 기존 게임 시작 상태 영역에 함께 표시한다.
+	CurrentPhaseMessageText = PhaseIndex != INDEX_NONE && !PlayerMessages.IsEmpty()
+		? FText::Join(FText::FromString(TEXT("\n")), PlayerMessages)
+		: FText::GetEmpty();
+	RefreshGameStartStatus();
 }
 
 void UDRHUDViewModel::HandleGameEndDebugTextChanged(const FString& DebugText)
@@ -42,8 +55,8 @@ void UDRHUDViewModel::HandleGameEndDebugTextChanged(const FString& DebugText)
 
 void UDRHUDViewModel::HandleGameResultTextChanged(const FText& ResultText)
 {
-	UE_MVVM_SET_PROPERTY_VALUE(GameStateText, ResultText);
-	UE_MVVM_SET_PROPERTY_VALUE(bIsGameStateTextVisible, !ResultText.IsEmpty());
+	CurrentGameResultText = ResultText;
+	RefreshGameStateText();
 }
 
 void UDRHUDViewModel::RefreshGameStartStatus()
@@ -64,9 +77,7 @@ void UDRHUDViewModel::RefreshGameStartStatus()
 	}
 	else if (bGameStarted)
 	{
-		const int32 Minutes = GameRemainingSeconds / 60;
-		const int32 Seconds = GameRemainingSeconds % 60;
-		NewStatusText = FText::FromString(FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds));
+		NewStatusText = CurrentPhaseMessageText;
 	}
 	else
 	{
@@ -76,5 +87,19 @@ void UDRHUDViewModel::RefreshGameStartStatus()
 	UE_MVVM_SET_PROPERTY_VALUE(GameStartStatusText, NewStatusText);
 	UE_MVVM_SET_PROPERTY_VALUE(
 		bIsGameStartStatusVisible,
-		GameStartActor.IsValid() || MiningGameState.IsValid());
+		!NewStatusText.IsEmpty());
+}
+
+void UDRHUDViewModel::RefreshGameStateText()
+{
+	FText NewStateText = CurrentGameResultText;
+	if (NewStateText.IsEmpty() && bGameStarted && !bGameEnded)
+	{
+		const int32 Minutes = GameRemainingSeconds / 60;
+		const int32 Seconds = GameRemainingSeconds % 60;
+		NewStateText = FText::FromString(FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds));
+	}
+
+	UE_MVVM_SET_PROPERTY_VALUE(GameStateText, NewStateText);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsGameStateTextVisible, !NewStateText.IsEmpty());
 }
