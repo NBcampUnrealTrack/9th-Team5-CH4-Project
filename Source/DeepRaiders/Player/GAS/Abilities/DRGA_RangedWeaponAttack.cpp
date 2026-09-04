@@ -11,6 +11,7 @@
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 
@@ -738,6 +739,34 @@ void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* T
 		
 		SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);		
 	}	
+}
+
+
+void UDRGA_RangedWeaponAttack::ApplyHeatForSuccessfulShot()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+	if (!IsValid(WeaponDefinition) || !WeaponDefinition->HeatSettings.bEnabled ||
+		WeaponDefinition->HeatSettings.HeatPerShot <= 0.f)
+	{
+		return;
+	}
+
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+	if (!IsValid(PlayerState))
+	{
+		return;
+	}
+
+	PlayerState->AddWeaponHeat(
+		WeaponDefinition->HeatSettings.HeatPerShot,
+		WeaponDefinition->HeatSettings.DecayDelay,
+		WeaponDefinition->HeatSettings.RecoveryDuration);
 }
 
 void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(

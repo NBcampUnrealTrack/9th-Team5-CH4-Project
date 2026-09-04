@@ -11,6 +11,7 @@
 #include "DeepRaiders/Player/Components/DRInteractionComponent.h"
 #include "EngineUtils.h"
 #include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 {
@@ -46,6 +47,15 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		MaxSnowGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleMaxSnowGaugeChanged);
+		HeatGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetHeatGaugeAttribute()).AddUObject(
+				this, &ThisClass::HandleHeatGaugeChanged);
+		MaxHeatGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetMaxHeatGaugeAttribute()).AddUObject(
+				this, &ThisClass::HandleMaxHeatGaugeChanged);
+		OverheatedTagChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this, &ThisClass::HandleOverheatedTagChanged);
 		FreezeGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleFreezeGaugeChanged);
@@ -116,6 +126,8 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	// 최초 리프레쉬
 	RefreshHealth();
 	RefreshSnowGauge();
+	RefreshHeatGauge();
+	RefreshOverheatedState();
 	RefreshFreezeGauge();
 	RefreshAmmoVisibility();
 	RefreshInteractionPrompt();
@@ -178,6 +190,16 @@ void UDRHUDViewModel::Deinitialize()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()).Remove(MaxSnowGaugeChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetHeatGaugeAttribute()).Remove(HeatGaugeChangedHandle);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetMaxHeatGaugeAttribute()).Remove(MaxHeatGaugeChangedHandle);
+		if (OverheatedTagChangedHandle.IsValid())
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(
+				DRGameplayTags::State_Overheated, EGameplayTagEventType::NewOrRemoved)
+				.Remove(OverheatedTagChangedHandle);
+		}
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
 	}
 
@@ -191,6 +213,9 @@ void UDRHUDViewModel::Deinitialize()
 	MaxHealthChangedHandle.Reset();
 	SnowGaugeChangedHandle.Reset();
 	MaxSnowGaugeChangedHandle.Reset();
+	HeatGaugeChangedHandle.Reset();
+	MaxHeatGaugeChangedHandle.Reset();
+	OverheatedTagChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
 	InteractionFocusChangedHandle.Reset();
 	ReadyPlayerCount = 0;
@@ -201,11 +226,17 @@ void UDRHUDViewModel::Deinitialize()
 	bGameEnded = false;
 	TargetHealthRatio = 0.f;
 	TargetSnowGaugeRatio = 0.f;
+	TargetHeatGaugeRatio = 0.f;
 	TargetFreezeGaugeRatio = 0.f;
 	TargetCurrentHealth = 0.f;
 	TargetSnowGauge = 0;
 	InterpolatedSnowGauge = 0.f;
+	TargetHeatGauge = 0.f;
 	TargetFreezeGauge = 0.f;
+	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, 100.f);
+	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeRatio, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsOverheated, false);
 	bInterpolateGauges = false;
 }
 
@@ -236,9 +267,11 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, InterpolateValue(CurrentHealth, TargetCurrentHealth));
 	InterpolatedSnowGauge = InterpolateValue(InterpolatedSnowGauge, TargetSnowGauge);
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, FMath::RoundToInt(InterpolatedSnowGauge));
+	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, InterpolateValue(HeatGauge, TargetHeatGauge));
 	UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, InterpolateValue(FreezeGauge, TargetFreezeGauge));
 	UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, InterpolateRatio(HealthRatio, TargetHealthRatio));
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, InterpolateRatio(SnowGaugeRatio, TargetSnowGaugeRatio));
+	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeRatio, InterpolateRatio(HeatGaugeRatio, TargetHeatGaugeRatio));
 	UE_MVVM_SET_PROPERTY_VALUE(
 		FreezeGaugeRatio,
 		InterpolateRatio(FreezeGaugeRatio, TargetFreezeGaugeRatio));
@@ -262,6 +295,21 @@ void UDRHUDViewModel::HandleSnowGaugeChanged(const FOnAttributeChangeData& Chang
 void UDRHUDViewModel::HandleMaxSnowGaugeChanged(const FOnAttributeChangeData& ChangeData)
 {
 	RefreshSnowGauge();
+}
+
+void UDRHUDViewModel::HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshHeatGauge();
+}
+
+void UDRHUDViewModel::HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshHeatGauge();
+}
+
+void UDRHUDViewModel::HandleOverheatedTagChanged(FGameplayTag Tag, int32 NewCount)
+{
+	RefreshOverheatedState();
 }
 
 void UDRHUDViewModel::HandleFreezeGaugeChanged(const FOnAttributeChangeData& ChangeData)
@@ -326,6 +374,35 @@ void UDRHUDViewModel::RefreshSnowGauge()
 		UE_MVVM_SET_PROPERTY_VALUE(SnowGauge, TargetSnowGauge);
 		UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeRatio, TargetSnowGaugeRatio);
 	}
+}
+
+
+void UDRHUDViewModel::RefreshHeatGauge()
+{
+	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
+		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
+		: nullptr;
+	const float NewHeatGauge = IsValid(AttributeSet) ? AttributeSet->GetHeatGauge() : 0.f;
+	const float NewMaxHeatGauge = IsValid(AttributeSet) ? AttributeSet->GetMaxHeatGauge() : 100.f;
+	const float NewHeatGaugeRatio = NewMaxHeatGauge > KINDA_SMALL_NUMBER
+		? FMath::Clamp(NewHeatGauge / NewMaxHeatGauge, 0.f, 1.f)
+		: 0.f;
+
+	TargetHeatGauge = NewHeatGauge;
+	TargetHeatGaugeRatio = NewHeatGaugeRatio;
+	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, NewMaxHeatGauge);
+	if (!bInterpolateGauges)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, TargetHeatGauge);
+		UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeRatio, TargetHeatGaugeRatio);
+	}
+}
+
+void UDRHUDViewModel::RefreshOverheatedState()
+{
+	const bool bNewOverheated = AbilitySystemComponent.IsValid() &&
+		AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Overheated);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsOverheated, bNewOverheated);
 }
 
 void UDRHUDViewModel::RefreshFreezeGauge()

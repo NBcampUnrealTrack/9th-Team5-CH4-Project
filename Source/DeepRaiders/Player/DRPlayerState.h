@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "TimerManager.h"
 #include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPlayerState.generated.h"
@@ -11,6 +12,7 @@
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
+class UDRCharacterUpgradeComponent;
 class UDRPerkComponent;
 class UDRSkillComponent;
 class UGameplayAbility;
@@ -33,7 +35,6 @@ struct FDRPublicQuickSlot
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCoinsChangedSignature, int32, NewCoins);
 DECLARE_MULTICAST_DELEGATE(FDROnPlayerIdentityChanged);
 
 UCLASS()
@@ -56,6 +57,11 @@ public:
 	UDRPerkComponent* GetPerkComponent() const
 	{
 		return PerkComponent;
+	}
+
+	UDRCharacterUpgradeComponent* GetCharacterUpgradeComponent() const
+	{
+		return CharacterUpgradeComponent;
 	}
 
 	UDRSkillComponent* GetSkillComponent() const
@@ -149,26 +155,26 @@ public:
 	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
 	bool RefillJetpackFuel();
 
-	UFUNCTION(BlueprintPure, Category = "Player|Coin")
-	int32 GetCoins() const;
+	UFUNCTION(BlueprintPure, Category = "Player|Snow")
+	float GetSnowGauge() const;
 
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
-	void SetCoins(int32 NewCoins);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Coin")
-	void AddCoins(int32 Amount);
-
-	UPROPERTY(BlueprintAssignable, Category = "Player|Coin")
-	FDRCoinsChangedSignature OnCoinsChanged;
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Snow")
+	void AddSnowGauge(float Amount);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
 	void ResetForRespawn();
 
-	/** 새 경기용 코인과 퍽 상태를 기본값으로 되돌린다. */
+	/** 새 경기용 퍽 상태를 기본값으로 되돌린다. */
 	void ResetForGameStart();
 	
 	UFUNCTION(BlueprintPure, Category = "GAS|Status")
 	bool IsFrozen() const;
+
+	/** 서버에서 성공한 원거리 무기 사용이 확정된 뒤 Heat를 누적한다. */
+	void AddWeaponHeat(float HeatAmount, float DecayDelay, float RecoveryDuration);
+
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsOverheated() const;
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
 	void ClearFrozenState();
@@ -190,6 +196,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
 	TSubclassOf<UGameplayEffect> DeadEffectClass;
+
+	/** Infinite GE. BP에서 State.Overheated를 Granted Tag로 부여한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat")
+	TSubclassOf<UGameplayEffect> OverheatedEffectClass;
 	
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
 	void EvaluateDeadState();
@@ -208,6 +218,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Upgrade")
+	TObjectPtr<UDRCharacterUpgradeComponent> CharacterUpgradeComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
 	TObjectPtr<UDRPerkComponent> PerkComponent;
 
@@ -221,6 +234,7 @@ protected:
 	void UnbindStatusPolicy();
 
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleHeatGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	
@@ -243,6 +257,25 @@ protected:
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
 	FDelegateHandle VoxelContainedTagChangedHandle;
+
+	// Heat / Overheat
+	void EvaluateOverheatedState(float HeatGauge);
+	void EnterOverheatedState();
+	void ClearOverheatedState();
+	void ResetHeatState();
+	void RestartHeatDecay();
+	void TickHeatDecay();
+	void StopHeatDecay();
+
+	/** Heat 감소는 UI 보간보다 충분히 낮은 빈도로 서버에서만 실행한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat", meta = (ClampMin = "0.02", Units = "s"))
+	float HeatDecayInterval = 0.1f;
+
+	float CurrentHeatDecayDelay = 1.f;
+	float CurrentHeatDecayRatePerSecond = 25.f;
+	FTimerHandle HeatDecayTimerHandle;
+	FDelegateHandle HeatGaugeChangedHandle;
+	FActiveGameplayEffectHandle OverheatedEffectHandle;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;
@@ -267,12 +300,6 @@ protected:
 
 	UFUNCTION()
 	void OnRep_JetpackFuel();
-
-	UFUNCTION()
-	void OnRep_Coins(int32 PreviousCoins);
-
-	UPROPERTY(EditDefaultsOnly, ReplicatedUsing = OnRep_Coins, Category = "Player|Coin", meta = (ClampMin = "0"))
-	int32 Coins = 1000;
 
 private:
 	UFUNCTION()

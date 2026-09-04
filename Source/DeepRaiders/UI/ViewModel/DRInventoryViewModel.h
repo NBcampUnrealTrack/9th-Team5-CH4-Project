@@ -111,10 +111,6 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Inventory")
 	bool bIsOccupied = false;
 
-	/** 로컬 PlayerState가 보유한 재화 표시 문자열이다. */
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Inventory")
-	FText CoinsText;
-
 	/** 장착 상태를 제외한 퀵슬롯 표시 목록이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
 	TArray<TObjectPtr<UDRInventorySlotEntryViewModel>> QuickSlotEntries;
@@ -123,16 +119,11 @@ private:
 	UFUNCTION()
 	void HandleInventoryChanged();
 
-	UFUNCTION()
-	void HandleCoinsChanged(int32 NewCoins);
-
-	void InitializeCoins(ADRPlayerState* InPlayerState);
 	void RebuildQuickSlotEntries();
 
 	TWeakObjectPtr<UDRInventoryComponent> InventoryComponent;
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 	TWeakObjectPtr<ADRPlayerState> PlayerState;
-	TWeakObjectPtr<ADRPlayerState> CoinsPlayerState;
 };
 
 /** 로컬 플레이어를 중앙에 고정한 3인 인벤토리 화면 상태다. */

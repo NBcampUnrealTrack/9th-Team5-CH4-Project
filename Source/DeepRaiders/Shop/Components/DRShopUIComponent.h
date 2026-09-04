@@ -6,6 +6,8 @@
 #include "DeepRaiders/Shop/DRShopSellTypes.h"
 #include "DRShopUIComponent.generated.h"
 
+struct FOnAttributeChangeData;
+
 class AActor;
 class ADRPlayerController;
 class ADRPlayerState;
@@ -15,7 +17,6 @@ class UDRShopComponent;
 class UDRShopTransactionComponent;
 class UDRUIManagerSubsystem;
 class UDRShopWidget;
-class UDRUpgradeComponent;
 
 UCLASS(ClassGroup = (DeepRaiders), meta = (BlueprintSpawnableComponent))
 class DEEPRAIDERS_API UDRShopUIComponent : public UActorComponent
@@ -66,7 +67,7 @@ private:
 	UFUNCTION()
 	void HandleSellRequested(EDRShopSellTargetType TargetType, FGuid InstanceId);
 
-	/** 인벤토리가 변경되면 표시할 다음 업그레이드를 다시 계산한다. */
+	/** 인벤토리가 변경되면 상품 구매 가능 상태를 갱신한다. */
 	UFUNCTION()
 	void HandleInventoryChanged();
 
@@ -74,15 +75,14 @@ private:
 	UFUNCTION()
 	void HandlePerksChanged();
 
-	/** 보유 코인이 변경되면 퍽 구매 가능 상태를 다시 계산한다. */
-	UFUNCTION()
-	void HandleCoinsChanged(int32 NewCoins);
-
-	/** 현재 보유 단계에 맞는 업그레이드 Offer로 UI를 갱신한다. */
-	void RefreshUpgradeOffers();
+	/** 보유 눈이 변경되면 구매 가능 상태를 다시 계산한다. */
+	void HandleSnowGaugeChanged(const FOnAttributeChangeData& Data);
 
 	/** 현재 플레이어 상태에 맞춰 지정한 Offer UI를 갱신한다. */
 	void RefreshOffers(EDRShopOfferType OfferType);
+
+	UFUNCTION()
+	void RefreshCharacterUpgrades();
 
 	/** 상점 Offer를 UI 표시용 View 데이터로 변환한다. */
 	TArray<FDRShopOfferView> MakeOfferViews(
@@ -103,9 +103,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRShopTransactionComponent> ShopTransactionComponent;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDRPerkComponent> PerkComponent;

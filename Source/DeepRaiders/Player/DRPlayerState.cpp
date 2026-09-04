@@ -1,4 +1,5 @@
 #include "DRPlayerState.h"
+#include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
 
 #include "DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
@@ -27,6 +28,7 @@ ADRPlayerState::ADRPlayerState()
 	AbilitySystemComponent->GenericCancelInputID = static_cast<int32>(EDRAbilityInputId::Secondary);
 
 	PlayerAttributeSet = CreateDefaultSubobject<UDRPlayerAttributeSet>(TEXT("PlayerAttributeSet"));
+	CharacterUpgradeComponent = CreateDefaultSubobject<UDRCharacterUpgradeComponent>(TEXT("CharacterUpgradeComponent"));
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
 	SkillComponent = CreateDefaultSubobject<UDRSkillComponent>(TEXT("SkillComponent"));
 	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
@@ -47,8 +49,6 @@ void ADRPlayerState::GetLifetimeReplicatedProps(
 	DOREPLIFETIME(ADRPlayerState, bHasJetpack);
 	DOREPLIFETIME_CONDITION(ADRPlayerState, CurrentJetpackFuel, COND_OwnerOnly);
 
-	// 실제 코인 값은 서버와 해당 PlayerState의 소유 클라이언트만 공유한다.
-	DOREPLIFETIME_CONDITION(ADRPlayerState, Coins, COND_OwnerOnly);
 	DOREPLIFETIME(ADRPlayerState, TeamId);
 	DOREPLIFETIME(ADRPlayerState, PublicQuickSlots);
 }
@@ -216,41 +216,22 @@ bool ADRPlayerState::RefillJetpackFuel()
 	return true;
 }
 
-int32 ADRPlayerState::GetCoins() const
+float ADRPlayerState::GetSnowGauge() const
 {
-	return Coins;
+	return IsValid(PlayerAttributeSet) ? PlayerAttributeSet->GetSnowGauge() : 0.f;
 }
 
-void ADRPlayerState::SetCoins(int32 NewCoins)
+void ADRPlayerState::AddSnowGauge(float Amount)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !IsValid(PlayerAttributeSet))
 	{
 		return;
 	}
 
-	const int32 PreviousCoins = Coins;
-	const int32 ClampedCoins = FMath::Max(0, NewCoins);
-
-	if (PreviousCoins == ClampedCoins)
-	{
-		return;
-	}
-
-	Coins = ClampedCoins;
-	OnRep_Coins(PreviousCoins);
-	ForceNetUpdate();
-}
-
-void ADRPlayerState::AddCoins(int32 Amount)
-{
-	if (!HasAuthority() || Amount <= 0)
-	{
-		return;
-	}
-
-	// int32 덧셈 전에 int64로 확장해 오버플로를 방지한다.
-	const int64 NewCoins = static_cast<int64>(Coins) + Amount;
-	SetCoins(static_cast<int32>(FMath::Min<int64>(NewCoins, MAX_int32)));
+	AbilitySystemComponent->ApplyModToAttribute(
+		UDRPlayerAttributeSet::GetSnowGaugeAttribute(),
+		EGameplayModOp::Additive,
+		Amount);
 }
 
 void ADRPlayerState::ResetForGameStart()
@@ -260,11 +241,12 @@ void ADRPlayerState::ResetForGameStart()
 		return;
 	}
 
-	SetCoins(GetClass()->GetDefaultObject<ADRPlayerState>()->GetCoins());
+	ResetHeatState();
 	if (IsValid(PerkComponent))
 	{
 		PerkComponent->ResetPerks();
 	}
+	CharacterUpgradeComponent->ResetUpgrades();
 }
 
 void ADRPlayerState::ResetForRespawn()
@@ -282,6 +264,7 @@ void ADRPlayerState::ResetForRespawn()
 	}
 
 	ClearFrozenState();
+	ResetHeatState();
 	
 	FGameplayTagContainer PersistThroughDeathTags;
 	PersistThroughDeathTags.AddTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
@@ -300,6 +283,43 @@ void ADRPlayerState::ResetForRespawn()
 bool ADRPlayerState::IsFrozen() const
 {
 	return IsValid(AbilitySystemComponent) && AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
+}
+
+bool ADRPlayerState::IsOverheated() const
+{
+	return IsValid(AbilitySystemComponent) &&
+		AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Overheated);
+}
+
+void ADRPlayerState::AddWeaponHeat(
+	float HeatAmount,
+	float DecayDelay,
+	float RecoveryDuration)
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || HeatAmount <= 0.f)
+	{
+		return;
+	}
+
+	const UDRPlayerAttributeSet* Attributes =
+		AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>();
+	if (!IsValid(Attributes) || Attributes->GetMaxHeatGauge() <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// 마지막으로 Heat를 발생시킨 무기의 냉각 정책을 고정한다.
+	// 무기만 교체해서 더 짧은 냉각 시간을 얻는 우회를 막는다.
+	CurrentHeatDecayDelay = FMath::Max(0.f, DecayDelay);
+	const float SafeRecoveryDuration = FMath::Max(0.01f, RecoveryDuration);
+	CurrentHeatDecayRatePerSecond = Attributes->GetMaxHeatGauge() / SafeRecoveryDuration;
+
+	const FGameplayAttribute HeatAttribute = UDRPlayerAttributeSet::GetHeatGaugeAttribute();
+	const float CurrentHeat = AbilitySystemComponent->GetNumericAttribute(HeatAttribute);
+	const float NewHeat = FMath::Min(
+		Attributes->GetMaxHeatGauge(),
+		CurrentHeat + HeatAmount);
+	AbilitySystemComponent->SetNumericAttributeBase(HeatAttribute, NewHeat);
 }
 
 void ADRPlayerState::ClearFrozenState()
@@ -330,12 +350,14 @@ void ADRPlayerState::BeginPlay()
 
 		EvaluateDeadState();
 		EvaluateFrozenState(PlayerAttributeSet->GetFreezeGauge(), PlayerAttributeSet->GetHealth());
+		EvaluateOverheatedState(PlayerAttributeSet->GetHeatGauge());
 	}
 }
 
 void ADRPlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopFreezeDecay();
+	StopHeatDecay();
 	UnbindStatusPolicy();
 
 	Super::EndPlay(EndPlayReason);
@@ -385,6 +407,7 @@ void ADRPlayerState::EvaluateDeadState()
 	 * 살아있는 플레이어용 Timer는 중단.
 	 */
 	StopFreezeDecay();
+	StopHeatDecay();
 
 	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
 	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(DeadEffectClass, 1.f, Context);
@@ -442,6 +465,14 @@ void ADRPlayerState::BindStatusPolicy()
 				this,
 				&ThisClass::HandleFreezeGaugeChanged);
 
+	HeatGaugeChangedHandle =
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetHeatGaugeAttribute())
+			.AddUObject(
+				this,
+				&ThisClass::HandleHeatGaugeChanged);
+
 	HealthChangedHandle =
 		AbilitySystemComponent->
 			GetGameplayAttributeValueChangeDelegate(
@@ -475,6 +506,15 @@ void ADRPlayerState::UnbindStatusPolicy()
 					GetFreezeGaugeAttribute())
 			.Remove(FreezeGaugeChangedHandle);
 		FreezeGaugeChangedHandle.Reset();
+	}
+
+	if (HeatGaugeChangedHandle.IsValid())
+	{
+		AbilitySystemComponent
+			->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetHeatGaugeAttribute())
+			.Remove(HeatGaugeChangedHandle);
+		HeatGaugeChangedHandle.Reset();
 	}
 
 	if (HealthChangedHandle.IsValid())
@@ -528,6 +568,156 @@ void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data
 	{
 		StopFreezeDecay();
 	}
+}
+
+void ADRPlayerState::HandleHeatGaugeChanged(const FOnAttributeChangeData& Data)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	EvaluateOverheatedState(Data.NewValue);
+
+	if (Data.NewValue > Data.OldValue + KINDA_SMALL_NUMBER)
+	{
+		RestartHeatDecay();
+		return;
+	}
+
+	if (Data.NewValue <= KINDA_SMALL_NUMBER)
+	{
+		StopHeatDecay();
+		ClearOverheatedState();
+	}
+}
+
+void ADRPlayerState::EvaluateOverheatedState(float HeatGauge)
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !IsValid(PlayerAttributeSet))
+	{
+		return;
+	}
+
+	if (HeatGauge + KINDA_SMALL_NUMBER >= PlayerAttributeSet->GetMaxHeatGauge())
+	{
+		EnterOverheatedState();
+	}
+	else if (HeatGauge <= KINDA_SMALL_NUMBER)
+	{
+		ClearOverheatedState();
+	}
+}
+
+void ADRPlayerState::EnterOverheatedState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || IsOverheated() || !OverheatedEffectClass)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(
+		OverheatedEffectClass,
+		1.f,
+		Context);
+	if (!SpecHandle.IsValid())
+	{
+		return;
+	}
+
+	OverheatedEffectHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	if (!OverheatedEffectHandle.IsValid())
+	{
+		return;
+	}
+
+	// 상태 진입 순간 이미 실행 중인 행동만 정리한다.
+	// 신규 활성화 차단 정책은 각 GA BP의 ActivationBlockedTags가 소유한다.
+	FGameplayTagContainer AbilitiesToCancel;
+	AbilitiesToCancel.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	AbilitiesToCancel.AddTag(DRGameplayTags::Ability_Snow_Absorb);
+	AbilitySystemComponent->CancelAbilities(&AbilitiesToCancel);
+}
+
+void ADRPlayerState::ClearOverheatedState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	if (OverheatedEffectHandle.IsValid())
+	{
+		AbilitySystemComponent->RemoveActiveGameplayEffect(OverheatedEffectHandle);
+		OverheatedEffectHandle.Invalidate();
+	}
+}
+
+void ADRPlayerState::ResetHeatState()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	StopHeatDecay();
+	ClearOverheatedState();
+	AbilitySystemComponent->SetNumericAttributeBase(
+		UDRPlayerAttributeSet::GetHeatGaugeAttribute(),
+		0.f);
+}
+
+void ADRPlayerState::RestartHeatDecay()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	const float CurrentHeat = AbilitySystemComponent->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetHeatGaugeAttribute());
+	if (CurrentHeat <= KINDA_SMALL_NUMBER || HeatDecayInterval <= 0.f ||
+		CurrentHeatDecayRatePerSecond <= 0.f)
+	{
+		StopHeatDecay();
+		return;
+	}
+
+	GetWorldTimerManager().SetTimer(
+		HeatDecayTimerHandle,
+		this,
+		&ThisClass::TickHeatDecay,
+		HeatDecayInterval,
+		true,
+		CurrentHeatDecayDelay);
+}
+
+void ADRPlayerState::TickHeatDecay()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent))
+	{
+		StopHeatDecay();
+		return;
+	}
+
+	const FGameplayAttribute HeatAttribute = UDRPlayerAttributeSet::GetHeatGaugeAttribute();
+	const float CurrentHeat = AbilitySystemComponent->GetNumericAttribute(HeatAttribute);
+	if (CurrentHeat <= KINDA_SMALL_NUMBER)
+	{
+		StopHeatDecay();
+		ClearOverheatedState();
+		return;
+	}
+
+	const float DecayAmount = CurrentHeatDecayRatePerSecond * HeatDecayInterval;
+	const float NewHeat = FMath::Max(0.f, CurrentHeat - DecayAmount);
+	AbilitySystemComponent->SetNumericAttributeBase(HeatAttribute, NewHeat);
+}
+
+void ADRPlayerState::StopHeatDecay()
+{
+	GetWorldTimerManager().ClearTimer(HeatDecayTimerHandle);
 }
 
 void ADRPlayerState::HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData&)
@@ -710,20 +900,6 @@ void ADRPlayerState::TickFreezeDecay()
 void ADRPlayerState::StopFreezeDecay()
 {
 	GetWorldTimerManager().ClearTimer(FreezeDecayTimerHandle);
-}
-
-void ADRPlayerState::OnRep_Coins(int32 PreviousCoins)
-{
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[Coin] Player=%s Previous=%d New=%d Delta=%d"),
-		*GetNameSafe(this),
-		PreviousCoins,
-		Coins,
-		Coins - PreviousCoins);
-
-	OnCoinsChanged.Broadcast(Coins);
 }
 
 void ADRPlayerState::OnRep_HasJetpack()

@@ -93,8 +93,16 @@ void UDRShopItemWidget::ApplyOffer()
 
 void UDRShopItemWidget::HandleBuyButtonClicked()
 {
-	if (!Offer.Request.RowName.IsNone() && Offer.IsPurchasable)
+	UE_LOG(LogTemp, Log, TEXT("[Shop][BuyClicked] Widget=%s Type=%d Row=%s Tag=%s ExpectedLevel=%d"),
+		*GetName(), static_cast<int32>(Offer.Request.OfferType), *Offer.Request.RowName.ToString(),
+		*Offer.Request.UpgradeTag.ToString(), Offer.Request.ExpectedLevel);
+	if (!Offer.IsPurchasable || !Offer.Request.IsValidRequest() || !OnOfferRequested.IsBound())
 	{
-		OnOfferRequested.Broadcast(Offer.Request);
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=UI Reason=%s Tag=%s"),
+			!Offer.IsPurchasable ? TEXT("NotPurchasable")
+				: (!Offer.Request.IsValidRequest() ? TEXT("InvalidRequest") : TEXT("MissingRequestBinding")),
+			*Offer.Request.UpgradeTag.ToString());
+		return;
 	}
+	OnOfferRequested.Broadcast(Offer.Request);
 }

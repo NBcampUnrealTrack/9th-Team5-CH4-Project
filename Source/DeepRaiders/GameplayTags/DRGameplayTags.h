@@ -4,11 +4,17 @@
 
 namespace DRGameplayTags
 {
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MoveSpeed);
+
 	// State
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frozen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VoxelContained);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Overheated);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
@@ -44,6 +50,27 @@ namespace DRGameplayTags
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
+	
+	// Weapon Upgrade - Rifle
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowCost);
+
+	// Weapon Upgrade - Shotgun
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_ProjectileCount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_Spread);
+
+	// Weapon Upgrade - Cannon
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowCost);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
@@ -77,7 +104,12 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_HealthRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_FreezeGaugeRecovery);
-
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_DamageModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FireIntervalModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_ProjectileCountModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SpreadModifier);
+	
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);
 	

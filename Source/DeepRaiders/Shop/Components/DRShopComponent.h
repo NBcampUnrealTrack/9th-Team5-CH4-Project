@@ -22,7 +22,7 @@ public:
 	/** 상점 데이터와 거래 범위 참조를 관리하는 컴포넌트를 초기화한다. */
 	UDRShopComponent();
 
-	/** DataTable에서 생성된 구매 및 업그레이드 Offer 목록을 반환한다. */
+	/** DataTable에서 생성된 상품 Offer 목록을 반환한다. */
 	const TArray<FDRShopItemOffer>& GetItemOffers() const;
 
 	/** RowName에 해당하는 원본 상점 데이터를 반환한다. */
@@ -33,22 +33,22 @@ public:
 		FName RowName,
 		UDRPerkDefinition*& OutPerkDefinition) const;
 
-	/** 퍽 개수 제한, 가격과 보유 코인을 기준으로 구매 가능 여부를 판단한다. */
+	/** 퍽 개수 제한, 가격과 보유 눈을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchasePerk(
 		const UDRPerkDefinition* PerkDefinition,
 		const UDRPerkComponent* PerkComponent,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
-	/** 가격과 보유 코인을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
+	/** 가격과 보유 눈을 기준으로 아이템 비용을 지불할 수 있는지 확인한다. */
 	bool CanAfford(
 		const UDRItemDefinition* ItemDefinition,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
-	/** 판매 목록, 가격, 보유 코인과 인벤토리 공간을 기준으로 구매 가능 여부를 판단한다. */
+	/** 판매 목록, 가격, 보유 눈과 인벤토리 공간을 기준으로 구매 가능 여부를 판단한다. */
 	bool CanPurchaseItem(
 		const UDRInventoryComponent* Inventory,
 		UDRItemDefinition* ItemDefinition,
-		int32 AvailableCoins) const;
+		float AvailableSnowGauge) const;
 
 	/** 플레이어가 현재 상점 범위 안에 있는지 확인한다. */
 	bool IsTransactionAllowed(const APawn* Pawn) const;
@@ -61,7 +61,7 @@ private:
 	/** DataTable 전체를 읽어 런타임 Offer 목록을 재구성한다. */
 	void LoadItemOffers();
 
-	/** 일반 상품 또는 단계별 업그레이드 Offer를 목록에 추가한다. */
+	/** 상품 Offer를 목록에 추가한다. */
 	void AddItemOffers(FName RowName, const FDRShopItemTableRow& ItemRow);
 
 	void AddOffer(

@@ -65,14 +65,16 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	
 	FCollisionQueryParams OverlapQuery(SCENE_QUERY_STAT(DRThrowableProjectile), false);
 	OverlapQuery.AddIgnoredActor(this);
-	// Owner와 Instigator 대상 제외
-	OverlapQuery.AddIgnoredActor(GetOwner());
-	OverlapQuery.AddIgnoredActor(GetInstigator());
+	if (!ShouldAffectInstigator())
+	{
+		OverlapQuery.AddIgnoredActor(GetOwner());
+		OverlapQuery.AddIgnoredActor(GetInstigator());
+	}
 	
 	TArray<FOverlapResult> OverlapResults;
 	World->OverlapMultiByObjectType(OverlapResults, ExplosionLocation, FQuat::Identity, ObjectQuery,
 		FCollisionShape::MakeSphere(ItemSettings.ExplosionRadius), OverlapQuery);
-	
+
 	TSet<AActor*> UniqueActors;
 	TArray<AActor*> CandidateActors;
 	
@@ -90,7 +92,7 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	
 	FCollisionQueryParams OcclusionQuery(SCENE_QUERY_STAT(DRThrowableOcclusion), false);
 	OcclusionQuery.AddIgnoredActor(this);
-	// Owner와 Instigator 대상 제외
+	// 발사자는 차폐물로 취급하지 않는다.
 	OcclusionQuery.AddIgnoredActor(GetOwner());
 	OcclusionQuery.AddIgnoredActor(GetInstigator());
 	// Pawn에 의해서는 가려지지 않는다.
@@ -98,9 +100,14 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	
 	for (AActor* TargetActor : CandidateActors)
 	{
-		if (!IsValid(TargetActor)
-			|| IsFriendlyTarget(TargetActor))
+		if (!IsValid(TargetActor))
 		{
+			continue;
+		}
+
+		if (!IsValidEffectTarget(TargetActor))
+		{
+			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::InvalidTeam);
 			continue;
 		}
 		
@@ -108,12 +115,13 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		
 		// 벽으로 가려지진 않았는지 차폐여부 검사.
 		// 눈에 의해 쉽게 가려질 것 같지만 일단 LineTrace로 차폐
-		const bool bOccluded = World->LineTraceSingleByChannel(OcclusionHit,
+		const bool IsOccluded = World->LineTraceSingleByChannel(OcclusionHit,
 			ExplosionLocation + ImpactResult.ImpactNormal * 2.f, TargetActor->GetActorLocation(),
 			OcclusionTraceChannel, OcclusionQuery);
 	
-		if (bOccluded)
+		if (IsOccluded)
 		{
+			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::Occluded);
 			continue;
 		}
 		
@@ -121,19 +129,36 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		
 		if (!IsValid(TargetASC))
 		{
+			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::MissingAbilitySystem);
 			continue;
 		}
-		
+
 		FHitResult ExplosionHit = ImpactResult;
 		ExplosionHit.Location = ExplosionLocation;
 		ExplosionHit.ImpactPoint = ExplosionLocation;
 		
-		ApplyImpactEffect(TargetASC, ExplosionHit);		
+		ApplyEffectToTarget(TargetActor, TargetASC, ExplosionHit);
 	}
 	
 	ExecuteImpactGameplayCue(ImpactResult);
 	HandleWorldImpact(ImpactResult);
 	Destroy();
+}
+
+bool ADRThrowableProjectile::IsValidEffectTarget(const AActor* TargetActor) const
+{
+	return IsValid(TargetActor) && !IsFriendlyTarget(TargetActor);
+}
+
+void ADRThrowableProjectile::ApplyEffectToTarget(
+	AActor* TargetActor,
+	UAbilitySystemComponent* TargetAbilitySystem,
+	const FHitResult& ImpactResult)
+{
+	if (IsValid(TargetActor) && IsValid(TargetAbilitySystem))
+	{
+		ApplyImpactEffect(TargetAbilitySystem, ImpactResult);
+	}
 }
 
 void ADRThrowableProjectile::HandleWorldImpact(const FHitResult& ImpactResult)

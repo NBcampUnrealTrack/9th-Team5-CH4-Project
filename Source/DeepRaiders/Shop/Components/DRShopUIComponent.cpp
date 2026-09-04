@@ -1,9 +1,11 @@
 #include "DRShopUIComponent.h"
+#include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
+#include "DeepRaiders/Upgrade/DRCharacterUpgradeProfile.h"
 
 #include "DRShopComponent.h"
 #include "DRShopTransactionComponent.h"
-#include "DRUpgradeComponent.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
@@ -82,10 +84,8 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	}
 
 	ShopComponent = ShopActor->FindComponentByClass<UDRShopComponent>();
-	UpgradeComponent = ShopActor->FindComponentByClass<UDRUpgradeComponent>();
 
-	if (!IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent))
+	if (!IsValid(ShopComponent))
 	{
 		return;
 	}
@@ -118,9 +118,9 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	// 위젯에 상점 데이터를 전달하고 UI 요청 이벤트를 연결한다.
 	ShopWidget->InitializeInventoryPanels(InventoryComponent, PerkComponent);
 	RefreshOffers(EDRShopOfferType::Purchase);
-	RefreshUpgradeOffers();
 	RefreshOffers(EDRShopOfferType::Perk);
 	BindShopEvents();
+	RefreshCharacterUpgrades();
 	// 상점 UI를 조작하는 동안 캐릭터 이동만 차단한다.
 	PlayerController->FlushPressedKeys();
 
@@ -155,7 +155,6 @@ void UDRShopUIComponent::HideShopWidget()
 	InventoryComponent = nullptr;
 	ShopTransactionComponent = nullptr;
 	ShopComponent = nullptr;
-	UpgradeComponent = nullptr;
 	PerkComponent = nullptr;
 	PlayerState = nullptr;
 
@@ -177,6 +176,11 @@ void UDRShopUIComponent::HideShopWidget()
 
 void UDRShopUIComponent::BindShopEvents()
 {
+	if (IsValid(PlayerState))
+	{
+		PlayerState->GetCharacterUpgradeComponent()->OnUpgradesChanged.AddDynamic(
+			this, &ThisClass::RefreshCharacterUpgrades);
+	}
 	if (IsValid(ShopWidget))
 	{
 		ShopWidget->OnCloseRequested.AddDynamic(
@@ -206,14 +210,22 @@ void UDRShopUIComponent::BindShopEvents()
 
 	if (IsValid(PlayerState))
 	{
-		PlayerState->OnCoinsChanged.AddDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
+		if (UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent())
+		{
+			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
+					this, &ThisClass::HandleSnowGaugeChanged);
+		}
 	}
 }
 
 void UDRShopUIComponent::UnbindShopEvents()
 {
+	if (IsValid(PlayerState))
+	{
+		PlayerState->GetCharacterUpgradeComponent()->OnUpgradesChanged.RemoveDynamic(
+			this, &ThisClass::RefreshCharacterUpgrades);
+	}
 	if (IsValid(ShopWidget))
 	{
 		ShopWidget->OnCloseRequested.RemoveDynamic(
@@ -243,9 +255,11 @@ void UDRShopUIComponent::UnbindShopEvents()
 
 	if (IsValid(PlayerState))
 	{
-		PlayerState->OnCoinsChanged.RemoveDynamic(
-			this,
-			&ThisClass::HandleCoinsChanged);
+		if (UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent())
+		{
+			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
+				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).RemoveAll(this);
+		}
 	}
 }
 
@@ -270,6 +284,11 @@ void UDRShopUIComponent::HandleOfferRequested(FDRShopOfferRequest Request)
 	{
 		ShopTransactionComponent->RequestOffer(ActiveShop.Get(), Request);
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=UIForward Reason=MissingTransactionComponent Tag=%s"),
+			*Request.UpgradeTag.ToString());
+	}
 }
 
 void UDRShopUIComponent::HandleSellRequested(
@@ -292,7 +311,6 @@ void UDRShopUIComponent::HandleSellRequested(
 void UDRShopUIComponent::HandleInventoryChanged()
 {
 	RefreshOffers(EDRShopOfferType::Purchase);
-	RefreshUpgradeOffers();
 }
 
 void UDRShopUIComponent::HandlePerksChanged()
@@ -300,10 +318,10 @@ void UDRShopUIComponent::HandlePerksChanged()
 	RefreshOffers(EDRShopOfferType::Perk);
 }
 
-void UDRShopUIComponent::HandleCoinsChanged(int32)
+void UDRShopUIComponent::HandleSnowGaugeChanged(const FOnAttributeChangeData&)
 {
+	RefreshCharacterUpgrades();
 	RefreshOffers(EDRShopOfferType::Purchase);
-	RefreshUpgradeOffers();
 	RefreshOffers(EDRShopOfferType::Perk);
 }
 
@@ -321,24 +339,39 @@ void UDRShopUIComponent::RefreshOffers(EDRShopOfferType OfferType)
 			OfferType));
 }
 
-void UDRShopUIComponent::RefreshUpgradeOffers()
+void UDRShopUIComponent::RefreshCharacterUpgrades()
 {
-	if (!IsValid(ShopWidget)
-		|| !IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent)
-		|| !IsValid(InventoryComponent))
+	if (!IsValid(ShopWidget) || !IsValid(PlayerState))
 	{
 		return;
 	}
-
-	ShopWidget->SetOffers(
-		EDRShopOfferType::Upgrade,
-		MakeOfferViews(
-			UpgradeComponent->GetNextUpgradeOffers(
-				ShopComponent,
-				InventoryComponent),
-			EDRShopOfferType::Upgrade));
+	const UDRCharacterUpgradeComponent* Component = PlayerState->GetCharacterUpgradeComponent();
+	const UDRCharacterUpgradeProfile* Profile = IsValid(Component) ? Component->GetProfile() : nullptr;
+	TArray<FDRShopOfferView> Offers;
+	if (IsValid(Profile) && Profile->IsUsable())
+	{
+		for (const FDRStatUpgradeData& Data : Profile->GetStatUpgrades())
+		{
+			const int32 Level = Component->GetUpgradeLevel(Data.UpgradeTag);
+			FDRShopOfferView& Offer = Offers.AddDefaulted_GetRef();
+			Offer.Request.OfferType = EDRShopOfferType::CharacterUpgrade;
+			Offer.Request.UpgradeTag = Data.UpgradeTag;
+			Offer.Request.ExpectedLevel = Level;
+			Offer.Section = EDRShopOfferSection::CharacterUpgrade;
+			Offer.DisplayName = FText::Format(
+				NSLOCTEXT("Shop", "CharacterUpgradeName", "{0} (Lv. {1})"), Data.DisplayName, FText::AsNumber(Level));
+			Offer.Description = FText::Format(
+				NSLOCTEXT("Shop", "CharacterUpgradeDescription", "{0}\n구매마다 기본 스탯 +{1}% · 현재 누적 +{2}%"),
+				Data.Description, FText::AsNumber(Data.IncreasePercent),
+				FText::AsNumber(Data.GetTotalIncreasePercent(Level)));
+			Offer.Icon = Data.Icon;
+			Offer.Price = Data.Price;
+			Offer.IsPurchasable = Data.IsUpgradeAvailable(Level) && PlayerState->GetSnowGauge() >= Data.Price;
+		}
+	}
+	ShopWidget->SetOffers(EDRShopOfferType::CharacterUpgrade, Offers);
 }
+
 
 TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 	const TArray<FDRShopItemOffer>& Offers,
@@ -374,14 +407,6 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 				FText::FromString(TEXT("{0} 퍽")),
 				PerkDefinition->DisplayName);
 		}
-		else if (OfferType == EDRShopOfferType::Upgrade
-			&& IsValid(Offer.UpgradeSourceDefinition))
-		{
-			OfferView.DisplayName = FText::Format(
-				FText::FromString(TEXT("{0} → {1}")),
-				Offer.UpgradeSourceDefinition->DisplayName,
-				Offer.ItemDefinition->DisplayName);
-		}
 
 		OfferView.Description = Offer.ItemDefinition->Description;
 		OfferView.Icon = Offer.ItemDefinition->Icon;
@@ -399,20 +424,20 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			OfferView.IsPurchasable = ShopComponent->CanPurchaseItem(
 				InventoryComponent,
 				Offer.ItemDefinition,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 
 		case EDRShopOfferType::Perk:
 			OfferView.IsPurchasable = ShopComponent->CanPurchasePerk(
 				PerkDefinition,
 				PerkComponent,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 
 		default:
 			OfferView.IsPurchasable = ShopComponent->CanAfford(
 				Offer.ItemDefinition,
-				PlayerState->GetCoins());
+				PlayerState->GetSnowGauge());
 			break;
 		}
 	}
@@ -425,9 +450,6 @@ EDRShopOfferSection UDRShopUIComponent::ResolveOfferSection(
 {
 	switch (Offer.OfferType)
 	{
-	case EDRShopOfferType::Upgrade:
-		return EDRShopOfferSection::Upgrade;
-
 	case EDRShopOfferType::Perk:
 		return EDRShopOfferSection::Perk;
 

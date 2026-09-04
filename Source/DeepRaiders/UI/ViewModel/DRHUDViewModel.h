@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "MVVMViewModelBase.h"
+#include "GameplayTagContainer.h"
 #include "DRHUDViewModel.generated.h"
 
 class ADRPlayerCharacter;
@@ -51,6 +52,18 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	float SnowGaugeRatio = 0.f;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	float HeatGauge = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	float MaxHeatGauge = 100.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	float HeatGaugeRatio = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	bool bIsOverheated = false;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGauge = 0.f;
 
@@ -65,6 +78,9 @@ private:
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleOverheatedTagChanged(FGameplayTag Tag, int32 NewCount);
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& ChangeData);
 
@@ -76,6 +92,8 @@ private:
 
 	void RefreshHealth();
 	void RefreshSnowGauge();
+	void RefreshHeatGauge();
+	void RefreshOverheatedState();
 	void RefreshFreezeGauge();
 	void RefreshAmmoVisibility();
 
@@ -85,13 +103,18 @@ private:
 	FDelegateHandle MaxHealthChangedHandle;
 	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle MaxSnowGaugeChangedHandle;
+	FDelegateHandle HeatGaugeChangedHandle;
+	FDelegateHandle MaxHeatGaugeChangedHandle;
+	FDelegateHandle OverheatedTagChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
 	float TargetCurrentHealth = 0.f;
 	int32 TargetSnowGauge = 0;
 	float InterpolatedSnowGauge = 0.f;
+	float TargetHeatGauge = 0.f;
 	float TargetFreezeGauge = 0.f;
 	float TargetHealthRatio = 0.f;
 	float TargetSnowGaugeRatio = 0.f;
+	float TargetHeatGaugeRatio = 0.f;
 	float TargetFreezeGaugeRatio = 0.f;
 	bool bInterpolateGauges = false;
 	

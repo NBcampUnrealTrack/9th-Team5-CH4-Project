@@ -1,7 +1,7 @@
 #include "DRShopTransactionComponent.h"
 
 #include "DRShopComponent.h"
-#include "DRUpgradeComponent.h"
+#include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
@@ -22,14 +22,18 @@ void UDRShopTransactionComponent::RequestOffer(
 	AActor* ShopActor,
 	const FDRShopOfferRequest& Request)
 {
-	if (!IsValid(ShopActor)
-		|| Request.RowName.IsNone()
-		|| (Request.OfferType == EDRShopOfferType::Upgrade
-			&& Request.TargetLevel <= 0))
+	if (!IsValid(ShopActor) || !Request.IsValidRequest())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=Request Reason=%s Owner=%s Type=%d Row=%s Tag=%s"),
+			!IsValid(ShopActor) ? TEXT("InvalidShop") : TEXT("InvalidRequest"),
+			*GetNameSafe(GetOwner()), static_cast<int32>(Request.OfferType),
+			*Request.RowName.ToString(), *Request.UpgradeTag.ToString());
 		return;
 	}
 
+	UE_LOG(LogTemp, Log, TEXT("[Shop][Request] Owner=%s Shop=%s Type=%d Row=%s Tag=%s ExpectedLevel=%d"),
+		*GetNameSafe(GetOwner()), *GetNameSafe(ShopActor), static_cast<int32>(Request.OfferType),
+		*Request.RowName.ToString(), *Request.UpgradeTag.ToString(), Request.ExpectedLevel);
 	ServerRequestOffer(ShopActor, Request);
 }
 
@@ -60,37 +64,44 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	UDRInventoryComponent* Inventory = GetInventoryComponent();
 	FDRShopItemTableRow ItemRow;
 
-	// 클라이언트 요청을 신뢰하지 않고 상점 접근 상태와 Row를 서버에서 다시 확인한다.
-	if (!IsValid(PlayerState)
-		|| !IsValid(ShopComponent)
-		|| !IsValid(Inventory)
-		|| Request.RowName.IsNone()
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
+	UE_LOG(LogTemp, Log, TEXT("[Shop][ServerRequest] Player=%s Shop=%s Type=%d Row=%s Tag=%s ExpectedLevel=%d"),
+		*GetNameSafe(PlayerState), *GetNameSafe(ShopActor), static_cast<int32>(Request.OfferType),
+		*Request.RowName.ToString(), *Request.UpgradeTag.ToString(), Request.ExpectedLevel);
+
+	const TCHAR* FailureReason = !IsValid(PlayerState) ? TEXT("MissingPlayerState")
+		: !IsValid(ShopComponent) ? TEXT("MissingShopComponent")
+		: !Request.IsValidRequest() ? TEXT("InvalidRequest")
+		: !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()) ? TEXT("OutsideShopArea")
+		: (Request.OfferType == EDRShopOfferType::Purchase && !IsValid(Inventory)) ? TEXT("MissingInventory")
+		: nullptr;
+	if (FailureReason)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=ServerValidation Reason=%s Player=%s Shop=%s Tag=%s"),
+			FailureReason, *GetNameSafe(PlayerState), *GetNameSafe(ShopActor), *Request.UpgradeTag.ToString());
 		return;
 	}
 
 	switch (Request.OfferType)
 	{
-	case EDRShopOfferType::Purchase:
-		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
-			&& TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
+	case EDRShopOfferType::CharacterUpgrade:
+		if (TryPurchaseCharacterUpgrade(PlayerState, Request))
 		{
 			PlayPurchaseSound(ShopActor);
 		}
 		break;
 
-	case EDRShopOfferType::Upgrade:
+	case EDRShopOfferType::Purchase:
 		if (ShopComponent->GetItemRow(Request.RowName, ItemRow)
-			&& TryUpgrade(
-				PlayerState,
-				ShopComponent,
-				ShopActor->FindComponentByClass<UDRUpgradeComponent>(),
-				Inventory,
-				ItemRow,
-				Request.TargetLevel))
+			&& TryPurchase(PlayerState, ShopComponent, Inventory, ItemRow))
 		{
+			UE_LOG(LogTemp, Log, TEXT("[Shop][PurchaseSucceeded] Type=Item Player=%s Row=%s Price=%d Currency=%.2f"),
+				*GetNameSafe(PlayerState), *Request.RowName.ToString(), ItemRow.ItemDefinition->Price, PlayerState->GetSnowGauge());
 			PlayPurchaseSound(ShopActor);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=ItemPurchase Reason=RowOrPurchaseRejected Player=%s Row=%s Currency=%.2f"),
+				*GetNameSafe(PlayerState), *Request.RowName.ToString(), PlayerState->GetSnowGauge());
 		}
 		break;
 
@@ -101,7 +112,14 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 				PlayerState->GetPerkComponent(),
 				Request.RowName))
 		{
+			UE_LOG(LogTemp, Log, TEXT("[Shop][PurchaseSucceeded] Type=Perk Player=%s Row=%s Currency=%.2f"),
+				*GetNameSafe(PlayerState), *Request.RowName.ToString(), PlayerState->GetSnowGauge());
 			PlayPurchaseSound(ShopActor);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=PerkPurchase Reason=PerkPurchaseRejected Player=%s Row=%s"),
+				*GetNameSafe(PlayerState), *Request.RowName.ToString());
 		}
 		break;
 
@@ -139,7 +157,7 @@ void UDRShopTransactionComponent::ServerRequestSell_Implementation(
 
 	if (Inventory->TryRemoveItemInstance(InstanceId, 1))
 	{
-		PlayerState->AddCoins(SellPrice);
+		PlayerState->AddSnowGauge(SellPrice);
 	}
 }
 
@@ -171,7 +189,7 @@ void UDRShopTransactionComponent::ServerRequestSellPerk_Implementation(
 	const int32 SellPrice = PerkDefinition->GetSellPrice();
 	if (PerkComponent->TryRemovePerk(PerkInstanceId))
 	{
-		PlayerState->AddCoins(SellPrice);
+		PlayerState->AddSnowGauge(SellPrice);
 		UE_LOG(
 			LogTemp,
 			Log,
@@ -234,55 +252,54 @@ bool UDRShopTransactionComponent::TryPurchase(
 {
 	UDRItemDefinition* ItemDefinition = ItemRow.ItemDefinition;
 
-	// 가격, 판매 목록, 코인, 인벤토리 공간을 모두 검증한 뒤 아이템을 추가한다.
+	// 가격, 판매 목록, 눈, 인벤토리 공간을 모두 검증한 뒤 아이템을 추가한다.
 	if (!IsValid(PlayerState)
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
-		|| ItemRow.IsUpgradeRow()
 		|| !IsValid(ItemDefinition)
 		|| !ShopComponent->CanPurchaseItem(
 			Inventory,
 			ItemDefinition,
-			PlayerState->GetCoins())
+			PlayerState->GetSnowGauge())
 		|| !Inventory->TryAddItem(ItemDefinition, 1))
 	{
 		return false;
 	}
 
-	PlayerState->SetCoins(PlayerState->GetCoins() - ItemDefinition->Price);
+	PlayerState->AddSnowGauge(-ItemDefinition->Price);
 	return true;
 }
-bool UDRShopTransactionComponent::TryUpgrade(
-	ADRPlayerState* PlayerState,
-	const UDRShopComponent* ShopComponent,
-	const UDRUpgradeComponent* UpgradeComponent,
-	UDRInventoryComponent* Inventory,
-	const FDRShopItemTableRow& ItemRow,
-	int32 TargetLevel) const
-{
-	FDRUpgradeOperation Operation;
 
-	// 현재 인벤토리를 기준으로 작업을 다시 만들고 성공한 경우에만 비용을 차감한다.
-	if (!IsValid(PlayerState)
-		|| !IsValid(ShopComponent)
-		|| !IsValid(UpgradeComponent)
-		|| !IsValid(Inventory)
-		|| !UpgradeComponent->BuildUpgradeOperation(
-			ItemRow,
-			TargetLevel,
-			Inventory,
-			Operation)
-		|| !IsValid(Operation.TargetDefinition)
-		|| !ShopComponent->CanAfford(
-			Operation.TargetDefinition,
-			PlayerState->GetCoins())
-		|| !UpgradeComponent->ApplyUpgrade(Inventory, Operation))
+bool UDRShopTransactionComponent::TryPurchaseCharacterUpgrade(
+	ADRPlayerState* PlayerState, const FDRShopOfferRequest& Request) const
+{
+	UDRCharacterUpgradeComponent* UpgradeComponent = PlayerState->GetCharacterUpgradeComponent();
+	const FDRStatUpgradeData* UpgradeData = IsValid(UpgradeComponent)
+		? UpgradeComponent->GetUpgradeData(Request.UpgradeTag) : nullptr;
+	const float PreviousSnowGauge = PlayerState->GetSnowGauge();
+	const TCHAR* UpgradeFailure = !IsValid(UpgradeComponent) ? TEXT("MissingUpgradeComponent")
+		: !UpgradeData ? TEXT("InvalidProfileOrUpgradeTag")
+		: PreviousSnowGauge < UpgradeData->Price ? TEXT("InsufficientCurrency")
+		: nullptr;
+	if (UpgradeFailure)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=UpgradeValidation Reason=%s Player=%s Tag=%s Price=%d Currency=%.2f"),
+			UpgradeFailure, *GetNameSafe(PlayerState), *Request.UpgradeTag.ToString(),
+			UpgradeData ? UpgradeData->Price : -1, PreviousSnowGauge);
 		return false;
 	}
-
-	PlayerState->SetCoins(
-		PlayerState->GetCoins() - Operation.TargetDefinition->Price);
+	if (!UpgradeComponent->TryUpgrade(Request.UpgradeTag, Request.ExpectedLevel))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Shop][PurchaseFailed] Stage=UpgradeApply Reason=UpgradeRejected Player=%s Tag=%s ExpectedLevel=%d CurrentLevel=%d"),
+			*GetNameSafe(PlayerState), *Request.UpgradeTag.ToString(), Request.ExpectedLevel,
+			UpgradeComponent->GetUpgradeLevel(Request.UpgradeTag));
+		return false;
+	}
+	PlayerState->AddSnowGauge(-UpgradeData->Price);
+	UE_LOG(LogTemp, Log, TEXT("[Shop][PurchaseSucceeded] Type=CharacterUpgrade Player=%s Tag=%s Level=%d->%d Price=%d Currency=%.2f->%.2f"),
+		*GetNameSafe(PlayerState), *Request.UpgradeTag.ToString(), Request.ExpectedLevel,
+		UpgradeComponent->GetUpgradeLevel(Request.UpgradeTag), UpgradeData->Price,
+		PreviousSnowGauge, PlayerState->GetSnowGauge());
 	return true;
 }
 
@@ -302,15 +319,15 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 		|| !ShopComponent->CanPurchasePerk(
 			PerkDefinition,
 			PerkComponent,
-			PlayerState->GetCoins()))
+			PlayerState->GetSnowGauge()))
 	{
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s Coins=%d Reason=PurchaseValidationFailed"),
+			TEXT("[Perk][PurchaseRejected] Player=%s Row=%s SnowGauge=%.2f Reason=PurchaseValidationFailed"),
 			*GetNameSafe(PlayerState),
 			*RowName.ToString(),
-			IsValid(PlayerState) ? PlayerState->GetCoins() : 0);
+			IsValid(PlayerState) ? PlayerState->GetSnowGauge() : 0);
 		return false;
 	}
 
@@ -328,19 +345,19 @@ bool UDRShopTransactionComponent::TryPurchasePerk(
 	}
 
 	// 퍽 적용이 완료된 뒤 비용을 차감한다.
-	const int32 PreviousCoins = PlayerState->GetCoins();
-	PlayerState->SetCoins(PreviousCoins - PerkDefinition->Price);
+	const float PreviousSnowGauge = PlayerState->GetSnowGauge();
+	PlayerState->AddSnowGauge(-PerkDefinition->Price);
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d Coins=%d->%d"),
+		TEXT("[Perk][PurchaseSucceeded] Player=%s Row=%s Perk=%s Count=%d Price=%d SnowGauge=%.2f->%.2f"),
 		*GetNameSafe(PlayerState),
 		*RowName.ToString(),
 		*GetNameSafe(PerkDefinition),
 		PerkComponent->GetPerkCount(PerkDefinition),
 		PerkDefinition->Price,
-		PreviousCoins,
-		PlayerState->GetCoins());
+		PreviousSnowGauge,
+		PlayerState->GetSnowGauge());
 	return true;
 }
 

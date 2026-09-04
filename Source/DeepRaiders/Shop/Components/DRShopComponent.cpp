@@ -60,27 +60,27 @@ bool UDRShopComponent::GetPerkDefinition(
 bool UDRShopComponent::CanPurchasePerk(
 	const UDRPerkDefinition* PerkDefinition,
 	const UDRPerkComponent* PerkComponent,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(PerkComponent)
 		&& IsValid(PerkDefinition)
 		&& PerkComponent->CanAddPerkAutomatically(PerkDefinition)
-		&& CanAfford(PerkDefinition, AvailableCoins);
+		&& CanAfford(PerkDefinition, AvailableSnowGauge);
 }
 
 bool UDRShopComponent::CanAfford(
 	const UDRItemDefinition* ItemDefinition,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(ItemDefinition)
 		&& ItemDefinition->Price >= 0
-		&& AvailableCoins >= ItemDefinition->Price;
+		&& AvailableSnowGauge >= ItemDefinition->Price;
 }
 
 bool UDRShopComponent::CanPurchaseItem(
 	const UDRInventoryComponent* Inventory,
 	UDRItemDefinition* ItemDefinition,
-	int32 AvailableCoins) const
+	float AvailableSnowGauge) const
 {
 	return IsValid(Inventory)
 		&& IsValid(ItemDefinition)
@@ -90,7 +90,7 @@ bool UDRShopComponent::CanPurchaseItem(
 				return ItemOffer.OfferType == EDRShopOfferType::Purchase
 					&& ItemOffer.ItemDefinition == ItemDefinition;
 			})
-		&& CanAfford(ItemDefinition, AvailableCoins)
+		&& CanAfford(ItemDefinition, AvailableSnowGauge)
 		&& Inventory->CanAddItem(ItemDefinition, 1);
 }
 
@@ -137,7 +137,7 @@ void UDRShopComponent::AddItemOffers(
 	FName RowName,
 	const FDRShopItemTableRow& ItemRow)
 {
-	// PerkDefinition은 일반 구매나 장비 업그레이드가 아닌 퍽 Offer로 등록한다.
+	// PerkDefinition은 퍽 Offer로 등록한다.
 	if (IsValid(Cast<UDRPerkDefinition>(ItemRow.ItemDefinition)))
 	{
 		AddOffer(RowName, EDRShopOfferType::Perk, ItemRow.ItemDefinition);
@@ -150,34 +150,7 @@ void UDRShopComponent::AddItemOffers(
 		return;
 	}
 
-	if (!ItemRow.IsUpgradeRow())
-	{
-		AddOffer(RowName, EDRShopOfferType::Purchase, ItemRow.ItemDefinition);
-		return;
-	}
-
-	for (int32 TargetLevel = 1;
-		TargetLevel <= ItemRow.GetMaxUpgradeLevel();
-		++TargetLevel)
-	{
-		UDRItemDefinition* SourceDefinition =
-			ItemRow.GetUpgradeSourceDefinition(TargetLevel);
-		UDRItemDefinition* TargetDefinition =
-			ItemRow.GetUpgradeTargetDefinition(TargetLevel);
-
-		if (!IsValid(TargetDefinition)
-			|| (TargetLevel > 1 && !IsValid(SourceDefinition)))
-		{
-			continue;
-		}
-
-		FDRShopItemOffer& ItemOffer = ItemOffers.AddDefaulted_GetRef();
-		ItemOffer.RowName = RowName;
-		ItemOffer.OfferType = EDRShopOfferType::Upgrade;
-		ItemOffer.ItemDefinition = TargetDefinition;
-		ItemOffer.UpgradeSourceDefinition = SourceDefinition;
-		ItemOffer.TargetLevel = TargetLevel;
-	}
+	AddOffer(RowName, EDRShopOfferType::Purchase, ItemRow.ItemDefinition);
 }
 
 void UDRShopComponent::AddOffer(

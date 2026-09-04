@@ -90,6 +90,9 @@ protected:
 
 	float GetMaxAttackDistance() const;
 
+	/** 서버에서 실제 발사가 성공한 뒤 현재 무기의 HeatPerShot을 적용한다. */
+	void ApplyHeatForSuccessfulShot();
+
 private:
 	bool ResolveSelectedWeaponInstance(
 		const FGameplayAbilityActorInfo* ActorInfo,

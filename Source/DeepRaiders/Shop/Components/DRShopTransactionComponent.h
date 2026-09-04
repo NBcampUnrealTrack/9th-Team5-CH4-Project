@@ -9,7 +9,6 @@ class ADRPlayerState;
 class UDRInventoryComponent;
 class UDRPerkComponent;
 class UDRShopComponent;
-class UDRUpgradeComponent;
 class USoundBase;
 
 UCLASS(ClassGroup = (DeepRaiders))
@@ -32,7 +31,7 @@ public:
 	void RequestSellPerk(AActor* ShopActor, FGuid PerkInstanceId);
 
 protected:
-	/** 상점 접근과 Row 데이터를 재검증한 뒤 구매 또는 업그레이드를 실행한다. */
+	/** 상점 접근과 Row 데이터를 재검증한 뒤 구매를 실행한다. */
 	UFUNCTION(Server, Reliable)
 	void ServerRequestOffer(
 		AActor* ShopActor,
@@ -68,14 +67,8 @@ private:
 		UDRInventoryComponent* Inventory,
 		const FDRShopItemTableRow& ItemRow) const;
 
-	/** 업그레이드 작업을 생성·적용하고 비용을 차감한다. */
-	bool TryUpgrade(
-		ADRPlayerState* PlayerState,
-		const UDRShopComponent* ShopComponent,
-		const UDRUpgradeComponent* UpgradeComponent,
-		UDRInventoryComponent* Inventory,
-		const FDRShopItemTableRow& ItemRow,
-		int32 TargetLevel) const;
+	/** 캐릭터 업그레이드 적용 성공 후 비용을 차감한다. */
+	bool TryPurchaseCharacterUpgrade(ADRPlayerState* PlayerState, const FDRShopOfferRequest& Request) const;
 
 	/** 공용 구매 검증 후 퍽 효과를 적용하고 비용을 차감한다. */
 	bool TryPurchasePerk(

@@ -34,6 +34,32 @@ struct DEEPRAIDERS_API FDRRangedWeaponAimCorrectionSettings
 	float MaxCameraAimCorrectionAngleDegrees = 30.0f;
 };
 
+
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRRangedWeaponHeatSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat")
+	bool bEnabled = true;
+
+	/** Projectile/HitScan처럼 발 단위 무기가 서버에서 1회 성공 발사할 때 추가되는 Heat. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float HeatPerShot = 10.f;
+
+	/** Sprayer 같은 지속형 무기가 초당 추가할 Heat. 실제 적용은 SprayTickInterval을 곱한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float HeatPerSecond = 20.f;
+
+	/** 마지막 Heat 증가 이후 자연 냉각이 시작되기까지의 대기 시간. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float DecayDelay = 1.f;
+
+	/** MaxHeat에서 0까지 자연 냉각되는 데 걸리는 시간. 현재 Heat가 낮으면 비례해서 더 빨리 0에 도달한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
+	float RecoveryDuration = 4.f;
+};
+
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 {
@@ -92,6 +118,9 @@ public:
 	/** 캐릭터 로컬 좌표 기준 흡수 및 투사체 시작 오프셋. X: 전방, Y: 오른쪽, Z: 위. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Origin", meta = (DisplayName = "Start Offset", Units = "cm"))
 	FVector StartOffset = FVector(-15.0f, 10.0f, 10.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Heat", meta = (DisplayName = "Heat"))
+	FDRRangedWeaponHeatSettings HeatSettings;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Absorb"))
 	FDRProjectileWeaponSnowAbsorbSettings SnowAbsorbSettings;

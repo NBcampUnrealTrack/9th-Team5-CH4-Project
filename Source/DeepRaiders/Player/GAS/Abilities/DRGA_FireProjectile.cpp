@@ -166,8 +166,11 @@ void UDRGA_FireProjectile::HandleServerShotRequest()
 		return;
 	}
 	
-	// 투사체 발사
-	ExecuteServerProjectileShot();
+	// 실제 Projectile이 하나 이상 생성된 발사만 Heat를 누적한다.
+	if (ExecuteServerProjectileShot())
+	{
+		ApplyHeatForSuccessfulShot();
+	}
 }
 
 bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
@@ -307,7 +310,9 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		GetBreakableDamageAmount(),
 		WorldImpactData,
 		GetSourceTeamId(),
-		WeaponDefinition);
+		WeaponDefinition,
+		GetMaxAttackDistance(),
+		WeaponDefinition->FalloffSettings);
 
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 

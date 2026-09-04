@@ -53,10 +53,10 @@ private:
 	void HandleConsumableButtonClicked();
 
 	UFUNCTION()
-	void HandleUpgradeButtonClicked();
+	void HandlePerkButtonClicked();
 
 	UFUNCTION()
-	void HandlePerkButtonClicked();
+	void HandleCharacterUpgradeButtonClicked();
 
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
@@ -68,10 +68,10 @@ private:
 	TObjectPtr<UButton> ConsumableButton;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> UpgradeButton;
-
-	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> PerkButton;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> CharacterUpgradeButton;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
