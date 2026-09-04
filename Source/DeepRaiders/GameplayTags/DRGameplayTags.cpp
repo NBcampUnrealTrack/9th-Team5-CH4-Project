@@ -79,6 +79,11 @@ namespace DRGameplayTags
 		State_Stealthed,
 		"State.Stealthed",
 		"Player is currently stealthed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_Aiming_Throw,
+		"State.Aiming.Throw",
+		"Player is aiming a throwable action.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,

@@ -3,6 +3,8 @@
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraShakeBase.h"
 #include "Camera/PlayerCameraManager.h"
+#include "AbilitySystemComponent.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "Components/SceneComponent.h"
@@ -52,6 +54,8 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 	OpenSurroundingCameraPathCount = 8;
 	SurroundingCameraProbeElapsed = 0.f;
 	bSurroundingCameraProbeInitialized = false;
+	bCameraStateInitialized = false;
+	TargetCameraState = EDRPlayerCameraState::Default;
 	SetComponentTickEnabled(CameraBoom.IsValid());
 
 	if (bEnableAutomaticFirstPerson && !FirstPersonCameraAnchor.IsValid())
@@ -72,6 +76,11 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 		DefaultThirdPersonArmLength = FMath::Max(
 			DefaultThirdPersonArmLength,
 			CameraBoom->TargetArmLength);
+		DefaultCameraSettings.TargetArmLength = DefaultThirdPersonArmLength;
+		DefaultCameraSettings.SocketOffset = CameraBoom->SocketOffset;
+		CurrentCameraStateArmLength = DefaultCameraSettings.TargetArmLength;
+		CurrentCameraStateSocketOffset = DefaultCameraSettings.SocketOffset;
+		bCameraStateInitialized = true;
 		CurrentThirdPersonArmLength = DefaultThirdPersonArmLength;
 		TargetThirdPersonArmLength = DefaultThirdPersonArmLength;
 		CameraBoom->TargetArmLength = CurrentThirdPersonArmLength;
@@ -101,6 +110,35 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 	}
 }
 
+void UDRPlayerCameraComponent::UpdateCameraState(float DeltaSeconds)
+{
+	if (!CameraBoom.IsValid())
+	{
+		return;
+	}
+
+	TargetCameraState = ResolveDesiredCameraState();
+	const FDRPlayerCameraStateSettings& TargetSettings = GetCameraStateSettings(TargetCameraState);
+	if (!bCameraStateInitialized)
+	{
+		CurrentCameraStateArmLength = TargetSettings.TargetArmLength;
+		CurrentCameraStateSocketOffset = TargetSettings.SocketOffset;
+		bCameraStateInitialized = true;
+	}
+	else if (CameraStateBlendSpeed > KINDA_SMALL_NUMBER)
+	{
+		CurrentCameraStateArmLength = FMath::FInterpTo(
+			CurrentCameraStateArmLength, TargetSettings.TargetArmLength, DeltaSeconds, CameraStateBlendSpeed);
+		CurrentCameraStateSocketOffset = FMath::VInterpTo(
+			CurrentCameraStateSocketOffset, TargetSettings.SocketOffset, DeltaSeconds, CameraStateBlendSpeed);
+	}
+	else
+	{
+		CurrentCameraStateArmLength = TargetSettings.TargetArmLength;
+		CurrentCameraStateSocketOffset = TargetSettings.SocketOffset;
+	}
+}
+
 void UDRPlayerCameraComponent::UpdateAutomaticFirstPersonView(float DeltaSeconds)
 {
 	if (!CameraBoom.IsValid())
@@ -118,7 +156,7 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 {
 	const FVector CollisionOrigin = GetCameraCollisionOrigin();
 	const FTransform FullThirdPersonTransform =
-		GetDesiredThirdPersonCameraTransform(DefaultThirdPersonArmLength);
+		GetDesiredThirdPersonCameraTransform(CurrentCameraStateArmLength, CurrentCameraStateSocketOffset);
 	FVector CentralCameraLocation = FullThirdPersonTransform.GetLocation();
 	bool bCentralCameraPathBlocked = false;
 	CurrentAvailableCameraDistance = EvaluateCameraSpace(
@@ -166,8 +204,8 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 
 	// 이동 예측과 다중 후보가 실제 Arm 길이를 바꾸면 평범한 전진 중에도 줌이 흔들린다.
 	// Spring Arm은 항상 기본 길이를 유지하고, 중앙 경로의 충돌 거리만 최종 카메라에 적용한다.
-	TargetThirdPersonArmLength = DefaultThirdPersonArmLength;
-	CurrentThirdPersonArmLength = DefaultThirdPersonArmLength;
+	TargetThirdPersonArmLength = CurrentCameraStateArmLength;
+	CurrentThirdPersonArmLength = CurrentCameraStateArmLength;
 	CameraBoom->TargetArmLength = CurrentThirdPersonArmLength;
 
 	const FTransform& DesiredCameraTransform = FullThirdPersonTransform;
@@ -408,7 +446,8 @@ USceneComponent* UDRPlayerCameraComponent::FindFirstPersonCameraAnchor() const
 }
 
 FTransform UDRPlayerCameraComponent::GetDesiredThirdPersonCameraTransform(
-	float ArmLength) const
+	float ArmLength,
+	const FVector& SocketOffset) const
 {
 	if (!CameraBoom.IsValid())
 	{
@@ -419,16 +458,17 @@ FTransform UDRPlayerCameraComponent::GetDesiredThirdPersonCameraTransform(
 	// 충돌만 끄고 기존 추적 감각은 그대로 유지하기 위함이다.
 	const FQuat ViewQuaternion =
 		CameraBoom->GetSocketQuaternion(USpringArmComponent::SocketName);
-	const FVector WorldSocketOffset =
+	const FVector CurrentWorldSocketOffset =
 		ViewQuaternion.RotateVector(CameraBoom->SocketOffset);
+	const FVector DesiredWorldSocketOffset = ViewQuaternion.RotateVector(SocketOffset);
 	const FVector CurrentSocketLocation =
 		CameraBoom->GetSocketLocation(USpringArmComponent::SocketName);
 	const FVector ArmOrigin = CurrentSocketLocation
 		+ ViewQuaternion.GetForwardVector() * CameraBoom->TargetArmLength
-		- WorldSocketOffset;
+		- CurrentWorldSocketOffset;
 	const FVector CameraLocation =
 		ArmOrigin - ViewQuaternion.GetForwardVector() * FMath::Max(0.f, ArmLength)
-		+ WorldSocketOffset;
+		+ DesiredWorldSocketOffset;
 	return FTransform(ViewQuaternion, CameraLocation);
 }
 
@@ -783,6 +823,7 @@ void UDRPlayerCameraComponent::TickComponent(
 	}
 
 	bMovementUpdatedSinceLastTick = false;
+	UpdateCameraState(DeltaTime);
 
 	const UDRCharacterMovementComponent* CharacterMovement = MovementComponent.Get();
 	if (!IsValid(CharacterMovement) || !CharacterMovement->IsMovingOnGround())
@@ -905,6 +946,26 @@ void UDRPlayerCameraComponent::ApplyCameraBoomLocation() const
 	FVector BoomRelativeLocation = CameraBoomBaseRelativeLocation;
 	BoomRelativeLocation.Z = SmoothedCameraPivotZ - GetOwner()->GetActorLocation().Z;
 	CameraBoom->SetRelativeLocation(BoomRelativeLocation);
+}
+
+EDRPlayerCameraState UDRPlayerCameraComponent::ResolveDesiredCameraState() const
+{
+	const ADRPlayerCharacter* OwnerCharacter = Cast<ADRPlayerCharacter>(GetOwner());
+	const UAbilitySystemComponent* AbilitySystem = IsValid(OwnerCharacter)
+		? OwnerCharacter->GetAbilitySystemComponent()
+		: nullptr;
+	return IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Aiming_Throw)
+		? EDRPlayerCameraState::ThrowAim
+		: EDRPlayerCameraState::Default;
+}
+
+const FDRPlayerCameraStateSettings& UDRPlayerCameraComponent::GetCameraStateSettings(
+	EDRPlayerCameraState CameraState) const
+{
+	return CameraState == EDRPlayerCameraState::ThrowAim
+		? ThrowAimCameraSettings
+		: DefaultCameraSettings;
 }
 
 bool UDRPlayerCameraComponent::IsLocallyControlledOwner() const
