@@ -104,6 +104,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		MiningGameState->OnGameTimerChanged.AddDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGamePhaseChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGamePhaseChanged);
 		MiningGameState->OnGameEndDebugTextChanged.AddDynamic(
 			this,
 			&ThisClass::HandleGameEndDebugTextChanged);
@@ -113,6 +116,10 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		GameRemainingSeconds = MiningGameState->GetGameRemainingSeconds();
 		bGameStarted = MiningGameState->IsGameStarted();
 		bGameEnded = MiningGameState->IsGameEnded();
+		HandleGamePhaseChanged(
+			MiningGameState->GetCurrentPhaseIndex(),
+			MiningGameState->GetPhaseRemainingSeconds(),
+			MiningGameState->GetCurrentPhaseMessages());
 		UE_MVVM_SET_PROPERTY_VALUE(
 			GameEndDebugText,
 			FText::FromString(MiningGameState->GetGameEndDebugText()));
@@ -167,6 +174,9 @@ void UDRHUDViewModel::Deinitialize()
 		MiningGameState->OnGameTimerChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGamePhaseChanged);
 		MiningGameState->OnGameEndDebugTextChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGameEndDebugTextChanged);
@@ -215,6 +225,8 @@ void UDRHUDViewModel::Deinitialize()
 	TotalPlayerCount = 0;
 	GameStartCountdown = 0;
 	GameRemainingSeconds = 0;
+	CurrentPhaseMessageText = FText::GetEmpty();
+	CurrentGameResultText = FText::GetEmpty();
 	bGameStarted = false;
 	bGameEnded = false;
 	TargetHealthRatio = 0.f;
