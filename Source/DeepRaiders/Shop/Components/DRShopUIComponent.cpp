@@ -366,7 +366,7 @@ void UDRShopUIComponent::RefreshCharacterUpgrades()
 			Offer.DisplayName = FText::Format(
 				NSLOCTEXT("Shop", "CharacterUpgradeName", "{0} (Lv. {1})"), Data.DisplayName, FText::AsNumber(Level));
 			Offer.Description = FText::Format(
-				NSLOCTEXT("Shop", "CharacterUpgradeDescription", "{0}\n구매마다 기본 스탯 +{1}% · 현재 누적 +{2}%"),
+				NSLOCTEXT("Shop", "CharacterUpgradeDescription", "{0}\n구매마다 기본 스탯 +{1}% 현재 누적 +{2}%"),
 				Data.Description, FText::AsNumber(Data.IncreasePercent),
 				FText::AsNumber(Data.GetTotalIncreasePercent(Level)));
 			Offer.Icon = Data.Icon;
