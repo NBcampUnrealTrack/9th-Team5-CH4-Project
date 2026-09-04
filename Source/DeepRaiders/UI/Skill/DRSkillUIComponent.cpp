@@ -8,6 +8,39 @@
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
 
+namespace DRSkillUI
+{
+	int32 RegisterViewModelRecursively(
+		UUserWidget* Widget,
+		UDRSkillViewModel* ViewModel,
+		TSet<UUserWidget*>& VisitedWidgets)
+	{
+		if (!IsValid(Widget) || VisitedWidgets.Contains(Widget))
+		{
+			return 0;
+		}
+
+		VisitedWidgets.Add(Widget);
+		int32 RegisteredCount = 0;
+		if (UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(Widget))
+		{
+			RegisteredCount += View->SetViewModel(TEXT("DRSkillViewModel"), ViewModel) ? 1 : 0;
+		}
+
+		TArray<UWidget*> ChildWidgets;
+		Widget->WidgetTree->GetAllWidgets(ChildWidgets);
+		for (UWidget* ChildWidget : ChildWidgets)
+		{
+			RegisteredCount += RegisterViewModelRecursively(
+				Cast<UUserWidget>(ChildWidget),
+				ViewModel,
+				VisitedWidgets);
+		}
+
+		return RegisteredCount;
+	}
+}
+
 UDRSkillUIComponent::UDRSkillUIComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -62,21 +95,9 @@ void UDRSkillUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 bool UDRSkillUIComponent::RegisterViewModel(UUserWidget* HUDWidget)
 {
-	TArray<UWidget*> Widgets;
-	HUDWidget->WidgetTree->GetAllWidgets(Widgets);
-	for (UWidget* Widget : Widgets)
-	{
-		UUserWidget* UserWidget = Cast<UUserWidget>(Widget);
-		UMVVMView* View = IsValid(UserWidget)
-			? UMVVMSubsystem::GetViewFromUserWidget(UserWidget)
-			: nullptr;
-
-		if (IsValid(View)
-			&& View->SetViewModel(TEXT("DRSkillViewModel"), SkillViewModel))
-		{
-			return true;
-		}
-	}
-
-	return false;
+	TSet<UUserWidget*> VisitedWidgets;
+	return DRSkillUI::RegisterViewModelRecursively(
+		HUDWidget,
+		SkillViewModel,
+		VisitedWidgets) > 0;
 }

@@ -43,15 +43,6 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Health")
 	float HealthRatio = 0.f;
 
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
-	int32 SnowGauge = 0;
-
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
-	int32 MaxSnowGauge = 0;
-
-	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
-	float SnowGaugeRatio = 0.f;
-
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
 	float HeatGauge = 0.f;
 
@@ -60,6 +51,16 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
 	float HeatGaugeRatio = 0.f;
+
+	/** 과열 진행도에 따라 차가운 하늘색에서 경고색으로 변한다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	FLinearColor HeatGaugeColor = FLinearColor::White;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	float HeatIconOpacity = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
+	float HeatGaugeOpacity = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
 	bool bIsOverheated = false;
@@ -76,8 +77,6 @@ protected:
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
-	void HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
-	void HandleMaxSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleOverheatedTagChanged(FGameplayTag Tag, int32 NewCount);
@@ -91,7 +90,6 @@ private:
 	void HandleSelectedQuickSlotItemChanged(UDRItemDefinition* ItemDefinition);
 
 	void RefreshHealth();
-	void RefreshSnowGauge();
 	void RefreshHeatGauge();
 	void RefreshOverheatedState();
 	void RefreshFreezeGauge();
@@ -101,23 +99,22 @@ private:
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 	FDelegateHandle HealthChangedHandle;
 	FDelegateHandle MaxHealthChangedHandle;
-	FDelegateHandle SnowGaugeChangedHandle;
-	FDelegateHandle MaxSnowGaugeChangedHandle;
 	FDelegateHandle HeatGaugeChangedHandle;
 	FDelegateHandle MaxHeatGaugeChangedHandle;
 	FDelegateHandle OverheatedTagChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
 	float TargetCurrentHealth = 0.f;
-	int32 TargetSnowGauge = 0;
-	float InterpolatedSnowGauge = 0.f;
 	float TargetHeatGauge = 0.f;
 	float TargetFreezeGauge = 0.f;
 	float TargetHealthRatio = 0.f;
-	float TargetSnowGaugeRatio = 0.f;
 	float TargetHeatGaugeRatio = 0.f;
 	float TargetFreezeGaugeRatio = 0.f;
+	float HeatGaugeZeroDuration = 0.f;
+	float HeatGaugeBlinkElapsed = 0.f;
+	bool bHeatGaugeWasActive = false;
+	bool bHoldHeatGaugeEndColor = false;
 	bool bInterpolateGauges = false;
-	
+
 #pragma region Interaction
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Interaction")
@@ -131,17 +128,17 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Interaction")
 	FText InteractionDetailText;
-	
+
 private:
 	void HandleFocusedInteractableChanged(AActor* Target, const FDRInteractionPromptData& PromptData);
 	void RefreshInteractionPrompt();
-	
+
 	TWeakObjectPtr<UDRInteractionComponent> InteractionComponent;
 	FDelegateHandle InteractionFocusChangedHandle;
-	
+
 #pragma endregion
 
-#pragma region GameStart
+#pragma region GameState
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game Start")
 	FText GameStartStatusText;
