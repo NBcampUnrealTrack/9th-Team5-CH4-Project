@@ -37,7 +37,7 @@ public:
 
 	bool IsWeaponSelectionAvailable() const
 	{
-		return !IsWeaponSelected;
+		return IsWeaponSelectionEnabled && !IsWeaponSelected;
 	}
 
 	bool IsSkillSelectionAvailable() const
@@ -49,7 +49,7 @@ public:
 
 	bool IsSelectionComplete() const
 	{
-		return IsWeaponSelected && !IsSkillSelectionAvailable();
+		return !IsWeaponSelectionAvailable() && !IsSkillSelectionAvailable();
 	}
 
 	bool IsSelectionAvailable() const
@@ -74,6 +74,9 @@ private:
 
 	void NotifySelectionStateChanged();
 	bool TryApplySelection(UDRItemDefinition* SelectedWeapon);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Starting Selection|Weapon")
+	bool IsWeaponSelectionEnabled = false;
 
 	UPROPERTY(
 		EditDefaultsOnly,
