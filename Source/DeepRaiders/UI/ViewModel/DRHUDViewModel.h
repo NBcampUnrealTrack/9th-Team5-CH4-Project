@@ -46,6 +46,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	FText SnowGaugeText;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
+	float SnowGaugeOpacity = 0.f;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
 	float HeatGauge = 0.f;
 
@@ -115,9 +118,11 @@ private:
 	float TargetHealthRatio = 0.f;
 	float TargetHeatGaugeRatio = 0.f;
 	float TargetFreezeGaugeRatio = 0.f;
+	float SnowGaugeIdleDuration = 0.f;
 	float HeatGaugeZeroDuration = 0.f;
 	float HeatGaugeBlinkElapsed = 0.f;
 	bool bHeatGaugeWasActive = false;
+	bool bSnowGaugeFadeActive = false;
 	bool bHoldHeatGaugeEndColor = false;
 	bool bInterpolateGauges = false;
 
