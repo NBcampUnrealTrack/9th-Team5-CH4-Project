@@ -107,6 +107,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver", meta = (ClampMin = "1"))
 	int32 MaxVoxelCount = 2000000;
 
+	// 한 번의 비동기 작업에서 처리할 Voxel 축 길이다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver", meta = (ClampMin = "8"))
+	int32 CarveChunkSize = 64;
+
+	// Mesh Bounds의 겉쪽 Chunk부터 중심 방향으로 처리한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver")
+	bool bCarveOutsideIn = true;
+
 private:
 	AVoxelWorld* ResolveVoxelWorld();
 	void StartCarveBatch(bool bForGameStart);
