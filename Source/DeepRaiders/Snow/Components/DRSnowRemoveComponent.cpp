@@ -6,6 +6,8 @@
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
 #include "VoxelWorld.h"
 
 static TAutoConsoleVariable<int32> CVarDrawSnowAbsorbDebug(
@@ -16,6 +18,31 @@ static TAutoConsoleVariable<int32> CVarDrawSnowAbsorbDebug(
 	TEXT("1: On"),
 	ECVF_Cheat);
 
+namespace
+{
+	float PredictRemoveRequest(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const bool bUseAbsorbTool)
+	{
+		if (!IsValid(World))
+		{
+			return 0.f;
+		}
+
+		UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
+		if (!IsValid(SnowSubsystem))
+		{
+			return 0.f;
+		}
+
+		const FDRSnowRemoveResult Result = bUseAbsorbTool
+			? SnowSubsystem->PredictSnowAbsorbTool(Request)
+			: SnowSubsystem->PredictSnowRemoval(Request);
+		return FMath::Max(0.f, Result.RemovedAmount);
+	}
+}
+
 UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -23,13 +50,14 @@ UDRSnowRemoveComponent::UDRSnowRemoveComponent()
 
 float UDRSnowRemoveComponent::TryRemoveSnowFromHit(const FHitResult& HitResult, const FDRSnowRemovalSpec& RemovalSpec)
 {
-	AActor* Owner = GetOwner();
-	if (IsValid(Owner) && !Owner->HasAuthority())
-	{
-		ServerTryRemoveSnowFromHit(HitResult, RemovalSpec);
-		return 0.f;
-	}
+	return TryRemoveSnowFromHitInternal(HitResult, RemovalSpec, FDRSnowPredictionKey());
+}
 
+float UDRSnowRemoveComponent::TryRemoveSnowFromHitInternal(
+	const FHitResult& HitResult,
+	const FDRSnowRemovalSpec& RemovalSpec,
+	FDRSnowPredictionKey PredictionKey)
+{
 	if (!HitResult.bBlockingHit)
 	{
 		return 0.f;
@@ -44,6 +72,19 @@ float UDRSnowRemoveComponent::TryRemoveSnowFromHit(const FHitResult& HitResult, 
 	FDRSnowSurfaceRemoveRequest Request =
 		MakeRemoveRequest(HitResult.ImpactPoint, HitResult.ImpactNormal, HitResult.TraceStart, RemovalSpec);
 	Request.TargetVoxelWorld = GetVoxelWorldFromHit(HitResult);
+
+	AActor* Owner = GetOwner();
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		if (!PredictionKey.IsValid())
+		{
+			PredictionKey = MakePredictionKey();
+		}
+		Request.PredictionKey = PredictionKey;
+		ServerTryRemoveSnowFromHit(HitResult, RemovalSpec, PredictionKey);
+		return PredictRemoveRequest(GetWorld(), Request, false);
+	}
+	Request.PredictionKey = PredictionKey;
 	return ExecuteRemoveRequest(Request, GetInteractableActorFromHit(HitResult));
 }
 
@@ -52,13 +93,20 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 	FVector SurfaceNormal,
 	const FDRSnowRemovalSpec& RemovalSpec)
 {
-	AActor* Owner = GetOwner();
-	if (IsValid(Owner) && !Owner->HasAuthority())
-	{
-		ServerTryRemoveSnowAtLocation(WorldLocation, SurfaceNormal.GetSafeNormal(), RemovalSpec);
-		return 0.f;
-	}
+	return TryRemoveSnowAtLocationInternal(
+		WorldLocation,
+		SurfaceNormal,
+		RemovalSpec,
+		FDRSnowPredictionKey());
+}
 
+float UDRSnowRemoveComponent::TryRemoveSnowAtLocationInternal(
+	FVector WorldLocation,
+	FVector SurfaceNormal,
+	const FDRSnowRemovalSpec& RemovalSpec,
+	FDRSnowPredictionKey PredictionKey)
+{
+	AActor* Owner = GetOwner();
 	if (!CanRemoveNow(RemovalSpec))
 	{
 		return 0.f;
@@ -66,9 +114,24 @@ float UDRSnowRemoveComponent::TryRemoveSnowAtLocation(
 	LastRemoveTime = GetWorld()->GetTimeSeconds();
 
 	const FVector BrushOrigin = IsValid(Owner) ? Owner->GetActorLocation() : WorldLocation;
-	const FDRSnowSurfaceRemoveRequest Request =
+	FDRSnowSurfaceRemoveRequest Request =
 		MakeRemoveRequest(WorldLocation, SurfaceNormal, BrushOrigin, RemovalSpec);
 
+	if (IsValid(Owner) && !Owner->HasAuthority())
+	{
+		if (!PredictionKey.IsValid())
+		{
+			PredictionKey = MakePredictionKey();
+		}
+		Request.PredictionKey = PredictionKey;
+		ServerTryRemoveSnowAtLocation(
+			WorldLocation,
+			SurfaceNormal.GetSafeNormal(),
+			RemovalSpec,
+			PredictionKey);
+		return PredictRemoveRequest(GetWorld(), Request, false);
+	}
+	Request.PredictionKey = PredictionKey;
 	return ExecuteRemoveRequest(Request);
 }
 
@@ -77,8 +140,37 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 	FVector Direction,
 	const FDRSnowRemovalSpec& RemovalSpec)
 {
+	return TryRemoveSnowAlongDirectionInternal(
+		BrushOrigin,
+		Direction,
+		RemovalSpec,
+		FDRSnowPredictionKey());
+}
+
+float UDRSnowRemoveComponent::TryRemoveSnowAlongDirectionPredicted(
+	FVector BrushOrigin,
+	FVector Direction,
+	const FDRSnowRemovalSpec& RemovalSpec,
+	const int32 PredictionSequence)
+{
+	FDRSnowPredictionKey PredictionKey;
+	PredictionKey.OwnerPlayerId = ResolvePredictionOwnerId();
+	PredictionKey.LocalSequence = PredictionSequence;
+	return TryRemoveSnowAlongDirectionInternal(
+		BrushOrigin,
+		Direction,
+		RemovalSpec,
+		PredictionKey);
+}
+
+float UDRSnowRemoveComponent::TryRemoveSnowAlongDirectionInternal(
+	FVector BrushOrigin,
+	FVector Direction,
+	const FDRSnowRemovalSpec& RemovalSpec,
+	FDRSnowPredictionKey PredictionKey)
+{
 	AActor* Owner = GetOwner();
-	if (!IsValid(Owner) || !Owner->HasAuthority() || !CanRemoveNow(RemovalSpec))
+	if (!IsValid(Owner) || !CanRemoveNow(RemovalSpec))
 	{
 		return 0.f;
 	}
@@ -118,11 +210,21 @@ float UDRSnowRemoveComponent::TryRemoveSnowAlongDirection(
 	}
 #endif
 
-	const FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(
+	FDRSnowSurfaceRemoveRequest Request = MakeRemoveRequest(
 		FrustumEnd,
 		-NormalizedDirection,
 		FrustumOrigin,
 		RemovalSpec);
+	if (!PredictionKey.IsValid())
+	{
+		PredictionKey = MakePredictionKey();
+	}
+	Request.PredictionKey = PredictionKey;
+	if (!Owner->HasAuthority())
+	{
+		// LocalPredicted GA의 서버 실행이 같은 요청을 별도로 처리한다.
+		return PredictRemoveRequest(GetWorld(), Request, true);
+	}
 	return ExecuteRemoveRequest(Request, nullptr, true);
 }
 
@@ -185,6 +287,7 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 						IsValid(Request.TargetVoxelWorld.Get())
 							? Request.TargetVoxelWorld->GetFName()
 							: NAME_None;
+					Operation.PredictionKey = Request.PredictionKey;
 					MiningGameState->RegisterSnowRemove(Operation, MoveTemp(MaterialPatch));
 				}
 			}
@@ -222,17 +325,76 @@ bool UDRSnowRemoveComponent::CanRemoveNow(const FDRSnowRemovalSpec& RemovalSpec)
 
 void UDRSnowRemoveComponent::ServerTryRemoveSnowFromHit_Implementation(
 	const FHitResult& HitResult,
-	const FDRSnowRemovalSpec& RemovalSpec)
+	const FDRSnowRemovalSpec& RemovalSpec,
+	FDRSnowPredictionKey PredictionKey)
 {
-	TryRemoveSnowFromHit(HitResult, RemovalSpec);
+	if (PredictionKey.OwnerPlayerId != ResolvePredictionOwnerId())
+	{
+		PredictionKey = FDRSnowPredictionKey();
+	}
+	SynchronizePredictionSequence(PredictionKey);
+	TryRemoveSnowFromHitInternal(HitResult, RemovalSpec, PredictionKey);
 }
 
 void UDRSnowRemoveComponent::ServerTryRemoveSnowAtLocation_Implementation(
 	FVector_NetQuantize WorldLocation,
 	FVector_NetQuantizeNormal SurfaceNormal,
-	const FDRSnowRemovalSpec& RemovalSpec)
+	const FDRSnowRemovalSpec& RemovalSpec,
+	FDRSnowPredictionKey PredictionKey)
 {
-	TryRemoveSnowAtLocation(WorldLocation, SurfaceNormal, RemovalSpec);
+	if (PredictionKey.OwnerPlayerId != ResolvePredictionOwnerId())
+	{
+		PredictionKey = FDRSnowPredictionKey();
+	}
+	SynchronizePredictionSequence(PredictionKey);
+	TryRemoveSnowAtLocationInternal(
+		WorldLocation,
+		SurfaceNormal,
+		RemovalSpec,
+		PredictionKey);
+}
+
+FDRSnowPredictionKey UDRSnowRemoveComponent::MakePredictionKey()
+{
+	FDRSnowPredictionKey PredictionKey;
+	PredictionKey.OwnerPlayerId = ResolvePredictionOwnerId();
+	if (PredictionKey.OwnerPlayerId == INDEX_NONE)
+	{
+		return PredictionKey;
+	}
+
+	if (NextPredictionSequence == MAX_int32)
+	{
+		NextPredictionSequence = 0;
+	}
+	PredictionKey.LocalSequence = ++NextPredictionSequence;
+	return PredictionKey;
+}
+
+void UDRSnowRemoveComponent::SynchronizePredictionSequence(
+	const FDRSnowPredictionKey& PredictionKey)
+{
+	if (PredictionKey.OwnerPlayerId == ResolvePredictionOwnerId())
+	{
+		NextPredictionSequence = FMath::Max(
+			NextPredictionSequence,
+			PredictionKey.LocalSequence);
+	}
+}
+
+int32 UDRSnowRemoveComponent::ResolvePredictionOwnerId() const
+{
+	const AActor* Owner = GetOwner();
+	const APawn* OwnerPawn = Cast<APawn>(Owner);
+	if (!IsValid(OwnerPawn) && IsValid(Owner))
+	{
+		OwnerPawn = Owner->GetInstigator();
+	}
+
+	const APlayerState* PlayerState = IsValid(OwnerPawn)
+		? OwnerPawn->GetPlayerState()
+		: nullptr;
+	return IsValid(PlayerState) ? PlayerState->GetPlayerId() : INDEX_NONE;
 }
 
 AVoxelWorld* UDRSnowRemoveComponent::GetVoxelWorldFromHit(const FHitResult& HitResult) const

@@ -45,6 +45,36 @@ enum class EDRSnowRemovalMode : uint8
 	AbsorbTool UMETA(DisplayName = "Absorb Tool")
 };
 
+// 어느 클라이언트의 몇 번째 로컬 제거인지 식별한다.
+// 서버 판정에는 사용하지 않고, 요청을 시작한 클라이언트의 중복 재생 방지에만 사용한다.
+USTRUCT()
+struct DEEPRAIDERS_API FDRSnowPredictionKey
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 OwnerPlayerId = INDEX_NONE;
+
+	UPROPERTY()
+	int32 LocalSequence = 0;
+
+	bool IsValid() const
+	{
+		return OwnerPlayerId != INDEX_NONE && LocalSequence > 0;
+	}
+
+	friend bool operator==(const FDRSnowPredictionKey& Left, const FDRSnowPredictionKey& Right)
+	{
+		return Left.OwnerPlayerId == Right.OwnerPlayerId &&
+			Left.LocalSequence == Right.LocalSequence;
+	}
+
+	friend bool operator!=(const FDRSnowPredictionKey& Left, const FDRSnowPredictionKey& Right)
+	{
+		return !(Left == Right);
+	}
+};
+
 // 눈 관련 요청을 누가 발생시켰는지 기록한다.
 // 팀 판정은 별도 enum을 만들지 않고 PlayerState의 TeamId 체계를 그대로 따른다.
 USTRUCT(BlueprintType)
@@ -166,6 +196,9 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
+
+	UPROPERTY()
+	FDRSnowPredictionKey PredictionKey;
 };
 
 USTRUCT(BlueprintType)
@@ -261,6 +294,9 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FName VoxelWorldName = NAME_None;
+
+	UPROPERTY()
+	FDRSnowPredictionKey PredictionKey;
 };
 
 // checkpoint 이후 재생할 눈 변경 이벤트다. Sequence는 중도난입 동기화 중

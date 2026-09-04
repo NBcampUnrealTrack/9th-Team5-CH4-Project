@@ -2,6 +2,7 @@
 
 #include "DRGA_AbsorbSnow.h"
 
+#include "Abilities/Tasks/AbilityTask_NetworkSyncPoint.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -43,11 +44,6 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		return;
 	}
 
-	if (!ActorInfo->IsNetAuthority())
-	{
-		return;
-	}
-
 	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
 	UDRSnowRemoveComponent* SnowRemoveComponent =
@@ -58,12 +54,31 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	PerformAbsorbTick();
+	AbsorbPredictionTick = 0;
+	StartAbsorbTick();
 }
 
 void UDRGA_AbsorbSnow::HandleAbsorbDelayFinished()
 {
-	PerformAbsorbTick();
+	StartAbsorbTick();
+}
+
+void UDRGA_AbsorbSnow::StartAbsorbTick()
+{
+	UAbilityTask_NetworkSyncPoint* SyncTask =
+		UAbilityTask_NetworkSyncPoint::WaitNetSync(
+			this,
+			EAbilityTaskNetSyncType::OnlyServerWait);
+	if (!IsValid(SyncTask))
+	{
+		const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, true);
+		return;
+	}
+
+	// 소유 클라이언트는 즉시 계속하고, 서버는 이 신호가 전달한 예측 키 안에서 같은 틱을 확정한다.
+	SyncTask->OnSync.AddDynamic(this, &ThisClass::PerformAbsorbTick);
+	SyncTask->ReadyForActivation();
 }
 
 void UDRGA_AbsorbSnow::InputReleased(
@@ -79,7 +94,7 @@ void UDRGA_AbsorbSnow::InputReleased(
 void UDRGA_AbsorbSnow::PerformAbsorbTick()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	if (ActorInfo == nullptr)
 	{
 		return;
 	}
@@ -152,10 +167,22 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	FDRSnowRemovalSpec EffectiveRemovalSpec = RemovalSpec;
 	EffectiveRemovalSpec.SnowAbsorbStartOffset = FVector::ZeroVector;
 
+	const int32 ActivationPredictionKey = static_cast<int32>(
+		GetCurrentActivationInfo().GetActivationPredictionKey().Current);
+	const uint32 PredictionHash = HashCombineFast(
+		GetTypeHash(ActivationPredictionKey),
+		GetTypeHash(++AbsorbPredictionTick));
+	const int32 PredictionSequence = FMath::Max(
+		1,
+		static_cast<int32>(PredictionHash & MAX_int32));
 	const float RemovedAmount =
-		SnowRemoveComponent->TryRemoveSnowAlongDirection(
-			AbsorbFrustumOrigin, AbsorbDirection, EffectiveRemovalSpec);
+		SnowRemoveComponent->TryRemoveSnowAlongDirectionPredicted(
+			AbsorbFrustumOrigin,
+			AbsorbDirection,
+			EffectiveRemovalSpec,
+			PredictionSequence);
 	
+	// 클라이언트는 즉시 예측하고 서버는 같은 GAS 예측 키로 실제 제거량을 확정한다.
 	ApplySnowGaugeGain(ASC, RemovedAmount);
 
 	ScheduleNextAbsorbTick();

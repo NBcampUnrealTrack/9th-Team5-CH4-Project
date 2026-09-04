@@ -38,10 +38,15 @@ public:
 	FDRSnowRemoveResult RemoveSnow(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
+	// 클라이언트 표현만 즉시 편집한다. Volume과 Material은 서버 확정 수신 시 반영한다.
+	FDRSnowRemoveResult PredictSnowRemoval(
+		const FDRSnowSurfaceRemoveRequest& Request);
 	// 눈총 frustum 전용 제거 경로다.
 	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
+	FDRSnowRemoveResult PredictSnowAbsorbTool(
+		const FDRSnowSurfaceRemoveRequest& Request);
 	// Multicast 수신용 제거 경로다. 일반 제거와 달리 서버가 확정한 양을 Volume에 반영한다.
 	bool ApplyReplicatedSnowRemoval(
 		const FDRSnowSurfaceRemoveRequest& Request,
@@ -75,6 +80,27 @@ public:
 		const TArray<uint8>& SnowVolumeData);
 
 private:
+	struct FPendingRemovalPrediction
+	{
+		FDRSnowPredictionKey PredictionKey;
+		FDRSnowSurfaceEditResult SurfaceEdit;
+		EDRSnowRemovalPath RemovalPath = EDRSnowRemovalPath::Standard;
+	};
+
+	FDRSnowRemoveResult PredictSnowRemovalInternal(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath);
+	bool ConsumeMatchingRemovalPrediction(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath,
+		FPendingRemovalPrediction& OutPrediction);
+	void ConfirmPredictedRemoval(
+		const FPendingRemovalPrediction& Prediction,
+		const FDRSnowSurfaceRemoveRequest& AuthoritativeRequest,
+		float AuthoritativeAmount,
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch);
+	void ResetRemovalPredictions();
+
 	FDRSnowOwnershipStore OwnershipStore;
 	FDRSnowVolumeStore VolumeStore;
 	FDRSnowSurfaceEditor SurfaceEditor;
@@ -83,4 +109,5 @@ private:
 	TUniquePtr<FDRSnowRemovalPipeline> RemovalPipeline;
 	TUniquePtr<FDRSnowAddPipeline> AddPipeline;
 	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
+	TArray<FPendingRemovalPrediction> PendingRemovalPredictions;
 };

@@ -43,6 +43,19 @@ public:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath,
 		bool bBuildMaterialPatch);
+	// 클라이언트 예측용으로 Surface만 먼저 편집한다.
+	FDRSnowSurfaceEditResult PredictSurface(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath);
+	// 예측 때 확보한 실제 변경 voxel로 서버 확정 Volume/Material을 반영한다.
+	FDRSnowRemovalReplayResult ConfirmPrediction(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowSurfaceEditResult& PredictedSurfaceEdit,
+		float AuthoritativeAmount,
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
+		EDRSnowRemovalPath RemovalPath);
 
 	FDRSnowRemovalReplayResult Replay(
 		UWorld* World,

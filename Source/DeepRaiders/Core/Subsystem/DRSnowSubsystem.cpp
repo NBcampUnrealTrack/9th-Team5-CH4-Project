@@ -7,6 +7,11 @@
 #include "Engine/World.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
+namespace
+{
+	constexpr int32 MaxPendingRemovalPredictions = 32;
+}
+
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
 	ContainmentEvaluator = MakeUnique<FDRSnowVoxelContainmentEvaluator>();
@@ -24,6 +29,7 @@ UDRSnowSubsystem::~UDRSnowSubsystem() = default;
 
 void UDRSnowSubsystem::Deinitialize()
 {
+	ResetRemovalPredictions();
 	if (MaterialPatchApplyQueue)
 	{
 		MaterialPatchApplyQueue->Reset();
@@ -66,6 +72,12 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
 	return Execution.RemoveResult;
 }
 
+FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowRemoval(
+	const FDRSnowSurfaceRemoveRequest& Request)
+{
+	return PredictSnowRemovalInternal(Request, EDRSnowRemovalPath::Standard);
+}
+
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	FDRSnowMaterialPatch* OutMaterialPatch)
@@ -83,11 +95,122 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 	return Execution.RemoveResult;
 }
 
+FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowAbsorbTool(
+	const FDRSnowSurfaceRemoveRequest& Request)
+{
+	return PredictSnowRemovalInternal(Request, EDRSnowRemovalPath::Absorb);
+}
+
+FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowRemovalInternal(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const EDRSnowRemovalPath RemovalPath)
+{
+	FDRSnowRemoveResult Result;
+	Result.TeamId = Request.Context.TeamId;
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || World->GetNetMode() != NM_Client ||
+		!Request.PredictionKey.IsValid())
+	{
+		return Result;
+	}
+
+	FDRSnowSurfaceEditResult SurfaceEdit = RemovalPipeline->PredictSurface(
+		World,
+		Request,
+		RemovalPath);
+	Result.RemovedAmount = SurfaceEdit.AppliedAmount;
+	if (Result.RemovedAmount <= 0.f)
+	{
+		return Result;
+	}
+
+	if (PendingRemovalPredictions.Num() >= MaxPendingRemovalPredictions)
+	{
+		PendingRemovalPredictions.RemoveAt(
+			0,
+			PendingRemovalPredictions.Num() - MaxPendingRemovalPredictions + 1);
+	}
+
+	FPendingRemovalPrediction& Prediction = PendingRemovalPredictions.AddDefaulted_GetRef();
+	Prediction.PredictionKey = Request.PredictionKey;
+	Prediction.SurfaceEdit = MoveTemp(SurfaceEdit);
+	Prediction.RemovalPath = RemovalPath;
+	return Result;
+}
+
+bool UDRSnowSubsystem::ConsumeMatchingRemovalPrediction(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const EDRSnowRemovalPath RemovalPath,
+	FPendingRemovalPrediction& OutPrediction)
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || World->GetNetMode() != NM_Client)
+	{
+		return false;
+	}
+
+	for (int32 Index = 0; Index < PendingRemovalPredictions.Num(); ++Index)
+	{
+		const FPendingRemovalPrediction& Candidate = PendingRemovalPredictions[Index];
+		if (Candidate.RemovalPath != RemovalPath ||
+			Candidate.PredictionKey != Request.PredictionKey)
+		{
+			continue;
+		}
+
+		OutPrediction = MoveTemp(PendingRemovalPredictions[Index]);
+		PendingRemovalPredictions.RemoveAt(Index);
+		return true;
+	}
+	return false;
+}
+
+void UDRSnowSubsystem::ConfirmPredictedRemoval(
+	const FPendingRemovalPrediction& Prediction,
+	const FDRSnowSurfaceRemoveRequest& AuthoritativeRequest,
+	const float AuthoritativeAmount,
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
+{
+	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->ConfirmPrediction(
+		GetWorld(),
+		AuthoritativeRequest,
+		Prediction.SurfaceEdit,
+		AuthoritativeAmount,
+		AuthoritativeMaterialPatch,
+		Prediction.RemovalPath);
+	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
+	{
+		MaterialPatchApplyQueue->Enqueue(
+			ReplayResult.VoxelWorld.Get(),
+			*AuthoritativeMaterialPatch);
+	}
+}
+
+void UDRSnowSubsystem::ResetRemovalPredictions()
+{
+	PendingRemovalPredictions.Reset();
+}
+
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
+	FPendingRemovalPrediction Prediction;
+	if (ConsumeMatchingRemovalPrediction(
+		Request,
+		EDRSnowRemovalPath::Standard,
+		Prediction))
+	{
+		ConfirmPredictedRemoval(
+			Prediction,
+			Request,
+			AppliedAmount,
+			AuthoritativeMaterialPatch);
+		return true;
+	}
+
 	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
@@ -108,6 +231,20 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
+	FPendingRemovalPrediction Prediction;
+	if (ConsumeMatchingRemovalPrediction(
+		Request,
+		EDRSnowRemovalPath::Absorb,
+		Prediction))
+	{
+		ConfirmPredictedRemoval(
+			Prediction,
+			Request,
+			AppliedAmount,
+			AuthoritativeMaterialPatch);
+		return true;
+	}
+
 	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
@@ -161,6 +298,7 @@ void UDRSnowSubsystem::ResetCheckpoints()
 
 void UDRSnowSubsystem::ResetSnowState()
 {
+	ResetRemovalPredictions();
 	ResetCheckpoints();
 	VolumeStore.Reset();
 	OwnershipStore.Reset();
@@ -185,6 +323,7 @@ bool UDRSnowSubsystem::ApplyCheckpoint(
 	const TArray<uint8>& Volume)
 {
 	// 중도 난입 클라이언트에는 Ownership 원본을 복원하지 않는다.
+	ResetRemovalPredictions();
 	OwnershipStore.Reset();
 	SnapshotSerializer->SetWorld(GetWorld());
 	return SnapshotSerializer->ApplyCheckpoint(Name, Voxel, Volume);
