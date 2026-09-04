@@ -176,6 +176,11 @@ namespace DRGameplayTags
 		Perk_Skill_Search_TeamShare,
 		"Perk.Skill.Search.TeamShare",
 		"Shares the search skill reveal with teammates.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_HotPack_InstantCare,
+		"Perk.Skill.HotPack.InstantCare",
+		"Changes Hot Pack into a throwable instant recovery skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,

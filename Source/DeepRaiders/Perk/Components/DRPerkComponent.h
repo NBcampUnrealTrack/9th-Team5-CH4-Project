@@ -30,6 +30,10 @@ struct DEEPRAIDERS_API FDRPerkEntry
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
 	FGameplayTag EquippedSkillId;
 
+	/** 교체형 퍽 판매 시 복구할 원본 스킬이다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perk")
+	TObjectPtr<UDRSkillDefinition> ReplacedSkillDefinition;
+
 	/** 초기화 시 퍽 GameplayEffect를 회수하기 위한 서버 전용 핸들이다. */
 	FActiveGameplayEffectHandle EffectHandle;
 };
@@ -70,7 +74,10 @@ public:
 	bool CanAddPerk(const UDRPerkDefinition* PerkDefinition, FGameplayTag EquippedSkillId = FGameplayTag()) const;
 
 	/** 서버에서 퍽을 추가하고 GameplayEffect를 즉시 적용한다. */
-	bool AddPerk(UDRPerkDefinition* PerkDefinition, FGameplayTag EquippedSkillId = FGameplayTag());
+	bool AddPerk(
+		UDRPerkDefinition* PerkDefinition,
+		FGameplayTag EquippedSkillId = FGameplayTag(),
+		UDRSkillDefinition* ReplacedSkillDefinition = nullptr);
 
 	/** 공용 퍽 또는 유일하게 호환되는 장착 스킬 퍽을 추가할 수 있는지 확인한다. */
 	bool CanAddPerkAutomatically(const UDRPerkDefinition* PerkDefinition) const;
@@ -148,6 +155,8 @@ private:
 		TArray<FActiveGameplayEffectHandle>* OutActiveEffectHandles) const;
 
 	bool HasUsableSkillEffectRule(const UDRPerkDefinition* PerkDefinition) const;
+
+	bool RestoreReplacedSkill(const FDRPerkEntry& PerkEntry) const;
 
 	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)

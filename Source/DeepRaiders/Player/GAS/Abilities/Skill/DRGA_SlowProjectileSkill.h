@@ -5,7 +5,7 @@
 #include "DRGA_SlowProjectileSkill.generated.h"
 
 class ADRSlowProjectile;
-class UGameplayEffect;
+class UGameplayEffect; 
 
 UCLASS()
 class DEEPRAIDERS_API UDRGA_SlowProjectileSkill : public UDRGA_CharacterSkillBase

@@ -7,6 +7,7 @@
 #include "DRPerkDefinition.generated.h"
 
 class UGameplayEffect;
+class UDRSkillDefinition;
 
 UENUM(BlueprintType)
 enum class EDRPerkTrigger : uint8
@@ -45,6 +46,10 @@ public:
 	/** 스킬 동작 변경형 퍽을 식별하기 위한 태그다. 예: Perk.Skill.Charges */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	FGameplayTag PerkTag;
+
+	/** 구매 시 호환 스킬을 대체할 스킬이다. 판매 또는 초기화 시 기존 스킬로 복구한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
+	TObjectPtr<UDRSkillDefinition> ReplacementSkillDefinition;
 
 	/** GameplayEffect의 SetByCaller에 전달할 시트 기반 퍽 값이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Balance")

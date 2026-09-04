@@ -67,9 +67,17 @@ bool UDRPerkComponent::CanAddPerk(
 		return false;
 	}
 
+	if (IsValid(PerkDefinition->ReplacementSkillDefinition)
+		&& (PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill
+			|| GetPerkCount(PerkDefinition) > 0))
+	{
+		return false;
+	}
+
 	const bool IsEffectConfigured = PerkDefinition->PerkEffectClass != nullptr
 		|| !PerkDefinition->EffectRules.IsEmpty()
-		|| PerkDefinition->PerkTag.IsValid();
+		|| PerkDefinition->PerkTag.IsValid()
+		|| IsValid(PerkDefinition->ReplacementSkillDefinition);
 	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
 	{
 		return !EquippedSkillId.IsValid()
@@ -300,7 +308,8 @@ bool UDRPerkComponent::HasUsableSkillEffectRule(
 
 bool UDRPerkComponent::AddPerk(
 	UDRPerkDefinition* PerkDefinition,
-	FGameplayTag EquippedSkillId)
+	FGameplayTag EquippedSkillId,
+	UDRSkillDefinition* ReplacedSkillDefinition)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
 	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
@@ -378,6 +387,7 @@ bool UDRPerkComponent::AddPerk(
 	while (FindPerkIndex(PerkEntry.PerkInstanceId) != INDEX_NONE);
 	PerkEntry.PerkDefinition = PerkDefinition;
 	PerkEntry.EquippedSkillId = EquippedSkillId;
+	PerkEntry.ReplacedSkillDefinition = ReplacedSkillDefinition;
 	PerkEntry.EffectHandle = EffectHandle;
 
 	UE_LOG(
@@ -405,11 +415,40 @@ bool UDRPerkComponent::AddPerkToSkill(
 		? PlayerState->GetSkillComponent()
 		: nullptr;
 
-	return IsValid(SkillDefinition)
-		&& SkillDefinition->SkillId.IsValid()
-		&& IsValid(SkillComponent)
-		&& SkillComponent->GetCurrentSkill(SkillDefinition->SkillSlot) == SkillDefinition
-		&& AddPerk(PerkDefinition, SkillDefinition->SkillId);
+	if (!IsValid(PerkDefinition)
+		|| !IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid()
+		|| !IsValid(SkillComponent)
+		|| SkillComponent->GetCurrentSkill(SkillDefinition->SkillSlot) != SkillDefinition
+		|| !CanAddPerk(PerkDefinition, SkillDefinition->SkillId))
+	{
+		return false;
+	}
+
+	UDRSkillDefinition* ReplacementSkillDefinition = PerkDefinition->ReplacementSkillDefinition;
+	if (!IsValid(ReplacementSkillDefinition))
+	{
+		return AddPerk(PerkDefinition, SkillDefinition->SkillId);
+	}
+
+	if (ReplacementSkillDefinition->SkillSlot != SkillDefinition->SkillSlot
+		|| !SkillComponent->CanEquipSkill(ReplacementSkillDefinition)
+		|| !SkillComponent->EquipSkill(ReplacementSkillDefinition))
+	{
+		return false;
+	}
+
+	UDRSkillDefinition* MutableSkillDefinition = const_cast<UDRSkillDefinition*>(SkillDefinition);
+	if (AddPerk(
+		PerkDefinition,
+		SkillDefinition->SkillId,
+		MutableSkillDefinition))
+	{
+		return true;
+	}
+
+	SkillComponent->EquipSkill(MutableSkillDefinition);
+	return false;
 }
 
 bool UDRPerkComponent::AddPerkAutomatically(
@@ -608,6 +647,13 @@ bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 
 	const UDRPerkDefinition* RemovedPerkDefinition =
 		PerkEntries[PerkIndex].PerkDefinition;
+	if (!RestoreReplacedSkill(PerkEntries[PerkIndex]))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Perk][RemoveFailed] PerkId=%s Reason=SkillRestoreFailed"),
+			*PerkInstanceId.ToString());
+		return false;
+	}
+
 	const FActiveGameplayEffectHandle EffectHandle = PerkEntries[PerkIndex].EffectHandle;
 	if (EffectHandle.IsValid() && !AbilitySystemComponent->RemoveActiveGameplayEffect(EffectHandle))
 	{
@@ -655,6 +701,12 @@ bool UDRPerkComponent::ResetPerks()
 	bool IsResetSucceeded = true;
 	for (FDRPerkEntry& PerkEntry : PerkEntries)
 	{
+		if (!RestoreReplacedSkill(PerkEntry))
+		{
+			IsResetSucceeded = false;
+			continue;
+		}
+
 		if (PerkEntry.EffectHandle.IsValid()
 			&& !AbilitySystemComponent->RemoveActiveGameplayEffect(PerkEntry.EffectHandle))
 		{
@@ -673,6 +725,34 @@ bool UDRPerkComponent::ResetPerks()
 	PlayerState->ForceNetUpdate();
 	OnPerksChanged.Broadcast();
 	return IsResetSucceeded;
+}
+
+bool UDRPerkComponent::RestoreReplacedSkill(const FDRPerkEntry& PerkEntry) const
+{
+	if (!IsValid(PerkEntry.ReplacedSkillDefinition))
+	{
+		return true;
+	}
+
+	const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+	if (!IsValid(PerkDefinition)
+		|| !IsValid(PerkDefinition->ReplacementSkillDefinition)
+		|| !IsValid(SkillComponent))
+	{
+		return false;
+	}
+
+	if (SkillComponent->GetCurrentSkill(PerkEntry.ReplacedSkillDefinition->SkillSlot)
+		!= PerkDefinition->ReplacementSkillDefinition)
+	{
+		return true;
+	}
+
+	return SkillComponent->EquipSkill(PerkEntry.ReplacedSkillDefinition);
 }
 
 void UDRPerkComponent::RequestResetPerks()

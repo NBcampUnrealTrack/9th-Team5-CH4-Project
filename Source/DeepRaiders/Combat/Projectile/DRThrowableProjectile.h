@@ -9,6 +9,13 @@
 class UDRSnowAddComponent;
 class UDRSnowRemoveComponent;
 
+enum class EDRThrowableTargetRejectReason : uint8
+{
+	InvalidTeam,
+	Occluded,
+	MissingAbilitySystem
+};
+
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRThrowableProjectile : public ADRProjectile
 {
@@ -28,6 +35,17 @@ protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override;
 	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult) override;
+	virtual bool ShouldAffectInstigator() const { return false; }
+	virtual bool IsValidEffectTarget(const AActor* TargetActor) const;
+	virtual void HandleTargetRejected(
+		const AActor* TargetActor,
+		EDRThrowableTargetRejectReason RejectReason) const { }
+	virtual void ApplyEffectToTarget(
+		AActor* TargetActor,
+		UAbilitySystemComponent* TargetAbilitySystem,
+		const FHitResult& ImpactResult);
+
+	float GetExplosionRadius() const { return ItemSettings.ExplosionRadius; }
 
 	virtual bool ShouldIgnoreFriendlyBlockingHit() const override
 	{
