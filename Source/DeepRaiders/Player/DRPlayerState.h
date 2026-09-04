@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "TimerManager.h"
 #include "DeepRaiders/GAS/DRAbilitySet.h"
 #include "DRPlayerState.generated.h"
@@ -163,6 +164,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GAS|Status")
 	bool IsFrozen() const;
 
+	/** 서버에서 성공한 원거리 무기 사용이 확정된 뒤 Heat를 누적한다. */
+	void AddWeaponHeat(float HeatAmount, float DecayDelay, float RecoveryDuration);
+
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsOverheated() const;
+
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
 	void ClearFrozenState();
 	
@@ -183,6 +190,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
 	TSubclassOf<UGameplayEffect> DeadEffectClass;
+
+	/** Infinite GE. BP에서 State.Overheated를 Granted Tag로 부여한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat")
+	TSubclassOf<UGameplayEffect> OverheatedEffectClass;
 	
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
 	void EvaluateDeadState();
@@ -214,6 +225,7 @@ protected:
 	void UnbindStatusPolicy();
 
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleHeatGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	
@@ -236,6 +248,25 @@ protected:
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
 	FDelegateHandle VoxelContainedTagChangedHandle;
+
+	// Heat / Overheat
+	void EvaluateOverheatedState(float HeatGauge);
+	void EnterOverheatedState();
+	void ClearOverheatedState();
+	void ResetHeatState();
+	void RestartHeatDecay();
+	void TickHeatDecay();
+	void StopHeatDecay();
+
+	/** Heat 감소는 UI 보간보다 충분히 낮은 빈도로 서버에서만 실행한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat", meta = (ClampMin = "0.02", Units = "s"))
+	float HeatDecayInterval = 0.1f;
+
+	float CurrentHeatDecayDelay = 1.f;
+	float CurrentHeatDecayRatePerSecond = 25.f;
+	FTimerHandle HeatDecayTimerHandle;
+	FDelegateHandle HeatGaugeChangedHandle;
+	FActiveGameplayEffectHandle OverheatedEffectHandle;
 	
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
 	bool bHasDeepestDigLocation = false;

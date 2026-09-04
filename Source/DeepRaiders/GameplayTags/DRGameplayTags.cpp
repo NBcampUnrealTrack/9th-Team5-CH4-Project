@@ -23,6 +23,11 @@ namespace DRGameplayTags
 		"Player is absorbing snow.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_Overheated,
+		"State.Overheated",
+		"Player ranged weapon system is overheated.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_BlinkRecovery,
 		"State.BlinkRecovery",
 		"Player may move after blinking but cannot attack or use skills.");
