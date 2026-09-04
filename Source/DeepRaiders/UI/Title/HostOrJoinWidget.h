@@ -59,5 +59,6 @@ protected:
 	TObjectPtr<UDRTitleMapChoiceWidget> WBP_ChoiceMap;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
-	FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
+	// FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
+	FString DedicatedServerAddress = TEXT("katherine-fc.tun.ply.gg:55341");
 };
