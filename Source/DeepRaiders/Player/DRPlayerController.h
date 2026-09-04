@@ -398,6 +398,12 @@ private:
 	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
 
 	UFUNCTION(Server, Reliable)
+	void ServerAckSnowJoinSnapshotChunk(
+		int32 SnapshotId,
+		uint8 PayloadType,
+		int32 ByteOffset);
+
+	UFUNCTION(Server, Reliable)
 	void ServerNotifySnowJoinSnapshotApplied(int32 SnapshotId);
 
 	void SendNextSnowJoinSnapshotChunk();
@@ -414,7 +420,7 @@ private:
 	TArray<uint8> OutgoingSnowVoxelSaveData;
 	TArray<uint8> OutgoingSnowVolumeData;
 	TArray<uint8> OutgoingSnowOwnershipData;
-	FTimerHandle SnowJoinSnapshotSendTimer;
+	TSet<uint64> PendingSnowChunkAcks;
 	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	bool bSnowSnapshotTransferFinished = false;
 

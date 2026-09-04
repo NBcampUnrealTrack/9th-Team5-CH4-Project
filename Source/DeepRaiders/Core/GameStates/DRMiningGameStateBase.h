@@ -158,9 +158,11 @@ public:
 	void Multicast_ResetVoxelState();
 
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ApplySnowOperation(const FDRSnowOperationRecord& Record);
+	void Multicast_ApplySnowOperations(const TArray<FDRSnowOperationRecord>& Records);
 
 private:
+	void QueueSnowOperationForBroadcast(const FDRSnowOperationRecord& Record);
+	void FlushSnowOperationBroadcasts();
 	bool ApplySnowAddOnce(const FDRSnowAddOperation& Operation);
 	bool ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation);
 	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
@@ -176,7 +178,9 @@ private:
 	int32 AppliedSnowCheckpointSequence = 0;
 	TSet<int32> AppliedSnowOperationSequences;
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;
+	TArray<FDRSnowOperationRecord> PendingSnowBroadcastOperations;
 	FTimerHandle PendingSnowRetryTimer;
+	FTimerHandle SnowOperationBroadcastTimer;
 #pragma endregion
 	
 #pragma region Teleport
