@@ -90,6 +90,14 @@ public:
 		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
 	float MaxAttackDistance = 10000.0f;
 
+	/**
+	 * Crosshair Camera Trace가 아무것도 맞추지 않았을 때 사용할 가상 조준 거리.
+	 * 중력 Projectile이 MaxAttackDistance 끝점을 억지로 겨냥하지 않게 분리한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile|Aim", meta = (
+		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
+	float NoHitAimDistance = 3000.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;
 	
@@ -115,7 +123,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan", meta = (AllowPrivateAccess))
 	bool bCanPenetrateTargets = false;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan|Validation",
+	/** 클라이언트 발사 시점 Aim과 서버의 현재 ControlRotation 사이 허용 각도. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim|Validation",
 		meta = (AllowPrivateAccess, ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
 	float MaxServerAimDeviationDegrees = 30.0f;
 	

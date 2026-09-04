@@ -143,7 +143,7 @@ bool UDRGA_UseConsumableEffects::ResolveSelectedConsumable(const FGameplayAbilit
 	}
 	
 	const FGuid SelectedInstanceId = QuickSlot->GetSelectedInstanceId();
-	const FDRItemInstance* ItemInstance = Inventory->GetItemInstance(SelectedInstanceId);
+	const FDRItemInstance* ItemInstance = Inventory->FindItemInstance(SelectedInstanceId);
 	
 	if (ItemInstance == nullptr
 		|| ItemInstance->Definition.Get() != ExpectedDefinition

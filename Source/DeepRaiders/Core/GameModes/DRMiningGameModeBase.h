@@ -5,6 +5,8 @@
 #include "TimerManager.h"
 #include "DRMiningGameModeBase.generated.h"
 
+struct FPropertyChangedChainEvent;
+
 enum class EDRSnowJoinSnapshotResult : uint8
 {
 	Applied,
@@ -13,6 +15,25 @@ enum class EDRSnowJoinSnapshotResult : uint8
 
 DECLARE_MULTICAST_DELEGATE(FOnJoinSnapshotStarted);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnJoinSnapshotFinished, EDRSnowJoinSnapshotResult);
+
+USTRUCT(BlueprintType)
+struct FDRGamePhaseConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase")
+	int32 PhaseIndex = 0;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Game Phase",
+		meta = (ClampMin = "1", Units = "s"))
+	int32 DurationSeconds = 180;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase")
+	TArray<FText> PlayerMessages;
+};
 
 // 채굴 테스트/플레이용 GameState를 사용하는 GameMode이다.
 UCLASS()
@@ -53,6 +74,11 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual bool ShouldSpawnAtStartSpot(AController* Player) override;
 
+#if WITH_EDITOR
+	virtual void PostEditChangeChainProperty(
+		FPropertyChangedChainEvent& PropertyChangedEvent) override;
+#endif
+
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
@@ -63,8 +89,14 @@ protected:
 	UPROPERTY(
 		EditDefaultsOnly,
 		BlueprintReadOnly,
-		Category = "Game",
-		meta = (ClampMin = "1.0", Units = "s"))
+		Category = "Game|Phase")
+	TArray<FDRGamePhaseConfig> GamePhases;
+
+	UPROPERTY(
+		VisibleDefaultsOnly,
+		BlueprintReadOnly,
+		Category = "Game|Phase",
+		meta = (Units = "s"))
 	float GameDuration = 180.f;
 
 	UPROPERTY(
@@ -77,6 +109,9 @@ protected:
 private:
 	void ResetGameState();
 	void TickGameTimer();
+	void AdvanceGamePhase();
+	void UpdateReplicatedGamePhase();
+	void RecalculateGameDuration();
 	void ClearGameResultText();
 	void RefreshGameStartPlayerRoster();
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
@@ -86,6 +121,8 @@ private:
 	FTimerHandle GameTimerHandle;
 	FTimerHandle GameResultTimerHandle;
 	int32 GameRemainingSeconds = 0;
+	int32 CurrentPhaseArrayIndex = INDEX_NONE;
+	int32 PhaseRemainingSeconds = 0;
 	int32 ActiveTeamId = INDEX_NONE;
 
 	void StartTeamSwitchTimer();

@@ -68,6 +68,27 @@ void ADRProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ThisClass, ReplicatedSizeMultiplier);
 }
 
+float ADRProjectile::GetConfiguredInitialSpeed() const
+{
+	return IsValid(ProjectileMovement)
+		? FMath::Max(ProjectileMovement->InitialSpeed, 1.0f)
+		: 1.0f;
+}
+
+float ADRProjectile::GetConfiguredGravityScale() const
+{
+	return IsValid(ProjectileMovement)
+		? FMath::Max(ProjectileMovement->ProjectileGravityScale, 0.0f)
+		: 0.0f;
+}
+
+void ADRProjectile::SetInitialLaunchVelocity(const FVector& InLaunchVelocity)
+{
+	InitialLaunchVelocity = InLaunchVelocity.ContainsNaN()
+		? FVector::ZeroVector
+		: InLaunchVelocity;
+}
+
 void ADRProjectile::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
@@ -78,12 +99,22 @@ void ADRProjectile::PostInitializeComponents()
 void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+
+	/*
+	 * 서버는 GA에서 전달한 ballistic velocity를 사용한다.
+	 * 클라이언트는 SpawnRotation 기반 초기 속도로 시작하고 ReplicateMovement로
+	 * 서버의 실제 궤적을 이어받는다.
+	 */
+	const FVector LaunchVelocity =
+		HasAuthority() && !InitialLaunchVelocity.IsNearlyZero()
+			? InitialLaunchVelocity
+			: GetActorForwardVector() * ProjectileMovement->InitialSpeed;
 	
 	if (!HasAuthority())
 	{
 		// 클라에서의 충돌을 무시
 		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+		ProjectileMovement->Velocity = LaunchVelocity;
 		
 		return;
 	}
@@ -104,8 +135,7 @@ void ADRProjectile::BeginPlay()
 	}
 	
 	ProjectileMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleProjectileStop);
-	
-	ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+	ProjectileMovement->Velocity = LaunchVelocity;
 }
 
 void ADRProjectile::Tick(float DeltaSeconds)

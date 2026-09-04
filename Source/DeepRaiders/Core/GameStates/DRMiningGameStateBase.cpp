@@ -31,6 +31,9 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(ADRMiningGameStateBase, bGameEnded);
 	DOREPLIFETIME(ADRMiningGameStateBase, GameEndDebugText);
 	DOREPLIFETIME(ADRMiningGameStateBase, GameResultText);
+	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseIndex);
+	DOREPLIFETIME(ADRMiningGameStateBase, PhaseRemainingSeconds);
+	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseMessages);
 }
 
 void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded)
@@ -50,6 +53,31 @@ void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds, bool bSta
 void ADRMiningGameStateBase::OnRep_GameTimerState()
 {
 	OnGameTimerChanged.Broadcast(GameRemainingSeconds, bGameStarted, bGameEnded);
+}
+
+void ADRMiningGameStateBase::SetGamePhaseState(
+	int32 PhaseIndex,
+	int32 RemainingSeconds,
+	const TArray<FText>& PlayerMessages)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	CurrentPhaseIndex = PhaseIndex;
+	PhaseRemainingSeconds = FMath::Max(0, RemainingSeconds);
+	CurrentPhaseMessages = PlayerMessages;
+	OnRep_GamePhaseState();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_GamePhaseState()
+{
+	OnGamePhaseChanged.Broadcast(
+		CurrentPhaseIndex,
+		PhaseRemainingSeconds,
+		CurrentPhaseMessages);
 }
 
 void ADRMiningGameStateBase::SetGameEndDebugText(const FString& DebugText)

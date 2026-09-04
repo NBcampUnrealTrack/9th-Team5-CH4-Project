@@ -21,13 +21,33 @@ protected:
 	virtual bool SendLocalShotRequest() override;	
 
 private:
-	void RegisterServerShotDelegate();
-	void UnregisterServerShotDelegate();
+	void RegisterServerShotTargetDataDelegate();
+	void UnregisterServerShotTargetDataDelegate();
 
-	void HandleServerShotRequest();
-	bool ExecuteServerProjectileShot();
+	void HandleServerShotTargetData(
+		const FGameplayAbilityTargetDataHandle& TargetData,
+		FGameplayTag ApplicationTag);
 
-	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& ProjectileDirection, AActor* AvatarActor, UAbilitySystemComponent* AbilitySystem, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
+	bool ValidateServerShotTargetData(
+		const FGameplayAbilityTargetDataHandle& TargetData,
+		FVector& OutAimPoint,
+		FVector& OutAimDirection) const;
+
+	bool ExecuteServerProjectileShot(
+		const FVector& AimPoint,
+		const FVector& AimDirection);
+
+	bool ResolveProjectileLaunchVelocity(
+		const FVector& SpawnLocation,
+		const FVector& AimPoint,
+		FVector& OutLaunchVelocity) const;
+
+	bool SpawnProjectile(
+		const FVector& SpawnLocation,
+		const FVector& LaunchVelocity,
+		AActor* AvatarActor,
+		UAbilitySystemComponent* AbilitySystem,
+		const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
 	
-	FDelegateHandle ServerShotDelegateHandle;
+	FDelegateHandle ServerShotTargetDataDelegateHandle;
 };

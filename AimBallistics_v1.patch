@@ -1,0 +1,923 @@
+diff --git a/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.cpp b/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.cpp
+index a2fff5f..fa43b5c 100644
+--- a/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.cpp
++++ b/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.cpp
+@@ -19,6 +19,16 @@ ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitial
+ 	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
+ }
+ 
++float ADRCannonProjectile::GetConfiguredInitialSpeed() const
++{
++	return FMath::Max(InitialSpeed, 1.0f);
++}
++
++float ADRCannonProjectile::GetConfiguredGravityScale() const
++{
++	return FMath::Max(GravityScale, 0.0f);
++}
++
+ void ADRCannonProjectile::BeginPlay()
+ {
+ 	ConfigureProjectileMovement(InitialSpeed, GravityScale);
+diff --git a/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.h b/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.h
+index b3069de..046e9d9 100644
+--- a/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.h
++++ b/Source/DeepRaiders/Combat/Projectile/DRCannonProjectile.h
+@@ -14,6 +14,9 @@ class DEEPRAIDERS_API ADRCannonProjectile : public ADRProjectile
+ public:
+ 	ADRCannonProjectile(const FObjectInitializer& ObjectInitializer);
+ 
++	virtual float GetConfiguredInitialSpeed() const override;
++	virtual float GetConfiguredGravityScale() const override;
++
+ protected:
+ 	virtual void BeginPlay() override;
+ 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
+diff --git a/Source/DeepRaiders/Combat/Projectile/DRProjectile.cpp b/Source/DeepRaiders/Combat/Projectile/DRProjectile.cpp
+index df099e7..9e1a43a 100644
+--- a/Source/DeepRaiders/Combat/Projectile/DRProjectile.cpp
++++ b/Source/DeepRaiders/Combat/Projectile/DRProjectile.cpp
+@@ -68,6 +68,27 @@ void ADRProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
+ 	DOREPLIFETIME(ThisClass, ReplicatedSizeMultiplier);
+ }
+ 
++float ADRProjectile::GetConfiguredInitialSpeed() const
++{
++	return IsValid(ProjectileMovement)
++		? FMath::Max(ProjectileMovement->InitialSpeed, 1.0f)
++		: 1.0f;
++}
++
++float ADRProjectile::GetConfiguredGravityScale() const
++{
++	return IsValid(ProjectileMovement)
++		? FMath::Max(ProjectileMovement->ProjectileGravityScale, 0.0f)
++		: 0.0f;
++}
++
++void ADRProjectile::SetInitialLaunchVelocity(const FVector& InLaunchVelocity)
++{
++	InitialLaunchVelocity = InLaunchVelocity.ContainsNaN()
++		? FVector::ZeroVector
++		: InLaunchVelocity;
++}
++
+ void ADRProjectile::PostInitializeComponents()
+ {
+ 	Super::PostInitializeComponents();
+@@ -78,12 +99,22 @@ void ADRProjectile::PostInitializeComponents()
+ void ADRProjectile::BeginPlay()
+ {
+ 	Super::BeginPlay();
++
++	/*
++	 * 서버는 GA에서 전달한 ballistic velocity를 사용한다.
++	 * 클라이언트는 SpawnRotation 기반 초기 속도로 시작하고 ReplicateMovement로
++	 * 서버의 실제 궤적을 이어받는다.
++	 */
++	const FVector LaunchVelocity =
++		HasAuthority() && !InitialLaunchVelocity.IsNearlyZero()
++			? InitialLaunchVelocity
++			: GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+ 	
+ 	if (!HasAuthority())
+ 	{
+ 		// 클라에서의 충돌을 무시
+ 		CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+-		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
++		ProjectileMovement->Velocity = LaunchVelocity;
+ 		
+ 		return;
+ 	}
+@@ -104,8 +135,7 @@ void ADRProjectile::BeginPlay()
+ 	}
+ 	
+ 	ProjectileMovement->OnProjectileStop.AddDynamic(this, &ThisClass::HandleProjectileStop);
+-	
+-	ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
++	ProjectileMovement->Velocity = LaunchVelocity;
+ }
+ 
+ void ADRProjectile::Tick(float DeltaSeconds)
+diff --git a/Source/DeepRaiders/Combat/Projectile/DRProjectile.h b/Source/DeepRaiders/Combat/Projectile/DRProjectile.h
+index be09eee..3c6ceb8 100644
+--- a/Source/DeepRaiders/Combat/Projectile/DRProjectile.h
++++ b/Source/DeepRaiders/Combat/Projectile/DRProjectile.h
+@@ -20,6 +20,15 @@ class DEEPRAIDERS_API ADRProjectile : public AActor
+ public:
+ 	ADRProjectile(const FObjectInitializer& ObjectInitializer);
+ 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
++
++	/** Ballistic Aim 계산에서 사용하는 이 Projectile의 실제 기본 발사 속도. */
++	virtual float GetConfiguredInitialSpeed() const;
++
++	/** Ballistic Aim 계산에서 사용하는 ProjectileGravityScale. */
++	virtual float GetConfiguredGravityScale() const;
++
++	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
++	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
+ 	
+ 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
+ 	void InitializeProjectile(
+@@ -125,6 +134,7 @@ private:
+ 	FDRProjectileFalloffSettings FalloffSettings;
+ 
+ 	FVector LaunchLocation = FVector::ZeroVector;
++	FVector InitialLaunchVelocity = FVector::ZeroVector;
+ 	FVector InitialActorScale = FVector::OneVector;
+ 	float EffectiveMaxRange = 0.f;
+ 	float CurrentFalloffStrength = 1.f;
+diff --git a/Source/DeepRaiders/Item/DRProjectileWeaponDefinition.h b/Source/DeepRaiders/Item/DRProjectileWeaponDefinition.h
+index 87bcf8c..bc1d906 100644
+--- a/Source/DeepRaiders/Item/DRProjectileWeaponDefinition.h
++++ b/Source/DeepRaiders/Item/DRProjectileWeaponDefinition.h
+@@ -90,6 +90,14 @@ public:
+ 		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
+ 	float MaxAttackDistance = 10000.0f;
+ 
++	/**
++	 * Crosshair Camera Trace가 아무것도 맞추지 않았을 때 사용할 가상 조준 거리.
++	 * 중력 Projectile이 MaxAttackDistance 끝점을 억지로 겨냥하지 않게 분리한다.
++	 */
++	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile|Aim", meta = (
++		ClampMin = "1.0", UIMin = "1.0", Units = "cm"))
++	float NoHitAimDistance = 3000.0f;
++
+ 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect")
+ 	TArray<FDRGameplayEffectData> ImpactEffects;
+ 	
+@@ -115,7 +123,8 @@ public:
+ 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan", meta = (AllowPrivateAccess))
+ 	bool bCanPenetrateTargets = false;
+ 
+-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|HitScan|Validation",
++	/** 클라이언트 발사 시점 Aim과 서버의 현재 ControlRotation 사이 허용 각도. */
++	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Aim|Validation",
+ 		meta = (AllowPrivateAccess, ClampMin = "0.0", ClampMax = "180.0", Units = "deg"))
+ 	float MaxServerAimDeviationDegrees = 30.0f;
+ 	
+diff --git a/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.cpp b/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.cpp
+index 3a4324f..af9c1fd 100644
+--- a/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.cpp
++++ b/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.cpp
+@@ -1,4 +1,3 @@
+-
+ #include "DRGA_FireProjectile.h"
+ 
+ #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
+@@ -9,32 +8,40 @@
+ #include "GameFramework/Pawn.h"
+ #include "Kismet/GameplayStatics.h"
+ 
+-bool UDRGA_FireProjectile::IsAttackConfigurationValid(const UDRProjectileWeaponItemDefinition* WeaponDefinition) const
++namespace DRProjectileAim
+ {
+-	return Super::IsAttackConfigurationValid(WeaponDefinition) && WeaponDefinition->ProjectileClass != nullptr;
++	constexpr float MinAimDistance = 1.0f;
++	constexpr float MaxClientViewLocationError = 500.0f;
++}
++
++bool UDRGA_FireProjectile::IsAttackConfigurationValid(
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition) const
++{
++	return Super::IsAttackConfigurationValid(WeaponDefinition)
++		&& WeaponDefinition->ProjectileClass != nullptr;
+ }
+ 
+ void UDRGA_FireProjectile::OnRangedWeaponActivated()
+ {
+ 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+-	
+-	// 서버에서
++
+ 	if (ActorInfo != nullptr
+ 		&& ActorInfo->IsNetAuthority()
+ 		&& !ActorInfo->IsLocallyControlled())
+ 	{
+-		// GA를 활성화하며 InputPressed 이벤트 Delegate 연결
+-		RegisterServerShotDelegate();
++		/*
++		 * Projectile은 발사 시점의 클라이언트 조준점을 사용한다.
++		 * Generic InputPressed 이벤트에는 위치 payload가 없으므로 TargetData를 수신한다.
++		 */
++		RegisterServerShotTargetDataDelegate();
+ 	}
+ }
+ 
+ void UDRGA_FireProjectile::OnRangedWeaponEnded()
+ {
+-	// GA를 종료하며 InputPressed 이벤트 Delegate 해제
+-	UnregisterServerShotDelegate();
++	UnregisterServerShotTargetDataDelegate();
+ }
+ 
+-// 로컬 플레이어의 발사 요청 처리
+ bool UDRGA_FireProjectile::SendLocalShotRequest()
+ {
+ 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+@@ -43,46 +50,81 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
+ 	{
+ 		return false;
+ 	}
+-	
++
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
++		GetCurrentWeaponDefinition();
++	if (!IsValid(WeaponDefinition))
++	{
++		return false;
++	}
++
+ 	FVector ViewLocation;
+ 	FRotator ViewRotation;
+ 	if (!GetViewPoint(ViewLocation, ViewRotation))
+ 	{
+ 		return false;
+ 	}
+-	
+-	FHitResult CameraHit;
+-	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(),CameraHit))
++
++	const FVector ViewDirection = ViewRotation.Vector().GetSafeNormal();
++	if (ViewDirection.IsNearlyZero())
+ 	{
+ 		return false;
+ 	}
+ 
+-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+-	if (!IsValid(AvatarActor))
++	FHitResult CameraHit;
++	if (!TraceCameraAim(ViewLocation, ViewDirection, CameraHit))
+ 	{
+ 		return false;
+ 	}
+ 
+-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+-	if (!IsValid(WeaponDefinition))
++	/*
++	 * Crosshair가 실제 Geometry를 맞춘 경우에는 그 ImpactPoint가 발사 의도다.
++	 *
++	 * 허공인 경우 MaxAttackDistance 끝점까지 탄도를 맞추면 중력탄은 물리적으로
++	 * 도달 불가능한 거리를 목표로 삼기 쉽다. 별도 NoHitAimDistance에서
++	 * 카메라 Ray와 Projectile 궤적이 교차하도록 한다.
++	 */
++	const float NoHitAimDistance = FMath::Clamp(
++		WeaponDefinition->NoHitAimDistance,
++		DRProjectileAim::MinAimDistance,
++		FMath::Max(WeaponDefinition->MaxAttackDistance, DRProjectileAim::MinAimDistance));
++
++	const FVector AimPoint = CameraHit.bBlockingHit
++		? FVector(CameraHit.ImpactPoint)
++		: ViewLocation + ViewDirection * NoHitAimDistance;
++
++	if (AimPoint.ContainsNaN())
+ 	{
+ 		return false;
+ 	}
+ 
+-	// 원거리 무기 공통 캐릭터 로컬 StartOffset에서 눈총을 발사한다.
+-	const FVector GameplayFireOrigin = AvatarActor->GetActorLocation()
+-		+ AvatarActor->GetActorTransform().TransformVectorNoScale(
+-			WeaponDefinition->StartOffset);
++	FHitResult ShotAimHit = CameraHit;
++	ShotAimHit.TraceStart = ViewLocation;
++	ShotAimHit.TraceEnd = AimPoint;
++	ShotAimHit.Location = AimPoint;
++	ShotAimHit.ImpactPoint = AimPoint;
++
++	/*
++	 * 실제 Projectile Spawn과 Presentation 모두 Character의 GameplayFireAnchor를
++	 * 동일한 기준으로 사용한다. Socket/Weapon mesh 위치는 Gameplay 판정 기준이 아니다.
++	 */
++	FVector GameplayFireOrigin;
++	if (!ResolveGameplayFireOrigin(ViewDirection, GameplayFireOrigin))
++	{
++		return false;
++	}
+ 
+-	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
+ 	if (!ActorInfo->IsNetAuthority())
+ 	{
+ 		PlayLocalFirePresentation(GameplayFireOrigin, AimPoint);
+ 	}
+ 
++	FGameplayAbilityTargetDataHandle TargetData(
++		new FGameplayAbilityTargetData_SingleTargetHit(ShotAimHit));
++
+ 	if (ActorInfo->IsNetAuthority())
+ 	{
+-		HandleServerShotRequest();
++		HandleServerShotTargetData(TargetData, FGameplayTag());
+ 		return true;
+ 	}
+ 
+@@ -91,110 +133,235 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
+ 	{
+ 		return false;
+ 	}
+-	
+-	// 부모 GA에서 TryRequestLocalShot() 함수가 호출되고 내부에서 생성한 PredictionKey가 공유됨
+-	AbilitySystem->ServerSetReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
+-		GetCurrentAbilitySpecHandle(),GetCurrentActivationInfo().GetActivationPredictionKey(),
++
++	/*
++	 * 부모 TryRequestLocalShot()이 생성한 PredictionKey를 그대로 사용해
++	 * "발사 버튼을 누른 순간"의 Camera Aim을 서버로 전달한다.
++	 */
++	AbilitySystem->ServerSetReplicatedTargetData(
++		GetCurrentAbilitySpecHandle(),
++		GetCurrentActivationInfo().GetActivationPredictionKey(),
++		TargetData,
++		FGameplayTag(),
+ 		AbilitySystem->ScopedPredictionKey);
+ 
+ 	return true;
+ }
+ 
+-void UDRGA_FireProjectile::RegisterServerShotDelegate()
++void UDRGA_FireProjectile::RegisterServerShotTargetDataDelegate()
+ {
+-	if (ServerShotDelegateHandle.IsValid())
++	if (ServerShotTargetDataDelegateHandle.IsValid())
+ 	{
+ 		return;
+ 	}
+ 
+-	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+-
++	UAbilitySystemComponent* AbilitySystem =
++		GetAbilitySystemComponentFromActorInfo();
+ 	if (!IsValid(AbilitySystem))
+ 	{
+ 		return;
+ 	}
+ 
+-	const FGameplayAbilitySpecHandle SpecHandle = GetCurrentAbilitySpecHandle();
+-
+-	const FPredictionKey PredictionKey = GetCurrentActivationInfo().GetActivationPredictionKey();
+-
+-	ServerShotDelegateHandle = AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,
+-			SpecHandle,PredictionKey).AddUObject(this,&ThisClass::HandleServerShotRequest);
+-
+-	AbilitySystem->CallReplicatedEventDelegateIfSet(EAbilityGenericReplicatedEvent::InputPressed,SpecHandle,PredictionKey);
++	const FGameplayAbilitySpecHandle SpecHandle =
++		GetCurrentAbilitySpecHandle();
++	const FPredictionKey PredictionKey =
++		GetCurrentActivationInfo().GetActivationPredictionKey();
++
++	ServerShotTargetDataDelegateHandle =
++		AbilitySystem->AbilityTargetDataSetDelegate(
++			SpecHandle,
++			PredictionKey).AddUObject(
++				this,
++				&ThisClass::HandleServerShotTargetData);
++
++	/*
++	 * TargetData가 Delegate 등록보다 먼저 서버에 도착한 경우에도
++	 * 캐시된 데이터를 즉시 소비할 수 있게 한다.
++	 */
++	AbilitySystem->CallReplicatedTargetDataDelegatesIfSet(
++		SpecHandle,
++		PredictionKey);
+ }
+ 
+-void UDRGA_FireProjectile::UnregisterServerShotDelegate()
++void UDRGA_FireProjectile::UnregisterServerShotTargetDataDelegate()
+ {
+-	if (!ServerShotDelegateHandle.IsValid())
++	if (!ServerShotTargetDataDelegateHandle.IsValid())
+ 	{
+ 		return;
+ 	}
+ 
+-	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
++	if (UAbilitySystemComponent* AbilitySystem =
++		GetAbilitySystemComponentFromActorInfo())
+ 	{
+-		AbilitySystem->AbilityReplicatedEventDelegate(EAbilityGenericReplicatedEvent::InputPressed,	
++		AbilitySystem->AbilityTargetDataSetDelegate(
+ 			GetCurrentAbilitySpecHandle(),
+-			GetCurrentActivationInfo().GetActivationPredictionKey()).Remove(ServerShotDelegateHandle);
++			GetCurrentActivationInfo().GetActivationPredictionKey())
++			.Remove(ServerShotTargetDataDelegateHandle);
+ 	}
+ 
+-	ServerShotDelegateHandle.Reset();
++	ServerShotTargetDataDelegateHandle.Reset();
+ }
+ 
+-void UDRGA_FireProjectile::HandleServerShotRequest()
++void UDRGA_FireProjectile::HandleServerShotTargetData(
++	const FGameplayAbilityTargetDataHandle& TargetData,
++	FGameplayTag /*ApplicationTag*/)
+ {
+ 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+-	
+ 	if (ActorInfo == nullptr
+ 		|| !ActorInfo->IsNetAuthority())
+ 	{
+ 		return;
+ 	}
+-	
++
++	FVector AimPoint;
++	FVector AimDirection;
++	const bool bValidAim = ValidateServerShotTargetData(
++		TargetData,
++		AimPoint,
++		AimDirection);
++
++	/*
++	 * 원격 클라이언트 TargetData는 성공/실패와 관계없이 이번 Shot 데이터로 소비한다.
++	 * 자동사격의 다음 Shot이 동일한 Ability/PredictionKey에 새 TargetData를 보낼 수 있다.
++	 */
+ 	if (!ActorInfo->IsLocallyControlled())
+ 	{
+-		if (UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get())
++		if (UAbilitySystemComponent* AbilitySystem =
++			ActorInfo->AbilitySystemComponent.Get())
+ 		{
+-			AbilitySystemComponent->ConsumeGenericReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed,
+-				GetCurrentAbilitySpecHandle(), GetCurrentActivationInfo().GetActivationPredictionKey());
++			AbilitySystem->ConsumeClientReplicatedTargetData(
++				GetCurrentAbilitySpecHandle(),
++				GetCurrentActivationInfo().GetActivationPredictionKey());
+ 		}
+ 	}
+-	
+-	// CommitAbility 시도
++
++	if (!bValidAim)
++	{
++		return;
++	}
++
+ 	if (!TryCommitServerShot())
+ 	{
+ 		return;
+ 	}
+-	
++
+ 	// 실제 Projectile이 하나 이상 생성된 발사만 Heat를 누적한다.
+-	if (ExecuteServerProjectileShot())
++	if (ExecuteServerProjectileShot(AimPoint, AimDirection))
+ 	{
+ 		ApplyHeatForSuccessfulShot();
+ 	}
+ }
+ 
+-bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
++bool UDRGA_FireProjectile::ValidateServerShotTargetData(
++	const FGameplayAbilityTargetDataHandle& TargetData,
++	FVector& OutAimPoint,
++	FVector& OutAimDirection) const
+ {
+-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+-	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
++	OutAimPoint = FVector::ZeroVector;
++	OutAimDirection = FVector::ZeroVector;
++
++	if (TargetData.Num() != 1)
+ 	{
+ 		return false;
+ 	}
+ 
+-	FVector ViewLocation;
+-	FRotator ViewRotation;
+-	if (!GetViewPoint(ViewLocation, ViewRotation))
++	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
++	const FHitResult* AimHit = Data != nullptr
++		? Data->GetHitResult()
++		: nullptr;
++
++	if (AimHit == nullptr)
+ 	{
+ 		return false;
+ 	}
+ 
+-	FHitResult CameraHit;
+-	if (!TraceCameraAim(ViewLocation, ViewRotation.Vector(), CameraHit))
++	const FVector ClientViewLocation = AimHit->TraceStart;
++	const FVector AimPoint = AimHit->bBlockingHit
++		? FVector(AimHit->ImpactPoint)
++		: FVector(AimHit->TraceEnd);
++
++	if (ClientViewLocation.ContainsNaN()
++		|| AimPoint.ContainsNaN())
++	{
++		return false;
++	}
++
++	FVector ServerViewLocation;
++	FRotator ServerViewRotation;
++	if (!GetViewPoint(ServerViewLocation, ServerViewRotation))
++	{
++		return false;
++	}
++
++	/*
++	 * Dedicated Server의 현재 Camera 위치와 클라이언트 발사 순간 Camera 위치는
++	 * 네트워크 지연 때문에 조금 다를 수 있다. 완전히 다른 위치에서 만든 TargetData만 거절한다.
++	 */
++	if (FVector::DistSquared(ClientViewLocation, ServerViewLocation)
++		> FMath::Square(DRProjectileAim::MaxClientViewLocationError))
++	{
++		return false;
++	}
++
++	const FVector ToAim = AimPoint - ClientViewLocation;
++	const float AimDistance = ToAim.Size();
++	const float MaxAttackDistance =
++		FMath::Max(GetMaxAttackDistance(), DRProjectileAim::MinAimDistance);
++
++	if (AimDistance < DRProjectileAim::MinAimDistance
++		|| AimDistance > MaxAttackDistance + DRProjectileAim::MaxClientViewLocationError)
+ 	{
+ 		return false;
+ 	}
+ 
+-	const FVector AimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
++	const FVector ClientAimDirection = ToAim / AimDistance;
++	const FVector ServerViewDirection =
++		ServerViewRotation.Vector().GetSafeNormal();
++
++	if (ServerViewDirection.IsNearlyZero())
++	{
++		return false;
++	}
++
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
++		GetCurrentWeaponDefinition();
++	if (!IsValid(WeaponDefinition))
++	{
++		return false;
++	}
++
++	const float MaxDeviationDegrees = FMath::Clamp(
++		WeaponDefinition->MaxServerAimDeviationDegrees,
++		0.0f,
++		180.0f);
++
++	const float AimDot = FMath::Clamp(
++		FVector::DotProduct(ServerViewDirection, ClientAimDirection),
++		-1.0f,
++		1.0f);
++	const float AimDeviationDegrees =
++		FMath::RadiansToDegrees(FMath::Acos(AimDot));
++
++	if (AimDeviationDegrees > MaxDeviationDegrees)
++	{
++		return false;
++	}
++
++	OutAimPoint = AimPoint;
++	OutAimDirection = ClientAimDirection;
++	return true;
++}
++
++bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
++	const FVector& AimPoint,
++	const FVector& AimDirection)
++{
++	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
++	if (ActorInfo == nullptr
++		|| !ActorInfo->IsNetAuthority())
++	{
++		return false;
++	}
+ 
+ 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+ 	if (!IsValid(AvatarActor))
+@@ -202,24 +369,36 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
+ 		return false;
+ 	}
+ 
+-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
++		GetCurrentWeaponDefinition();
+ 	if (!IsValid(WeaponDefinition))
+ 	{
+ 		return false;
+ 	}
+ 
+-	// 원거리 무기 공통 캐릭터 로컬 StartOffset에서 눈총을 발사한다.
+-	const FVector GameplayFireOrigin = AvatarActor->GetActorLocation()
+-		+ AvatarActor->GetActorTransform().TransformVectorNoScale(
+-			WeaponDefinition->StartOffset);
++	/*
++	 * Projectile은 Character의 고정 GameplayFireAnchor에서 출발한다.
++	 * AimDirection은 클라이언트 발사 순간의 Crosshair 방향이며,
++	 * 실제 중력 보정은 아래 ResolveProjectileLaunchVelocity()가 담당한다.
++	 */
++	FVector GameplayFireOrigin;
++	if (!ResolveGameplayFireOrigin(AimDirection, GameplayFireOrigin))
++	{
++		return false;
++	}
+ 
+-	const FVector BaseProjectileDirection = WeaponDefinition->ResolveCameraAimDirection(
+-		ViewRotation.Vector(),
++	FVector BaseLaunchVelocity;
++	if (!ResolveProjectileLaunchVelocity(
+ 		GameplayFireOrigin,
+-		AimPoint);
++		AimPoint,
++		BaseLaunchVelocity))
++	{
++		return false;
++	}
+ 
+-	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();	
+-	if (!IsValid(AvatarActor) || !IsValid(AbilitySystem))
++	UAbilitySystemComponent* AbilitySystem =
++		ActorInfo->AbilitySystemComponent.Get();
++	if (!IsValid(AbilitySystem))
+ 	{
+ 		return false;
+ 	}
+@@ -228,18 +407,45 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
+ 	BuildImpactEffectSpecs(ImpactEffectSpecs);
+ 
+ 	const int32 SafeProjectileCount = GetWeaponProjectileCount();
+-	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(WeaponDefinition->SpreadHalfAngleDegrees, 0.f));
++	const float SpreadRadians = FMath::DegreesToRadians(
++		FMath::Max(
++			WeaponDefinition->SpreadHalfAngleDegrees,
++			0.f));
++	const float LaunchSpeed = BaseLaunchVelocity.Size();
++	const FVector BaseLaunchDirection =
++		BaseLaunchVelocity.GetSafeNormal();
++
++	if (LaunchSpeed <= KINDA_SMALL_NUMBER
++		|| BaseLaunchDirection.IsNearlyZero())
++	{
++		return false;
++	}
++
+ 	bool bSpawnedAnyProjectile = false;
+-	for (int32 ProjectileIndex = 0; ProjectileIndex < SafeProjectileCount; ++ProjectileIndex)
++
++	for (int32 ProjectileIndex = 0;
++		ProjectileIndex < SafeProjectileCount;
++		++ProjectileIndex)
+ 	{
+-		FVector ProjectileDirection = BaseProjectileDirection;
++		FVector ProjectileDirection = BaseLaunchDirection;
+ 
+ 		if (SpreadRadians > KINDA_SMALL_NUMBER)
+ 		{
+-			ProjectileDirection = FMath::VRandCone(BaseProjectileDirection, SpreadRadians);
++			ProjectileDirection =
++				FMath::VRandCone(
++					BaseLaunchDirection,
++					SpreadRadians);
+ 		}
+ 
+-		if (SpawnProjectile(GameplayFireOrigin, ProjectileDirection, AvatarActor, AbilitySystem, ImpactEffectSpecs))
++		const FVector LaunchVelocity =
++			ProjectileDirection * LaunchSpeed;
++
++		if (SpawnProjectile(
++			GameplayFireOrigin,
++			LaunchVelocity,
++			AvatarActor,
++			AbilitySystem,
++			ImpactEffectSpecs))
+ 		{
+ 			bSpawnedAnyProjectile = true;
+ 		}
+@@ -250,20 +456,114 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
+ 		return false;
+ 	}
+ 
+-	PlayServerFirePresentation(GameplayFireOrigin, AimPoint);
++	PlayServerFirePresentation(
++		GameplayFireOrigin,
++		AimPoint);
++
++	return true;
++}
++
++bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
++	const FVector& SpawnLocation,
++	const FVector& AimPoint,
++	FVector& OutLaunchVelocity) const
++{
++	OutLaunchVelocity = FVector::ZeroVector;
++
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
++		GetCurrentWeaponDefinition();
++
++	if (!IsValid(WeaponDefinition)
++		|| !WeaponDefinition->ProjectileClass)
++	{
++		return false;
++	}
++
++	const ADRProjectile* ProjectileDefault =
++		WeaponDefinition->ProjectileClass->GetDefaultObject<ADRProjectile>();
++
++	if (!IsValid(ProjectileDefault))
++	{
++		return false;
++	}
++
++	const float LaunchSpeed =
++		FMath::Max(
++			ProjectileDefault->GetConfiguredInitialSpeed(),
++			1.0f);
++	const float GravityScale =
++		FMath::Max(
++			ProjectileDefault->GetConfiguredGravityScale(),
++			0.0f);
++
++	const FVector DirectDirection =
++		(AimPoint - SpawnLocation).GetSafeNormal();
++
++	if (DirectDirection.IsNearlyZero())
++	{
++		return false;
++	}
++
++	UWorld* World = GetWorld();
++	if (!IsValid(World))
++	{
++		return false;
++	}
++
++	// 중력이 없는 Projectile은 기존과 동일하게 AimPoint 직선 방향으로 발사한다.
++	if (GravityScale <= KINDA_SMALL_NUMBER)
++	{
++		OutLaunchVelocity =
++			DirectDirection * LaunchSpeed;
++		return true;
++	}
++
++	/*
++	 * 고정된 Projectile 속도와 실제 WorldGravity * GravityScale을 사용해
++	 * AimPoint를 통과하는 저각(low arc) 초기 속도를 계산한다.
++	 */
++	FSuggestProjectileVelocityParameters Params(
++		this,
++		SpawnLocation,
++		AimPoint,
++		LaunchSpeed);
++
++	Params.bFavorHighArc = false;
++	Params.CollisionRadius = 0.0f;
++	Params.OverrideGravityZ =
++		World->GetGravityZ() * GravityScale;
++	Params.TraceOption =
++		ESuggestProjVelocityTraceOption::DoNotTrace;
++	Params.bAcceptClosestOnNoSolutions = true;
++
++	if (UGameplayStatics::SuggestProjectileVelocity(
++		Params,
++		OutLaunchVelocity)
++		&& !OutLaunchVelocity.IsNearlyZero())
++	{
++		return true;
++	}
++
++	/*
++	 * 마지막 fallback.
++	 * Solver 실패 때문에 발사 자체가 먹히는 것보다는 기존 직선 발사 동작을 유지한다.
++	 */
++	OutLaunchVelocity =
++		DirectDirection * LaunchSpeed;
+ 
+ 	return true;
+ }
+ 
+ bool UDRGA_FireProjectile::SpawnProjectile(
+ 	const FVector& SpawnLocation,
+-	const FVector& ProjectileDirection,
++	const FVector& LaunchVelocity,
+ 	AActor* AvatarActor,
+ 	UAbilitySystemComponent* AbilitySystem,
+ 	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs)
+ {
+-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = GetCurrentWeaponDefinition();
+-	
++	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
++		GetCurrentWeaponDefinition();
++
+ 	if (!IsValid(AvatarActor)
+ 		|| !IsValid(AbilitySystem)
+ 		|| !IsValid(WeaponDefinition)
+@@ -273,31 +573,45 @@ bool UDRGA_FireProjectile::SpawnProjectile(
+ 	}
+ 
+ 	UWorld* World = GetWorld();
+-
+ 	if (!IsValid(World))
+ 	{
+ 		return false;
+ 	}
+ 
+-	const FVector SafeDirection = ProjectileDirection.GetSafeNormal();
++	const FVector SafeLaunchVelocity =
++		LaunchVelocity.ContainsNaN()
++			? FVector::ZeroVector
++			: LaunchVelocity;
++	const FVector SafeDirection =
++		SafeLaunchVelocity.GetSafeNormal();
+ 
+ 	if (SafeDirection.IsNearlyZero())
+ 	{
+ 		return false;
+ 	}
+ 
+-	const FTransform SpawnTransform(SafeDirection.Rotation(), SpawnLocation);
++	const FTransform SpawnTransform(
++		SafeDirection.Rotation(),
++		SpawnLocation);
++
++	const FDRProjectileWeaponSnowAddSettings& SnowAddSettings =
++		WeaponDefinition->SnowAddSettings;
+ 
+-	const FDRProjectileWeaponSnowAddSettings& SnowAddSettings = WeaponDefinition->SnowAddSettings;
+ 	FDRProjectileWorldImpactData WorldImpactData;
+ 	WorldImpactData.bAddSnow = SnowAddSettings.bEnabled;
+ 	WorldImpactData.SnowRadius = SnowAddSettings.Radius;
+ 	WorldImpactData.SnowAmount = SnowAddSettings.Amount;
+ 	WorldImpactData.SnowEditTool = SnowAddSettings.EditTool;
+-	WorldImpactData.bAllowVirtualSurfaceFallback = SnowAddSettings.bAllowVirtualSurfaceFallback;
++	WorldImpactData.bAllowVirtualSurfaceFallback =
++		SnowAddSettings.bAllowVirtualSurfaceFallback;
+ 
+-	ADRProjectile* Projectile = World->SpawnActorDeferred<ADRProjectile>(WeaponDefinition->ProjectileClass,
+-		SpawnTransform, AvatarActor, Cast<APawn>(AvatarActor), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
++	ADRProjectile* Projectile =
++		World->SpawnActorDeferred<ADRProjectile>(
++			WeaponDefinition->ProjectileClass,
++			SpawnTransform,
++			AvatarActor,
++			Cast<APawn>(AvatarActor),
++			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+ 
+ 	if (!IsValid(Projectile))
+ 	{
+@@ -314,7 +628,17 @@ bool UDRGA_FireProjectile::SpawnProjectile(
+ 		GetMaxAttackDistance(),
+ 		WeaponDefinition->FalloffSettings);
+ 
+-	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
++	/*
++	 * FinishSpawningActor -> BeginPlay 전에 ballistic velocity를 저장한다.
++	 * Cannon처럼 BeginPlay에서 ProjectileMovement 설정을 바꾸는 자식도
++	 * Super::BeginPlay()에서 이 속도를 최종 발사 속도로 사용한다.
++	 */
++	Projectile->SetInitialLaunchVelocity(
++		SafeLaunchVelocity);
++
++	UGameplayStatics::FinishSpawningActor(
++		Projectile,
++		SpawnTransform);
+ 
+ 	return true;
+ }
+diff --git a/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.h b/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.h
+index ce0ab3d..a1c3d49 100644
+--- a/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.h
++++ b/Source/DeepRaiders/Player/GAS/Abilities/DRGA_FireProjectile.h
+@@ -21,13 +21,33 @@ protected:
+ 	virtual bool SendLocalShotRequest() override;	
+ 
+ private:
+-	void RegisterServerShotDelegate();
+-	void UnregisterServerShotDelegate();
++	void RegisterServerShotTargetDataDelegate();
++	void UnregisterServerShotTargetDataDelegate();
+ 
+-	void HandleServerShotRequest();
+-	bool ExecuteServerProjectileShot();
++	void HandleServerShotTargetData(
++		const FGameplayAbilityTargetDataHandle& TargetData,
++		FGameplayTag ApplicationTag);
+ 
+-	bool SpawnProjectile(const FVector& SpawnLocation, const FVector& ProjectileDirection, AActor* AvatarActor, UAbilitySystemComponent* AbilitySystem, const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
++	bool ValidateServerShotTargetData(
++		const FGameplayAbilityTargetDataHandle& TargetData,
++		FVector& OutAimPoint,
++		FVector& OutAimDirection) const;
++
++	bool ExecuteServerProjectileShot(
++		const FVector& AimPoint,
++		const FVector& AimDirection);
++
++	bool ResolveProjectileLaunchVelocity(
++		const FVector& SpawnLocation,
++		const FVector& AimPoint,
++		FVector& OutLaunchVelocity) const;
++
++	bool SpawnProjectile(
++		const FVector& SpawnLocation,
++		const FVector& LaunchVelocity,
++		AActor* AvatarActor,
++		UAbilitySystemComponent* AbilitySystem,
++		const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs);
+ 	
+-	FDelegateHandle ServerShotDelegateHandle;
++	FDelegateHandle ServerShotTargetDataDelegateHandle;
+ };

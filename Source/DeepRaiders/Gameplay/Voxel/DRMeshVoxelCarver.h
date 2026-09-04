@@ -5,6 +5,7 @@
 #include "DRMeshVoxelCarver.generated.h"
 
 class AVoxelWorld;
+class ADRMiningGameStateBase;
 class UStaticMeshComponent;
 
 UENUM(BlueprintType)
@@ -38,6 +39,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel Carver")
 	TObjectPtr<UStaticMeshComponent> CarveMesh;
@@ -47,6 +49,17 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver")
 	bool bCarveOnBeginPlay = true;
+
+	/** 게임 시작을 위한 복셀 월드 초기화 후 다시 Carve할지 결정한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver")
+	bool bCarveOnGameStart = true;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Carver",
+		meta = (ClampMin = "0", EditCondition = "bCarveOnGameStart"))
+	int32 StartPhaseIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Carver")
 	EDRMeshVoxelCarveMode CarveMode = EDRMeshVoxelCarveMode::Remove;
@@ -96,11 +109,22 @@ protected:
 
 private:
 	AVoxelWorld* ResolveVoxelWorld();
+	void StartCarveBatch(bool bForGameStart);
 	bool StartCarveAsync(TFunction<void()>&& Completion);
 	void TryExecuteCarveBatch();
 	void ExecuteNextCarver();
 
+	UFUNCTION()
+	void HandleGamePhaseChanged(
+		int32 PhaseIndex,
+		int32 PhaseRemainingSeconds,
+		const TArray<FText>& PlayerMessages);
+
 	FTimerHandle RetryTimerHandle;
+	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
+	bool bCarveBatchForGameStart = false;
+	bool bStartedForCurrentGame = false;
+	int32 ActiveGamePhaseIndex = INDEX_NONE;
 	int32 RetryCount = 0;
 	int32 PendingCarverIndex = 0;
 	TArray<TWeakObjectPtr<ADRMeshVoxelCarver>> PendingCarvers;
