@@ -18,6 +18,7 @@ class UDRStartingSelectionComponent;
 class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
+class UDRProjectileWeaponItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
@@ -34,6 +35,7 @@ class UDRInteractionComponent;
 enum class EDRSkillSlot : uint8;
 struct FGameplayAbilitySpec;
 struct FPredictionKey;
+struct FGameplayTag;
 class ADRPlayerState;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
@@ -256,6 +258,25 @@ protected:
 #pragma endregion
 
 #pragma region DEBUG BUILD
+
+public:
+	/** 콘솔에서 upgrade rifle damage 형태로 무기 스탯을 한 단계 올린다. */
+	UFUNCTION(Exec)
+	void Upgrade(FString WeaponName, FString StatName);
+
+private:
+	UFUNCTION(Server, Reliable)
+	void ServerUpgradeWeaponForDebug(const FString& WeaponName, const FString& StatName);
+
+	bool ResolveWeaponUpgradeDebugTarget(
+		const FString& WeaponName,
+		const FString& StatName,
+		UDRProjectileWeaponItemDefinition*& OutWeaponDefinition,
+		FGameplayTag& OutUpgradeTag) const;
+
+	void ReportWeaponUpgradeDebugResult(const FString& Message);
+
+protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
 

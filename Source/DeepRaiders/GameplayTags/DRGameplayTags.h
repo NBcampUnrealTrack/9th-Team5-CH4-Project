@@ -107,7 +107,6 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FireIntervalModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_ProjectileCountModifier);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SpreadModifier);
 	
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);

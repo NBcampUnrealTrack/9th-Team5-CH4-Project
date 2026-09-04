@@ -459,11 +459,6 @@ namespace DRGameplayTags
 		Data_Weapon_ProjectileCountModifier,
 		"Data.Weapon.ProjectileCountModifier",
 		"Equipped weapon projectile count modifier passed through SetByCaller.");
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Data_Weapon_SpreadModifier,
-		"Data.Weapon.SpreadModifier",
-		"Equipped weapon spread modifier passed through SetByCaller.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
