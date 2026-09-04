@@ -9,6 +9,8 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -121,6 +123,7 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 	RefreshOffers(EDRShopOfferType::Perk);
 	BindShopEvents();
 	RefreshCharacterUpgrades();
+	RefreshWeaponUpgrades();
 	// 상점 UI를 조작하는 동안 캐릭터 이동만 차단한다.
 	PlayerController->FlushPressedKeys();
 
@@ -311,6 +314,7 @@ void UDRShopUIComponent::HandleSellRequested(
 void UDRShopUIComponent::HandleInventoryChanged()
 {
 	RefreshOffers(EDRShopOfferType::Purchase);
+	RefreshWeaponUpgrades();
 }
 
 void UDRShopUIComponent::HandlePerksChanged()
@@ -321,6 +325,7 @@ void UDRShopUIComponent::HandlePerksChanged()
 void UDRShopUIComponent::HandleSnowGaugeChanged(const FOnAttributeChangeData&)
 {
 	RefreshCharacterUpgrades();
+	RefreshWeaponUpgrades();
 	RefreshOffers(EDRShopOfferType::Purchase);
 	RefreshOffers(EDRShopOfferType::Perk);
 }
@@ -372,6 +377,66 @@ void UDRShopUIComponent::RefreshCharacterUpgrades()
 	ShopWidget->SetOffers(EDRShopOfferType::CharacterUpgrade, Offers);
 }
 
+
+void UDRShopUIComponent::RefreshWeaponUpgrades()
+{
+	if (!IsValid(ShopWidget) || !IsValid(InventoryComponent) || !IsValid(PlayerState))
+	{
+		return;
+	}
+
+	TArray<FDRShopOfferView> Offers;
+	for (const FDRItemInstance& Item : InventoryComponent->GetItemInstances())
+	{
+		const UDRProjectileWeaponItemDefinition* Weapon = Cast<UDRProjectileWeaponItemDefinition>(Item.Definition.Get());
+		const FDRSnowProjectileWeaponRuntimeState* State = Item.RuntimeState.GetPtr<FDRSnowProjectileWeaponRuntimeState>();
+		if (!Item.IsValid() || !IsValid(Weapon) || Weapon->ResourceType != EDRProjectileWeaponResourceType::SnowGauge)
+		{
+			continue;
+		}
+
+		if (State == nullptr || !IsValid(Weapon->UpgradeProfile) || !Weapon->UpgradeProfile->IsUsable())
+		{
+			FDRShopOfferView& Offer = Offers.AddDefaulted_GetRef();
+			Offer.Request.OfferType = EDRShopOfferType::WeaponUpgrade;
+			Offer.Request.InstanceId = Item.InstanceId;
+			Offer.Section = EDRShopOfferSection::WeaponUpgrade;
+			Offer.DisplayName = Weapon->DisplayName;
+			Offer.WeaponName = Weapon->DisplayName;
+			Offer.WeaponIcon = Weapon->Icon;
+			Offer.Description = Weapon->Description;
+			Offer.Icon = Weapon->Icon;
+			Offer.IsPurchasable = false;
+			continue;
+		}
+
+		for (const FDRWeaponStatUpgradeData& Data : Weapon->UpgradeProfile->GetStatUpgrades())
+		{
+			const int32 Level = State->GetUpgradeLevel(Data.UpgradeTag);
+			const FDRWeaponUpgradeLevelData* NextLevel = Level < Data.GetMaxLevel() ? Data.FindLevelData(Level + 1) : nullptr;
+			FDRShopOfferView& Offer = Offers.AddDefaulted_GetRef();
+			Offer.Request.OfferType = EDRShopOfferType::WeaponUpgrade;
+			Offer.Request.InstanceId = Item.InstanceId;
+			Offer.Request.UpgradeTag = Data.UpgradeTag;
+			Offer.Request.ExpectedLevel = Level;
+			Offer.Section = EDRShopOfferSection::WeaponUpgrade;
+			Offer.WeaponName = Weapon->DisplayName;
+			Offer.WeaponIcon = Weapon->Icon;
+			Offer.DisplayName = Data.DisplayName;
+			Offer.MaxLevel = Data.GetMaxLevel();
+			Offer.Description = NextLevel != nullptr
+				? FText::Format(NSLOCTEXT("Shop", "WeaponUpgradeNext", "{0}\n기본값 대비 {1}% → {2}%"),
+					Data.Description, FText::AsNumber(Data.GetStatMultiplier(Level) * 100.f),
+					FText::AsNumber(NextLevel->SetByCallerMagnitude * 100.f))
+				: FText::Format(NSLOCTEXT("Shop", "WeaponUpgradeMax", "{0}\n최대 레벨 · 기본값 대비 {1}%"),
+					Data.Description, FText::AsNumber(Data.GetStatMultiplier(Level) * 100.f));
+			Offer.Icon = IsValid(Data.Icon) ? Data.Icon : Weapon->Icon;
+			Offer.Price = NextLevel != nullptr ? NextLevel->Price : 0;
+			Offer.IsPurchasable = NextLevel != nullptr && PlayerState->GetSnowGauge() >= NextLevel->Price;
+		}
+	}
+	ShopWidget->SetOffers(EDRShopOfferType::WeaponUpgrade, Offers);
+}
 
 TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 	const TArray<FDRShopItemOffer>& Offers,

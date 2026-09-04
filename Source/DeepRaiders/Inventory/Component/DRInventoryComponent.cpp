@@ -418,11 +418,6 @@ int32 UDRInventoryComponent::GetItemCount(const UDRItemDefinition* Definition) c
 	return TotalQuantity;
 }
 
-const FDRItemInstance* UDRInventoryComponent::GetItemInstance(FGuid InstanceId) const
-{
-	return FindItemInstance(InstanceId);
-}
-
 const FDRItemInstance* UDRInventoryComponent::GetItemAtSlot(int32 SlotIndex) const
 {
 	if (!Slots.IsValidIndex(SlotIndex)
@@ -492,16 +487,17 @@ bool UDRInventoryComponent::GetSnowProjectileWeaponUpgradeLevel(
 }
 
 bool UDRInventoryComponent::TryUpgradeSnowProjectileWeapon(
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition,
-	FGameplayTag UpgradeTag,
-	int32 ExpectedLevel)
+	FGuid InstanceId, FGameplayTag UpgradeTag, int32 ExpectedLevel)
 {
+	const FDRItemInstance* ItemInstance = FindItemInstance(InstanceId);
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = ItemInstance != nullptr
+		? Cast<UDRProjectileWeaponItemDefinition>(ItemInstance->Definition.Get()) : nullptr;
 	if (!HasInventoryAuthority()
 		|| !IsValid(WeaponDefinition)
 		|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
 		|| !IsValid(WeaponDefinition->UpgradeProfile)
 		|| !WeaponDefinition->UpgradeProfile->IsUsable()
-		|| ExpectedLevel < 0)
+		|| ExpectedLevel < 0 || ExpectedLevel == MAX_int32)
 	{
 		return false;
 	}
@@ -510,14 +506,10 @@ bool UDRInventoryComponent::TryUpgradeSnowProjectileWeapon(
 	const FDRWeaponUpgradeLevelData* TargetLevelData = UpgradeData != nullptr
 		? UpgradeData->FindLevelData(ExpectedLevel + 1)
 		: nullptr;
-	const FDRItemInstance* ItemInstance = FindFirstItemInstanceByDefinition(WeaponDefinition);
-
 	if (TargetLevelData == nullptr || ItemInstance == nullptr)
 	{
 		return false;
 	}
-
-	const FGuid InstanceId = ItemInstance->InstanceId;
 
 	return ModifyItemInstance(InstanceId,
 		[UpgradeTag, ExpectedLevel](FDRItemInstance& Candidate)
@@ -580,6 +572,31 @@ bool UDRInventoryComponent::ModifyItemInstance(FGuid InstanceId, TFunctionRef<bo
 void UDRInventoryComponent::OnRep_Slots()
 {
 	BroadcastInventoryChanged();
+}
+
+void UDRInventoryComponent::ResetWeaponUpgrades()
+{
+	if (!HasInventoryAuthority())
+	{
+		return;
+	}
+
+	bool IsChanged = false;
+	for (FDRItemInstance& Item : Slots)
+	{
+		FDRSnowProjectileWeaponRuntimeState* WeaponState =
+			Item.RuntimeState.GetMutablePtr<FDRSnowProjectileWeaponRuntimeState>();
+		if (WeaponState != nullptr && !WeaponState->UpgradeLevels.IsEmpty())
+		{
+			WeaponState->UpgradeLevels.Reset();
+			IsChanged = true;
+		}
+	}
+
+	if (IsChanged)
+	{
+		HandleInventoryChangedOnServer();
+	}
 }
 
 void UDRInventoryComponent::ResetInventory()

@@ -8,6 +8,7 @@
 #include "DeepRaiders/Player/DRTeamPlayerStart.h"
 #include "DeepRaiders/Gameplay/Team/DRTeamMovingActor.h"
 #include "DeepRaiders/Gameplay/DRGameStartActor.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Snow/DRSnowControlZone.h"
 #include "GameFramework/PawnMovementComponent.h"
 #include "EngineUtils.h"
@@ -159,6 +160,16 @@ void ADRMiningGameModeBase::EndGame()
 			&ThisClass::ClearGameResultText,
 			GameResultDisplayDuration,
 			false);
+	}
+
+	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
+	{
+		ADRPlayerController* PlayerController = Cast<ADRPlayerController>(Iterator->Get());
+		UDRInventoryComponent* Inventory = IsValid(PlayerController) ? PlayerController->GetInventoryComponent() : nullptr;
+		if (IsValid(Inventory))
+		{
+			Inventory->ResetWeaponUpgrades();
+		}
 	}
 
 	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)

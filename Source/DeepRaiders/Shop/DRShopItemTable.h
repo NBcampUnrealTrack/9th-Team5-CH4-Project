@@ -13,7 +13,8 @@ enum class EDRShopOfferType : uint8
 {
 	Purchase,
 	Perk = 2,
-	CharacterUpgrade = 3
+	CharacterUpgrade = 3,
+	WeaponUpgrade = 4
 };
 
 UENUM(BlueprintType)
@@ -22,7 +23,8 @@ enum class EDRShopOfferSection : uint8
 	Equipment,
 	Consumable,
 	Perk = 3,
-	CharacterUpgrade = 4
+	CharacterUpgrade = 4,
+	WeaponUpgrade = 5
 };
 
 USTRUCT(BlueprintType)
@@ -51,10 +53,15 @@ struct FDRShopOfferRequest
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	int32 ExpectedLevel = 0;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
+	FGuid InstanceId;
+
 	bool IsValidRequest() const
 	{
 		switch (OfferType)
 		{
+		case EDRShopOfferType::WeaponUpgrade:
+			return InstanceId.IsValid() && UpgradeTag.IsValid() && ExpectedLevel >= 0 && ExpectedLevel < MAX_int32;
 		case EDRShopOfferType::CharacterUpgrade:
 			return UpgradeTag.IsValid() && ExpectedLevel >= 0 && ExpectedLevel < MAX_int32;
 		case EDRShopOfferType::Purchase:
@@ -91,6 +98,15 @@ struct FDRShopOfferView
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop")
 	bool IsPurchasable = true;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop|Weapon")
+	FText WeaponName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop|Weapon")
+	TObjectPtr<UTexture2D> WeaponIcon;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop|Weapon")
+	int32 MaxLevel = 0;
 };
 
 USTRUCT(BlueprintType)

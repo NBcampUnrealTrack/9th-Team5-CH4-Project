@@ -8,6 +8,7 @@
 #include "DeepRaiders/UI/Inventory/DRInventoryWidget.h"
 #include "DeepRaiders/UI/ViewModel/DRShopViewModel.h"
 #include "DRShopItemWidget.h"
+#include "DRShopWeaponUpgradeWidget.h"
 #include "MVVMSubsystem.h"
 #include "View/MVVMView.h"
 
@@ -33,12 +34,21 @@ void UDRShopBuyPanelWidget::SetOffers(
 void UDRShopBuyPanelWidget::SetOfferEntries(
 	const TArray<UDRShopOfferEntryViewModel*>& NewOfferEntries)
 {
-	if (!IsValid(ItemScrollBox) || !ItemWidgetClass)
+	if (!IsValid(ItemScrollBox))
 	{
 		return;
 	}
 
 	ItemScrollBox->ClearChildren();
+	if (SelectedSection == EDRShopOfferSection::WeaponUpgrade)
+	{
+		SetWeaponUpgradeEntries(NewOfferEntries);
+		return;
+	}
+	if (!ItemWidgetClass)
+	{
+		return;
+	}
 
 	for (UDRShopOfferEntryViewModel* EntryViewModel : NewOfferEntries)
 	{
@@ -59,6 +69,41 @@ void UDRShopBuyPanelWidget::SetOfferEntries(
 		ItemWidget->InitializeViewModel(EntryViewModel);
 		ItemWidget->OnOfferRequested.AddDynamic(this, &ThisClass::HandleOfferRequested);
 		ItemScrollBox->AddChild(ItemWidget);
+	}
+}
+
+void UDRShopBuyPanelWidget::SetWeaponUpgradeEntries(const TArray<UDRShopOfferEntryViewModel*>& NewOfferEntries)
+{
+	if (!WeaponUpgradeWidgetClass)
+	{
+		return;
+	}
+	TArray<FGuid> WeaponIds;
+	TMap<FGuid, TArray<FDRShopOfferView>> WeaponOffers;
+	for (const UDRShopOfferEntryViewModel* Entry : NewOfferEntries)
+	{
+		if (!IsValid(Entry))
+		{
+			continue;
+		}
+		const FDRShopOfferView& Offer = Entry->GetOffer();
+		if (!WeaponOffers.Contains(Offer.Request.InstanceId))
+		{
+			WeaponIds.Add(Offer.Request.InstanceId);
+		}
+		WeaponOffers.FindOrAdd(Offer.Request.InstanceId).Add(Offer);
+	}
+
+	for (const FGuid& InstanceId : WeaponIds)
+	{
+		UDRShopWeaponUpgradeWidget* WeaponWidget = CreateWidget<UDRShopWeaponUpgradeWidget>(GetOwningPlayer(), WeaponUpgradeWidgetClass);
+		if (!IsValid(WeaponWidget))
+		{
+			continue;
+		}
+		WeaponWidget->InitializeOffers(WeaponOffers[InstanceId]);
+		WeaponWidget->OnOfferRequested.AddDynamic(this, &ThisClass::HandleOfferRequested);
+		ItemScrollBox->AddChild(WeaponWidget);
 	}
 }
 
@@ -108,11 +153,33 @@ void UDRShopBuyPanelWidget::NativeOnInitialized()
 	{
 		CharacterUpgradeButton->OnClicked.AddDynamic(this, &ThisClass::HandleCharacterUpgradeButtonClicked);
 	}
+	if (!IsValid(WeaponUpgradeButton) && IsValid(PerkButton) && PerkButton->GetParent())
+	{
+		WeaponUpgradeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("WeaponUpgradeButton"));
+		WeaponUpgradeButton->SetStyle(PerkButton->GetStyle());
+		UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
+		Label->SetText(NSLOCTEXT("Shop", "WeaponUpgradeTab", "무기 강화"));
+		if (const UTextBlock* PerkLabel = Cast<UTextBlock>(PerkButton->GetContent()))
+		{
+			Label->SetFont(PerkLabel->GetFont());
+			Label->SetColorAndOpacity(PerkLabel->GetColorAndOpacity());
+		}
+		WeaponUpgradeButton->AddChild(Label);
+		PerkButton->GetParent()->AddChild(WeaponUpgradeButton);
+	}
+	if (IsValid(WeaponUpgradeButton))
+	{
+		WeaponUpgradeButton->OnClicked.AddDynamic(this, &ThisClass::HandleWeaponUpgradeButtonClicked);
+	}
 	SelectSection(SelectedSection);
 }
 
 void UDRShopBuyPanelWidget::NativeDestruct()
 {
+	if (IsValid(WeaponUpgradeButton))
+	{
+		WeaponUpgradeButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleWeaponUpgradeButtonClicked);
+	}
 	if (IsValid(CharacterUpgradeButton))
 	{
 		CharacterUpgradeButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleCharacterUpgradeButtonClicked);
@@ -160,6 +227,10 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 	EquipmentButton->SetIsEnabled(Section != EDRShopOfferSection::Equipment);
 	ConsumableButton->SetIsEnabled(Section != EDRShopOfferSection::Consumable);
 	PerkButton->SetIsEnabled(Section != EDRShopOfferSection::Perk);
+	if (IsValid(WeaponUpgradeButton))
+	{
+		WeaponUpgradeButton->SetIsEnabled(Section != EDRShopOfferSection::WeaponUpgrade);
+	}
 	if (IsValid(CharacterUpgradeButton))
 	{
 		CharacterUpgradeButton->SetIsEnabled(Section != EDRShopOfferSection::CharacterUpgrade);
@@ -169,6 +240,11 @@ void UDRShopBuyPanelWidget::SelectSection(EDRShopOfferSection Section)
 void UDRShopBuyPanelWidget::HandleCharacterUpgradeButtonClicked()
 {
 	SelectSection(EDRShopOfferSection::CharacterUpgrade);
+}
+
+void UDRShopBuyPanelWidget::HandleWeaponUpgradeButtonClicked()
+{
+	SelectSection(EDRShopOfferSection::WeaponUpgrade);
 }
 
 void UDRShopBuyPanelWidget::HandleEquipmentButtonClicked()
