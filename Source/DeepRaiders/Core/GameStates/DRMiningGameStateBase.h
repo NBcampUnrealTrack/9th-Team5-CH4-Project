@@ -146,9 +146,8 @@ private:
 
 #pragma region Snow
 public:
-	void RegisterSnowAdd(
-		const FDRSnowAddOperation& Operation,
-		float ServerAppliedAmount = 0.f);
+	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
+	void RegisterSnowAdd(const FDRSnowAddOperation& Operation, float ServerAppliedAmount);
 	void RegisterSnowRemove(
 		const FDRSnowRemoveOperation& Operation,
 		FDRSnowMaterialPatch MaterialPatch);
@@ -185,6 +184,10 @@ private:
 
 	bool ApplySnowAddOnce(const FDRSnowOperationRecord& Record);
 	bool ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record);
+	void HandleDirectionalSnowAddCompleted(
+		int32 OperationSequence,
+		int32 ApplicationGeneration,
+		float AppliedAmount);
 	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
 	bool IsSnowOperationApplied(int32 Sequence) const;
 	bool HasPendingSnowOperation(int32 Sequence) const;
@@ -210,6 +213,8 @@ private:
 	// 클라이언트: 복셀 월드가 아직 로드되지 않아 생성을 기다리는 작업 목록
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;
 	FTimerHandle PendingSnowRetryTimer;
+	int32 ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	int32 SnowApplicationGeneration = 0;
 #pragma endregion
 	
 #pragma region Teleport

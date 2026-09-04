@@ -48,7 +48,6 @@ public:
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AuthoritativeAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath RemovalPath);
 
 private:
@@ -60,10 +59,6 @@ private:
 		const FDRSnowSurfaceEditResult& EditResult,
 		EDRSnowRemovalPath RemovalPath,
 		FDRSnowResolvedMaterialEdit& OutResolvedEdit) const;
-	bool RepaintWithoutPatch(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		EDRSnowRemovalPath RemovalPath) const;
 	void ApplyRemovedSurfaceEdit(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,

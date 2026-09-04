@@ -72,7 +72,8 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 FDRSnowAddResult FDRSnowAddPipeline::Replay(
 	UWorld* World,
 	const FDRSnowSurfaceAddRequest& Request,
-	const float AuthoritativeAmount)
+	const float AuthoritativeAmount,
+	TFunction<void(float)> DirectionalCompletion)
 {
 	if (Request.EditTool != EDRSnowVoxelEditTool::DirectionalSurfaceTool)
 	{
@@ -80,12 +81,25 @@ FDRSnowAddResult FDRSnowAddPipeline::Replay(
 	}
 
 	SurfaceEditor.SetWorld(World);
-	if (!IsValid(World))
+	if (!IsValid(World) || AuthoritativeAmount <= 0.f)
 	{
 		return {};
 	}
 
-	return ExecuteDirectionalAdd(World, Request, TOptional<float>(AuthoritativeAmount));
+	FPendingDirectionalAdd PendingAdd;
+	PendingAdd.World = World;
+	PendingAdd.Request = Request;
+	PendingAdd.AuthoritativeAmount = AuthoritativeAmount;
+	PendingAdd.Completion = MoveTemp(DirectionalCompletion);
+	PendingAdd.StateGeneration = CurrentStateGeneration;
+	PendingDirectionalAdds.Enqueue(MoveTemp(PendingAdd));
+	ProcessNextDirectionalAdd();
+
+	FDRSnowAddResult Result;
+	Result.TeamId = Request.Context.TeamId;
+	// 실제 복셀 편집은 비동기 큐에서 처리하며 반환값은 권위 작업의 접수량이다.
+	Result.AddedAmount = AuthoritativeAmount;
+	return Result;
 }
 
 void FDRSnowAddPipeline::Reset(const int32 NewStateGeneration)
@@ -126,6 +140,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 		bDirectionalAddInProgress = true;
 		SurfaceEditor.SetWorld(World);
 		const FDRSnowSurfaceAddRequest Request = PendingAdd.Request;
+		const TOptional<float> AuthoritativeAmount = PendingAdd.AuthoritativeAmount;
 		const int32 RequestGeneration = PendingAdd.StateGeneration;
 		TFunction<void(float)> Completion = MoveTemp(PendingAdd.Completion);
 		const TFunction<void(float)> FailureCompletion = Completion;
@@ -135,6 +150,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 			[WeakPipeline,
 				WeakWorld = PendingAdd.World,
 				Request,
+				AuthoritativeAmount,
 				RequestGeneration,
 				Completion = MoveTemp(Completion)](FDRSnowSurfaceEditResult&& EditResult) mutable
 			{
@@ -143,6 +159,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 					Pipeline->HandleDirectionalAddCompleted(
 						WeakWorld,
 						Request,
+						AuthoritativeAmount,
 						RequestGeneration,
 						MoveTemp(Completion),
 						MoveTemp(EditResult));
@@ -165,47 +182,29 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 	const TWeakObjectPtr<UWorld> World,
 	const FDRSnowSurfaceAddRequest& Request,
+	const TOptional<float> AuthoritativeAmount,
 	const int32 RequestGeneration,
 	TFunction<void(float)> Completion,
 	FDRSnowSurfaceEditResult&& EditResult)
 {
-	float AppliedAmount = 0.f;
+	float CompletedAmount = 0.f;
 	if (RequestGeneration == CurrentStateGeneration && IsValid(World.Get()))
 	{
-		AppliedAmount = EditResult.AppliedAmount;
-		if (AppliedAmount > 0.f)
+		if (EditResult.AppliedAmount > 0.f)
 		{
-			CommitAddedSurfaceEdit(World.Get(), Request, EditResult);
+			CompletedAmount = AuthoritativeAmount.IsSet()
+				? AuthoritativeAmount.GetValue()
+				: EditResult.AppliedAmount;
+			CommitAddedSurfaceEdit(World.Get(), Request, EditResult, CompletedAmount);
 		}
 	}
 
 	if (Completion)
 	{
-		Completion(AppliedAmount);
+		Completion(CompletedAmount);
 	}
 	bDirectionalAddInProgress = false;
 	ProcessNextDirectionalAdd();
-}
-
-FDRSnowAddResult FDRSnowAddPipeline::ExecuteDirectionalAdd(
-	UWorld* World,
-	const FDRSnowSurfaceAddRequest& Request,
-	const TOptional<float> AuthoritativeAmount)
-{
-	FDRSnowAddResult Result;
-	Result.TeamId = Request.Context.TeamId;
-	const FDRSnowSurfaceEditResult EditResult = SurfaceEditor.AddSnowAtArea(Request);
-	if (EditResult.AppliedAmount <= 0.f)
-	{
-		return Result;
-	}
-
-	const float AppliedAmount = AuthoritativeAmount.IsSet()
-		? AuthoritativeAmount.GetValue()
-		: EditResult.AppliedAmount;
-	CommitAddedSurfaceEdit(World, Request, EditResult, AppliedAmount);
-	Result.AddedAmount = AppliedAmount;
-	return Result;
 }
 
 void FDRSnowAddPipeline::CommitAddedSurfaceEdit(

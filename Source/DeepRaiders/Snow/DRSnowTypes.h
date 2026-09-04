@@ -282,13 +282,9 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FDRSnowRemoveOperation RemoveOperation;
 
-	// 서버에서 실제 적용된 눈의 양
+	// 방향성 눈 추가에서 서버가 실제로 적용한 양
 	UPROPERTY()
 	float ServerAppliedAmount = 0.f;
-
-	// 전환 기간 중 구형 Operation과 구분
-	UPROPERTY()
-	bool bHasAuthoritativeMaterialPatch = false;
 
 	// TeamId가 아닌 MaterialIndex 패치
 	UPROPERTY()

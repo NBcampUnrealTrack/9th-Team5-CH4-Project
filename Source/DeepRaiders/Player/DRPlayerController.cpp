@@ -421,7 +421,7 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(ScrollQuickSlotAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandleScrollQuickSlot);
 	}
-
+	
 	if (IsValid(ScoreboardAction))
 	{
 		EnhancedInput->BindAction(ScoreboardAction, ETriggerEvent::Started, this, &ThisClass::HandleScoreboardStarted);
@@ -433,7 +433,7 @@ void ADRPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(MenuAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleMenu);
 	}
-
+	
 	SetupGASInputComponent();
 }
 
@@ -1144,17 +1144,17 @@ void ADRPlayerController::HandleScrollQuickSlot(const FInputActionValue& Value)
 	{
 		return;
 	}
-
+	
 	const float WheelDelta = Value.Get<float>();
-
+	
 	if (FMath::IsNearlyZero(WheelDelta))
 	{
 		return;
 	}
-
+	
 	// 휠 Up : 이전 슬롯, 휠 Down : 다음 슬롯
 	const int32 Direction = WheelDelta > 0.f ? -1 : 1;
-
+	
 	QuickSlotComponent->RequestSelectAdjacentSlot(Direction);
 }
 

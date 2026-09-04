@@ -63,9 +63,14 @@ FDRSnowAddResult UDRSnowSubsystem::AddSnow(
 
 FDRSnowAddResult UDRSnowSubsystem::ApplyReplicatedSnowAdd(
 	const FDRSnowSurfaceAddRequest& Request,
-	const float AppliedAmount)
+	const float AppliedAmount,
+	TFunction<void(float)> DirectionalCompletion)
 {
-	return AddPipeline->Replay(GetWorld(), Request, AppliedAmount);
+	return AddPipeline->Replay(
+		GetWorld(),
+		Request,
+		AppliedAmount,
+		MoveTemp(DirectionalCompletion));
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
@@ -104,19 +109,18 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AppliedAmount,
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
+	const FDRSnowMaterialPatch& AuthoritativeMaterialPatch)
 {
 	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
 		AppliedAmount,
-		AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath::Standard);
-	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
+	if (ReplayResult.bApplied)
 	{
 		MaterialPatchApplyQueue->Enqueue(
 			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch);
+			AuthoritativeMaterialPatch);
 	}
 	return ReplayResult.bApplied;
 }
@@ -124,19 +128,18 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AppliedAmount,
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
+	const FDRSnowMaterialPatch& AuthoritativeMaterialPatch)
 {
 	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
 		AppliedAmount,
-		AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath::Absorb);
-	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
+	if (ReplayResult.bApplied)
 	{
 		MaterialPatchApplyQueue->Enqueue(
 			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch);
+			AuthoritativeMaterialPatch);
 	}
 	return ReplayResult.bApplied;
 }

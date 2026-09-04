@@ -46,7 +46,8 @@ public:
 	FDRSnowAddResult Replay(
 		UWorld* World,
 		const FDRSnowSurfaceAddRequest& Request,
-		float AuthoritativeAmount);
+		float AuthoritativeAmount,
+		TFunction<void(float)> DirectionalCompletion = {});
 
 	// 게임 상태 초기화 시 대기 중인 비동기 작업을 폐기하고 실행 중인 콜백을 무효화합니다.
 	void Reset(int32 NewStateGeneration);
@@ -56,6 +57,7 @@ private:
 	{
 		TWeakObjectPtr<UWorld> World;
 		FDRSnowSurfaceAddRequest Request;
+		TOptional<float> AuthoritativeAmount;
 		TFunction<void(float)> Completion;
 		int32 StateGeneration = 0;
 	};
@@ -64,16 +66,10 @@ private:
 	void HandleDirectionalAddCompleted(
 		TWeakObjectPtr<UWorld> World,
 		const FDRSnowSurfaceAddRequest& Request,
+		TOptional<float> AuthoritativeAmount,
 		int32 RequestGeneration,
 		TFunction<void(float)> Completion,
 		FDRSnowSurfaceEditResult&& EditResult);
-
-	// 방향성 눈(DirectionalSurfaceTool) 전용 실행 함수
-	// AuthoritativeAmount가 설정되면 서버 확정 수치를, 없으면 실제 지형 생성량을 사용합니다.
-	FDRSnowAddResult ExecuteDirectionalAdd(
-		UWorld* World,
-		const FDRSnowSurfaceAddRequest& Request,
-		TOptional<float> AuthoritativeAmount = {});
 
 	// 지형 생성이 완료된 후 팀 소유권 등록, 부피 갱신, 캐릭터 파묻힘 검사를 순서대로 진행합니다.
 	void CommitAddedSurfaceEdit(

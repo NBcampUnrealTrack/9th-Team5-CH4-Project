@@ -339,12 +339,12 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
-	const float DistanceDivisor,
-	const bool bAdd,
+	float DistanceDivisor,
+	bool bAdd,
 	FDRDirectionalSurfaceEditComplete Completion)
 {
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || DistanceDivisor <= 0.f ||
-		SurfaceFootprint.Voxels->IsEmpty() || !Completion)
+		SurfaceFootprint.Voxels->Num() == 0 || !Completion)
 	{
 		return false;
 	}

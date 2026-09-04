@@ -164,6 +164,11 @@ bool ADRMiningGameStateBase::ApplyTerrainDigOnce(const FDRTerrainDigOperation& O
 #pragma endregion
 
 #pragma region Snow
+void ADRMiningGameStateBase::RegisterSnowAdd(const FDRSnowAddOperation& Operation)
+{
+	RegisterSnowAdd(Operation, Operation.Amount);
+}
+
 void ADRMiningGameStateBase::RegisterSnowAdd(
 	const FDRSnowAddOperation& Operation,
 	const float ServerAppliedAmount)
@@ -177,9 +182,7 @@ void ADRMiningGameStateBase::RegisterSnowAdd(
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = true;
 	Record.AddOperation = Operation;
-	Record.ServerAppliedAmount = ServerAppliedAmount > 0.f
-		? ServerAppliedAmount
-		: Operation.Amount;
+	Record.ServerAppliedAmount = ServerAppliedAmount;
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
 
@@ -196,8 +199,6 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = false;
 	Record.RemoveOperation = Operation;
-	Record.ServerAppliedAmount = Operation.AppliedAmount;
-	Record.bHasAuthoritativeMaterialPatch = true;
 	Record.MaterialPatch = MoveTemp(MaterialPatch);
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
@@ -287,6 +288,8 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
+	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	++SnowApplicationGeneration;
 	StopPendingSnowRetry();
 }
 
@@ -299,6 +302,8 @@ void ADRMiningGameStateBase::ResetSnowApplicationStateForCheckpoint(int32 Checkp
 
 	AppliedSnowCheckpointSequence = FMath::Max(0, CheckpointSequence);
 	AppliedSnowOperationSequences.Reset();
+	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	++SnowApplicationGeneration;
 	PendingSnowOperations.RemoveAll([this](const FDRSnowOperationRecord& Record)
 	{
 		return Record.Sequence > 0 && Record.Sequence <= AppliedSnowCheckpointSequence;
@@ -354,6 +359,8 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
+	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	++SnowApplicationGeneration;
 	StopPendingSnowRetry();
 }
 
@@ -448,6 +455,11 @@ void ADRMiningGameStateBase::QueuePendingSnowOperation(const FDRSnowOperationRec
 void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 {
 	PendingSnowRetryTimer.Invalidate();
+	if (ActiveDirectionalSnowOperationSequence != INDEX_NONE)
+	{
+		return;
+	}
+
 	while (!PendingSnowOperations.IsEmpty()
 		&& IsSnowOperationApplied(PendingSnowOperations[0].Sequence))
 	{
@@ -468,13 +480,36 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 	}
 
 	// 생성과 제거를 같은 실행 경로에서 처리하되 한 프레임에는 한 작업만 적용한다.
+	// 방향성 추가는 비동기 완료 콜백 전까지 다음 Sequence를 시작하지 않는다.
+	bool bApplied = false;
 	if (Record.bIsAddOperation)
 	{
-		ApplySnowAddOnce(Record);
+		const bool bDirectional =
+			Record.AddOperation.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool;
+		if (bDirectional)
+		{
+			ActiveDirectionalSnowOperationSequence = Record.Sequence;
+		}
+
+		bApplied = ApplySnowAddOnce(Record);
+		if (bDirectional)
+		{
+			if (!bApplied && ActiveDirectionalSnowOperationSequence == Record.Sequence)
+			{
+				ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+				StartPendingSnowRetry();
+			}
+			return;
+		}
 	}
 	else
 	{
-		ApplySnowRemoveOnce(Record);
+		bApplied = ApplySnowRemoveOnce(Record);
+	}
+	if (!bApplied)
+	{
+		StartPendingSnowRetry();
+		return;
 	}
 	if (Record.Sequence > 0)
 	{
@@ -552,10 +587,29 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Reco
 
 	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 	{
-		const float ServerAppliedAmount = Record.ServerAppliedAmount > 0.f
-			? Record.ServerAppliedAmount
-			: Operation.Amount;
-		return SnowSubsystem->ApplyReplicatedSnowAdd(Request, ServerAppliedAmount).AddedAmount > 0.f;
+		if (Operation.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+		{
+			const int32 OperationSequence = Record.Sequence;
+			const int32 ApplicationGeneration = SnowApplicationGeneration;
+			const TWeakObjectPtr<ADRMiningGameStateBase> WeakThis(this);
+			return SnowSubsystem->ApplyReplicatedSnowAdd(
+				Request,
+				Record.ServerAppliedAmount,
+				[WeakThis, OperationSequence, ApplicationGeneration](const float AppliedAmount)
+				{
+					if (ADRMiningGameStateBase* GameState = WeakThis.Get())
+					{
+						GameState->HandleDirectionalSnowAddCompleted(
+							OperationSequence,
+							ApplicationGeneration,
+							AppliedAmount);
+					}
+				}).AddedAmount > 0.f;
+		}
+
+		return SnowSubsystem->ApplyReplicatedSnowAdd(
+			Request,
+			Record.ServerAppliedAmount).AddedAmount > 0.f;
 	}
 
 	return false;
@@ -607,20 +661,52 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-	const float ServerAppliedAmount = Record.ServerAppliedAmount > 0.f
-		? Record.ServerAppliedAmount
-		: Operation.AppliedAmount;
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch =
-		Record.bHasAuthoritativeMaterialPatch ? &Record.MaterialPatch : nullptr;
 	return Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool
 		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(
 			Request,
-			ServerAppliedAmount,
-			AuthoritativeMaterialPatch)
+			Operation.AppliedAmount,
+			Record.MaterialPatch)
 		: SnowSubsystem->ApplyReplicatedSnowRemoval(
 			Request,
-			ServerAppliedAmount,
-			AuthoritativeMaterialPatch);
+			Operation.AppliedAmount,
+			Record.MaterialPatch);
+}
+
+void ADRMiningGameStateBase::HandleDirectionalSnowAddCompleted(
+	const int32 OperationSequence,
+	const int32 ApplicationGeneration,
+	const float AppliedAmount)
+{
+	if (ApplicationGeneration != SnowApplicationGeneration ||
+		ActiveDirectionalSnowOperationSequence != OperationSequence)
+	{
+		return;
+	}
+
+	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	if (OperationSequence > 0)
+	{
+		AppliedSnowOperationSequences.Add(OperationSequence);
+	}
+	PendingSnowOperations.RemoveAll(
+		[OperationSequence](const FDRSnowOperationRecord& Record)
+		{
+			return Record.Sequence == OperationSequence;
+		});
+
+	if (AppliedAmount <= 0.f)
+	{
+		UE_LOG(
+			LogTemp,
+			Verbose,
+			TEXT("[SnowReplication] Directional add completed without a local voxel change. Sequence=%d"),
+			OperationSequence);
+	}
+
+	if (!PendingSnowOperations.IsEmpty())
+	{
+		StartPendingSnowRetry();
+	}
 }
 
 AVoxelWorld* ADRMiningGameStateBase::ResolveVoxelWorldByName(FName VoxelWorldName) const

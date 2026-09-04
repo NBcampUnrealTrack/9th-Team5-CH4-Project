@@ -58,7 +58,6 @@ FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::Replay(
 	UWorld* World,
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AuthoritativeAmount,
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
 	const EDRSnowRemovalPath RemovalPath)
 {
 	FDRSnowRemovalReplayResult Result;
@@ -76,14 +75,7 @@ FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::Replay(
 
 	ApplyRemovedSurfaceEdit(World, Request, EditResult, AuthoritativeAmount);
 	Result.VoxelWorld = EditResult.VoxelWorld;
-	if (AuthoritativeMaterialPatch)
-	{
-		Result.bApplied = true;
-		return Result;
-	}
-
-	// 패치 플래그가 없는 구형 record만 클라이언트의 로컬 Store로 다시 칠한다.
-	Result.bApplied = RepaintWithoutPatch(Request, EditResult, RemovalPath);
+	Result.bApplied = true;
 	return Result;
 }
 
@@ -115,20 +107,6 @@ bool FDRSnowRemovalPipeline::ResolveMaterials(
 			OwnershipStore,
 			VolumeStore,
 			OutResolvedEdit);
-}
-
-bool FDRSnowRemovalPipeline::RepaintWithoutPatch(
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const FDRSnowSurfaceEditResult& EditResult,
-	const EDRSnowRemovalPath RemovalPath) const
-{
-	FDRSnowResolvedMaterialEdit ResolvedEdit;
-	const bool bRepainted =
-		ResolveMaterials(Request, EditResult, RemovalPath, ResolvedEdit) &&
-		SurfaceEditor.ApplyResolvedSnowMaterials(ResolvedEdit);
-
-	// 기존 Absorb replay는 repaint 결과와 무관하게 geometry 적용 성공을 반환했다.
-	return RemovalPath == EDRSnowRemovalPath::Absorb || bRepainted;
 }
 
 void FDRSnowRemovalPipeline::ApplyRemovedSurfaceEdit(

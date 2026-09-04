@@ -47,7 +47,8 @@ public:
 	// 클라이언트: 서버에서 확정된 눈 추가 작업을 수신하여 로컬 상태에 반영합니다.
 	FDRSnowAddResult ApplyReplicatedSnowAdd(
 		const FDRSnowSurfaceAddRequest& Request,
-		float AppliedAmount);
+		float AppliedAmount,
+		TFunction<void(float)> DirectionalCompletion = {});
 
 	// 일반 눈 파내기
 	// 서버: 지정 반경의 눈을 파내고, 점령 부피 삭감 및 드러난 표면의 색상 패치(OutMaterialPatch)를 생성합니다.
@@ -59,7 +60,7 @@ public:
 	bool ApplyReplicatedSnowRemoval(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AppliedAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch = nullptr);
+		const FDRSnowMaterialPatch& AuthoritativeMaterialPatch);
 
 	// 눈총 흡수 전용 파내기
 	// 서버: 원뿔 시야(Frustum) 형태로 눈을 흡수하며, 일반 파내기와 다른 재질 보정 방식을 사용합니다.
@@ -71,7 +72,7 @@ public:
 	bool ApplyReplicatedSnowAbsorbTool(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AppliedAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch = nullptr);
+		const FDRSnowMaterialPatch& AuthoritativeMaterialPatch);
 
 	// 점령 상태 조회
 	// 특정 위치에서 가장 많은 지분을 가진 팀 ID 반환

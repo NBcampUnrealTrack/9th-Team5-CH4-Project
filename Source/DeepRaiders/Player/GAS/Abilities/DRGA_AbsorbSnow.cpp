@@ -155,9 +155,7 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 
 	const float RemovedAmount =
 		SnowRemoveComponent->TryRemoveSnowAlongDirection(
-			AbsorbFrustumOrigin,
-			AbsorbDirection,
-			EffectiveRemovalSpec);
+			AbsorbFrustumOrigin, AbsorbDirection, EffectiveRemovalSpec);
 	
 	ApplySnowGaugeGain(ASC, RemovedAmount);
 
