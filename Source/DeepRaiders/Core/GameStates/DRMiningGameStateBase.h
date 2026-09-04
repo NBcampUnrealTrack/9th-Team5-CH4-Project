@@ -29,6 +29,15 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	const FText&,
 	ResultText);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FDRGamePhaseChanged,
+	int32,
+	PhaseIndex,
+	int32,
+	PhaseRemainingSeconds,
+	const TArray<FText>&,
+	PlayerMessages);
+
 USTRUCT()
 struct FDRTeamRegisteredTeleportPoint
 {
@@ -51,12 +60,24 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded);
+	void SetGamePhaseState(
+		int32 PhaseIndex,
+		int32 RemainingSeconds,
+		const TArray<FText>& PlayerMessages);
 	void SetGameEndDebugText(const FString& DebugText);
 	void SetGameResultText(const FText& ResultText);
 
 	int32 GetGameRemainingSeconds() const { return GameRemainingSeconds; }
 	bool IsGameStarted() const { return bGameStarted; }
 	bool IsGameEnded() const { return bGameEnded; }
+	UFUNCTION(BlueprintPure, Category = "Game|Phase")
+	int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Phase")
+	int32 GetPhaseRemainingSeconds() const { return PhaseRemainingSeconds; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Phase")
+	TArray<FText> GetCurrentPhaseMessages() const { return CurrentPhaseMessages; }
 	UFUNCTION(BlueprintPure, Category = "Game")
 	FString GetGameEndDebugText() const { return GameEndDebugText; }
 
@@ -72,6 +93,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Game")
 	FDRGameResultTextChanged OnGameResultTextChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Game|Phase")
+	FDRGamePhaseChanged OnGamePhaseChanged;
+
 private:
 	UFUNCTION()
 	void OnRep_GameTimerState();
@@ -81,6 +105,9 @@ private:
 
 	UFUNCTION()
 	void OnRep_GameResultText();
+
+	UFUNCTION()
+	void OnRep_GamePhaseState();
 
 	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
 	int32 GameRemainingSeconds = 0;
@@ -96,6 +123,15 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_GameResultText)
 	FText GameResultText;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GamePhaseState)
+	int32 CurrentPhaseIndex = INDEX_NONE;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GamePhaseState)
+	int32 PhaseRemainingSeconds = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GamePhaseState)
+	TArray<FText> CurrentPhaseMessages;
 
 #pragma region TerrainDig
 public:

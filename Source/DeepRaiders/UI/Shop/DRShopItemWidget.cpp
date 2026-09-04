@@ -87,7 +87,8 @@ void UDRShopItemWidget::ApplyOffer()
 		IsValid(Offer.Icon)
 			? ESlateVisibility::HitTestInvisible
 			: ESlateVisibility::Hidden);
-	PriceText->SetText(FText::AsNumber(Offer.Price));
+	PriceText->SetText(Offer.Request.OfferType == EDRShopOfferType::WeaponUpgrade && !Offer.Request.UpgradeTag.IsValid()
+		? FText::GetEmpty() : FText::AsNumber(Offer.Price));
 	Buy->SetIsEnabled(Offer.IsPurchasable);
 }
 

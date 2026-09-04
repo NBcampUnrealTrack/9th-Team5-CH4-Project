@@ -1,6 +1,7 @@
 #include "DRMeshVoxelCarver.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "StaticMeshResources.h"
@@ -100,16 +101,60 @@ ADRMeshVoxelCarver::ADRMeshVoxelCarver()
 void ADRMeshVoxelCarver::BeginPlay()
 {
 	Super::BeginPlay();
-	RestartCarveBatch();
+	MiningGameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	if (MiningGameState.IsValid())
+	{
+		MiningGameState->OnGamePhaseChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGamePhaseChanged);
+	}
+
+	if (bCarveOnBeginPlay)
+	{
+		StartCarveBatch(false);
+	}
+}
+
+void ADRMeshVoxelCarver::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (MiningGameState.IsValid())
+	{
+		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGamePhaseChanged);
+	}
+
+	GetWorldTimerManager().ClearTimer(RetryTimerHandle);
+	MiningGameState.Reset();
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRMeshVoxelCarver::RestartCarveBatch()
 {
-	if (!bCarveOnBeginPlay)
+	GetWorldTimerManager().ClearTimer(RetryTimerHandle);
+	PendingCarvers.Reset();
+	bStartedForCurrentGame = false;
+	ActiveGamePhaseIndex = INDEX_NONE;
+}
+
+void ADRMeshVoxelCarver::HandleGamePhaseChanged(
+	int32 PhaseIndex,
+	int32,
+	const TArray<FText>&)
+{
+	if (!bCarveOnGameStart || bStartedForCurrentGame || PhaseIndex != StartPhaseIndex)
 	{
 		return;
 	}
 
+	bStartedForCurrentGame = true;
+	ActiveGamePhaseIndex = PhaseIndex;
+	StartCarveBatch(true);
+}
+
+void ADRMeshVoxelCarver::StartCarveBatch(bool bForGameStart)
+{
+	bCarveBatchForGameStart = bForGameStart;
 	RetryCount = 0;
 	PendingCarverIndex = 0;
 	PendingCarvers.Reset();
@@ -360,9 +405,18 @@ void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 	TArray<ADRMeshVoxelCarver*> Carvers;
 	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
 	{
-		if (IsValid(*It) && It->bCarveOnBeginPlay)
+		ADRMeshVoxelCarver* Carver = *It;
+		if (!IsValid(Carver))
 		{
-			Carvers.Add(*It);
+			continue;
+		}
+
+		const bool bShouldCarve = bCarveBatchForGameStart
+			? Carver->bCarveOnGameStart && Carver->StartPhaseIndex == ActiveGamePhaseIndex
+			: Carver->bCarveOnBeginPlay;
+		if (bShouldCarve)
+		{
+			Carvers.Add(Carver);
 		}
 	}
 

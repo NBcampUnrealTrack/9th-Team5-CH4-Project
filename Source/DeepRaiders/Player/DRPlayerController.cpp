@@ -740,7 +740,9 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 		return;
 	}
 
-	if (!InventoryComponent->TryUpgradeSnowProjectileWeapon(WeaponDefinition, UpgradeTag, CurrentLevel))
+	const FDRItemInstance* ItemInstance = InventoryComponent->FindFirstItemInstanceByDefinition(WeaponDefinition);
+	if (ItemInstance == nullptr
+		|| !InventoryComponent->TryUpgradeSnowProjectileWeapon(ItemInstance->InstanceId, UpgradeTag, CurrentLevel))
 	{
 		ReportWeaponUpgradeDebugResult(FString::Printf(
 			TEXT("Upgrade failed: server rejected %s %s at level %d."),

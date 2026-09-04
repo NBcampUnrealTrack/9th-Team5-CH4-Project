@@ -50,6 +50,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	void ResetInventory();
+
+	void ResetWeaponUpgrades();
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Inventory")
 	bool TryReplaceItemDefinition(
@@ -115,8 +117,6 @@ public:
 		return Slots;
 	}
 	
-	const FDRItemInstance* GetItemInstance(FGuid InstanceId) const;
-	
 	// 슬롯 위치 조회
 	const FDRItemInstance* GetItemAtSlot(int32 SlotIndex) const;
 	
@@ -133,10 +133,7 @@ public:
 		int32& OutLevel) const;
 
 	/** 서버에서 예상 레벨을 재검증한 뒤 해당 스탯만 한 단계 올린다. */
-	bool TryUpgradeSnowProjectileWeapon(
-		const UDRProjectileWeaponItemDefinition* WeaponDefinition,
-		FGameplayTag UpgradeTag,
-		int32 ExpectedLevel);
+	bool TryUpgradeSnowProjectileWeapon(FGuid InstanceId, FGameplayTag UpgradeTag, int32 ExpectedLevel);
 	
 	// InstanceId가 있는 슬롯을 반환
 	int32 FindSlotIndex(FGuid InstanceId) const;

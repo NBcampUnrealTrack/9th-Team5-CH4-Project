@@ -9,6 +9,7 @@ class UButton;
 class UDRInventoryComponent;
 class UDRInventoryWidget;
 class UDRShopItemWidget;
+class UDRShopWeaponUpgradeWidget;
 class UDRShopOfferEntryViewModel;
 class UDRShopViewModel;
 class UScrollBox;
@@ -45,6 +46,7 @@ protected:
 
 private:
 	void SelectSection(EDRShopOfferSection Section);
+	void SetWeaponUpgradeEntries(const TArray<UDRShopOfferEntryViewModel*>& NewOfferEntries);
 
 	UFUNCTION()
 	void HandleEquipmentButtonClicked();
@@ -57,6 +59,9 @@ private:
 
 	UFUNCTION()
 	void HandleCharacterUpgradeButtonClicked();
+
+	UFUNCTION()
+	void HandleWeaponUpgradeButtonClicked();
 
 	UFUNCTION()
 	void HandleOfferRequested(FDRShopOfferRequest Request);
@@ -73,6 +78,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> CharacterUpgradeButton;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> WeaponUpgradeButton;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UScrollBox> ItemScrollBox;
 
@@ -81,6 +89,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
 	TSubclassOf<UDRShopItemWidget> ItemWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shop|UI")
+	TSubclassOf<UDRShopWeaponUpgradeWidget> WeaponUpgradeWidgetClass;
 
 	/** Widget Blueprint에 등록한 Manual ViewModel 이름이다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|MVVM")

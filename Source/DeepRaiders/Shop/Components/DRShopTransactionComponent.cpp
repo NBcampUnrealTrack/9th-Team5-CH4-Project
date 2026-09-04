@@ -4,6 +4,8 @@
 #include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
@@ -83,6 +85,13 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 
 	switch (Request.OfferType)
 	{
+	case EDRShopOfferType::WeaponUpgrade:
+		if (TryPurchaseWeaponUpgrade(PlayerState, Inventory, Request))
+		{
+			PlayPurchaseSound(ShopActor);
+		}
+		break;
+
 	case EDRShopOfferType::CharacterUpgrade:
 		if (TryPurchaseCharacterUpgrade(PlayerState, Request))
 		{
@@ -300,6 +309,40 @@ bool UDRShopTransactionComponent::TryPurchaseCharacterUpgrade(
 		*GetNameSafe(PlayerState), *Request.UpgradeTag.ToString(), Request.ExpectedLevel,
 		UpgradeComponent->GetUpgradeLevel(Request.UpgradeTag), UpgradeData->Price,
 		PreviousSnowGauge, PlayerState->GetSnowGauge());
+	return true;
+}
+
+bool UDRShopTransactionComponent::TryPurchaseWeaponUpgrade(
+	ADRPlayerState* PlayerState, UDRInventoryComponent* Inventory, const FDRShopOfferRequest& Request) const
+{
+	if (!IsValid(PlayerState) || !IsValid(Inventory) || !Request.IsValidRequest())
+	{
+		return false;
+	}
+
+	const FDRItemInstance* Item = Inventory->FindItemInstance(Request.InstanceId);
+	const UDRProjectileWeaponItemDefinition* Weapon = Item != nullptr
+		? Cast<UDRProjectileWeaponItemDefinition>(Item->Definition.Get()) : nullptr;
+	if (!IsValid(Weapon) || Weapon->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
+		|| !IsValid(Weapon->UpgradeProfile) || !Weapon->UpgradeProfile->IsUsable())
+	{
+		return false;
+	}
+
+	const FDRWeaponUpgradeLevelData* NextLevel = Weapon->UpgradeProfile->FindLevelData(
+		Request.UpgradeTag, Request.ExpectedLevel + 1);
+	if (NextLevel == nullptr || PlayerState->GetSnowGauge() < NextLevel->Price)
+	{
+		return false;
+	}
+
+	const int32 Price = NextLevel->Price;
+	if (!Inventory->TryUpgradeSnowProjectileWeapon(Request.InstanceId, Request.UpgradeTag, Request.ExpectedLevel))
+	{
+		return false;
+	}
+
+	PlayerState->AddSnowGauge(-Price);
 	return true;
 }
 

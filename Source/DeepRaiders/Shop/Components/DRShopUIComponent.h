@@ -84,6 +84,8 @@ private:
 	UFUNCTION()
 	void RefreshCharacterUpgrades();
 
+	void RefreshWeaponUpgrades();
+
 	/** 상점 Offer를 UI 표시용 View 데이터로 변환한다. */
 	TArray<FDRShopOfferView> MakeOfferViews(
 		const TArray<FDRShopItemOffer>& Offers,
