@@ -6,6 +6,7 @@
 #include "DRVoxelDepositArea.generated.h"
 
 class AVoxelWorld;
+class ADRMiningGameStateBase;
 enum class EDRSnowJoinSnapshotResult : uint8;
 
 UCLASS()
@@ -55,6 +56,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="0.01"))
 	float DepositInterval = 1.f;
 
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Terrain|Deposit",
+		meta = (ClampMin = "0"))
+	int32 StartPhaseIndex = 0;
+
 	UPROPERTY(EditAnywhere, Category="Voxel Terrain|Deposit")
 	FDRVoxelDepositInBoxSettings DepositSettings;
 
@@ -90,9 +98,11 @@ private:
 
 	FTimerHandle DepositTimerHandle;
 	FTimerHandle DepositPipelineTimerHandle;
+	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
 	FDRVoxelDepositPlan PreparedDepositPlan;
 	TArray<FDRVoxelDepositCommand> QueuedDepositCommands;
 	int32 ActiveJoinSnapshotCount = 0;
+	bool bDepositStarted = false;
 
 	/**
 	 * 현재 액터 설정으로 새로운 퇴적 명령을 만듭니다.
@@ -102,6 +112,15 @@ private:
 	bool MakeDepositCommand(FDRVoxelDepositCommand& OutCommand) const;
 	void HandleJoinSnapshotStarted();
 	void HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult Result);
+
+	UFUNCTION()
+	void HandleGamePhaseChanged(
+		int32 PhaseIndex,
+		int32 PhaseRemainingSeconds,
+		const TArray<FText>& PlayerMessages);
+
+	void StartDepositing();
+	void StopDepositing();
 	void RequestDepositArea();
 	void PrepareNextQueuedDeposit();
 	void ApplyPreparedDeposit();

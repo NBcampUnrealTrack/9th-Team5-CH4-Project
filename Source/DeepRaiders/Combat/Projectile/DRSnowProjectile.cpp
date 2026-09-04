@@ -3,30 +3,49 @@
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 
 ADRSnowProjectile::ADRSnowProjectile(const FObjectInitializer& ObjectInitializer)
-    : Super(ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
 }
 
+float ADRSnowProjectile::GetConfiguredInitialSpeed() const
+{
+	return FMath::Max(InitialSpeed, 1.0f);
+}
+
+float ADRSnowProjectile::GetConfiguredGravityScale() const
+{
+	return FMath::Max(GravityScale, 0.0f);
+}
+
+void ADRSnowProjectile::BeginPlay()
+{
+	ConfigureProjectileMovement(InitialSpeed, GravityScale);
+
+	Super::BeginPlay();
+}
+
 void ADRSnowProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 {
-	if (!HasAuthority()
-		|| !IsValid(SnowAddComponent))
+	if (!HasAuthority() || !IsValid(SnowAddComponent))
 	{
 		return;
 	}
 
 	const FDRProjectileWorldImpactData& ImpactData = GetWorldImpactData();
+
 	if (!ImpactData.bAddSnow)
 	{
 		return;
 	}
 
 	SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
-	SnowAddComponent->SetAddSettings(
-		ImpactData.SnowRadius * GetCurrentFalloffStrength(),
-		ImpactData.SnowAmount * GetCurrentFalloffStrength());
+
+	SnowAddComponent->SetAddSettings(ImpactData.SnowRadius * GetCurrentFalloffStrength(), ImpactData.SnowAmount * GetCurrentFalloffStrength());
+
 	SnowAddComponent->SetAddEditTool(ImpactData.SnowEditTool);
+
 	SnowAddComponent->SetAllowVirtualSurfaceFallback(ImpactData.bAllowVirtualSurfaceFallback);
+
 	SnowAddComponent->TryAddSnowFromHit(ImpactResult);
 }

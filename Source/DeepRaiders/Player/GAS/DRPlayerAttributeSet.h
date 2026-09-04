@@ -42,6 +42,8 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowCostMultiplier)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponHeatGenerationMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowAbsorbPowerMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowAddAmountMultiplier)
 
 protected:
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Player|Health")
@@ -93,6 +95,12 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponHeatGenerationMultiplier, Category = "Player|Weapon")
 	FGameplayAttributeData WeaponHeatGenerationMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowAbsorbPowerMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowAbsorbPowerMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowAddAmountMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowAddAmountMultiplier;
 	
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);
@@ -127,6 +135,10 @@ protected:
 	void OnRep_WeaponProjectileCountMultiplier(const FGameplayAttributeData& OldWeaponProjectileCountMultiplier);
 	UFUNCTION()
 	void OnRep_WeaponHeatGenerationMultiplier(const FGameplayAttributeData& OldWeaponHeatGenerationMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowAbsorbPowerMultiplier(const FGameplayAttributeData& OldWeaponSnowAbsorbPowerMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowAddAmountMultiplier(const FGameplayAttributeData& OldWeaponSnowAddAmountMultiplier);
 
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;

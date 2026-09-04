@@ -20,6 +20,15 @@ class DEEPRAIDERS_API ADRProjectile : public AActor
 public:
 	ADRProjectile(const FObjectInitializer& ObjectInitializer);
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+
+	/** Ballistic Aim 계산에서 사용하는 이 Projectile의 실제 기본 발사 속도. */
+	virtual float GetConfiguredInitialSpeed() const;
+
+	/** Ballistic Aim 계산에서 사용하는 ProjectileGravityScale. */
+	virtual float GetConfiguredGravityScale() const;
+
+	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
+	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
 	
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
 	void InitializeProjectile(
@@ -125,6 +134,7 @@ private:
 	FDRProjectileFalloffSettings FalloffSettings;
 
 	FVector LaunchLocation = FVector::ZeroVector;
+	FVector InitialLaunchVelocity = FVector::ZeroVector;
 	FVector InitialActorScale = FVector::OneVector;
 	float EffectiveMaxRange = 0.f;
 	float CurrentFalloffStrength = 1.f;

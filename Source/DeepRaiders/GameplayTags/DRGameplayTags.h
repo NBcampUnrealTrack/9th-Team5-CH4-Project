@@ -58,6 +58,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_FireInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowCost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowAddAmount);
 
 	// Weapon Upgrade - Shotgun
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun);
@@ -66,6 +68,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowCost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_ProjectileCount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowAddAmount);
 
 	// Weapon Upgrade - Cannon
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon);
@@ -73,6 +77,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_FireInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowCost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAddAmount);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
@@ -111,6 +117,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_ProjectileCountModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_HeatGenerationModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAbsorbPowerModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAddAmountModifier);
 	
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);

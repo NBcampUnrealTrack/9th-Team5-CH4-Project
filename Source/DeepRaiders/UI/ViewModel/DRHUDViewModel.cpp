@@ -40,6 +40,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		MaxHealthChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxHealthAttribute()).AddUObject(
 				this, &ThisClass::HandleMaxHealthChanged);
+		SnowGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
+				this, &ThisClass::HandleSnowGaugeChanged);
 		HeatGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetHeatGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleHeatGaugeChanged);
@@ -118,6 +121,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 
 	// 최초 리프레쉬
 	RefreshHealth();
+	RefreshSnowGaugeText();
 	RefreshHeatGauge();
 	RefreshOverheatedState();
 	RefreshFreezeGauge();
@@ -178,6 +182,8 @@ void UDRHUDViewModel::Deinitialize()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxHealthAttribute()).Remove(MaxHealthChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).Remove(SnowGaugeChangedHandle);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetHeatGaugeAttribute()).Remove(HeatGaugeChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxHeatGaugeAttribute()).Remove(MaxHeatGaugeChangedHandle);
@@ -199,6 +205,7 @@ void UDRHUDViewModel::Deinitialize()
 
 	HealthChangedHandle.Reset();
 	MaxHealthChangedHandle.Reset();
+	SnowGaugeChangedHandle.Reset();
 	HeatGaugeChangedHandle.Reset();
 	MaxHeatGaugeChangedHandle.Reset();
 	OverheatedTagChangedHandle.Reset();
@@ -223,6 +230,7 @@ void UDRHUDViewModel::Deinitialize()
 	bInterpolateGauges = false;
 
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(0));
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, 100.f);
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGaugeColor, FLinearColor::White);

@@ -639,37 +639,37 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 	if (!HasAuthority() ||
 		!IsValid(InventoryComponent) ||
 		!IsValid(QuickSlotComponent) ||
-		!IsValid(StartingShovelDefinition) ||
-		!IsValid(StartingRifle) ||
-		!IsValid(StartingShotgun) ||
-		!IsValid(StartingSprayer) ||
-		!IsValid(StartingCannon) ||
 		InventoryComponent->GetMaxSlots() < 2)
 	{
 		return;
 	}
 
-	if (!InventoryComponent->GetItemAtSlot(0))
+	if (IsValid(StartingShovelDefinition) 
+		&& !InventoryComponent->GetItemAtSlot(0))
 	{
 		InventoryComponent->TryAddItemToSlot(0, StartingShovelDefinition, 1);
 	}
 
-	if (!InventoryComponent->GetItemAtSlot(1))
+	if (IsValid(StartingRifle) 
+		&& !InventoryComponent->GetItemAtSlot(1))
 	{
 		InventoryComponent->TryAddItemToSlot(1, StartingRifle, 1);
 	}
 
-	if (!InventoryComponent->GetItemAtSlot(2))
+	if (IsValid(StartingShotgun) 
+		&& !InventoryComponent->GetItemAtSlot(2))
 	{
 		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
 	}
 
-	if (!InventoryComponent->GetItemAtSlot(3))
+	if (IsValid(StartingSprayer) 
+		&& !InventoryComponent->GetItemAtSlot(3))
 	{
 		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
 	}
 
-	if (!InventoryComponent->GetItemAtSlot(4))
+	if (IsValid(StartingCannon) 
+		&& !InventoryComponent->GetItemAtSlot(4))
 	{
 		InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
 	}
@@ -740,7 +740,9 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 		return;
 	}
 
-	if (!InventoryComponent->TryUpgradeSnowProjectileWeapon(WeaponDefinition, UpgradeTag, CurrentLevel))
+	const FDRItemInstance* ItemInstance = InventoryComponent->FindFirstItemInstanceByDefinition(WeaponDefinition);
+	if (ItemInstance == nullptr
+		|| !InventoryComponent->TryUpgradeSnowProjectileWeapon(ItemInstance->InstanceId, UpgradeTag, CurrentLevel))
 	{
 		ReportWeaponUpgradeDebugResult(FString::Printf(
 			TEXT("Upgrade failed: server rejected %s %s at level %d."),
@@ -796,6 +798,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_HeatGeneration;
 		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowAddAmount;
+		}
 	}
 	else if (WeaponKey == TEXT("shotgun"))
 	{
@@ -821,6 +831,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_HeatGeneration;
 		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowAddAmount;
+		}
 	}
 	else if (WeaponKey == TEXT("cannon"))
 	{
@@ -841,6 +859,14 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_HeatGeneration;
+		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowAbsorbPower;
+		}
+		else if (StatKey == TEXT("snowadd") || StatKey == TEXT("snowamount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowAddAmount;
 		}
 	}
 

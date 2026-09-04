@@ -143,6 +143,11 @@ void UDRHUDViewModel::HandleMaxHealthChanged(const FOnAttributeChangeData& Chang
 	RefreshHealth();
 }
 
+void UDRHUDViewModel::HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshSnowGaugeText();
+}
+
 void UDRHUDViewModel::HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData)
 {
 	RefreshHeatGauge();
@@ -232,6 +237,15 @@ void UDRHUDViewModel::RefreshHeatGauge()
 				? DRHUDStatus::HeatGaugeEndColor
 				: DRHUDStatus::GetHeatGaugeColor(HeatGaugeRatio));
 	}
+}
+
+void UDRHUDViewModel::RefreshSnowGaugeText()
+{
+	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
+		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
+		: nullptr;
+	const float NewSnowGauge = IsValid(AttributeSet) ? AttributeSet->GetSnowGauge() : 0.f;
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(FMath::RoundToInt(NewSnowGauge)));
 }
 
 void UDRHUDViewModel::RefreshOverheatedState()

@@ -70,6 +70,9 @@ private:
 	/** 캐릭터 업그레이드 적용 성공 후 비용을 차감한다. */
 	bool TryPurchaseCharacterUpgrade(ADRPlayerState* PlayerState, const FDRShopOfferRequest& Request) const;
 
+	bool TryPurchaseWeaponUpgrade(ADRPlayerState* PlayerState, UDRInventoryComponent* Inventory,
+		const FDRShopOfferRequest& Request) const;
+
 	/** 공용 구매 검증 후 퍽 효과를 적용하고 비용을 차감한다. */
 	bool TryPurchasePerk(
 		ADRPlayerState* PlayerState,

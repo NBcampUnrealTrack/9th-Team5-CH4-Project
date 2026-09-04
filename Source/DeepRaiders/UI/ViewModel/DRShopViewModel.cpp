@@ -7,7 +7,9 @@ void UDRShopOfferEntryViewModel::Initialize(const FDRShopOfferView& InOffer)
 	UE_MVVM_SET_PROPERTY_VALUE(Description, InOffer.Description);
 	UE_MVVM_SET_PROPERTY_VALUE(ItemIcon, InOffer.Icon);
 	UE_MVVM_SET_PROPERTY_VALUE(Price, InOffer.Price);
-	UE_MVVM_SET_PROPERTY_VALUE(PriceText, FText::AsNumber(InOffer.Price));
+	UE_MVVM_SET_PROPERTY_VALUE(PriceText,
+		InOffer.Request.OfferType == EDRShopOfferType::WeaponUpgrade && !InOffer.Request.UpgradeTag.IsValid()
+			? FText::GetEmpty() : FText::AsNumber(InOffer.Price));
 	UE_MVVM_SET_PROPERTY_VALUE(bIsPurchasable, InOffer.IsPurchasable);
 }
 

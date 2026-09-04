@@ -351,6 +351,9 @@ void ADRPlayerCharacter::RefreshTeamColor()
 
 	// 팀 ID 복제 후 각 클라이언트에서 같은 MI를 적용한다.
 	GetMesh()->SetMaterial(TeamMaterialSlotIndex, TeamMaterial);
+	
+	// 팀 ID에 맞는 무기 메테리얼 사용
+	RefreshHeldWeaponTeamMaterial();
 }
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset)
@@ -370,6 +373,8 @@ void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName 
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
 	WorldHandEquipmentMesh->SetRelativeTransform(WorldItemOffset);
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
+	
+	RefreshHeldWeaponTeamMaterial();
 }
 
 void ADRPlayerCharacter::ClearHandEquipmentVisual()
@@ -947,6 +952,60 @@ void ADRPlayerCharacter::ApplySpawnAttributeReset()
 	}
 
 	DRPlayerState->ResetForRespawn();
+}
+
+void ADRPlayerCharacter::RefreshHeldWeaponTeamMaterial()
+{
+	if (!IsValid(WorldHandEquipmentMesh) || !IsValid(HeldItemComponent) || !IsValid(WorldHandEquipmentMesh->GetStaticMesh()))
+	{
+		return;
+	}
+
+	const ADRPlayerState* DRPlayerState = GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(DRPlayerState) || !DRPlayerState->HasAssignedTeam())
+	{
+		return;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(HeldItemComponent->GetHeldItemDefinition());
+
+	if (!IsValid(WeaponDefinition))
+	{
+		return;
+	}
+
+	const int32 TeamId = DRPlayerState->GetTeamId();
+
+	UMaterialInterface* TeamMaterial = nullptr;
+
+	switch (TeamId)
+	{
+	case 0:
+		TeamMaterial = WeaponDefinition->Team0Material;
+		break;
+
+	case 1:
+		TeamMaterial = WeaponDefinition->Team1Material;
+		break;
+
+	default:
+		return;
+	}
+
+	if (!IsValid(TeamMaterial))
+	{
+		return;
+	}
+
+	const int32 MaterialIndex = WeaponDefinition->TeamMaterialSlotIndex;
+
+	if (MaterialIndex < 0 || MaterialIndex >= WorldHandEquipmentMesh->GetNumMaterials())
+	{
+		return;
+	}
+
+	WorldHandEquipmentMesh->SetMaterial(MaterialIndex, TeamMaterial);
 }
 
 void ADRPlayerCharacter::SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition)

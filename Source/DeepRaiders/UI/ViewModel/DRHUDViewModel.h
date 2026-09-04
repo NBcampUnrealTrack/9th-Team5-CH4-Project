@@ -43,6 +43,9 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Health")
 	float HealthRatio = 0.f;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
+	FText SnowGaugeText;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Heat")
 	float HeatGauge = 0.f;
 
@@ -77,6 +80,7 @@ protected:
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleOverheatedTagChanged(FGameplayTag Tag, int32 NewCount);
@@ -90,6 +94,7 @@ private:
 	void HandleSelectedQuickSlotItemChanged(UDRItemDefinition* ItemDefinition);
 
 	void RefreshHealth();
+	void RefreshSnowGaugeText();
 	void RefreshHeatGauge();
 	void RefreshOverheatedState();
 	void RefreshFreezeGauge();
@@ -99,6 +104,7 @@ private:
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 	FDelegateHandle HealthChangedHandle;
 	FDelegateHandle MaxHealthChangedHandle;
+	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle HeatGaugeChangedHandle;
 	FDelegateHandle MaxHeatGaugeChangedHandle;
 	FDelegateHandle OverheatedTagChangedHandle;

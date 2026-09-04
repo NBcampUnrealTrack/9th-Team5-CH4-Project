@@ -274,10 +274,6 @@ void ADRPlayerState::ResetForRespawn()
 
 	// Respawn Attribute 초기화
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), Attributes->GetMaxHealth());
-
-	// 현재 Snow Absorb가 없으므로 전투 루프를 위해 Full로 리스폰.
-	// Snow Absorb 구현 후 정책에 맞게 0.f 등으로 변경.
-	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetSnowGaugeAttribute(), Attributes->GetMaxSnowGauge());
 }
 
 bool ADRPlayerState::IsFrozen() const
