@@ -10,26 +10,39 @@ class FDRSnowSurfaceEditor;
 class FDRSnowVolumeStore;
 class UWorld;
 
+// 눈 파내기 방식 구분
 enum class EDRSnowRemovalPath : uint8
 {
-	Standard,
-	Absorb
+	Standard, // 일반 파내기 (원형/구형 범위)
+	Absorb    // 눈총 흡수 파내기 (카메라 시야각 Frustum 범위)
 };
 
+// 서버에서 눈 파내기를 실행한 후 반환하는 결과 묶음
 struct FDRSnowRemovalExecutionResult
 {
-	FDRSnowRemoveResult RemoveResult;
-	FDRSnowMaterialPatch MaterialPatch;
+	FDRSnowRemoveResult RemoveResult;  // 실제 파낸 부피 및 팀 정보
+	FDRSnowMaterialPatch MaterialPatch; // 파여서 새로 드러난 지형에 칠할 팀 색상 패치 (클라이언트 전송용)
 };
 
+// 클라이언트에서 눈 파내기를 재생/확정했을 때의 결과
 struct FDRSnowRemovalReplayResult
 {
-	bool bApplied = false;
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+	bool bApplied = false;                 // 지형이 실제로 변경되었는지 여부
+	TWeakObjectPtr<AVoxelWorld> VoxelWorld; // 변경된 복셀 월드 포인터
 };
 
-// 눈 제거의 전체 도메인 순서를 소유한다.
-// Surface 편집 → 서버 원본 갱신 → 재질 해석/적용 순서가 이 클래스 밖으로 흩어지지 않는다.
+// FDRSnowRemovalPipeline: 눈 파내기의 전체 실행 순서를 관리하는 파이프라인
+//
+// 핵심 실행 순서:
+//   1. 지형 깎기 (SurfaceEditor)
+//   2. 점령 부피 차감 및 소유권 갱신 (VolumeStore, OwnershipStore)
+//   3. 새로 드러난 표면에 팀 색상 칠하기 (MaterialPatch 생성 또는 적용)
+//
+// 상황별 4가지 실행 함수:
+//   Execute: 서버에서 위 1, 2, 3 단계를 모두 수행하고 클라이언트용 색상 패치 생성
+//   PredictSurface: 클라이언트에서 입력 즉시 1단계(지형 깎기)만 먼저 수행하여 렉을 숨김
+//   ConfirmPrediction: 서버 확정 응답 도착 시, 이미 깎은 지형 위에 2, 3단계를 적용하여 마무리
+//   Replay: 예측을 건너뛴 다른 클라이언트가 1, 2, 3단계를 처음부터 순서대로 재현
 class DEEPRAIDERS_API FDRSnowRemovalPipeline
 {
 public:
@@ -38,17 +51,21 @@ public:
 		FDRSnowOwnershipStore& InOwnershipStore,
 		FDRSnowVolumeStore& InVolumeStore);
 
+	// 서버: 지형 파기, 부피 차감, 팀 색상 계산을 모두 처리하고 결과(색상 패치 포함)를 반환합니다.
 	FDRSnowRemovalExecutionResult Execute(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath,
 		bool bBuildMaterialPatch);
-	// 클라이언트 예측용으로 Surface만 먼저 편집한다.
+
+	// 클라이언트 예측: 입력 즉시 시각적인 지형만 깎아내고, 변경된 복셀 목록을 반환합니다.
 	FDRSnowSurfaceEditResult PredictSurface(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath);
-	// 예측 때 확보한 실제 변경 voxel로 서버 확정 Volume/Material을 반영한다.
+
+	// 클라이언트 예측 확정: 이전에 깎아둔 지형 목록을 재사용하여 서버 확정 부피와 색상 패치만 반영합니다.
+	// 지형을 다시 파지 않으므로 프레임 드랍이나 중복 굴착이 없습니다.
 	FDRSnowRemovalReplayResult ConfirmPrediction(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
@@ -57,6 +74,7 @@ public:
 		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath RemovalPath);
 
+	// 클라이언트 재생: 예측 내역이 없을 때 서버 수신 데이터를 바탕으로 지형부터 색상까지 처음부터 적용합니다.
 	FDRSnowRemovalReplayResult Replay(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
@@ -65,23 +83,32 @@ public:
 		EDRSnowRemovalPath RemovalPath);
 
 private:
+	// 파내기 방식(Standard / Absorb)에 따라 지형을 깎아냅니다.
 	FDRSnowSurfaceEditResult RemoveSurface(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath) const;
+
+	// 파여서 새로 드러난 지형에 어떤 팀의 색상을 칠해야 하는지 주변 소유권을 검색해 결정합니다.
 	bool ResolveMaterials(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
 		EDRSnowRemovalPath RemovalPath,
 		FDRSnowResolvedMaterialEdit& OutResolvedEdit) const;
+
+	// 색상 패치가 없는 이전 버전 데이터 수신 시, 로컬에서 직접 색상을 계산해 칠합니다.
 	bool RepaintWithoutPatch(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
 		EDRSnowRemovalPath RemovalPath) const;
+
+	// 지형 변경 결과에 맞춰 점령 부피를 차감하고, 서버인 경우 파여나간 복셀 소유권을 삭제합니다.
 	void ApplyRemovedSurfaceEdit(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
 		float VolumeAmount);
+
+	// 변경된 복셀별 높낮이 차이를 계산하여 VolumeStore에서 팀 점령량을 삭감합니다.
 	void RemoveVolumeFromModifiedValues(
 		AVoxelWorld& VoxelWorld,
 		const FDRSnowSurfaceRemoveRequest& Request,

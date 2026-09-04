@@ -13,6 +13,7 @@
 
 void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearSnowOperationBroadcasts();
 	StopPendingSnowRetry();
 	PendingSnowOperations.Reset();
 	AppliedSnowOperationSequences.Reset();
@@ -144,7 +145,7 @@ void ADRMiningGameStateBase::RegisterSnowAdd(
 	Record.ServerAppliedAmount = ServerAppliedAmount > 0.f
 		? ServerAppliedAmount
 		: Operation.Amount;
-	Multicast_ApplySnowOperation(Record);
+	QueueSnowOperationBroadcast(MoveTemp(Record));
 }
 
 void ADRMiningGameStateBase::RegisterSnowRemove(
@@ -163,7 +164,7 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 	Record.ServerAppliedAmount = Operation.AppliedAmount;
 	Record.bHasAuthoritativeMaterialPatch = true;
 	Record.MaterialPatch = MoveTemp(MaterialPatch);
-	Multicast_ApplySnowOperation(Record);
+	QueueSnowOperationBroadcast(MoveTemp(Record));
 }
 
 void ADRMiningGameStateBase::ResetSnowOperationState()
@@ -173,6 +174,8 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 		return;
 	}
 
+	// Sequence를 0으로 되돌리기 전에 이전 경기의 미전송 배치를 폐기한다.
+	ClearSnowOperationBroadcasts();
 	NextSnowOperationSequence = 0;
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
@@ -247,22 +250,104 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	StopPendingSnowRetry();
 }
 
-void ADRMiningGameStateBase::Multicast_ApplySnowOperation_Implementation(const FDRSnowOperationRecord& Record)
+void ADRMiningGameStateBase::QueueSnowOperationBroadcast(FDRSnowOperationRecord&& Record)
 {
-	if (HasAuthority())
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetWorld()->GetFirstPlayerController()))
+	PendingSnowBroadcastOperations.Add(MoveTemp(Record));
+
+	// 산탄/연사로 한 프레임에 작업이 몰리면 30Hz 타이머를 기다리지 않고 상한에서 즉시 보낸다.
+	if (PendingSnowBroadcastOperations.Num() >= MaxSnowOperationsPerBatch)
 	{
-		if (PlayerController->QueueSnowJoinOperation(Record))
-		{
-			return;
-		}
+		FlushSnowOperationBroadcasts();
+		return;
 	}
 
-	ApplySnowOperationRecord(Record);
+	ScheduleSnowOperationBroadcast();
+}
+
+void ADRMiningGameStateBase::ScheduleSnowOperationBroadcast()
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !IsValid(World) || PendingSnowBroadcastOperations.IsEmpty() ||
+		World->GetTimerManager().IsTimerActive(SnowOperationBroadcastTimer))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		SnowOperationBroadcastTimer,
+		this,
+		&ThisClass::FlushSnowOperationBroadcasts,
+		SnowOperationBroadcastInterval,
+		false);
+}
+
+void ADRMiningGameStateBase::FlushSnowOperationBroadcasts()
+{
+	UWorld* World = GetWorld();
+	if (IsValid(World))
+	{
+		World->GetTimerManager().ClearTimer(SnowOperationBroadcastTimer);
+	}
+	SnowOperationBroadcastTimer.Invalidate();
+
+	if (!HasAuthority() || PendingSnowBroadcastOperations.IsEmpty())
+	{
+		return;
+	}
+
+	// RPC 호출 중 새 작업이 등록되더라도 현재 배치와 섞이지 않도록 먼저 분리한다.
+	TArray<FDRSnowOperationRecord> Batch = MoveTemp(PendingSnowBroadcastOperations);
+	PendingSnowBroadcastOperations.Reset();
+
+	Multicast_ApplySnowOperations(Batch);
+
+	// 재진입 등으로 RPC 호출 중 새 작업이 들어왔다면 다음 30Hz 창을 예약한다.
+	if (!PendingSnowBroadcastOperations.IsEmpty())
+	{
+		ScheduleSnowOperationBroadcast();
+	}
+}
+
+void ADRMiningGameStateBase::ClearSnowOperationBroadcasts()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SnowOperationBroadcastTimer);
+	}
+	SnowOperationBroadcastTimer.Invalidate();
+	PendingSnowBroadcastOperations.Reset();
+}
+
+void ADRMiningGameStateBase::Multicast_ApplySnowOperations_Implementation(
+	const TArray<FDRSnowOperationRecord>& Records)
+{
+	if (HasAuthority() || Records.IsEmpty())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	ADRPlayerController* PlayerController = IsValid(World)
+		? Cast<ADRPlayerController>(World->GetFirstPlayerController())
+		: nullptr;
+
+	// Reliable RPC 내부 배열 순서는 서버 Sequence 생성 순서와 동일하다.
+	// Join snapshot 중이면 각 Record를 기존 QueueSnowJoinOperation 경로로 넘겨
+	// checkpoint/history 중복 제거 규칙을 그대로 유지한다.
+	for (const FDRSnowOperationRecord& Record : Records)
+	{
+		if (IsValid(PlayerController) && PlayerController->QueueSnowJoinOperation(Record))
+		{
+			continue;
+		}
+
+		ApplySnowOperationRecord(Record);
+	}
 }
 
 bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationRecord& Record)

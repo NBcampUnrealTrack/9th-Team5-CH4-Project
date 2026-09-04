@@ -121,14 +121,32 @@ public:
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
 
-	/** 새 경기를 위해 서버와 모든 클라이언트의 복셀 상태를 함께 초기화한다. */
+	// 새 경기를 시작할 때 서버와 모든 클라이언트의 복셀/지형 데이터를 초기화합니다.
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ResetVoxelState();
 
+	// 짧은 시간 동안 발생한 눈 변경 작업들을 배열로 묶어 한 번에 보내는 Reliable Multicast RPC
+	// 패킷 내 배열 순서는 서버의 발생 순서(Sequence)와 동일합니다.
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ApplySnowOperation(const FDRSnowOperationRecord& Record);
+	void Multicast_ApplySnowOperations(const TArray<FDRSnowOperationRecord>& Records);
 
 private:
+	// 눈 작업 배치 전송 시스템 (서버 전용)
+	// 매 작업마다 RPC를 보내면 연사나 산탄 시 패킷 폭주가 발생하므로,
+	// 대기열에 모아두었다가 30Hz 주기로 묶어서 전송합니다 (16개 초과 시 즉시 전송).
+
+	// 작업을 대기열에 추가하고 30Hz 타이머를 예약합니다 (16개 이상이면 즉시 전송).
+	void QueueSnowOperationBroadcast(FDRSnowOperationRecord&& Record);
+
+	// 타이머가 꺼져 있을 때만 30Hz 타이머를 새로 시작합니다.
+	void ScheduleSnowOperationBroadcast();
+
+	// 대기열의 작업들을 분리하여 Multicast_ApplySnowOperations RPC로 일괄 발송합니다.
+	void FlushSnowOperationBroadcasts();
+
+	// 미전송 대기열과 타이머를 취소합니다 (게임 종료 및 상태 초기화 시 호출).
+	void ClearSnowOperationBroadcasts();
+
 	bool ApplySnowAddOnce(const FDRSnowOperationRecord& Record);
 	bool ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record);
 	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
@@ -140,9 +158,24 @@ private:
 	void StopPendingSnowRetry();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
 
+	// 서버 전송용: 아직 클라이언트로 전송되지 않은 눈 작업 묶음 대기열
+	TArray<FDRSnowOperationRecord> PendingSnowBroadcastOperations;
+	FTimerHandle SnowOperationBroadcastTimer;
+
+	// 기본 전송 주기 (초당 30회) 및 순간 폭주시 즉시 발송하는 상한 개수
+	static constexpr float SnowOperationBroadcastInterval = 1.f / 30.f;
+	static constexpr int32 MaxSnowOperationsPerBatch = 16;
+
+	// 공통: 눈 작업 고유 번호 (서버: 순차 발급, 클라이언트: 중복 처리 방지용)
 	int32 NextSnowOperationSequence = 0;
+
+	// 클라이언트: 체크포인트 스냅샷으로 이미 처리 완료된 작업 번호 기준선
 	int32 AppliedSnowCheckpointSequence = 0;
+
+	// 클라이언트: 이미 로컬에 반영 완료된 작업 번호 목록 (중복 실행 방지)
 	TSet<int32> AppliedSnowOperationSequences;
+
+	// 클라이언트: 복셀 월드가 아직 로드되지 않아 생성을 기다리는 작업 목록
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;
 	FTimerHandle PendingSnowRetryTimer;
 #pragma endregion
