@@ -2,6 +2,19 @@
 
 namespace DRGameplayTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(
+		Character_Upgrade_MaxHealth, 
+		"Character.Upgrade.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Character_Upgrade_MoveSpeed, 
+		"Character.Upgrade.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Data_Upgrade_MaxHealth, 
+		"Data.Upgrade.MaxHealth");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Data_Upgrade_MoveSpeed, 
+		"Data.Upgrade.MoveSpeed");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_Frozen,
 		"State.Frozen",

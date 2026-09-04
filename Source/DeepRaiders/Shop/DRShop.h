@@ -7,7 +7,6 @@
 class APawn;
 class UDRShopComponent;
 class UDRShopAreaComponent;
-class UDRUpgradeComponent;
 class USceneComponent;
 class USoundBase;
 
@@ -48,9 +47,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<UDRShopComponent> ShopComponent;
-
-	UPROPERTY(VisibleAnywhere, Category = "Shop")
-	TObjectPtr<UDRUpgradeComponent> UpgradeComponent;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shop|Sound")
 	TObjectPtr<USoundBase> PurchaseSound;

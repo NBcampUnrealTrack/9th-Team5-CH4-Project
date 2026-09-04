@@ -11,6 +11,7 @@
 class FLifetimeProperty;
 class UAbilitySystemComponent;
 class UDRPlayerAttributeSet;
+class UDRCharacterUpgradeComponent;
 class UDRPerkComponent;
 class UDRSkillComponent;
 class UGameplayAbility;
@@ -55,6 +56,11 @@ public:
 	UDRPerkComponent* GetPerkComponent() const
 	{
 		return PerkComponent;
+	}
+
+	UDRCharacterUpgradeComponent* GetCharacterUpgradeComponent() const
+	{
+		return CharacterUpgradeComponent;
 	}
 
 	UDRSkillComponent* GetSkillComponent() const
@@ -200,6 +206,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
 	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Upgrade")
+	TObjectPtr<UDRCharacterUpgradeComponent> CharacterUpgradeComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
 	TObjectPtr<UDRPerkComponent> PerkComponent;

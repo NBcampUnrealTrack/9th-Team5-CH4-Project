@@ -4,6 +4,11 @@
 
 namespace DRGameplayTags
 {
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MoveSpeed);
+
 	// State
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frozen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VoxelContained);
