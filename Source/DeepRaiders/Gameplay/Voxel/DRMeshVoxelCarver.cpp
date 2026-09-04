@@ -18,6 +18,36 @@ namespace DRMeshVoxelCarver
 	constexpr float RetryInterval = 0.1f;
 	const FVector RayDirection = FVector(1.f, 0.137f, 0.071f).GetSafeNormal();
 
+	struct FCarveContext
+	{
+		FIntVector Min = FIntVector::ZeroValue;
+		FIntVector Max = FIntVector::ZeroValue;
+		int32 Step = 1;
+		int32 ChunkSize = 64;
+		FTransform MeshTransform;
+		FTransform VoxelTransform;
+		float VoxelSize = 100.f;
+		FIntVector VoxelWorldOffset = FIntVector::ZeroValue;
+		FVoxelValue TargetValue = FVoxelValue::Empty();
+		EDRMeshVoxelSampleShape SampleShape = EDRMeshVoxelSampleShape::Cube;
+		float SphereRadius = 1.f;
+		float RandomOffsetRatio = 0.f;
+		float SphereNoiseStrength = 0.f;
+		float SphereNoiseScale = 0.15f;
+		int32 RandomSeed = 1337;
+		FVector NoiseSeedOffset = FVector::ZeroVector;
+		float MaximumSphereRadius = 1.f;
+		int32 SphereExtent = 0;
+		TArray<FVector3f> Vertices;
+		TArray<uint32> Indices;
+		TArray<FIntVector> ChunkMins;
+		int32 NextChunkIndex = 0;
+		TWeakObjectPtr<UStaticMeshComponent> CarveMesh;
+		TWeakObjectPtr<AVoxelWorld> VoxelWorld;
+		bool bHideMeshAfterCarve = true;
+		TFunction<void()> Completion;
+	};
+
 	bool IsPointInsideMesh(
 		const FVector& LocalPoint,
 		const TArray<FVector3f>& Vertices,
@@ -86,6 +116,8 @@ namespace DRMeshVoxelCarver
 		TVoxelWeakPtr<FVoxelData> Data;
 		TFunction<void(FVoxelData&)> Work;
 	};
+
+	void StartNextCarveChunk(const TSharedRef<FCarveContext, ESPMode::ThreadSafe>& Context);
 }
 
 ADRMeshVoxelCarver::ADRMeshVoxelCarver()
@@ -221,6 +253,7 @@ bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
 	const FIntVector Max = VoxelWorld->GlobalToLocal(
 		WorldMax, EVoxelWorldCoordinatesRounding::RoundUp) + 1;
 	const int32 Step = FMath::Max(1, SamplingStep);
+	const int32 ChunkSize = FMath::DivideAndRoundUp(FMath::Max(Step, CarveChunkSize), Step) * Step;
 	const int64 SampleCount = int64(FMath::DivideAndRoundUp(Max.X - Min.X, Step))
 		* int64(FMath::DivideAndRoundUp(Max.Y - Min.Y, Step))
 		* int64(FMath::DivideAndRoundUp(Max.Z - Min.Z, Step));
@@ -251,87 +284,157 @@ bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
 	const float MaximumSphereRadius = SphereRadius * (1.f + SelectedSphereNoiseStrength);
 	const int32 SphereExtent = FMath::CeilToInt(
 		MaximumSphereRadius + Step * SelectedRandomOffsetRatio);
+	TSharedRef<DRMeshVoxelCarver::FCarveContext, ESPMode::ThreadSafe> Context =
+		MakeShared<DRMeshVoxelCarver::FCarveContext, ESPMode::ThreadSafe>();
+	Context->Min = Min;
+	Context->Max = Max;
+	Context->Step = Step;
+	Context->ChunkSize = ChunkSize;
+	Context->MeshTransform = MeshTransform;
+	Context->VoxelTransform = VoxelTransform;
+	Context->VoxelSize = VoxelSize;
+	Context->VoxelWorldOffset = VoxelWorldOffset;
+	Context->TargetValue = TargetValue;
+	Context->SampleShape = SelectedSampleShape;
+	Context->SphereRadius = SphereRadius;
+	Context->RandomOffsetRatio = SelectedRandomOffsetRatio;
+	Context->SphereNoiseStrength = SelectedSphereNoiseStrength;
+	Context->SphereNoiseScale = SelectedSphereNoiseScale;
+	Context->RandomSeed = SelectedRandomSeed;
+	Context->NoiseSeedOffset = NoiseSeedOffset;
+	Context->MaximumSphereRadius = MaximumSphereRadius;
+	Context->SphereExtent = SphereExtent;
+	Context->Vertices = MoveTemp(Vertices);
+	Context->Indices = MoveTemp(Indices);
+	Context->CarveMesh = CarveMesh;
+	Context->VoxelWorld = VoxelWorld;
+	Context->bHideMeshAfterCarve = bHideMeshAfterCarve;
+	Context->Completion = MoveTemp(Completion);
+
+	for (int32 X = Min.X; X < Max.X; X += ChunkSize)
+	{
+		for (int32 Y = Min.Y; Y < Max.Y; Y += ChunkSize)
+		{
+			for (int32 Z = Min.Z; Z < Max.Z; Z += ChunkSize)
+			{
+				Context->ChunkMins.Add(FIntVector(X, Y, Z));
+			}
+		}
+	}
+
+	if (bCarveOutsideIn)
+	{
+		const FVector BoundsCenter = (FVector(Min) + FVector(Max)) * 0.5f;
+		const FVector BoundsExtent = (FVector(Max) - FVector(Min)) * 0.5f;
+		Context->ChunkMins.Sort([BoundsCenter, BoundsExtent, ChunkSize](
+			const FIntVector& Left,
+			const FIntVector& Right)
+		{
+			const FVector LeftCenter = FVector(Left) + FVector(ChunkSize * 0.5f);
+			const FVector RightCenter = FVector(Right) + FVector(ChunkSize * 0.5f);
+			const FVector SafeExtent(
+				FMath::Max(1.f, BoundsExtent.X),
+				FMath::Max(1.f, BoundsExtent.Y),
+				FMath::Max(1.f, BoundsExtent.Z));
+			const FVector LeftDistance = (LeftCenter - BoundsCenter).GetAbs() / SafeExtent;
+			const FVector RightDistance = (RightCenter - BoundsCenter).GetAbs() / SafeExtent;
+			const float LeftLayer = LeftDistance.GetMax();
+			const float RightLayer = RightDistance.GetMax();
+			return LeftLayer > RightLayer;
+		});
+	}
+
+	DRMeshVoxelCarver::StartNextCarveChunk(Context);
+	return true;
+}
+
+void DRMeshVoxelCarver::StartNextCarveChunk(
+	const TSharedRef<FCarveContext, ESPMode::ThreadSafe>& Context)
+{
+	AVoxelWorld* VoxelWorld = Context->VoxelWorld.Get();
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		Context->Completion();
+		return;
+	}
+
+	if (!Context->ChunkMins.IsValidIndex(Context->NextChunkIndex))
+	{
+		if (Context->bHideMeshAfterCarve)
+		{
+			if (UStaticMeshComponent* CarveMesh = Context->CarveMesh.Get())
+			{
+				CarveMesh->SetVisibility(false, true);
+			}
+		}
+		Context->Completion();
+		return;
+	}
+
+	const FIntVector ChunkMin = Context->ChunkMins[Context->NextChunkIndex++];
+	const FIntVector ChunkMax(
+		FMath::Min(ChunkMin.X + Context->ChunkSize, Context->Max.X),
+		FMath::Min(ChunkMin.Y + Context->ChunkSize, Context->Max.Y),
+		FMath::Min(ChunkMin.Z + Context->ChunkSize, Context->Max.Z));
 	const FVoxelIntBox EditedBounds(
-		SampleShape == EDRMeshVoxelSampleShape::Sphere ? Min - SphereExtent : Min,
-		SampleShape == EDRMeshVoxelSampleShape::Sphere ? Max + SphereExtent : Max);
+		Context->SampleShape == EDRMeshVoxelSampleShape::Sphere
+			? ChunkMin - Context->SphereExtent
+			: ChunkMin,
+		Context->SampleShape == EDRMeshVoxelSampleShape::Sphere
+			? ChunkMax + Context->SphereExtent
+			: ChunkMax);
 	const auto GameThreadTasks = VoxelWorld->GetGameThreadTasks();
-	const TWeakObjectPtr<ADRMeshVoxelCarver> WeakThis(this);
-	const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld(VoxelWorld);
-	auto Work = [
-		Min,
-		Max,
-		Step,
-		MeshTransform,
-		VoxelTransform,
-		VoxelSize,
-		VoxelWorldOffset,
-		TargetValue,
-		SelectedSampleShape,
-		SphereRadius,
-		SelectedRandomOffsetRatio,
-		SelectedSphereNoiseStrength,
-		SelectedSphereNoiseScale,
-		SelectedRandomSeed,
-		NoiseSeedOffset,
-		MaximumSphereRadius,
-		SphereExtent,
-		EditedBounds,
-		Vertices = MoveTemp(Vertices),
-		Indices = MoveTemp(Indices),
-		GameThreadTasks,
-		WeakThis,
-		WeakVoxelWorld,
-		Completion = MoveTemp(Completion)](FVoxelData& Data) mutable
+	auto Work = [Context, ChunkMin, ChunkMax, EditedBounds, GameThreadTasks](FVoxelData& Data)
 	{
 		FVoxelWriteScopeLock Lock(Data, EditedBounds, FUNCTION_FNAME);
-		for (int32 X = Min.X; X < Max.X; X += Step)
+		for (int32 X = ChunkMin.X; X < ChunkMax.X; X += Context->Step)
 		{
-			for (int32 Y = Min.Y; Y < Max.Y; Y += Step)
+			for (int32 Y = ChunkMin.Y; Y < ChunkMax.Y; Y += Context->Step)
 			{
-				for (int32 Z = Min.Z; Z < Max.Z; Z += Step)
+				for (int32 Z = ChunkMin.Z; Z < ChunkMax.Z; Z += Context->Step)
 				{
 					const FIntVector SampleCenter(
-						FMath::Min(X + Step / 2, Max.X - 1),
-						FMath::Min(Y + Step / 2, Max.Y - 1),
-						FMath::Min(Z + Step / 2, Max.Z - 1));
+						FMath::Min(X + Context->Step / 2, Context->Max.X - 1),
+						FMath::Min(Y + Context->Step / 2, Context->Max.Y - 1),
+						FMath::Min(Z + Context->Step / 2, Context->Max.Z - 1));
 					FIntVector BrushCenter = SampleCenter;
-					if (SelectedSampleShape == EDRMeshVoxelSampleShape::Sphere
-						&& SelectedRandomOffsetRatio > 0.f)
+					if (Context->SampleShape == EDRMeshVoxelSampleShape::Sphere &&
+						Context->RandomOffsetRatio > 0.f)
 					{
 						const uint32 PositionHash = HashCombineFast(
-							GetTypeHash(SampleCenter), GetTypeHash(SelectedRandomSeed));
+							GetTypeHash(SampleCenter), GetTypeHash(Context->RandomSeed));
 						FRandomStream RandomStream(PositionHash);
-						const float OffsetRange = Step * SelectedRandomOffsetRatio;
+						const float OffsetRange = Context->Step * Context->RandomOffsetRatio;
 						BrushCenter += FIntVector(
 							FMath::RoundToInt(RandomStream.FRandRange(-OffsetRange, OffsetRange)),
 							FMath::RoundToInt(RandomStream.FRandRange(-OffsetRange, OffsetRange)),
 							FMath::RoundToInt(RandomStream.FRandRange(-OffsetRange, OffsetRange)));
 					}
 
-					const FVector WorldPoint = VoxelTransform.TransformPosition(
-						VoxelSize * FVector(BrushCenter + VoxelWorldOffset));
-					const FVector LocalPoint = MeshTransform.InverseTransformPosition(WorldPoint);
-					if (!DRMeshVoxelCarver::IsPointInsideMesh(LocalPoint, Vertices, Indices))
+					const FVector WorldPoint = Context->VoxelTransform.TransformPosition(
+						Context->VoxelSize * FVector(BrushCenter + Context->VoxelWorldOffset));
+					const FVector LocalPoint = Context->MeshTransform.InverseTransformPosition(WorldPoint);
+					if (!IsPointInsideMesh(LocalPoint, Context->Vertices, Context->Indices))
 					{
 						continue;
 					}
 
-					if (SelectedSampleShape == EDRMeshVoxelSampleShape::Cube)
+					if (Context->SampleShape == EDRMeshVoxelSampleShape::Cube)
 					{
-						for (int32 BrushX = X; BrushX < FMath::Min(X + Step, Max.X); ++BrushX)
+						for (int32 BrushX = X; BrushX < FMath::Min(X + Context->Step, Context->Max.X); ++BrushX)
 						{
-							for (int32 BrushY = Y; BrushY < FMath::Min(Y + Step, Max.Y); ++BrushY)
+							for (int32 BrushY = Y; BrushY < FMath::Min(Y + Context->Step, Context->Max.Y); ++BrushY)
 							{
-								for (int32 BrushZ = Z; BrushZ < FMath::Min(Z + Step, Max.Z); ++BrushZ)
+								for (int32 BrushZ = Z; BrushZ < FMath::Min(Z + Context->Step, Context->Max.Z); ++BrushZ)
 								{
-									Data.SetValue(BrushX, BrushY, BrushZ, TargetValue);
+									Data.SetValue(BrushX, BrushY, BrushZ, Context->TargetValue);
 								}
 							}
 						}
 						continue;
 					}
 
-					const int32 BrushExtent = FMath::CeilToInt(MaximumSphereRadius);
+					const int32 BrushExtent = FMath::CeilToInt(Context->MaximumSphereRadius);
 					for (int32 OffsetX = -BrushExtent; OffsetX <= BrushExtent; ++OffsetX)
 					{
 						for (int32 OffsetY = -BrushExtent; OffsetY <= BrushExtent; ++OffsetY)
@@ -340,13 +443,13 @@ bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
 							{
 								const FIntVector Offset(OffsetX, OffsetY, OffsetZ);
 								const FVector NoisePosition = FVector(BrushCenter + Offset)
-									* SelectedSphereNoiseScale + NoiseSeedOffset;
+									* Context->SphereNoiseScale + Context->NoiseSeedOffset;
 								const float Noise = FMath::PerlinNoise3D(NoisePosition);
-								const float NoisyRadius = SphereRadius
-									* (1.f + Noise * SelectedSphereNoiseStrength);
+								const float NoisyRadius = Context->SphereRadius
+									* (1.f + Noise * Context->SphereNoiseStrength);
 								if (FVector(Offset).SizeSquared() <= FMath::Square(NoisyRadius))
 								{
-									Data.SetValue(BrushCenter + Offset, TargetValue);
+									Data.SetValue(BrushCenter + Offset, Context->TargetValue);
 								}
 							}
 						}
@@ -355,30 +458,27 @@ bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
 			}
 		}
 
-		GameThreadTasks->AddTask([
-			EditedBounds,
-			WeakThis,
-			WeakVoxelWorld,
-			Completion = MoveTemp(Completion)]() mutable
+		GameThreadTasks->AddTask([Context, EditedBounds]()
 		{
-			ADRMeshVoxelCarver* Carver = WeakThis.Get();
-			AVoxelWorld* CompletedVoxelWorld = WeakVoxelWorld.Get();
-			if (IsValid(CompletedVoxelWorld) && CompletedVoxelWorld->IsCreated())
+			AVoxelWorld* CompletedVoxelWorld = Context->VoxelWorld.Get();
+			if (!IsValid(CompletedVoxelWorld) || !CompletedVoxelWorld->IsCreated())
 			{
-				FVoxelToolHelpers::UpdateWorld(CompletedVoxelWorld, EditedBounds);
+				Context->Completion();
+				return;
 			}
-			if (IsValid(Carver) && Carver->bHideMeshAfterCarve && IsValid(Carver->CarveMesh))
+
+			FVoxelToolHelpers::UpdateWorld(CompletedVoxelWorld, EditedBounds);
+			// 렌더 갱신과 다음 편집이 같은 프레임에 연속 실행되지 않게 한 Chunk씩 넘긴다.
+			CompletedVoxelWorld->GetWorldTimerManager().SetTimerForNextTick([Context]()
 			{
-				Carver->CarveMesh->SetVisibility(false, true);
-			}
-			Completion();
+				StartNextCarveChunk(Context);
+			});
 		});
 	};
 
 	FVoxelToolHelpers::StartAsyncEditTask(
 		VoxelWorld,
-		new DRMeshVoxelCarver::FMeshVoxelCarveWork(*VoxelWorld, MoveTemp(Work)));
-	return true;
+		new FMeshVoxelCarveWork(*VoxelWorld, MoveTemp(Work)));
 }
 
 AVoxelWorld* ADRMeshVoxelCarver::ResolveVoxelWorld()
