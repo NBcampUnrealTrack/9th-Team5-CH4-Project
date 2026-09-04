@@ -321,6 +321,8 @@ private:
 
 	float LastHitReactionTime = -BIG_NUMBER;
 	
+	void RefreshHeldWeaponTeamMaterial();
+	
 #pragma region QuickSlot
 
 public:
