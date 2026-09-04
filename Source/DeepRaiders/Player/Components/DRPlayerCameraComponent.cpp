@@ -48,8 +48,10 @@ void UDRPlayerCameraComponent::ConfigureCamera(
 	bCameraDistanceInitialized = false;
 	bResolvedThirdPersonCameraInitialized = false;
 	CameraObstructionElapsed = 0.f;
-	CameraCenterPathClearElapsed = 0.f;
-	SelectedCameraPathIndex = 0;
+	CameraClearPathElapsed = 0.f;
+	OpenSurroundingCameraPathCount = 8;
+	SurroundingCameraProbeElapsed = 0.f;
+	bSurroundingCameraProbeInitialized = false;
 	SetComponentTickEnabled(CameraBoom.IsValid());
 
 	if (bEnableAutomaticFirstPerson && !FirstPersonCameraAnchor.IsValid())
@@ -117,27 +119,16 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 	const FVector CollisionOrigin = GetCameraCollisionOrigin();
 	const FTransform FullThirdPersonTransform =
 		GetDesiredThirdPersonCameraTransform(DefaultThirdPersonArmLength);
-	FVector FullBestCameraLocation = FullThirdPersonTransform.GetLocation();
+	FVector CentralCameraLocation = FullThirdPersonTransform.GetLocation();
+	bool bCentralCameraPathBlocked = false;
 	CurrentAvailableCameraDistance = EvaluateCameraSpace(
 		CollisionOrigin,
 		FullThirdPersonTransform,
-		&FullBestCameraLocation,
-		DeltaSeconds,
-		true);
-	PredictedAvailableCameraDistance = CurrentAvailableCameraDistance;
+		&CentralCameraLocation,
+		&bCentralCameraPathBlocked);
 
-	const FVector PredictionOffset = GetGroundAwarePredictionOffset();
-	if (!PredictionOffset.IsNearlyZero())
-	{
-		FTransform PredictedTransform = FullThirdPersonTransform;
-		PredictedTransform.AddToTranslation(PredictionOffset);
-		PredictedAvailableCameraDistance = EvaluateCameraSpace(
-			CollisionOrigin + PredictionOffset,
-			PredictedTransform);
-	}
-
-	// 1인칭 판정에는 현재 공간만 사용한다. 예측값은 선제적인 Arm 축소에만 사용해
-	// 경사면이나 갱신 중인 복셀 메시가 시점을 강제로 바꾸지 못하게 한다.
+	// 여러 방향의 중앙값은 1인칭 전환 판정에만 사용한다.
+	// 실제 3인칭 카메라 위치는 중앙 경로의 결과만 따른다.
 	RawAvailableCameraDistance = CurrentAvailableCameraDistance;
 	if (!bCameraDistanceInitialized)
 	{
@@ -151,37 +142,36 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 		? FMath::FInterpTo(SmoothedAvailableCameraDistance, RawAvailableCameraDistance, DeltaSeconds, FilterSpeed)
 		: RawAvailableCameraDistance;
 
-	const float AnticipatedAvailableDistance = FMath::Min(
-		SmoothedAvailableCameraDistance,
-		PredictedAvailableCameraDistance);
-	TargetThirdPersonArmLength = FMath::Clamp(
-		AnticipatedAvailableDistance - CameraCollisionMargin,
-		MinimumThirdPersonArmLength,
-		DefaultThirdPersonArmLength);
-	const float InterpSpeed = TargetThirdPersonArmLength < CurrentThirdPersonArmLength
-		? CameraRetractSpeed
-		: CameraExtendSpeed;
-	CurrentThirdPersonArmLength = InterpSpeed > KINDA_SMALL_NUMBER
-		? FMath::FInterpTo(CurrentThirdPersonArmLength, TargetThirdPersonArmLength, DeltaSeconds, InterpSpeed)
-		: TargetThirdPersonArmLength;
+	const bool bNeedsSurroundingProbe = bEnableAutomaticFirstPerson
+		&& (SmoothedAvailableCameraDistance <= FirstPersonExitDistance
+			|| PerspectiveState != EDRCameraPerspectiveState::ThirdPerson);
+	if (bNeedsSurroundingProbe)
+	{
+		SurroundingCameraProbeElapsed += DeltaSeconds;
+		if (!bSurroundingCameraProbeInitialized
+			|| FirstPersonSurroundingProbeInterval <= KINDA_SMALL_NUMBER
+			|| SurroundingCameraProbeElapsed >= FirstPersonSurroundingProbeInterval)
+		{
+			OpenSurroundingCameraPathCount = CountOpenSurroundingCameraPaths();
+			SurroundingCameraProbeElapsed = 0.f;
+			bSurroundingCameraProbeInitialized = true;
+		}
+	}
+	else
+	{
+		OpenSurroundingCameraPathCount = 8;
+		SurroundingCameraProbeElapsed = 0.f;
+		bSurroundingCameraProbeInitialized = false;
+	}
+
+	// 이동 예측과 다중 후보가 실제 Arm 길이를 바꾸면 평범한 전진 중에도 줌이 흔들린다.
+	// Spring Arm은 항상 기본 길이를 유지하고, 중앙 경로의 충돌 거리만 최종 카메라에 적용한다.
+	TargetThirdPersonArmLength = DefaultThirdPersonArmLength;
+	CurrentThirdPersonArmLength = DefaultThirdPersonArmLength;
 	CameraBoom->TargetArmLength = CurrentThirdPersonArmLength;
 
-	const FTransform DesiredCameraTransform =
-		GetDesiredThirdPersonCameraTransform(CurrentThirdPersonArmLength);
-	const float DesiredDistance = FVector::Distance(
-		CollisionOrigin,
-		DesiredCameraTransform.GetLocation());
-	const FVector BestPathDelta = FullBestCameraLocation - CollisionOrigin;
-	const float BestPathDistance = BestPathDelta.Size();
-	const bool bUsingCenterPath = FullBestCameraLocation.Equals(
-		FullThirdPersonTransform.GetLocation(),
-		0.1f);
-	const FVector TargetCameraLocation = bUsingCenterPath
-		? DesiredCameraTransform.GetLocation()
-		: (BestPathDelta.IsNearlyZero()
-			? CollisionOrigin
-			: CollisionOrigin + BestPathDelta.GetSafeNormal()
-				* FMath::Min(BestPathDistance, DesiredDistance));
+	const FTransform& DesiredCameraTransform = FullThirdPersonTransform;
+	const FVector& TargetCameraLocation = CentralCameraLocation;
 
 	if (!bResolvedThirdPersonCameraInitialized)
 	{
@@ -193,11 +183,13 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 		bResolvedThirdPersonCameraInitialized = true;
 	}
 
-	const bool bCurrentPathObstructed =
-		CurrentAvailableCameraDistance + CameraCollisionMargin < DesiredDistance;
+	const bool bCurrentPathObstructed = bCentralCameraPathBlocked;
 	CameraObstructionElapsed = bCurrentPathObstructed
 		? CameraObstructionElapsed + DeltaSeconds
 		: 0.f;
+	CameraClearPathElapsed = bCurrentPathObstructed
+		? 0.f
+		: CameraClearPathElapsed + DeltaSeconds;
 	const bool bCanHoldPreviousLocation =
 		bCurrentPathObstructed
 		&& CameraObstructionElapsed < CameraObstructionConfirmTime
@@ -217,15 +209,19 @@ void UDRPlayerCameraComponent::UpdateCameraSpace(float DeltaSeconds)
 	// 월드 위치를 보간하면 마우스 회전 궤도까지 지연되어 멀미를 유발한다.
 	// 방향은 즉시 따르고, 충돌로 줄어든 거리의 복구만 별도 스칼라로 보간한다.
 	const float TargetDistance = FVector::Distance(CollisionOrigin, TargetCameraLocation);
+	const bool bAllowDistanceRecovery =
+		CameraClearPathElapsed >= CameraCollisionRecoveryDelay;
 	const float ResolvedDistance = TargetDistance < ResolvedThirdPersonCameraDistance
 		? TargetDistance
-		: (CameraCollisionRecoverySpeed > KINDA_SMALL_NUMBER
+		: (!bAllowDistanceRecovery
+			? ResolvedThirdPersonCameraDistance
+			: (CameraCollisionRecoverySpeed > KINDA_SMALL_NUMBER
 			? FMath::FInterpTo(
 				ResolvedThirdPersonCameraDistance,
 				TargetDistance,
 				DeltaSeconds,
 				CameraCollisionRecoverySpeed)
-			: TargetDistance);
+			: TargetDistance));
 	const FVector TargetDirection = (TargetCameraLocation - CollisionOrigin).GetSafeNormal();
 	FVector SafeCandidateLocation = TargetDirection.IsNearlyZero()
 		? CollisionOrigin
@@ -258,7 +254,9 @@ void UDRPlayerCameraComponent::UpdatePerspectiveState(float DeltaSeconds)
 	{
 	case EDRCameraPerspectiveState::ThirdPerson:
 		ApplyResolvedThirdPersonCamera();
-		FirstPersonEnterConditionElapsed = SmoothedAvailableCameraDistance <= FirstPersonEnterDistance
+		FirstPersonEnterConditionElapsed =
+			SmoothedAvailableCameraDistance <= FirstPersonEnterDistance
+			&& OpenSurroundingCameraPathCount < FirstPersonMinimumOpenDirections
 			? FirstPersonEnterConditionElapsed + DeltaSeconds : 0.f;
 		if (FirstPersonEnterConditionElapsed >= FirstPersonEnterHoldTime)
 		{
@@ -303,7 +301,9 @@ void UDRPlayerCameraComponent::UpdatePerspectiveState(float DeltaSeconds)
 
 	case EDRCameraPerspectiveState::FirstPerson:
 		FollowCamera->SetWorldTransform(GetFirstPersonCameraTransform());
-		FirstPersonExitConditionElapsed = SmoothedAvailableCameraDistance >= FirstPersonExitDistance
+		FirstPersonExitConditionElapsed =
+			SmoothedAvailableCameraDistance >= FirstPersonExitDistance
+			|| OpenSurroundingCameraPathCount >= FirstPersonMinimumOpenDirections
 			? FirstPersonExitConditionElapsed + DeltaSeconds : 0.f;
 		if (FirstPersonExitConditionElapsed >= FirstPersonExitHoldTime)
 		{
@@ -435,51 +435,54 @@ FTransform UDRPlayerCameraComponent::GetDesiredThirdPersonCameraTransform(
 float UDRPlayerCameraComponent::EvaluateCameraSpace(
 	const FVector& TraceStart,
 	const FTransform& DesiredCameraTransform,
-	FVector* OutBestCameraLocation,
-	float DeltaSeconds,
-	bool bUpdateAvoidanceSelection)
+	FVector* OutCentralCameraLocation,
+	bool* OutCentralPathBlocked) const
 {
 	const FVector DesiredLocation = DesiredCameraTransform.GetLocation();
 	if (!bEnableCameraCollision)
 	{
-		if (bUpdateAvoidanceSelection)
+		if (OutCentralCameraLocation)
 		{
-			SelectedCameraPathIndex = 0;
-			CameraCenterPathClearElapsed = 0.f;
+			*OutCentralCameraLocation = DesiredLocation;
 		}
-		if (OutBestCameraLocation)
+		if (OutCentralPathBlocked)
 		{
-			*OutBestCameraLocation = DesiredLocation;
+			*OutCentralPathBlocked = false;
 		}
 		return FVector::Distance(TraceStart, DesiredLocation);
 	}
 
 	const FQuat CameraRotation = DesiredCameraTransform.GetRotation();
 	const FVector Right = CameraRotation.GetRightVector();
-	const FVector Up = CameraRotation.GetUpVector();
-	const float HorizontalOffset = FMath::Max(0.f, CameraAvoidanceHorizontalOffset);
-	const float VerticalOffset = FMath::Max(0.f, CameraAvoidanceVerticalOffset);
+	const FVector BaseCameraDelta = DesiredLocation - TraceStart;
+	const float YawStepRadians = FMath::DegreesToRadians(
+		FMath::Max(0.f, CameraAvoidanceYawStepDegrees));
+	const float MaxYawRadians = FMath::DegreesToRadians(
+		FMath::Max(CameraAvoidanceYawStepDegrees, CameraAvoidanceMaxYawDegrees));
+	const float PitchRadians = FMath::DegreesToRadians(
+		FMath::Max(0.f, CameraAvoidancePitchDegrees));
 
-	TArray<FVector, TInlineAllocator<5>> CandidateOffsets;
-	CandidateOffsets.Add(FVector::ZeroVector);
-	CandidateOffsets.Add(Right * HorizontalOffset);
-	CandidateOffsets.Add(-Right * HorizontalOffset);
-	CandidateOffsets.Add(Up * VerticalOffset + Right * HorizontalOffset);
-	CandidateOffsets.Add(Up * VerticalOffset - Right * HorizontalOffset);
+	TArray<FVector, TInlineAllocator<6>> CandidateEnds;
+	CandidateEnds.Add(DesiredLocation);
+	CandidateEnds.Add(TraceStart + FQuat(FVector::UpVector, YawStepRadians).RotateVector(BaseCameraDelta));
+	CandidateEnds.Add(TraceStart + FQuat(FVector::UpVector, -YawStepRadians).RotateVector(BaseCameraDelta));
+	CandidateEnds.Add(TraceStart + FQuat(FVector::UpVector, MaxYawRadians).RotateVector(BaseCameraDelta));
+	CandidateEnds.Add(TraceStart + FQuat(FVector::UpVector, -MaxYawRadians).RotateVector(BaseCameraDelta));
+	const FVector PitchPositive = FQuat(Right, PitchRadians).RotateVector(BaseCameraDelta);
+	const FVector PitchNegative = FQuat(Right, -PitchRadians).RotateVector(BaseCameraDelta);
+	CandidateEnds.Add(TraceStart + (
+		PitchPositive.Z >= PitchNegative.Z ? PitchPositive : PitchNegative));
 
-	TArray<float, TInlineAllocator<5>> AvailableDistances;
-	AvailableDistances.Reserve(CandidateOffsets.Num());
-	TArray<FVector, TInlineAllocator<5>> SafeLocations;
-	SafeLocations.Reserve(CandidateOffsets.Num());
-	TArray<bool, TInlineAllocator<5>> BlockedPaths;
-	BlockedPaths.Reserve(CandidateOffsets.Num());
-	float BestAvailableDistance = -TNumericLimits<float>::Max();
-	int32 BestPathIndex = 0;
+	TArray<float, TInlineAllocator<6>> AvailableDistances;
+	AvailableDistances.Reserve(CandidateEnds.Num());
+	TArray<FVector, TInlineAllocator<6>> SafeLocations;
+	SafeLocations.Reserve(CandidateEnds.Num());
+	TArray<bool, TInlineAllocator<6>> BlockedPaths;
+	BlockedPaths.Reserve(CandidateEnds.Num());
 
-	for (int32 CandidateIndex = 0; CandidateIndex < CandidateOffsets.Num(); ++CandidateIndex)
+	for (int32 CandidateIndex = 0; CandidateIndex < CandidateEnds.Num(); ++CandidateIndex)
 	{
-		const FVector& CandidateOffset = CandidateOffsets[CandidateIndex];
-		const FVector CandidateEnd = DesiredLocation + CandidateOffset;
+		const FVector& CandidateEnd = CandidateEnds[CandidateIndex];
 		FVector SafeLocation = CandidateEnd;
 		const bool bBlocked = SweepCameraPath(
 			TraceStart,
@@ -490,42 +493,6 @@ float UDRPlayerCameraComponent::EvaluateCameraSpace(
 		AvailableDistances.Add(AvailableDistance);
 		SafeLocations.Add(SafeLocation);
 		BlockedPaths.Add(bBlocked);
-		if (AvailableDistance > BestAvailableDistance)
-		{
-			BestAvailableDistance = AvailableDistance;
-			BestPathIndex = CandidateIndex;
-		}
-	}
-
-	if (bUpdateAvoidanceSelection && AvailableDistances.Num() > 0)
-	{
-		SelectedCameraPathIndex = FMath::Clamp(
-			SelectedCameraPathIndex,
-			0,
-			AvailableDistances.Num() - 1);
-
-		if (SelectedCameraPathIndex != 0 && !BlockedPaths[0])
-		{
-			CameraCenterPathClearElapsed += DeltaSeconds;
-			if (CameraCenterPathClearElapsed >= CameraCenterReturnHoldTime)
-			{
-				SelectedCameraPathIndex = 0;
-				CameraCenterPathClearElapsed = 0.f;
-			}
-		}
-		else
-		{
-			CameraCenterPathClearElapsed = 0.f;
-		}
-
-		if (BestPathIndex != SelectedCameraPathIndex
-			&& AvailableDistances[BestPathIndex]
-				>= AvailableDistances[SelectedCameraPathIndex]
-					+ CameraAvoidanceSwitchDistance)
-		{
-			SelectedCameraPathIndex = BestPathIndex;
-			CameraCenterPathClearElapsed = 0.f;
-		}
 	}
 
 	AvailableDistances.Sort();
@@ -534,12 +501,13 @@ float UDRPlayerCameraComponent::EvaluateCameraSpace(
 		? AvailableDistances[MiddleIndex]
 		: FVector::Distance(TraceStart, DesiredLocation);
 
-	if (OutBestCameraLocation)
+	if (OutCentralCameraLocation && SafeLocations.Num() > 0)
 	{
-		const int32 OutputPathIndex = bUpdateAvoidanceSelection
-			? FMath::Clamp(SelectedCameraPathIndex, 0, SafeLocations.Num() - 1)
-			: BestPathIndex;
-		*OutBestCameraLocation = SafeLocations[OutputPathIndex];
+		*OutCentralCameraLocation = SafeLocations[0];
+	}
+	if (OutCentralPathBlocked && BlockedPaths.Num() > 0)
+	{
+		*OutCentralPathBlocked = BlockedPaths[0];
 	}
 	return MedianAvailableDistance;
 }
@@ -617,45 +585,50 @@ bool UDRPlayerCameraComponent::IsCameraLocationBlocked(
 
 FVector UDRPlayerCameraComponent::GetCameraCollisionOrigin() const
 {
-	if (FirstPersonCameraAnchor.IsValid())
+	// 3인칭 충돌은 Spring Arm 피벗을 기준으로 해야 이동 랙/데드존과 같은 좌표계를 쓴다.
+	// 별도 1인칭 앵커를 사용하면 두 컴포넌트의 미세한 이동 차이가 거리 흔들림으로 증폭된다.
+	if (CameraBoom.IsValid())
 	{
-		return FirstPersonCameraAnchor->GetComponentLocation();
+		return CameraBoom->GetComponentLocation();
 	}
-	return CameraBoom.IsValid()
-		? CameraBoom->GetComponentLocation()
+	return FirstPersonCameraAnchor.IsValid()
+		? FirstPersonCameraAnchor->GetComponentLocation()
 		: GetOwner()->GetActorLocation();
 }
 
-FVector UDRPlayerCameraComponent::GetGroundAwarePredictionOffset() const
+int32 UDRPlayerCameraComponent::CountOpenSurroundingCameraPaths() const
 {
-	if (!MovementComponent.IsValid() || CameraPredictionTime <= KINDA_SMALL_NUMBER)
-	{
-		return FVector::ZeroVector;
-	}
+	const FVector TraceStart = GetCameraCollisionOrigin();
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const AController* Controller = IsValid(OwnerPawn)
+		? OwnerPawn->GetController()
+		: nullptr;
+	const float BaseYaw = IsValid(Controller)
+		? Controller->GetControlRotation().Yaw
+		: GetOwner()->GetActorRotation().Yaw;
+	const float ProbeDistance = FMath::Max(0.f, FirstPersonSurroundingProbeDistance);
+	const float RequiredOpenDistance = FMath::Min(
+		FMath::Max(0.f, FirstPersonSurroundingOpenDistance),
+		ProbeDistance);
 
-	FVector PredictionOffset = MovementComponent->Velocity * CameraPredictionTime;
-	PredictionOffset.Z = 0.f;
-	if (CameraPredictionMaxDistance > KINDA_SMALL_NUMBER)
+	int32 OpenPathCount = 0;
+	for (int32 DirectionIndex = 0; DirectionIndex < 8; ++DirectionIndex)
 	{
-		PredictionOffset = PredictionOffset.GetClampedToMaxSize(CameraPredictionMaxDistance);
-	}
-
-	const FFindFloorResult& CurrentFloor = MovementComponent->CurrentFloor;
-	if (CurrentFloor.IsWalkableFloor())
-	{
-		const FVector FloorNormal = CurrentFloor.HitResult.ImpactNormal;
-		if (FloorNormal.Z > 0.2f)
+		const float DirectionYaw = BaseYaw + DirectionIndex * 45.f;
+		const FVector Direction = FRotator(0.f, DirectionYaw, 0.f).Vector();
+		const FVector TraceEnd = TraceStart + Direction * ProbeDistance;
+		FVector SafeLocation = TraceEnd;
+		SweepCameraPath(
+			TraceStart,
+			TraceEnd,
+			CameraCollisionProbeSize,
+			SafeLocation);
+		if (FVector::Distance(TraceStart, SafeLocation) >= RequiredOpenDistance)
 		{
-			PredictionOffset.Z = -(
-				FloorNormal.X * PredictionOffset.X
-				+ FloorNormal.Y * PredictionOffset.Y) / FloorNormal.Z;
-			PredictionOffset.Z = FMath::Clamp(
-				PredictionOffset.Z,
-				-CameraPredictionMaxDistance,
-				CameraPredictionMaxDistance);
+			++OpenPathCount;
 		}
 	}
-	return PredictionOffset;
+	return OpenPathCount;
 }
 
 void UDRPlayerCameraComponent::ApplyResolvedThirdPersonCamera()
@@ -699,12 +672,13 @@ void UDRPlayerCameraComponent::DrawCameraDebug() const
 		0.f,
 		FColor::Cyan,
 		FString::Printf(
-			TEXT("Camera Median: %.1f Predicted: %.1f Filtered: %.1f Arm: %.1f Resolved: %.1f State: %s"),
+			TEXT("Camera Median: %.1f Filtered: %.1f Arm: %.1f Resolved: %.1f Clear: %.2f Open: %d State: %s"),
 			CurrentAvailableCameraDistance,
-			PredictedAvailableCameraDistance,
 			SmoothedAvailableCameraDistance,
 			CurrentThirdPersonArmLength,
 			ResolvedThirdPersonCameraDistance,
+			CameraClearPathElapsed,
+			OpenSurroundingCameraPathCount,
 			StateNames[FMath::Clamp(StateIndex, 0, UE_ARRAY_COUNT(StateNames) - 1)]));
 }
 

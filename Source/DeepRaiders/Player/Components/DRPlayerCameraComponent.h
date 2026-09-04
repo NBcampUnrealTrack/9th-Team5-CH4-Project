@@ -71,9 +71,8 @@ private:
 	float EvaluateCameraSpace(
 		const FVector& TraceStart,
 		const FTransform& DesiredCameraTransform,
-		FVector* OutBestCameraLocation = nullptr,
-		float DeltaSeconds = 0.f,
-		bool bUpdateAvoidanceSelection = false);
+		FVector* OutCentralCameraLocation = nullptr,
+		bool* OutCentralPathBlocked = nullptr) const;
 	bool SweepCameraPath(
 		const FVector& TraceStart,
 		const FVector& TraceEnd,
@@ -81,7 +80,7 @@ private:
 		FVector& OutSafeLocation) const;
 	bool IsCameraLocationBlocked(const FVector& CameraLocation) const;
 	FVector GetCameraCollisionOrigin() const;
-	FVector GetGroundAwarePredictionOffset() const;
+	int32 CountOpenSurroundingCameraPaths() const;
 	void ApplyResolvedThirdPersonCamera();
 	FTransform GetFirstPersonCameraTransform() const;
 	void DrawCameraDebug() const;
@@ -124,19 +123,19 @@ private:
 
 	/** 좁은 공간이 이 시간 동안 유지되어야 1인칭 전환을 시작한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float FirstPersonEnterHoldTime = 0.45f;
+	float FirstPersonEnterHoldTime = 0.10f;
 
 	/** 넓은 공간이 이 시간 동안 유지되어야 3인칭 복귀를 시작한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float FirstPersonExitHoldTime = 0.65f;
+	float FirstPersonExitHoldTime = 0.12f;
 
 	/** 좁은 3인칭에서 1인칭으로 이동하는 데 걸리는 시간. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0"))
-	float FirstPersonEnterBlendDuration = 0.35f;
+	float FirstPersonEnterBlendDuration = 0.18f;
 
 	/** 1인칭에서 현재의 가까운 3인칭으로 복귀하는 데 걸리는 시간. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0"))
-	float FirstPersonExitBlendDuration = 0.55f;
+	float FirstPersonExitBlendDuration = 0.25f;
 
 	/** 실제 카메라가 이 거리보다 가까워지면 로컬 캐릭터 본체를 숨긴다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
@@ -146,46 +145,27 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float CharacterShowDistance = 110.f;
 
-	/** 충돌 전에 선제적으로 줄일 기본 3인칭 거리. ConfigureCamera 시 SpringArm의 기존 값으로 초기화한다. */
+	/** 기본 3인칭 거리. ConfigureCamera 시 SpringArm의 기존 값으로 초기화한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float DefaultThirdPersonArmLength = 450.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float MinimumThirdPersonArmLength = 90.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float CameraRetractSpeed = 12.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float CameraExtendSpeed = 4.f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float CameraCollisionMargin = 8.f;
 
-	/** 작은 돌기 하나에 카메라가 당겨지지 않도록 검사할 좌우 후보 위치 간격. */
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float CameraAvoidanceHorizontalOffset = 45.f;
+	/** 실제 공간 크기를 판정하기 위해 검사할 첫 좌우 각도. 카메라 위치에는 적용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
+	float CameraAvoidanceYawStepDegrees = 15.f;
 
-	/** 낮은 장애물을 위쪽으로 피하기 위한 후보 위치 간격. */
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float CameraAvoidanceVerticalOffset = 35.f;
+	/** 실제 공간 크기를 판정하기 위해 검사할 최대 좌우 각도. 카메라 위치에는 적용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
+	float CameraAvoidanceMaxYawDegrees = 30.f;
 
-	/** 다른 회피 경로가 이 거리 이상 더 확보될 때만 후보를 변경한다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float CameraAvoidanceSwitchDistance = 40.f;
-
-	/** 중앙 경로가 다시 열린 뒤 중앙 카메라로 돌아가기 전 유지 시간. */
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float CameraCenterReturnHoldTime = 0.15f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	float CameraPredictionTime = 0.25f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float CameraPredictionMaxDistance = 175.f;
+	/** 실제 공간 크기를 판정하기 위해 검사할 위쪽 각도. 카메라 위치에는 적용하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
+	float CameraAvoidancePitchDegrees = 15.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float CameraDistanceShrinkFilterSpeed = 15.f;
+	float CameraDistanceShrinkFilterSpeed = 30.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float CameraDistanceExpandFilterSpeed = 4.f;
@@ -196,7 +176,27 @@ private:
 
 	/** 충돌로 가까워진 카메라가 다시 멀어지는 속도. 회전 방향에는 적용하지 않는다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float CameraCollisionRecoverySpeed = 3.f;
+	float CameraCollisionRecoverySpeed = 6.f;
+
+	/** 이 시간 동안 충돌 경로가 연속으로 열려 있어야 카메라 거리를 다시 늘린다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float CameraCollisionRecoveryDelay = 0.20f;
+
+	/** 1인칭 판정을 위해 캐릭터 주변을 검사할 수평 거리. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float FirstPersonSurroundingProbeDistance = 140.f;
+
+	/** 이 거리 이상 확보된 주변 경로를 열린 방향으로 센다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float FirstPersonSurroundingOpenDistance = 100.f;
+
+	/** 이 개수 이상의 주변 방향이 열려 있으면 단일 벽으로 판단해 1인칭 진입을 막는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "1", ClampMax = "8", UIMin = "1", UIMax = "8"))
+	int32 FirstPersonMinimumOpenDirections = 3;
+
+	/** 주변 8방향 검사를 갱신하는 주기. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float FirstPersonSurroundingProbeInterval = 0.05f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Debug")
 	bool bDrawCameraDebug = false;
@@ -263,15 +263,16 @@ private:
 	float TargetThirdPersonArmLength = 450.f;
 	float CurrentAvailableCameraDistance = 450.f;
 	float RawAvailableCameraDistance = 450.f;
-	float PredictedAvailableCameraDistance = 450.f;
 	float SmoothedAvailableCameraDistance = 450.f;
 	float ResolvedThirdPersonCameraDistance = 450.f;
 	FVector ResolvedThirdPersonCameraLocation = FVector::ZeroVector;
 	FQuat ResolvedThirdPersonCameraRotation = FQuat::Identity;
 	bool bResolvedThirdPersonCameraInitialized = false;
 	float CameraObstructionElapsed = 0.f;
-	float CameraCenterPathClearElapsed = 0.f;
-	int32 SelectedCameraPathIndex = 0;
+	float CameraClearPathElapsed = 0.f;
+	int32 OpenSurroundingCameraPathCount = 8;
+	float SurroundingCameraProbeElapsed = 0.f;
+	bool bSurroundingCameraProbeInitialized = false;
 	FVector TransitionStartCameraLocation = FVector::ZeroVector;
 	FQuat TransitionStartCameraRotation = FQuat::Identity;
 };
