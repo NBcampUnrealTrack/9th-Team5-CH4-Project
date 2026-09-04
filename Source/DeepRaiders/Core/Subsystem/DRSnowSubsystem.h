@@ -2,19 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowAddPipeline.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowRemovalPipeline.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVoxelContainmentEvaluator.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowSurfaceEditor.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DRSnowSubsystem.generated.h"
 
 class AVoxelWorld;
+class FDRSnowAddPipeline;
 class FDRSnowMaterialPatchApplyQueue;
+class FDRSnowRemovalPipeline;
+class FDRSnowVoxelContainmentEvaluator;
+enum class EDRSnowRemovalPath : uint8;
 
 // UDRSnowSubsystem: 게임 내 눈 지형 및 점령 시스템의 메인 창구
 //
@@ -34,12 +35,15 @@ public:
 	UDRSnowSubsystem();
 	virtual ~UDRSnowSubsystem() override;
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
 	// 눈 추가
 	// 서버: 복셀 지형을 쌓고, 팀 점령 부피와 색상(Material)을 기록합니다.
-	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
+	FDRSnowAddResult AddSnow(
+		const FDRSnowSurfaceAddRequest& Request,
+		TFunction<void(float)> DirectionalCompletion = {});
 
 	// 클라이언트: 서버에서 확정된 눈 추가 작업을 수신하여 로컬 상태에 반영합니다.
 	FDRSnowAddResult ApplyReplicatedSnowAdd(
@@ -112,26 +116,31 @@ private:
 	struct FPendingRemovalPrediction
 	{
 		FDRSnowPredictionKey PredictionKey;
+		FDRSnowSurfaceRemoveRequest Request;
 		FDRSnowSurfaceEditResult SurfaceEdit;
-		EDRSnowRemovalPath RemovalPath = EDRSnowRemovalPath::Standard;
+		EDRSnowRemovalPath RemovalPath;
 	};
 
 	FDRSnowRemoveResult PredictSnowRemovalInternal(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath);
 
-	// 서버 RPC와 일치하는 예측 결과를 꺼내옵니다 (꺼낸 항목은 목록에서 삭제).
-	bool ConsumeMatchingRemovalPrediction(
+	// 서버 RPC와 일치하는 예측 결과의 인덱스를 반환합니다.
+	int32 FindMatchingRemovalPrediction(
 		const FDRSnowSurfaceRemoveRequest& Request,
-		EDRSnowRemovalPath RemovalPath,
-		FPendingRemovalPrediction& OutPrediction);
+		EDRSnowRemovalPath RemovalPath) const;
 
-	// 예측했던 지형 위에 서버가 확정한 실제 양과 팀 색상을 적용합니다.
-	void ConfirmPredictedRemoval(
-		const FPendingRemovalPrediction& Prediction,
-		const FDRSnowSurfaceRemoveRequest& AuthoritativeRequest,
+	// authoritative 작업 전에 모든 로컬 예측을 역순 롤백하고 목록을 분리합니다.
+	TArray<FPendingRemovalPrediction> SuspendRemovalPredictions();
+
+	// authoritative 작업 이후 아직 응답받지 않은 예측을 원래 순서대로 다시 적용합니다.
+	void ResumeRemovalPredictions(TArray<FPendingRemovalPrediction>&& Predictions);
+
+	bool ApplyReplicatedSnowRemovalInternal(
+		const FDRSnowSurfaceRemoveRequest& Request,
 		float AuthoritativeAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch);
+		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
+		EDRSnowRemovalPath RemovalPath);
 
 	// 게임 리셋 시 대기 중이던 예측 목록을 비웁니다.
 	void ResetRemovalPredictions();
@@ -146,20 +155,22 @@ private:
 	FDRSnowSurfaceEditor SurfaceEditor;
 
 	// 지형이 변했을 때 플레이어가 눈 속에 묻혔는지 감지하는 판정기
-	TUniquePtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
+	TSharedPtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
 
 	// 난입 플레이어용 맵 상태 압축 및 복원 직렬화기
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
 
 	// 눈 파내기 단계별 조율자 (지형 파기 -> 부피 삭감 -> 색상 재도색)
-	TUniquePtr<FDRSnowRemovalPipeline> RemovalPipeline;
+	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
 
 	// 눈 쌓기 단계별 조율자 (지형 생성 -> 부피 누적 -> 색상 적용)
-	TUniquePtr<FDRSnowAddPipeline> AddPipeline;
+	TSharedPtr<FDRSnowAddPipeline> AddPipeline;
 
 	// 네트워크로 받은 팀 색상 패치를 차례대로 안전하게 렌더링에 적용하는 큐
 	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
 
 	// 서버 확인을 기다리는 클라이언트 예측 목록 (최대 32개)
 	TArray<FPendingRemovalPrediction> PendingRemovalPredictions;
+	bool bPredictionCapacityWarningLogged = false;
+	int32 SnowStateGeneration = 0;
 };

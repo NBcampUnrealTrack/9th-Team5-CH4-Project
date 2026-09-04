@@ -265,7 +265,9 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request, &MaterialPatch)
 				: SnowSubsystem->RemoveSnow(Request, &MaterialPatch);
 			RemovedAmount = RemoveResult.RemovedAmount;
-			if (RemovedAmount > 0.f)
+			// A rejected client prediction still needs an authoritative acknowledgement.
+			// Otherwise the client has no operation to trigger prediction rollback.
+			if (RemovedAmount > 0.f || Request.PredictionKey.IsValid())
 			{
 				if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
 				{

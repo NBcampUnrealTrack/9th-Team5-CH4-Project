@@ -73,13 +73,18 @@ FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::Replay(
 	{
 		return Result;
 	}
-	return ConfirmPrediction(
-		World,
-		Request,
-		EditResult,
-		AuthoritativeAmount,
-		AuthoritativeMaterialPatch,
-		RemovalPath);
+
+	ApplyRemovedSurfaceEdit(World, Request, EditResult, AuthoritativeAmount);
+	Result.VoxelWorld = EditResult.VoxelWorld;
+	if (AuthoritativeMaterialPatch)
+	{
+		Result.bApplied = true;
+		return Result;
+	}
+
+	// 패치 플래그가 없는 구형 record만 클라이언트의 로컬 Store로 다시 칠한다.
+	Result.bApplied = RepaintWithoutPatch(Request, EditResult, RemovalPath);
+	return Result;
 }
 
 FDRSnowSurfaceEditResult FDRSnowRemovalPipeline::PredictSurface(
@@ -91,35 +96,6 @@ FDRSnowSurfaceEditResult FDRSnowRemovalPipeline::PredictSurface(
 	return IsValid(World)
 		? RemoveSurface(Request, RemovalPath)
 		: FDRSnowSurfaceEditResult();
-}
-
-FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::ConfirmPrediction(
-	UWorld* World,
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const FDRSnowSurfaceEditResult& PredictedSurfaceEdit,
-	const float AuthoritativeAmount,
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
-	const EDRSnowRemovalPath RemovalPath)
-{
-	FDRSnowRemovalReplayResult Result;
-	SurfaceEditor.SetWorld(World);
-	if (!IsValid(World) || AuthoritativeAmount <= 0.f ||
-		PredictedSurfaceEdit.AppliedAmount <= 0.f)
-	{
-		return Result;
-	}
-
-	ApplyRemovedSurfaceEdit(World, Request, PredictedSurfaceEdit, AuthoritativeAmount);
-	Result.VoxelWorld = PredictedSurfaceEdit.VoxelWorld;
-	if (AuthoritativeMaterialPatch)
-	{
-		Result.bApplied = true;
-		return Result;
-	}
-
-	// 패치 플래그가 없는 구형 record만 클라이언트의 로컬 Store로 다시 칠한다.
-	Result.bApplied = RepaintWithoutPatch(Request, PredictedSurfaceEdit, RemovalPath);
-	return Result;
 }
 
 FDRSnowSurfaceEditResult FDRSnowRemovalPipeline::RemoveSurface(

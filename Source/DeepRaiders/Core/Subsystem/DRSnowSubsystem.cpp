@@ -3,9 +3,12 @@
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowAddPipeline.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowMaterialPatchApplyQueue.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowRemovalPipeline.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVoxelContainmentEvaluator.h"
 #include "Engine/World.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogDRSnowPrediction, Log, All);
 
 namespace
 {
@@ -14,10 +17,10 @@ namespace
 
 UDRSnowSubsystem::UDRSnowSubsystem()
 {
-	ContainmentEvaluator = MakeUnique<FDRSnowVoxelContainmentEvaluator>();
+	ContainmentEvaluator = MakeShared<FDRSnowVoxelContainmentEvaluator>();
 	SnapshotSerializer = MakeUnique<FDRSnowSnapshotSerializer>(VolumeStore);
-	RemovalPipeline = MakeUnique<FDRSnowRemovalPipeline>(SurfaceEditor, OwnershipStore, VolumeStore);
-	AddPipeline = MakeUnique<FDRSnowAddPipeline>(
+	RemovalPipeline = MakeShared<FDRSnowRemovalPipeline>(SurfaceEditor, OwnershipStore, VolumeStore);
+	AddPipeline = MakeShared<FDRSnowAddPipeline>(
 		SurfaceEditor,
 		OwnershipStore,
 		VolumeStore,
@@ -27,9 +30,20 @@ UDRSnowSubsystem::UDRSnowSubsystem()
 
 UDRSnowSubsystem::~UDRSnowSubsystem() = default;
 
+void UDRSnowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	AddPipeline->Reset(SnowStateGeneration);
+}
+
 void UDRSnowSubsystem::Deinitialize()
 {
 	ResetRemovalPredictions();
+	++SnowStateGeneration;
+	if (AddPipeline)
+	{
+		AddPipeline->Reset(SnowStateGeneration);
+	}
 	if (MaterialPatchApplyQueue)
 	{
 		MaterialPatchApplyQueue->Reset();
@@ -44,16 +58,21 @@ bool UDRSnowSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return IsValid(World) && World->IsGameWorld();
 }
 
-FDRSnowAddResult UDRSnowSubsystem::AddSnow(const FDRSnowSurfaceAddRequest& Request)
+FDRSnowAddResult UDRSnowSubsystem::AddSnow(
+	const FDRSnowSurfaceAddRequest& Request,
+	TFunction<void(float)> DirectionalCompletion)
 {
-	return AddPipeline->Execute(GetWorld(), Request);
+	return AddPipeline->Execute(GetWorld(), Request, MoveTemp(DirectionalCompletion));
 }
 
 FDRSnowAddResult UDRSnowSubsystem::ApplyReplicatedSnowAdd(
 	const FDRSnowSurfaceAddRequest& Request,
 	const float AppliedAmount)
 {
-	return AddPipeline->Replay(GetWorld(), Request, AppliedAmount);
+	TArray<FPendingRemovalPrediction> SuspendedPredictions = SuspendRemovalPredictions();
+	const FDRSnowAddResult Result = AddPipeline->Replay(GetWorld(), Request, AppliedAmount);
+	ResumeRemovalPredictions(MoveTemp(SuspendedPredictions));
+	return Result;
 }
 
 FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnow(
@@ -115,6 +134,20 @@ FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowRemovalInternal(
 		return Result;
 	}
 
+	if (PendingRemovalPredictions.Num() >= MaxPendingRemovalPredictions)
+	{
+		if (!bPredictionCapacityWarningLogged)
+		{
+			UE_LOG(
+				LogDRSnowPrediction,
+				Warning,
+				TEXT("Snow removal prediction capacity reached (%d). New requests will wait for authoritative replay."),
+				MaxPendingRemovalPredictions);
+			bPredictionCapacityWarningLogged = true;
+		}
+		return Result;
+	}
+
 	FDRSnowSurfaceEditResult SurfaceEdit = RemovalPipeline->PredictSurface(
 		World,
 		Request,
@@ -125,31 +158,18 @@ FDRSnowRemoveResult UDRSnowSubsystem::PredictSnowRemovalInternal(
 		return Result;
 	}
 
-	if (PendingRemovalPredictions.Num() >= MaxPendingRemovalPredictions)
-	{
-		PendingRemovalPredictions.RemoveAt(
-			0,
-			PendingRemovalPredictions.Num() - MaxPendingRemovalPredictions + 1);
-	}
-
 	FPendingRemovalPrediction& Prediction = PendingRemovalPredictions.AddDefaulted_GetRef();
 	Prediction.PredictionKey = Request.PredictionKey;
+	Prediction.Request = Request;
 	Prediction.SurfaceEdit = MoveTemp(SurfaceEdit);
 	Prediction.RemovalPath = RemovalPath;
 	return Result;
 }
 
-bool UDRSnowSubsystem::ConsumeMatchingRemovalPrediction(
+int32 UDRSnowSubsystem::FindMatchingRemovalPrediction(
 	const FDRSnowSurfaceRemoveRequest& Request,
-	const EDRSnowRemovalPath RemovalPath,
-	FPendingRemovalPrediction& OutPrediction)
+	const EDRSnowRemovalPath RemovalPath) const
 {
-	UWorld* World = GetWorld();
-	if (!IsValid(World) || World->GetNetMode() != NM_Client)
-	{
-		return false;
-	}
-
 	for (int32 Index = 0; Index < PendingRemovalPredictions.Num(); ++Index)
 	{
 		const FPendingRemovalPrediction& Candidate = PendingRemovalPredictions[Index];
@@ -159,37 +179,97 @@ bool UDRSnowSubsystem::ConsumeMatchingRemovalPrediction(
 			continue;
 		}
 
-		OutPrediction = MoveTemp(PendingRemovalPredictions[Index]);
-		PendingRemovalPredictions.RemoveAt(Index);
-		return true;
+		return Index;
 	}
-	return false;
+	return INDEX_NONE;
 }
 
-void UDRSnowSubsystem::ConfirmPredictedRemoval(
-	const FPendingRemovalPrediction& Prediction,
-	const FDRSnowSurfaceRemoveRequest& AuthoritativeRequest,
-	const float AuthoritativeAmount,
-	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
+TArray<UDRSnowSubsystem::FPendingRemovalPrediction> UDRSnowSubsystem::SuspendRemovalPredictions()
 {
-	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->ConfirmPrediction(
-		GetWorld(),
-		AuthoritativeRequest,
-		Prediction.SurfaceEdit,
-		AuthoritativeAmount,
-		AuthoritativeMaterialPatch,
-		Prediction.RemovalPath);
+	TArray<FPendingRemovalPrediction> SuspendedPredictions = MoveTemp(PendingRemovalPredictions);
+	PendingRemovalPredictions.Reset();
+
+	for (int32 Index = SuspendedPredictions.Num() - 1; Index >= 0; --Index)
+	{
+		const FDRSnowSurfaceEditResult& SurfaceEdit = SuspendedPredictions[Index].SurfaceEdit;
+		const int32 RestoredVoxelCount = SurfaceEditor.RestoreSurfaceEdit(SurfaceEdit);
+		if (!SurfaceEdit.ModifiedValues.IsEmpty() &&
+			RestoredVoxelCount != SurfaceEdit.ModifiedValues.Num())
+		{
+			UE_LOG(
+				LogDRSnowPrediction,
+				Warning,
+				TEXT("Snow prediction rollback restored %d/%d voxels for key %d:%d; newer authoritative edits were preserved."),
+				RestoredVoxelCount,
+				SurfaceEdit.ModifiedValues.Num(),
+				SuspendedPredictions[Index].PredictionKey.OwnerPlayerId,
+				SuspendedPredictions[Index].PredictionKey.LocalSequence);
+		}
+	}
+	return SuspendedPredictions;
+}
+
+void UDRSnowSubsystem::ResumeRemovalPredictions(
+	TArray<FPendingRemovalPrediction>&& Predictions)
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || World->GetNetMode() != NM_Client)
+	{
+		return;
+	}
+
+	PendingRemovalPredictions.Reserve(Predictions.Num());
+	for (FPendingRemovalPrediction& Prediction : Predictions)
+	{
+		Prediction.SurfaceEdit = RemovalPipeline->PredictSurface(
+			World,
+			Prediction.Request,
+			Prediction.RemovalPath);
+		PendingRemovalPredictions.Add(MoveTemp(Prediction));
+	}
+	bPredictionCapacityWarningLogged = false;
+}
+
+bool UDRSnowSubsystem::ApplyReplicatedSnowRemovalInternal(
+	const FDRSnowSurfaceRemoveRequest& Request,
+	const float AuthoritativeAmount,
+	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
+	const EDRSnowRemovalPath RemovalPath)
+{
+	const int32 MatchingPredictionIndex = FindMatchingRemovalPrediction(Request, RemovalPath);
+	TArray<FPendingRemovalPrediction> SuspendedPredictions = SuspendRemovalPredictions();
+	if (MatchingPredictionIndex != INDEX_NONE)
+	{
+		SuspendedPredictions.RemoveAt(MatchingPredictionIndex);
+	}
+
+	FDRSnowRemovalReplayResult ReplayResult;
+	if (AuthoritativeAmount > 0.f)
+	{
+		ReplayResult = RemovalPipeline->Replay(
+			GetWorld(),
+			Request,
+			AuthoritativeAmount,
+			AuthoritativeMaterialPatch,
+			RemovalPath);
+	}
 	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
 	{
 		MaterialPatchApplyQueue->Enqueue(
 			ReplayResult.VoxelWorld.Get(),
 			*AuthoritativeMaterialPatch);
 	}
+
+	ResumeRemovalPredictions(MoveTemp(SuspendedPredictions));
+	return AuthoritativeAmount <= 0.f
+		? Request.PredictionKey.IsValid()
+		: ReplayResult.bApplied;
 }
 
 void UDRSnowSubsystem::ResetRemovalPredictions()
 {
 	PendingRemovalPredictions.Reset();
+	bPredictionCapacityWarningLogged = false;
 }
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
@@ -197,33 +277,11 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
-	FPendingRemovalPrediction Prediction;
-	if (ConsumeMatchingRemovalPrediction(
-		Request,
-		EDRSnowRemovalPath::Standard,
-		Prediction))
-	{
-		ConfirmPredictedRemoval(
-			Prediction,
-			Request,
-			AppliedAmount,
-			AuthoritativeMaterialPatch);
-		return true;
-	}
-
-	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
-		GetWorld(),
+	return ApplyReplicatedSnowRemovalInternal(
 		Request,
 		AppliedAmount,
 		AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath::Standard);
-	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
-	{
-		MaterialPatchApplyQueue->Enqueue(
-			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch);
-	}
-	return ReplayResult.bApplied;
 }
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
@@ -231,33 +289,11 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
 	const float AppliedAmount,
 	const FDRSnowMaterialPatch* AuthoritativeMaterialPatch)
 {
-	FPendingRemovalPrediction Prediction;
-	if (ConsumeMatchingRemovalPrediction(
-		Request,
-		EDRSnowRemovalPath::Absorb,
-		Prediction))
-	{
-		ConfirmPredictedRemoval(
-			Prediction,
-			Request,
-			AppliedAmount,
-			AuthoritativeMaterialPatch);
-		return true;
-	}
-
-	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
-		GetWorld(),
+	return ApplyReplicatedSnowRemovalInternal(
 		Request,
 		AppliedAmount,
 		AuthoritativeMaterialPatch,
 		EDRSnowRemovalPath::Absorb);
-	if (ReplayResult.bApplied && AuthoritativeMaterialPatch)
-	{
-		MaterialPatchApplyQueue->Enqueue(
-			ReplayResult.VoxelWorld.Get(),
-			*AuthoritativeMaterialPatch);
-	}
-	return ReplayResult.bApplied;
 }
 
 int32 UDRSnowSubsystem::GetDominantTeamAtLocation(FVector Location) const
@@ -299,6 +335,8 @@ void UDRSnowSubsystem::ResetCheckpoints()
 void UDRSnowSubsystem::ResetSnowState()
 {
 	ResetRemovalPredictions();
+	++SnowStateGeneration;
+	AddPipeline->Reset(SnowStateGeneration);
 	ResetCheckpoints();
 	VolumeStore.Reset();
 	OwnershipStore.Reset();

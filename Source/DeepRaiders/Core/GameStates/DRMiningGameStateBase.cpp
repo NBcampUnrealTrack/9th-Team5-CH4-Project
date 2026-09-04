@@ -546,7 +546,11 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Reco
 bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record)
 {
 	const FDRSnowRemoveOperation& Operation = Record.RemoveOperation;
-	if (Operation.Radius <= 0.f || Operation.RequestedAmount <= 0.f || Operation.AppliedAmount <= 0.f)
+	const bool bIsRejectedPrediction =
+		Operation.AppliedAmount == 0.f && Operation.PredictionKey.IsValid();
+	if (Operation.Radius <= 0.f || Operation.RequestedAmount <= 0.f ||
+		Operation.AppliedAmount < 0.f ||
+		(Operation.AppliedAmount == 0.f && !bIsRejectedPrediction))
 	{
 		return false;
 	}

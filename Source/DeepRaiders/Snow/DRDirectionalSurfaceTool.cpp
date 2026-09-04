@@ -1,10 +1,43 @@
 #include "DRDirectionalSurfaceTool.h"
 
+#include "VoxelAsyncWork.h"
 #include "VoxelData/VoxelDataImpl.inl"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
 #include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelWorld.h"
+
+namespace
+{
+class FDRDirectionalSurfaceEditWork final : public FVoxelAsyncWork
+{
+public:
+	FDRDirectionalSurfaceEditWork(AVoxelWorld& VoxelWorld, TFunction<void(FVoxelData&)>&& InWork)
+		: FVoxelAsyncWork(TEXT("DR Directional Surface Edit"), 1e9, true)
+		, Data(VoxelWorld.GetDataSharedPtr())
+		, Work(MoveTemp(InWork))
+	{
+	}
+
+	virtual uint32 GetPriority() const override
+	{
+		return 0;
+	}
+
+	virtual void DoWork() override
+	{
+		const auto PinnedData = Data.Pin();
+		if (PinnedData.IsValid())
+		{
+			Work(*PinnedData);
+		}
+	}
+
+private:
+	TVoxelWeakPtr<FVoxelData> Data;
+	TFunction<void(FVoxelData&)> Work;
+};
+}
 
 static float GetSmoothFalloffWeight(const float Alpha)
 {
@@ -301,6 +334,87 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 	}
 
 	return GetModifiedValueAmount(ModifiedValues);
+}
+
+bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
+	AVoxelWorld* VoxelWorld,
+	const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
+	const float DistanceDivisor,
+	const bool bAdd,
+	FDRDirectionalSurfaceEditComplete Completion)
+{
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || DistanceDivisor <= 0.f ||
+		SurfaceFootprint.Voxels->IsEmpty() || !Completion)
+	{
+		return false;
+	}
+
+	const FVoxelIntBox Bounds = SurfaceFootprint.Bounds;
+	if (!Bounds.IsValid())
+	{
+		return false;
+	}
+
+	TMap<FIntVector, float> StampValueByPosition;
+	for (const FVoxelSurfaceEditsVoxel& SurfaceVoxel : *SurfaceFootprint.Voxels)
+	{
+		const float SignedStrength = SurfaceVoxel.Strength;
+		if ((bAdd && SignedStrength >= 0.f) || (!bAdd && SignedStrength <= 0.f) ||
+			!IsInsideSweptSurfaceVolume(SurfaceVoxel, bAdd))
+		{
+			continue;
+		}
+
+		const float TargetValue = GetSurfaceToolTargetValue(SurfaceVoxel, DistanceDivisor);
+		float& StoredValue = StampValueByPosition.FindOrAdd(SurfaceVoxel.Position, TargetValue);
+		StoredValue = bAdd ? FMath::Min(StoredValue, TargetValue) : FMath::Max(StoredValue, TargetValue);
+	}
+
+	if (StampValueByPosition.IsEmpty())
+	{
+		return false;
+	}
+
+	const auto GameThreadTasks = VoxelWorld->GetGameThreadTasks();
+	auto Work = [
+		Bounds,
+		bAdd,
+		StampValueByPosition = MoveTemp(StampValueByPosition),
+		GameThreadTasks,
+		Completion = MoveTemp(Completion)](FVoxelData& Data) mutable
+	{
+		TVoxelDataImpl<FModifiedVoxelValue> DataImpl(Data, false, true);
+		{
+			FVoxelWriteScopeLock Lock(Data, Bounds, FUNCTION_FNAME);
+			DataImpl.Set<FVoxelValue>(Bounds, [&](int32 X, int32 Y, int32 Z, FVoxelValue& Value)
+			{
+				const float* StampValue = StampValueByPosition.Find(FIntVector(X, Y, Z));
+				if (!StampValue)
+				{
+					return;
+				}
+
+				const float CurrentValue = Value.ToFloat();
+				if ((bAdd && *StampValue < CurrentValue) || (!bAdd && *StampValue > CurrentValue))
+				{
+					Value = FVoxelValue(*StampValue);
+				}
+			});
+		}
+
+		GameThreadTasks->AddTask([
+			Bounds,
+			Completion = MoveTemp(Completion),
+			ModifiedValues = MoveTemp(DataImpl.ModifiedValues)]() mutable
+		{
+			Completion(MoveTemp(ModifiedValues), Bounds);
+		});
+	};
+
+	FVoxelToolHelpers::StartAsyncEditTask(
+		VoxelWorld,
+		new FDRDirectionalSurfaceEditWork(*VoxelWorld, MoveTemp(Work)));
+	return true;
 }
 
 FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(

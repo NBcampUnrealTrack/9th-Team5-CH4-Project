@@ -49,6 +49,14 @@ public:
 	}
 
 	FDRSnowSurfaceEditResult AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
+	bool AddDirectionalSnowAtAreaAsync(
+		const FDRSnowSurfaceAddRequest& Request,
+		TFunction<void(FDRSnowSurfaceEditResult&&)> Completion);
+
+	// 예측 당시 기록한 NewValue가 아직 유지된 voxel만 OldValue로 되돌린다.
+	// 이후 다른 작업이 덮어쓴 voxel은 보존하여 authoritative 변경을 역으로 훼손하지 않는다.
+	int32 RestoreSurfaceEdit(const FDRSnowSurfaceEditResult& EditResult);
+
 	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
 	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
