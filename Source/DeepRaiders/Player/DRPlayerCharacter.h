@@ -95,6 +95,9 @@ public:
 	/** 현재 등 장비 외형을 제거한다. */
 	void ClearBackEquipmentVisual();
 
+	/** 1인칭 카메라에서 로컬 캐릭터 본체와 등 장비만 숨긴다. */
+	void SetLocalFirstPersonVisualsHidden(bool bHideForFirstPerson);
+
 	/*
 	 *  제트팩 외형을 적용한다
 	 *  적용 시점은 아래와 같음
