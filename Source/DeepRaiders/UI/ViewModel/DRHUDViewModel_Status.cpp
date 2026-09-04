@@ -15,9 +15,9 @@ namespace DRHUDStatus
 	const FLinearColor HeatGaugeOrangeColor = FLinearColor::FromSRGBColor(
 		FColor::FromHex(TEXT("F9FF53")));
 	const FLinearColor HeatGaugeEndColor = FLinearColor::FromSRGBColor(
-		FColor::FromHex(TEXT("FFA200")));
-	const FLinearColor HeatGaugeBlinkColor = FLinearColor::FromSRGBColor(
 		FColor::FromHex(TEXT("FF0000")));
+	const FLinearColor HeatGaugeBlinkColor = FLinearColor::FromSRGBColor(
+		FColor::FromHex(TEXT("FFA200")));
 
 	FLinearColor GetHeatGaugeColor(float GaugeRatio)
 	{
@@ -241,6 +241,13 @@ void UDRHUDViewModel::RefreshOverheatedState()
 	if (bIsOverheated != bNewOverheated)
 	{
 		HeatGaugeBlinkElapsed = 0.f;
+	}
+	if (!bNewOverheated)
+	{
+		bHoldHeatGaugeEndColor = false;
+		UE_MVVM_SET_PROPERTY_VALUE(
+			HeatGaugeColor,
+			DRHUDStatus::GetHeatGaugeColor(HeatGaugeRatio));
 	}
 
 	UE_MVVM_SET_PROPERTY_VALUE(bIsOverheated, bNewOverheated);
