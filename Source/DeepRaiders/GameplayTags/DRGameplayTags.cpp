@@ -221,6 +221,11 @@ namespace DRGameplayTags
 		"Rifle snow cost upgrade track.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_HeatGeneration,
+		"Weapon.Upgrade.Rifle.HeatGeneration",
+		"Rifle heat generation upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Shotgun,
 		"Weapon.Upgrade.Shotgun",
 		"Parent tag for shotgun stat upgrade tracks.");
@@ -246,6 +251,11 @@ namespace DRGameplayTags
 		"Shotgun projectile count upgrade track.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_HeatGeneration,
+		"Weapon.Upgrade.Shotgun.HeatGeneration",
+		"Shotgun heat generation upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Cannon,
 		"Weapon.Upgrade.Cannon",
 		"Parent tag for cannon stat upgrade tracks.");
@@ -264,6 +274,11 @@ namespace DRGameplayTags
 		Weapon_Upgrade_Cannon_SnowCost,
 		"Weapon.Upgrade.Cannon.SnowCost",
 		"Cannon snow cost upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_HeatGeneration,
+		"Weapon.Upgrade.Cannon.HeatGeneration",
+		"Cannon heat generation upgrade track.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,
@@ -459,6 +474,11 @@ namespace DRGameplayTags
 		Data_Weapon_ProjectileCountModifier,
 		"Data.Weapon.ProjectileCountModifier",
 		"Equipped weapon projectile count modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_HeatGenerationModifier,
+		"Data.Weapon.HeatGenerationModifier",
+		"Equipped weapon heat generation modifier passed through SetByCaller.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

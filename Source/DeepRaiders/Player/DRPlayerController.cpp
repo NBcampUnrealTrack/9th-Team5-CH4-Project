@@ -792,6 +792,10 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowCost;
 		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_HeatGeneration;
+		}
 	}
 	else if (WeaponKey == TEXT("shotgun"))
 	{
@@ -813,6 +817,10 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_ProjectileCount;
 		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_HeatGeneration;
+		}
 	}
 	else if (WeaponKey == TEXT("cannon"))
 	{
@@ -829,6 +837,10 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 		else if (StatKey == TEXT("snowcost"))
 		{
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowCost;
+		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_HeatGeneration;
 		}
 	}
 

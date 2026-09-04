@@ -802,8 +802,12 @@ void UDRGA_RangedWeaponAttack::ApplyHeatForSuccessfulShot()
 		return;
 	}
 
+	const float HeatGenerationMultiplier = GetWeaponStatMultiplier(
+		UDRPlayerAttributeSet::GetWeaponHeatGenerationMultiplierAttribute());
+	const float HeatAmount = FMath::Max(0.f, WeaponDefinition->HeatSettings.HeatPerShot * HeatGenerationMultiplier);
+
 	PlayerState->AddWeaponHeat(
-		WeaponDefinition->HeatSettings.HeatPerShot,
+		HeatAmount,
 		WeaponDefinition->HeatSettings.DecayDelay,
 		WeaponDefinition->HeatSettings.RecoveryDuration);
 }

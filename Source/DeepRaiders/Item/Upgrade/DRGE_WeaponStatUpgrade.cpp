@@ -15,6 +15,8 @@ UDRGE_WeaponStatUpgrade::UDRGE_WeaponStatUpgrade()
 		DRGameplayTags::Data_Weapon_SnowCostModifier);
 	AddStat(UDRPlayerAttributeSet::GetWeaponProjectileCountMultiplierAttribute(),
 		DRGameplayTags::Data_Weapon_ProjectileCountModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponHeatGenerationMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_HeatGenerationModifier);
 }
 
 void UDRGE_WeaponStatUpgrade::AddStat(const FGameplayAttribute& Attribute, FGameplayTag ValueTag)

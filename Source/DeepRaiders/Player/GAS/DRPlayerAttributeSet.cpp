@@ -24,6 +24,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitWeaponFireIntervalMultiplier(1.f);
 	InitWeaponSnowCostMultiplier(1.f);
 	InitWeaponProjectileCountMultiplier(1.f);
+	InitWeaponHeatGenerationMultiplier(1.f);
 }
 
 void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -44,6 +45,8 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponFireIntervalMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponSnowCostMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier, COND_OwnerOnly,
+		REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponHeatGenerationMultiplier, COND_OwnerOnly,
 		REPNOTIFY_Always);
 }
 
@@ -123,6 +126,13 @@ void UDRPlayerAttributeSet::OnRep_WeaponProjectileCountMultiplier(
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier,
 		OldWeaponProjectileCountMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponHeatGenerationMultiplier(
+	const FGameplayAttributeData& OldWeaponHeatGenerationMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponHeatGenerationMultiplier,
+		OldWeaponHeatGenerationMultiplier);
 }
 
 void UDRPlayerAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
