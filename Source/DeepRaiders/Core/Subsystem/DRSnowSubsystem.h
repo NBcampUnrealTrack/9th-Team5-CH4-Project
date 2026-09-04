@@ -15,7 +15,6 @@ class FDRSnowAddPipeline;
 class FDRSnowMaterialPatchApplyQueue;
 class FDRSnowRemovalPipeline;
 class FDRSnowVoxelContainmentEvaluator;
-enum class EDRSnowRemovalPath : uint8;
 
 // UDRSnowSubsystem: 게임 내 눈 지형 및 점령 시스템의 메인 창구
 //
@@ -110,56 +109,6 @@ public:
 		const TArray<uint8>& SnowVolumeData);
 
 private:
-	// 클라이언트 선행 예측 보관 구조체
-	// 클라이언트가 먼저 파낸 지형 결과(SurfaceEdit)를 들고 있다가, 서버에서 같은 키(PredictionKey)의
-	// RPC가 도착하면 지형을 다시 파지 않고 서버 확정 수치와 색상 패치만 덮어씌웁니다.
-	struct FPendingRemovalPrediction
-	{
-		FDRSnowPredictionKey PredictionKey;
-		FDRSnowSurfaceRemoveRequest Request;
-		FDRSnowSurfaceEditResult SurfaceEdit;
-		EDRSnowRemovalPath RemovalPath;
-		uint64 LocalOrder = 0;
-	};
-
-	FDRSnowRemoveResult PredictSnowRemovalInternal(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		EDRSnowRemovalPath RemovalPath);
-
-	// 서버 RPC와 일치하는 예측 결과의 인덱스를 반환합니다.
-	int32 FindMatchingRemovalPrediction(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		EDRSnowRemovalPath RemovalPath) const;
-
-	// authoritative add처럼 정확한 영향 경계를 알 수 없는 경로에서 전체 예측을 분리합니다.
-	TArray<FPendingRemovalPrediction> SuspendRemovalPredictions();
-
-	// 선택한 예측만 역순 롤백하고 나머지는 현재 geometry에 그대로 유지합니다.
-	TArray<FPendingRemovalPrediction> SuspendRemovalPredictions(
-		const TArray<int32>& PredictionIndices);
-
-	FVoxelIntBox GetRemovalRequestBounds(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		EDRSnowRemovalPath RemovalPath) const;
-
-	// seed와 공간적으로 연결된 예측들의 전이적 묶음을 찾습니다.
-	TArray<int32> FindAffectedRemovalPredictionIndices(
-		AVoxelWorld* VoxelWorld,
-		const FVoxelIntBox& SeedBounds,
-		int32 RequiredPredictionIndex = INDEX_NONE) const;
-
-	// authoritative 작업 이후 아직 응답받지 않은 예측을 원래 순서대로 다시 적용합니다.
-	void ResumeRemovalPredictions(TArray<FPendingRemovalPrediction>&& Predictions);
-
-	bool ApplyReplicatedSnowRemovalInternal(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		float AuthoritativeAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
-		EDRSnowRemovalPath RemovalPath);
-
-	// 게임 리셋 시 대기 중이던 예측 목록을 비웁니다.
-	void ResetRemovalPredictions();
-
 	// 서버 전용: 각 복셀의 팀 색상(MaterialIndex) 원본 저장소 (32^3 청크 단위)
 	FDRSnowOwnershipStore OwnershipStore;
 
@@ -175,18 +124,14 @@ private:
 	// 난입 플레이어용 맵 상태 압축 및 복원 직렬화기
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
 
-	// 눈 파내기 단계별 조율자 (지형 파기 -> 부피 삭감 -> 색상 재도색)
+	// 네트워크로 받은 팀 색상 패치를 차례대로 안전하게 렌더링에 적용하는 큐
+	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
+
+	// 눈 파내기 단계별 조율자와 클라이언트 예측 관리자
 	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
 
 	// 눈 쌓기 단계별 조율자 (지형 생성 -> 부피 누적 -> 색상 적용)
 	TSharedPtr<FDRSnowAddPipeline> AddPipeline;
 
-	// 네트워크로 받은 팀 색상 패치를 차례대로 안전하게 렌더링에 적용하는 큐
-	TSharedPtr<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
-
-	// 서버 확인을 기다리는 클라이언트 예측 목록 (최대 32개)
-	TArray<FPendingRemovalPrediction> PendingRemovalPredictions;
-	bool bPredictionCapacityWarningLogged = false;
-	uint64 NextRemovalPredictionOrder = 0;
 	int32 SnowStateGeneration = 0;
 };

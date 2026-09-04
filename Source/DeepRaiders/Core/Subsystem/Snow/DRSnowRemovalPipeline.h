@@ -5,6 +5,8 @@
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 
 class AVoxelWorld;
+class FDRSnowAddPipeline;
+class FDRSnowMaterialPatchApplyQueue;
 class FDRSnowOwnershipStore;
 class FDRSnowSurfaceEditor;
 class FDRSnowVolumeStore;
@@ -15,6 +17,24 @@ enum class EDRSnowRemovalPath : uint8
 {
 	Standard, // 일반 파내기 (원형/구형 범위)
 	Absorb    // 눈총 흡수 파내기 (카메라 시야각 Frustum 범위)
+};
+
+// 서버가 확정한 파내기 결과를 클라이언트 예측 조정 단계에 전달하는 매개변수 객체
+struct FDRSnowServerResponse
+{
+	FDRSnowServerResponse(
+		const float InAuthoritativeAmount,
+		const FDRSnowMaterialPatch* InMaterialPatch,
+		const EDRSnowRemovalPath InRemovalPath)
+		: AuthoritativeAmount(InAuthoritativeAmount)
+		, MaterialPatch(InMaterialPatch)
+		, RemovalPath(InRemovalPath)
+	{
+	}
+
+	float AuthoritativeAmount = 0.f;
+	const FDRSnowMaterialPatch* MaterialPatch = nullptr;
+	EDRSnowRemovalPath RemovalPath = EDRSnowRemovalPath::Standard;
 };
 
 // 서버에서 눈 파내기를 실행한 후 반환하는 결과 묶음
@@ -38,18 +58,16 @@ struct FDRSnowRemovalReplayResult
 //   2. 점령 부피 차감 및 소유권 갱신 (VolumeStore, OwnershipStore)
 //   3. 새로 드러난 표면에 팀 색상 칠하기 (MaterialPatch 생성 또는 적용)
 //
-// 상황별 4가지 실행 함수:
-//   Execute: 서버에서 위 1, 2, 3 단계를 모두 수행하고 클라이언트용 색상 패치 생성
-//   PredictSurface: 클라이언트에서 입력 즉시 1단계(지형 깎기)만 먼저 수행하여 렉을 숨김
-//   ConfirmPrediction: 예측과 서버 결과가 일치할 때 geometry를 유지하고 2, 3단계만 확정
-//   Replay: 로컬 예측을 롤백한 authoritative 상태에서 1, 2, 3단계를 순서대로 재현
+// 서버 실행과 클라이언트 예측 수명 주기를 모두 소유합니다. 클라이언트 서버 응답은
+// ApplyServerUpdate 한 곳으로 들어오며, 내부에서 Fast Path 또는 선택적 rollback/replay를 결정합니다.
 class DEEPRAIDERS_API FDRSnowRemovalPipeline
 {
 public:
 	FDRSnowRemovalPipeline(
 		FDRSnowSurfaceEditor& InSurfaceEditor,
 		FDRSnowOwnershipStore& InOwnershipStore,
-		FDRSnowVolumeStore& InVolumeStore);
+		FDRSnowVolumeStore& InVolumeStore,
+		const TSharedRef<FDRSnowMaterialPatchApplyQueue>& InMaterialPatchApplyQueue);
 
 	// 서버: 지형 파기, 부피 차감, 팀 색상 계산을 모두 처리하고 결과(색상 패치 포함)를 반환합니다.
 	FDRSnowRemovalExecutionResult Execute(
@@ -58,31 +76,72 @@ public:
 		EDRSnowRemovalPath RemovalPath,
 		bool bBuildMaterialPatch);
 
-	// 클라이언트 예측: 입력 즉시 시각적인 지형만 깎아내고, 변경된 복셀 목록을 반환합니다.
+	// 클라이언트: 입력 즉시 surface를 예측하고 서버 확인 대기열까지 내부에서 관리합니다.
+	FDRSnowRemoveResult Predict(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath);
+
+	// 클라이언트: 서버 확정 결과를 받아 Fast Path 또는 선택적 rollback/replay를 수행합니다.
+	bool ApplyServerUpdate(
+		UWorld* World,
+		const FDRSnowSurfaceRemoveRequest& Request,
+		const FDRSnowServerResponse& Response);
+
+	// authoritative add가 예측 surface와 충돌하지 않도록 전체 예측을 잠시 분리한 뒤 재적용합니다.
+	FDRSnowAddResult ReconcileServerAdd(
+		UWorld* World,
+		FDRSnowAddPipeline& AddPipeline,
+		const FDRSnowSurfaceAddRequest& Request,
+		float AppliedAmount);
+
+	void ResetPredictions();
+
+private:
+	struct FPendingRemovalPrediction
+	{
+		FDRSnowPredictionKey PredictionKey;
+		FDRSnowSurfaceRemoveRequest Request;
+		FDRSnowSurfaceEditResult SurfaceEdit;
+		EDRSnowRemovalPath RemovalPath = EDRSnowRemovalPath::Standard;
+		uint64 LocalOrder = 0;
+	};
+
 	FDRSnowSurfaceEditResult PredictSurface(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath);
 
-	// 클라이언트 재생: 서버 수신 데이터를 바탕으로 지형부터 색상까지 처음부터 적용합니다.
 	FDRSnowRemovalReplayResult Replay(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
-		float AuthoritativeAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
-		EDRSnowRemovalPath RemovalPath);
+		const FDRSnowServerResponse& Response);
 
-	// 예측한 geometry가 서버 결과와 일치할 때 지형을 다시 편집하지 않고
-	// 점령 부피와 material만 확정하는 빠른 경로입니다.
 	FDRSnowRemovalReplayResult ConfirmPrediction(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& PredictedSurfaceEdit,
-		float AuthoritativeAmount,
-		const FDRSnowMaterialPatch* AuthoritativeMaterialPatch,
-		EDRSnowRemovalPath RemovalPath);
+		const FDRSnowServerResponse& Response);
 
-private:
+	int32 FindMatchingPrediction(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath) const;
+
+	TArray<FPendingRemovalPrediction> SuspendPredictions();
+	TArray<FPendingRemovalPrediction> SuspendPredictions(
+		const TArray<int32>& PredictionIndices);
+	void ResumePredictions(
+		UWorld* World,
+		TArray<FPendingRemovalPrediction>&& Predictions);
+
+	FVoxelIntBox GetRequestBounds(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		EDRSnowRemovalPath RemovalPath) const;
+	TArray<int32> FindAffectedPredictionIndices(
+		AVoxelWorld* VoxelWorld,
+		const FVoxelIntBox& SeedBounds,
+		int32 RequiredPredictionIndex = INDEX_NONE) const;
+
 	// 파내기 방식(Standard / Absorb)에 따라 지형을 깎아냅니다.
 	FDRSnowSurfaceEditResult RemoveSurface(
 		const FDRSnowSurfaceRemoveRequest& Request,
@@ -118,4 +177,8 @@ private:
 	FDRSnowSurfaceEditor& SurfaceEditor;
 	FDRSnowOwnershipStore& OwnershipStore;
 	FDRSnowVolumeStore& VolumeStore;
+	TSharedRef<FDRSnowMaterialPatchApplyQueue> MaterialPatchApplyQueue;
+	TArray<FPendingRemovalPrediction> PendingPredictions;
+	bool bPredictionCapacityWarningLogged = false;
+	uint64 NextPredictionOrder = 0;
 };
