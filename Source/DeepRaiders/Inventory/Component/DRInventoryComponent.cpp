@@ -4,6 +4,8 @@
 #include "DRInventoryComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
 #include "GameFramework/PlayerController.h"
@@ -443,6 +445,90 @@ const FDRItemInstance* UDRInventoryComponent::FindItemInstance(FGuid InstanceId)
 	{
 		return ItemInstance.IsValid() && ItemInstance.InstanceId == InstanceId;
 	});
+}
+
+const FDRItemInstance* UDRInventoryComponent::FindFirstItemInstanceByDefinition(
+	const UDRItemDefinition* Definition) const
+{
+	if (!IsValid(Definition))
+	{
+		return nullptr;
+	}
+
+	return Slots.FindByPredicate([Definition](const FDRItemInstance& ItemInstance)
+	{
+		return ItemInstance.IsValid() && ItemInstance.Definition == Definition;
+	});
+}
+
+bool UDRInventoryComponent::GetSnowProjectileWeaponUpgradeLevel(
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition,
+	FGameplayTag UpgradeTag,
+	int32& OutLevel) const
+{
+	OutLevel = 0;
+
+	if (!IsValid(WeaponDefinition)
+		|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
+		|| !UpgradeTag.IsValid()
+		|| !IsValid(WeaponDefinition->UpgradeProfile)
+		|| WeaponDefinition->UpgradeProfile->FindStatUpgrade(UpgradeTag) == nullptr)
+	{
+		return false;
+	}
+
+	const FDRItemInstance* ItemInstance = FindFirstItemInstanceByDefinition(WeaponDefinition);
+	const FDRSnowProjectileWeaponRuntimeState* WeaponState = ItemInstance != nullptr
+		? ItemInstance->RuntimeState.GetPtr<FDRSnowProjectileWeaponRuntimeState>()
+		: nullptr;
+
+	if (WeaponState == nullptr)
+	{
+		return false;
+	}
+
+	OutLevel = WeaponState->GetUpgradeLevel(UpgradeTag);
+	return true;
+}
+
+bool UDRInventoryComponent::TryUpgradeSnowProjectileWeapon(
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition,
+	FGameplayTag UpgradeTag,
+	int32 ExpectedLevel)
+{
+	if (!HasInventoryAuthority()
+		|| !IsValid(WeaponDefinition)
+		|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
+		|| !IsValid(WeaponDefinition->UpgradeProfile)
+		|| !WeaponDefinition->UpgradeProfile->IsUsable()
+		|| ExpectedLevel < 0)
+	{
+		return false;
+	}
+
+	const FDRWeaponStatUpgradeData* UpgradeData = WeaponDefinition->UpgradeProfile->FindStatUpgrade(UpgradeTag);
+	const FDRWeaponUpgradeLevelData* TargetLevelData = UpgradeData != nullptr
+		? UpgradeData->FindLevelData(ExpectedLevel + 1)
+		: nullptr;
+	const FDRItemInstance* ItemInstance = FindFirstItemInstanceByDefinition(WeaponDefinition);
+
+	if (TargetLevelData == nullptr || ItemInstance == nullptr)
+	{
+		return false;
+	}
+
+	const FGuid InstanceId = ItemInstance->InstanceId;
+
+	return ModifyItemInstance(InstanceId,
+		[UpgradeTag, ExpectedLevel](FDRItemInstance& Candidate)
+		{
+			FDRSnowProjectileWeaponRuntimeState* WeaponState =
+				Candidate.RuntimeState.GetMutablePtr<FDRSnowProjectileWeaponRuntimeState>();
+
+			return WeaponState != nullptr
+				&& WeaponState->GetUpgradeLevel(UpgradeTag) == ExpectedLevel
+				&& WeaponState->SetUpgradeLevel(UpgradeTag, ExpectedLevel + 1);
+		});
 }
 
 int32 UDRInventoryComponent::FindSlotIndex(FGuid InstanceId) const

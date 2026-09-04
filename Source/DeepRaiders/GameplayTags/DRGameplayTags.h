@@ -64,7 +64,6 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_FireInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowCost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_ProjectileCount);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_Spread);
 
 	// Weapon Upgrade - Cannon
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon);

@@ -3,6 +3,15 @@
 #include "DRGE_CharacterStatUpgrade.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
+const FDRStatUpgradeData* UDRCharacterUpgradeProfile::FindStatUpgrade(FGameplayTag UpgradeTag) const
+{
+	return UpgradeTag.IsValid() ? StatUpgrades.FindByPredicate(
+		[UpgradeTag](const FDRStatUpgradeData& Data)
+		{
+			return Data.UpgradeTag == UpgradeTag;
+		}) : nullptr;
+}
+
 UDRCharacterUpgradeProfile::UDRCharacterUpgradeProfile()
 {
 	EffectClass = UDRGE_CharacterStatUpgrade::StaticClass();

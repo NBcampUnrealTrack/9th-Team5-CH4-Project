@@ -246,11 +246,6 @@ namespace DRGameplayTags
 		"Shotgun projectile count upgrade track.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Weapon_Upgrade_Shotgun_Spread,
-		"Weapon.Upgrade.Shotgun.Spread",
-		"Shotgun spread upgrade track.");
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Cannon,
 		"Weapon.Upgrade.Cannon",
 		"Parent tag for cannon stat upgrade tracks.");

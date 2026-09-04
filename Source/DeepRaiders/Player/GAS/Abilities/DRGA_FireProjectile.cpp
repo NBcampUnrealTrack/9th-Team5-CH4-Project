@@ -227,7 +227,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot()
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 
-	const int32 SafeProjectileCount = FMath::Max(WeaponDefinition->ProjectileCount, 1);
+	const int32 SafeProjectileCount = GetWeaponProjectileCount();
 	const float SpreadRadians = FMath::DegreesToRadians(FMath::Max(WeaponDefinition->SpreadHalfAngleDegrees, 0.f));
 	bool bSpawnedAnyProjectile = false;
 	for (int32 ProjectileIndex = 0; ProjectileIndex < SafeProjectileCount; ++ProjectileIndex)

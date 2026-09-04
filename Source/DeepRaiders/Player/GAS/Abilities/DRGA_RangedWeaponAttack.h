@@ -71,6 +71,9 @@ protected:
 		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 
 	float GetBreakableDamageAmount() const;
+	float GetWeaponFireInterval() const;
+	float GetWeaponSnowCostPerShot() const;
+	int32 GetWeaponProjectileCount() const;
 	const UDRProjectileWeaponItemDefinition* GetCurrentWeaponDefinition() const;
 	
 	bool TryApplyBreakableDamage(const FHitResult& HitResult) const;
@@ -110,4 +113,6 @@ private:
 	void ExecuteFireGameplayCue(const FVector& FireOrigin) const;
 
 	void PlayFireMontage();
+
+	float GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const;
 };

@@ -6,6 +6,8 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Inventory/DRInventoryTypes.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "GameFramework/PlayerController.h"
@@ -61,12 +63,13 @@ void UDRQuickSlotComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
 	}
 		
-	UnbindAbilitySystemComponent();
-	
 	if (IsValid(ASC))
 	{
+		RemoveEquippedWeaponUpgradeEffect();
 		GrantedHandles.TakeFromAbilitySystem(ASC);	
 	}
+
+	UnbindAbilitySystemComponent();
 	
 	Super::EndPlay(EndPlayReason);
 }
@@ -476,6 +479,8 @@ void UDRQuickSlotComponent::RefreshHeldItem()
 	
 	UDRItemDefinition* NewDefinition = SelectedItem ? SelectedItem->Definition.Get() : nullptr;
 	const FGuid NewInstanceId = SelectedItem ? SelectedItem->InstanceId : FGuid();
+
+	RefreshEquippedWeaponUpgrade(SelectedItem);
 	
 	if (EquippedInstanceId == NewInstanceId
 		&& HeldItemDefinition == NewDefinition)
@@ -500,6 +505,99 @@ void UDRQuickSlotComponent::RefreshHeldItem()
 	ApplySelectedItemToCharacter();
 	
 	OnSelectedQuickSlotItemChangedDelegate.Broadcast(HeldItemDefinition);	
+}
+
+void UDRQuickSlotComponent::RefreshEquippedWeaponUpgrade(const FDRItemInstance* SelectedItem)
+{
+	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition = SelectedItem != nullptr
+		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem->Definition.Get())
+		: nullptr;
+	UDRWeaponUpgradeProfile* UpgradeProfile = IsValid(WeaponDefinition)
+		? WeaponDefinition->UpgradeProfile.Get()
+		: nullptr;
+	const FDRSnowProjectileWeaponRuntimeState* WeaponState = SelectedItem != nullptr
+		? SelectedItem->RuntimeState.GetPtr<FDRSnowProjectileWeaponRuntimeState>()
+		: nullptr;
+
+	if (!HasQuickSlotAuthority()
+		|| !IsValid(ASC))
+	{
+		return;
+	}
+
+	if (!IsValid(UpgradeProfile)
+		|| WeaponState == nullptr
+		|| !UpgradeProfile->IsUsable())
+	{
+		RemoveEquippedWeaponUpgradeEffect();
+		return;
+	}
+
+	const UGameplayEffect* Effect = UpgradeProfile->EquippedEffectClass.GetDefaultObject();
+	TMap<FGameplayTag, float> EffectValues;
+
+	for (const FGameplayModifierInfo& Modifier : Effect->Modifiers)
+	{
+		if (!ASC->HasAttributeSetForAttribute(Modifier.Attribute))
+		{
+			RemoveEquippedWeaponUpgradeEffect();
+			return;
+		}
+
+		EffectValues.Add(Modifier.ModifierMagnitude.GetSetByCallerFloat().DataTag, 1.0f);
+	}
+
+	for (const FDRWeaponStatUpgradeData& UpgradeData : UpgradeProfile->GetStatUpgrades())
+	{
+		const int32 Level = WeaponState->GetUpgradeLevel(UpgradeData.UpgradeTag);
+		EffectValues.Add(UpgradeData.SetByCallerTag, UpgradeData.GetStatMultiplier(Level));
+	}
+
+	if (EquippedWeaponUpgradeProfile.Get() == UpgradeProfile
+		&& ASC->GetActiveGameplayEffect(EquippedWeaponUpgradeEffectHandle) != nullptr)
+	{
+		ASC->UpdateActiveGameplayEffectSetByCallerMagnitudes(EquippedWeaponUpgradeEffectHandle, EffectValues);
+		return;
+	}
+
+	RemoveEquippedWeaponUpgradeEffect();
+
+	FGameplayEffectContextHandle EffectContext = ASC->MakeEffectContext();
+	EffectContext.AddSourceObject(WeaponDefinition);
+	FGameplayEffectSpecHandle EffectSpec = ASC->MakeOutgoingSpec(
+		UpgradeProfile->EquippedEffectClass,
+		1.0f,
+		EffectContext);
+
+	if (!EffectSpec.IsValid())
+	{
+		return;
+	}
+
+	EffectSpec.Data->AddDynamicAssetTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
+
+	for (const TPair<FGameplayTag, float>& EffectValue : EffectValues)
+	{
+		EffectSpec.Data->SetSetByCallerMagnitude(EffectValue.Key, EffectValue.Value);
+	}
+
+	EquippedWeaponUpgradeEffectHandle = ASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+	if (EquippedWeaponUpgradeEffectHandle.IsValid())
+	{
+		EquippedWeaponUpgradeProfile = UpgradeProfile;
+	}
+}
+
+void UDRQuickSlotComponent::RemoveEquippedWeaponUpgradeEffect()
+{
+	if (UAbilitySystemComponent* ASC = AbilitySystemComponent.Get())
+	{
+		ASC->RemoveActiveGameplayEffect(EquippedWeaponUpgradeEffectHandle);
+	}
+
+	EquippedWeaponUpgradeEffectHandle.Invalidate();
+	EquippedWeaponUpgradeProfile.Reset();
 }
 
 void UDRQuickSlotComponent::RefreshSelectedItem()
