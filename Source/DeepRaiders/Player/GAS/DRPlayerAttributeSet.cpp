@@ -11,8 +11,11 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 
 	InitFreezeGauge(0.f);
 
-	InitMaxSnowGauge(100.f);
-	InitSnowGauge(100.f);
+	InitMaxSnowGauge(10000000.f); // 일단 Max Snow 1000만으로 설정
+	InitSnowGauge(0.0f);
+
+	InitMaxHeatGauge(100.f);
+	InitHeatGauge(0.f);
 
 	InitDamageReduction(0.f);
 	InitMoveSpeedMultiplier(1.f);
@@ -32,6 +35,9 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, FreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
+	// Heat는 자신의 HUD/입력 판정에만 필요하므로 소유 클라이언트에만 보낸다.
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, HeatGauge, COND_OwnerOnly, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxHeatGauge, COND_OwnerOnly, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, DamageReduction, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MoveSpeedMultiplier, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponDamageMultiplier, COND_OwnerOnly, REPNOTIFY_Always);
@@ -64,6 +70,16 @@ void UDRPlayerAttributeSet::OnRep_SnowGauge(const FGameplayAttributeData& OldSno
 void UDRPlayerAttributeSet::OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, OldMaxSnowGauge);
+}
+
+void UDRPlayerAttributeSet::OnRep_HeatGauge(const FGameplayAttributeData& OldHeatGauge)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, HeatGauge, OldHeatGauge);
+}
+
+void UDRPlayerAttributeSet::OnRep_MaxHeatGauge(const FGameplayAttributeData& OldMaxHeatGauge)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxHeatGauge, OldMaxHeatGauge);
 }
 
 void UDRPlayerAttributeSet::OnRep_MoveSpeedMultiplier(
@@ -141,6 +157,13 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 			SetSnowGauge(NewValue);
 		}
 	}
+	else if (Attribute == GetMaxHeatGaugeAttribute())
+	{
+		if (GetHeatGauge() > NewValue)
+		{
+			SetHeatGauge(NewValue);
+		}
+	}
 }
 
 void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const
@@ -160,6 +183,14 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	else if (Attribute == GetSnowGaugeAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxSnowGauge());
+	}
+	else if (Attribute == GetMaxHeatGaugeAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 1.f);
+	}
+	else if (Attribute == GetHeatGaugeAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHeatGauge());
 	}
 	else if (Attribute == GetIncomingDamageAttribute())
 	{

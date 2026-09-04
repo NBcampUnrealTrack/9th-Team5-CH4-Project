@@ -391,6 +391,30 @@ void ADRPlayerCharacter::ClearBackEquipmentVisual()
 	WorldBackEquipmentMesh->SetVisibility(false, true);
 }
 
+void ADRPlayerCharacter::SetLocalFirstPersonVisualsHidden(bool bHideForFirstPerson)
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	if (IsValid(GetMesh()))
+	{
+		GetMesh()->SetOwnerNoSee(bHideForFirstPerson);
+	}
+
+	if (IsValid(WorldBackEquipmentMesh))
+	{
+		WorldBackEquipmentMesh->SetOwnerNoSee(bHideForFirstPerson);
+	}
+
+	// 1인칭에서도 현재 손 장비는 조준 피드백을 위해 계속 표시한다.
+	if (IsValid(WorldHandEquipmentMesh))
+	{
+		WorldHandEquipmentMesh->SetOwnerNoSee(false);
+	}
+}
+
 void ADRPlayerCharacter::RefreshJetpackVisual()
 {
 	if (IsValid(JetpackComponent))

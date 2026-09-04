@@ -11,6 +11,7 @@
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "Engine/OverlapResult.h"
 #include "DeepRaiders/Item/DRSprayerWeaponDefinition.h"
@@ -234,6 +235,38 @@ void UDRGA_SpraySnow::HandleSprayTick()
 	}
 
 	ApplySprayToTargets(Origin, Direction);
+	ApplyHeatForSuccessfulSprayTick();
+}
+
+void UDRGA_SpraySnow::ApplyHeatForSuccessfulSprayTick()
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	const UDRSprayerWeaponDefinition* WeaponDefinition = GetSprayerDefinition();
+	if (!IsValid(WeaponDefinition) || !WeaponDefinition->HeatSettings.bEnabled ||
+		WeaponDefinition->HeatSettings.HeatPerSecond <= 0.f ||
+		WeaponDefinition->SprayTickInterval <= 0.f)
+	{
+		return;
+	}
+
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+	if (!IsValid(PlayerState))
+	{
+		return;
+	}
+
+	const float HeatAmount =
+		WeaponDefinition->HeatSettings.HeatPerSecond * WeaponDefinition->SprayTickInterval;
+
+	PlayerState->AddWeaponHeat(
+		HeatAmount,
+		WeaponDefinition->HeatSettings.DecayDelay,
+		WeaponDefinition->HeatSettings.RecoveryDuration);
 }
 
 bool UDRGA_SpraySnow::ResolveSprayOriginAndDirection(FVector& OutOrigin, FVector& OutDirection) const

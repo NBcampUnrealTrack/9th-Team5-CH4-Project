@@ -29,6 +29,9 @@ public:
 
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowGauge)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
+
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, HeatGauge)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHeatGauge)
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
@@ -52,6 +55,13 @@ protected:
 	FGameplayAttributeData SnowGauge;
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxSnowGauge, Category = "Player|Snow")
 	FGameplayAttributeData MaxSnowGauge;
+
+	/** 무기 과열 게이지. SnowGauge와 별개인 전투 상태 리소스다. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_HeatGauge, Category = "Player|Heat")
+	FGameplayAttributeData HeatGauge;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHeatGauge, Category = "Player|Heat")
+	FGameplayAttributeData MaxHeatGauge;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingDamage;
 
@@ -92,6 +102,11 @@ protected:
 	void OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge);
 	UFUNCTION()
 	void OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge);
+
+	UFUNCTION()
+	void OnRep_HeatGauge(const FGameplayAttributeData& OldHeatGauge);
+	UFUNCTION()
+	void OnRep_MaxHeatGauge(const FGameplayAttributeData& OldMaxHeatGauge);
 	UFUNCTION()
 	void OnRep_MoveSpeedMultiplier(
 		const FGameplayAttributeData& OldMoveSpeedMultiplier);

@@ -7,6 +7,7 @@
 class UCameraComponent;
 class UCameraShakeBase;
 class UDRCharacterMovementComponent;
+class USceneComponent;
 class USpringArmComponent;
 
 /**
@@ -50,6 +51,12 @@ private:
 		const FVector& OldVelocity);
 
 	void UpdateVerticalFollow(bool bAllowInterpolation, float DeltaSeconds);
+	void UpdateAutomaticFirstPersonView(float DeltaSeconds);
+	void BeginFirstPersonTransition();
+	void FinishFirstPersonTransition();
+	void UpdateFirstPersonVisualVisibility();
+	USceneComponent* FindFirstPersonCameraAnchor() const;
+	float GetAvailableThirdPersonCameraDistance() const;
 	void ApplyCameraCollisionSettings() const;
 	void ApplyTargetLagSettings() const;
 	void ApplyCameraBoomLocation() const;
@@ -70,6 +77,38 @@ private:
 	/** VoxelWorld가 선택한 카메라 채널을 반드시 Block하도록 보장한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Collision", meta = (EditCondition = "bEnableCameraCollision"))
 	bool bForceVoxelWorldCameraBlocking = true;
+
+	/** 벽 때문에 Spring Arm이 짧아지면 자동으로 1인칭 시점으로 전환한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person")
+	bool bEnableAutomaticFirstPerson = true;
+
+	/** BP에 추가한 1인칭 카메라 기준 Scene Component의 이름. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson"))
+	FName FirstPersonCameraAnchorName = TEXT("FirstPersonCameraAnchor");
+
+	/** 3인칭 카메라가 확보할 수 있는 거리가 이 값 이하가 되면 1인칭으로 전환한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float FirstPersonEnterDistance = 90.f;
+
+	/** 3인칭 카메라 공간이 이 값 이상 확보되면 3인칭으로 복귀한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float FirstPersonExitDistance = 150.f;
+
+	/** 전환 판단용 Trace 반경. Spring Arm 반경보다 작게 두어 측면 벽의 오판을 줄인다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float FirstPersonTransitionProbeSize = 8.f;
+
+	/** 3인칭과 1인칭 위치 사이를 따라가는 보간 응답 속도. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", UIMin = "0.0"))
+	float FirstPersonBlendSpeed = 8.f;
+
+	/** 블렌드 비율이 이 값 이상이면 로컬 캐릭터 본체를 숨긴다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float FirstPersonHideVisualAlpha = 0.65f;
+
+	/** 블렌드 비율이 이 값 이하가 되면 로컬 캐릭터 본체를 다시 표시한다. */
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|First Person", meta = (EditCondition = "bEnableAutomaticFirstPerson", ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float FirstPersonShowVisualAlpha = 0.35f;
 
 	/** 캐릭터 이동을 카메라가 약간 늦게 따라가도록 한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Target Lag")
@@ -113,6 +152,7 @@ private:
 
 	TWeakObjectPtr<USpringArmComponent> CameraBoom;
 	TWeakObjectPtr<UCameraComponent> FollowCamera;
+	TWeakObjectPtr<USceneComponent> FirstPersonCameraAnchor;
 	TWeakObjectPtr<UDRCharacterMovementComponent> MovementComponent;
 	FDelegateHandle MovementUpdatedDelegateHandle;
 
@@ -121,4 +161,7 @@ private:
 	bool bVerticalFollowInitialized = false;
 	bool bVerticalFollowActive = false;
 	bool bMovementUpdatedSinceLastTick = false;
+	bool bFirstPersonTransitionActive = false;
+	bool bFirstPersonVisualsHidden = false;
+	float FirstPersonBlendAlpha = 0.f;
 };
