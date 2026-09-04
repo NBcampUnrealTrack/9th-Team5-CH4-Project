@@ -183,6 +183,76 @@ namespace DRGameplayTags
 		"Changes Hot Pack into a throwable instant recovery skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle,
+		"Weapon.Upgrade.Rifle",
+		"Parent tag for rifle stat upgrade tracks.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_Damage,
+		"Weapon.Upgrade.Rifle.Damage",
+		"Rifle damage upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_FireInterval,
+		"Weapon.Upgrade.Rifle.FireInterval",
+		"Rifle fire interval upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Rifle_SnowCost,
+		"Weapon.Upgrade.Rifle.SnowCost",
+		"Rifle snow cost upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun,
+		"Weapon.Upgrade.Shotgun",
+		"Parent tag for shotgun stat upgrade tracks.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_Damage,
+		"Weapon.Upgrade.Shotgun.Damage",
+		"Shotgun damage upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_FireInterval,
+		"Weapon.Upgrade.Shotgun.FireInterval",
+		"Shotgun fire interval upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_SnowCost,
+		"Weapon.Upgrade.Shotgun.SnowCost",
+		"Shotgun snow cost upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_ProjectileCount,
+		"Weapon.Upgrade.Shotgun.ProjectileCount",
+		"Shotgun projectile count upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Shotgun_Spread,
+		"Weapon.Upgrade.Shotgun.Spread",
+		"Shotgun spread upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon,
+		"Weapon.Upgrade.Cannon",
+		"Parent tag for cannon stat upgrade tracks.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_Damage,
+		"Weapon.Upgrade.Cannon.Damage",
+		"Cannon damage upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_FireInterval,
+		"Weapon.Upgrade.Cannon.FireInterval",
+		"Cannon fire interval upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Cannon_SnowCost,
+		"Weapon.Upgrade.Cannon.SnowCost",
+		"Cannon snow cost upgrade track.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,
 		"Ability.MovementAction",
 		"Parent tag for movement action abilities.");
@@ -356,6 +426,31 @@ namespace DRGameplayTags
 		Data_Perk_HotPack_FreezeGaugeRecovery,
 		"Data.Perk.HotPack.FreezeGaugeRecovery",
 		"Additional freeze gauge recovery granted to the hot pack by an equipped perk.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_DamageModifier,
+		"Data.Weapon.DamageModifier",
+		"Equipped weapon damage modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_FireIntervalModifier,
+		"Data.Weapon.FireIntervalModifier",
+		"Equipped weapon fire interval modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_SnowCostModifier,
+		"Data.Weapon.SnowCostModifier",
+		"Equipped weapon snow cost modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_ProjectileCountModifier,
+		"Data.Weapon.ProjectileCountModifier",
+		"Equipped weapon projectile count modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_SpreadModifier,
+		"Data.Weapon.SpreadModifier",
+		"Equipped weapon spread modifier passed through SetByCaller.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,
