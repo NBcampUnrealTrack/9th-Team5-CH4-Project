@@ -22,6 +22,7 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
@@ -690,6 +691,168 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 #endif
 
 	QuickSlotComponent->RequestSelectSlot(0);
+}
+
+void ADRPlayerController::Upgrade(FString WeaponName, FString StatName)
+{
+#if !UE_BUILD_SHIPPING
+	if (IsLocalController())
+	{
+		ServerUpgradeWeaponForDebug(MoveTemp(WeaponName), MoveTemp(StatName));
+	}
+#endif
+}
+
+void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FString& WeaponName, const FString& StatName)
+{
+#if !UE_BUILD_SHIPPING
+	UDRProjectileWeaponItemDefinition* WeaponDefinition = nullptr;
+	FGameplayTag UpgradeTag;
+
+	if (!ResolveWeaponUpgradeDebugTarget(WeaponName, StatName, WeaponDefinition, UpgradeTag))
+	{
+		ReportWeaponUpgradeDebugResult(FString::Printf(
+			TEXT("Upgrade failed: unsupported arguments '%s %s'. Usage: upgrade <rifle|shotgun|cannon> <stat>."),
+			*WeaponName,
+			*StatName));
+		return;
+	}
+
+	int32 CurrentLevel = 0;
+
+	if (!IsValid(InventoryComponent)
+		|| !InventoryComponent->GetSnowProjectileWeaponUpgradeLevel(WeaponDefinition, UpgradeTag, CurrentLevel))
+	{
+		ReportWeaponUpgradeDebugResult(FString::Printf(
+			TEXT("Upgrade failed: %s is not in the inventory or its upgrade profile is invalid."),
+			*WeaponName));
+		return;
+	}
+
+	const FDRWeaponUpgradeLevelData* TargetLevelData = IsValid(WeaponDefinition->UpgradeProfile)
+		? WeaponDefinition->UpgradeProfile->FindLevelData(UpgradeTag, CurrentLevel + 1)
+		: nullptr;
+
+	if (TargetLevelData == nullptr)
+	{
+		ReportWeaponUpgradeDebugResult(FString::Printf(
+			TEXT("Upgrade failed: %s %s is already at max level or has no next-level data."),
+			*WeaponName,
+			*StatName));
+		return;
+	}
+
+	if (!InventoryComponent->TryUpgradeSnowProjectileWeapon(WeaponDefinition, UpgradeTag, CurrentLevel))
+	{
+		ReportWeaponUpgradeDebugResult(FString::Printf(
+			TEXT("Upgrade failed: server rejected %s %s at level %d."),
+			*WeaponName,
+			*StatName,
+			CurrentLevel));
+		return;
+	}
+
+	ReportWeaponUpgradeDebugResult(FString::Printf(
+		TEXT("Upgrade succeeded: %s %s Lv.%d -> Lv.%d (Multiplier %.3f)."),
+		*WeaponName,
+		*StatName,
+		CurrentLevel,
+		CurrentLevel + 1,
+		TargetLevelData->SetByCallerMagnitude));
+#endif
+}
+
+bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
+	const FString& WeaponName,
+	const FString& StatName,
+	UDRProjectileWeaponItemDefinition*& OutWeaponDefinition,
+	FGameplayTag& OutUpgradeTag) const
+{
+	OutWeaponDefinition = nullptr;
+	OutUpgradeTag = FGameplayTag();
+
+	FString WeaponKey = WeaponName.ToLower();
+	FString StatKey = StatName.ToLower();
+	WeaponKey.ReplaceInline(TEXT("_"), TEXT(""));
+	WeaponKey.ReplaceInline(TEXT("-"), TEXT(""));
+	StatKey.ReplaceInline(TEXT("_"), TEXT(""));
+	StatKey.ReplaceInline(TEXT("-"), TEXT(""));
+
+	if (WeaponKey == TEXT("rifle"))
+	{
+		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingRifle.Get());
+
+		if (StatKey == TEXT("damage"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_Damage;
+		}
+		else if (StatKey == TEXT("fireinterval") || StatKey == TEXT("firerate"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_FireInterval;
+		}
+		else if (StatKey == TEXT("snowcost"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_SnowCost;
+		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Rifle_HeatGeneration;
+		}
+	}
+	else if (WeaponKey == TEXT("shotgun"))
+	{
+		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingShotgun.Get());
+
+		if (StatKey == TEXT("damage"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_Damage;
+		}
+		else if (StatKey == TEXT("fireinterval") || StatKey == TEXT("firerate"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_FireInterval;
+		}
+		else if (StatKey == TEXT("snowcost"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowCost;
+		}
+		else if (StatKey == TEXT("projectilecount") || StatKey == TEXT("pelletcount"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_ProjectileCount;
+		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_HeatGeneration;
+		}
+	}
+	else if (WeaponKey == TEXT("cannon"))
+	{
+		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingCannon.Get());
+
+		if (StatKey == TEXT("damage"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_Damage;
+		}
+		else if (StatKey == TEXT("fireinterval") || StatKey == TEXT("firerate"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_FireInterval;
+		}
+		else if (StatKey == TEXT("snowcost"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_SnowCost;
+		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Cannon_HeatGeneration;
+		}
+	}
+
+	return IsValid(OutWeaponDefinition) && OutUpgradeTag.IsValid();
+}
+
+void ADRPlayerController::ReportWeaponUpgradeDebugResult(const FString& Message)
+{
+	UE_LOG(LogTemp, Log, TEXT("[WeaponUpgrade][Debug] %s"), *Message);
+	ClientMessage(Message);
 }
 
 bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
