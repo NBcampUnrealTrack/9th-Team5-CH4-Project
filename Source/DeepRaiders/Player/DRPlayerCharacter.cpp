@@ -88,7 +88,8 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	CameraBoom->SetRelativeLocation(FVector(0.f, 0.f, 70.f));
 	CameraBoom->SocketOffset = FVector(0.f, 65.f, 20.f);
 	CameraBoom->bUsePawnControlRotation = true;
-	CameraBoom->bDoCollisionTest = true;
+	// 지형 충돌은 UDRPlayerCameraComponent가 다중 후보 검사와 보간을 적용한다.
+	CameraBoom->bDoCollisionTest = false;
 	CameraBoom->bEnableCameraLag = false;
 	CameraBoom->bEnableCameraRotationLag = false;
 
