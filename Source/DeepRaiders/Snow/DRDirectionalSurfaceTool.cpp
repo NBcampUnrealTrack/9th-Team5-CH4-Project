@@ -6,6 +6,8 @@
 #include "VoxelTools/VoxelSurfaceTools.h"
 #include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelWorld.h"
+#include "HAL/PlatformTime.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 namespace
 {
@@ -289,10 +291,10 @@ float UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
 		{
 			continue;
 		}
-		if (!IsInsideSweptSurfaceVolume(SurfaceVoxel, bAdd))
-		{
-			continue;
-		}
+		// EditVoxelValues (Legacy) applies the processed distance-field value to
+		// every surface sample, not only to samples crossing zero this frame.
+		// Keeping only zero-crossing samples makes repeated sub-voxel deposits
+		// sparse and prevents a stable second layer from forming.
 
 		const float TargetValue = GetSurfaceToolTargetValue(SurfaceVoxel, DistanceDivisor);
 		float& StoredValue = StampValueByPosition.FindOrAdd(SurfaceVoxel.Position, TargetValue);
@@ -341,8 +343,12 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 	const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
 	float DistanceDivisor,
 	bool bAdd,
-	FDRDirectionalSurfaceEditComplete Completion)
+	FDRDirectionalSurfaceEditComplete Completion,
+	TSharedPtr<FDRDirectionalSurfaceEditTimings, ESPMode::ThreadSafe> Timings,
+	FDRDirectionalSurfaceWorkerPostEdit WorkerPostEdit)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Directional_BuildStamp);
+	const double StampStart = Timings ? FPlatformTime::Seconds() : 0.0;
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || DistanceDivisor <= 0.f ||
 		SurfaceFootprint.Voxels->Num() == 0 || !Completion)
 	{
@@ -359,8 +365,7 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 	for (const FVoxelSurfaceEditsVoxel& SurfaceVoxel : *SurfaceFootprint.Voxels)
 	{
 		const float SignedStrength = SurfaceVoxel.Strength;
-		if ((bAdd && SignedStrength >= 0.f) || (!bAdd && SignedStrength <= 0.f) ||
-			!IsInsideSweptSurfaceVolume(SurfaceVoxel, bAdd))
+		if ((bAdd && SignedStrength >= 0.f) || (!bAdd && SignedStrength <= 0.f))
 		{
 			continue;
 		}
@@ -376,16 +381,43 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 	}
 
 	const auto GameThreadTasks = VoxelWorld->GetGameThreadTasks();
+	if (Timings)
+	{
+		Timings->StampMs = (FPlatformTime::Seconds() - StampStart) * 1000.0;
+		Timings->bFusedMaterial = !!WorkerPostEdit;
+		Timings->FootprintCount = SurfaceFootprint.Voxels->Num();
+		Timings->StampCount = StampValueByPosition.Num();
+		Timings->BoundsCount =
+			(static_cast<int64>(Bounds.Max.X) - Bounds.Min.X) *
+			(static_cast<int64>(Bounds.Max.Y) - Bounds.Min.Y) *
+			(static_cast<int64>(Bounds.Max.Z) - Bounds.Min.Z);
+	}
+	const double DispatchTime = Timings ? FPlatformTime::Seconds() : 0.0;
 	auto Work = [
 		Bounds,
 		bAdd,
+		Timings,
+		DispatchTime,
+		WorkerPostEdit = MoveTemp(WorkerPostEdit),
 		StampValueByPosition = MoveTemp(StampValueByPosition),
 		GameThreadTasks,
 		Completion = MoveTemp(Completion)](FVoxelData& Data) mutable
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Directional_Worker);
+		const double WorkerStart = Timings ? FPlatformTime::Seconds() : 0.0;
+		if (Timings)
+		{
+			Timings->WorkerQueueMs = (WorkerStart - DispatchTime) * 1000.0;
+		}
 		TVoxelDataImpl<FModifiedVoxelValue> DataImpl(Data, false, true);
 		{
+			const double LockStart = Timings ? FPlatformTime::Seconds() : 0.0;
 			FVoxelWriteScopeLock Lock(Data, Bounds, FUNCTION_FNAME);
+			const double DensityStart = Timings ? FPlatformTime::Seconds() : 0.0;
+			if (Timings)
+			{
+				Timings->LockWaitMs = (DensityStart - LockStart) * 1000.0;
+			}
 			DataImpl.Set<FVoxelValue>(Bounds, [&](int32 X, int32 Y, int32 Z, FVoxelValue& Value)
 			{
 				const float* StampValue = StampValueByPosition.Find(FIntVector(X, Y, Z));
@@ -400,13 +432,35 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 					Value = FVoxelValue(*StampValue);
 				}
 			});
+			const double DensityDone = Timings ? FPlatformTime::Seconds() : 0.0;
+			if (Timings)
+			{
+				Timings->DensityMs = (DensityDone - DensityStart) * 1000.0;
+			}
+			if (WorkerPostEdit && !DataImpl.ModifiedValues.IsEmpty())
+			{
+				TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Fused_PluginMaterial);
+				const double MaterialStart = Timings ? FPlatformTime::Seconds() : 0.0;
+				WorkerPostEdit(Data, DataImpl.ModifiedValues, Bounds);
+				if (Timings)
+				{
+					Timings->WorkerMaterialMs = (FPlatformTime::Seconds() - MaterialStart) * 1000.0;
+				}
+			}
 		}
 
+		const double WorkerDone = Timings ? FPlatformTime::Seconds() : 0.0;
 		GameThreadTasks->AddTask([
 			Bounds,
+			Timings,
+			WorkerDone,
 			Completion = MoveTemp(Completion),
 			ModifiedValues = MoveTemp(DataImpl.ModifiedValues)]() mutable
 		{
+			if (Timings)
+			{
+				Timings->CallbackMs = (FPlatformTime::Seconds() - WorkerDone) * 1000.0;
+			}
 			Completion(MoveTemp(ModifiedValues), Bounds);
 		});
 	};

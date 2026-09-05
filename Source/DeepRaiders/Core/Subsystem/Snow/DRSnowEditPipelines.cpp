@@ -9,6 +9,7 @@
 #include "Components/CapsuleComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "HAL/PlatformTime.h"
 
 namespace
 {
@@ -107,7 +108,7 @@ FDRSnowAddResult FDRSnowAddPipeline::Execute(
 		PendingAdd.Request = Request;
 		PendingAdd.Completion = MoveTemp(DirectionalCompletion);
 		PendingAdd.StateGeneration = CurrentStateGeneration;
-		PendingDirectionalAdds.Enqueue(MoveTemp(PendingAdd));
+		EnqueueDirectionalAdd(MoveTemp(PendingAdd));
 		ProcessNextDirectionalAdd();
 
 		Result.TeamId = Request.Context.TeamId;
@@ -160,7 +161,7 @@ FDRSnowAddResult FDRSnowAddPipeline::Replay(
 	PendingAdd.AuthoritativeAmount = AuthoritativeAmount;
 	PendingAdd.Completion = MoveTemp(DirectionalCompletion);
 	PendingAdd.StateGeneration = CurrentStateGeneration;
-	PendingDirectionalAdds.Enqueue(MoveTemp(PendingAdd));
+	EnqueueDirectionalAdd(MoveTemp(PendingAdd));
 	ProcessNextDirectionalAdd();
 
 	FDRSnowAddResult Result;
@@ -170,6 +171,19 @@ FDRSnowAddResult FDRSnowAddPipeline::Replay(
 	return Result;
 }
 
+void FDRSnowAddPipeline::EnqueueDirectionalAdd(FPendingDirectionalAdd&& PendingAdd)
+{
+	PendingAdd.Perf.bEnabled = FDRSnowSurfaceEditor::IsDirectionalPerfLoggingEnabled();
+	if (PendingAdd.Perf.bEnabled)
+	{
+		PendingAdd.Perf.Id = ++NextPerfId;
+		PendingAdd.Perf.EnqueuedAt = FPlatformTime::Seconds();
+		PendingAdd.Perf.AheadAtEnqueue = PendingDirectionalAddCount + (bDirectionalAddInProgress ? 1 : 0);
+	}
+	++PendingDirectionalAddCount;
+	PendingDirectionalAdds.Enqueue(MoveTemp(PendingAdd));
+}
+
 void FDRSnowAddPipeline::Reset(const int32 NewStateGeneration)
 {
 	CurrentStateGeneration = NewStateGeneration;
@@ -177,6 +191,7 @@ void FDRSnowAddPipeline::Reset(const int32 NewStateGeneration)
 	FPendingDirectionalAdd PendingAdd;
 	while (PendingDirectionalAdds.Dequeue(PendingAdd))
 	{
+		--PendingDirectionalAddCount;
 		if (PendingAdd.Completion)
 		{
 			PendingAdd.Completion(0.f);
@@ -195,6 +210,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 	FPendingDirectionalAdd PendingAdd;
 	while (PendingDirectionalAdds.Dequeue(PendingAdd))
 	{
+		--PendingDirectionalAddCount;
 		UWorld* World = PendingAdd.World.Get();
 		if (PendingAdd.StateGeneration != CurrentStateGeneration || !IsValid(World))
 		{
@@ -205,6 +221,9 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 			continue;
 		}
 
+		PendingAdd.Perf.bCombined = FDRSnowSurfaceEditor::IsCombinedDirectionalEditEnabled();
+		PendingAdd.Perf.StartedAt = PendingAdd.Perf.bEnabled ? FPlatformTime::Seconds() : 0.0;
+		const FDirectionalPerfContext Perf = PendingAdd.Perf;
 		bDirectionalAddInProgress = true;
 		SurfaceEditor.SetWorld(World);
 		const FDRSnowSurfaceAddRequest Request = PendingAdd.Request;
@@ -220,6 +239,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 				Request,
 				AuthoritativeAmount,
 				RequestGeneration,
+				Perf,
 				Completion = MoveTemp(Completion)](FDRSnowSurfaceEditResult&& EditResult) mutable
 			{
 				if (const TSharedPtr<FDRSnowAddPipeline> Pipeline = WeakPipeline.Pin())
@@ -230,12 +250,22 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 						AuthoritativeAmount,
 						RequestGeneration,
 						MoveTemp(Completion),
-						MoveTemp(EditResult));
+						MoveTemp(EditResult),
+						Perf);
 				}
 			});
 
 		if (!bStarted)
 		{
+			if (Perf.bEnabled)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[DRSnowPerf] Version=1.4 Mode=%s Role=%s World=%s Id=%llu Status=NotStarted Radius=%.3f Amount=%.3f QueueMs=%.3f EditMs=%.3f Ahead=%d"),
+					Perf.bCombined ? TEXT("Combined") : TEXT("Legacy"),
+					World->GetNetMode() == NM_Client ? TEXT("Client") : (World->GetNetMode() == NM_Standalone ? TEXT("Standalone") : TEXT("Server")),
+					*World->GetName(), static_cast<unsigned long long>(Perf.Id), Request.Radius, Request.Amount,
+					(Perf.StartedAt - Perf.EnqueuedAt) * 1000.0,
+					(FPlatformTime::Seconds() - Perf.StartedAt) * 1000.0, Perf.AheadAtEnqueue);
+			}
 			if (FailureCompletion)
 			{
 				FailureCompletion(0.f);
@@ -253,8 +283,11 @@ void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 	const TOptional<float> AuthoritativeAmount,
 	const int32 RequestGeneration,
 	TFunction<void(float)> Completion,
-	FDRSnowSurfaceEditResult&& EditResult)
+	FDRSnowSurfaceEditResult&& EditResult,
+	const FDirectionalPerfContext& Perf)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Directional_Commit);
+	const double CommitStart = Perf.bEnabled ? FPlatformTime::Seconds() : 0.0;
 	float CompletedAmount = 0.f;
 	if (RequestGeneration == CurrentStateGeneration && IsValid(World.Get()))
 	{
@@ -265,6 +298,29 @@ void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 				: EditResult.AppliedAmount;
 			CommitAddedSurfaceEdit(World.Get(), Request, EditResult, CompletedAmount);
 		}
+	}
+
+	// Log before invoking external completion: callbacks may destroy/reset the world.
+	if (Perf.bEnabled && RequestGeneration == CurrentStateGeneration && IsValid(World.Get()))
+	{
+		const double FinishedAt = FPlatformTime::Seconds();
+		const FDRDirectionalSurfaceEditTimings EmptyTimings;
+		const FDRDirectionalSurfaceEditTimings& T = EditResult.DirectionalTimings
+			? *EditResult.DirectionalTimings : EmptyTimings;
+		UWorld* LogWorld = World.Get();
+		UE_LOG(LogTemp, Log,
+			TEXT("[DRSnowPerf] Version=1.4 Mode=%s Role=%s World=%s Id=%llu Status=%s Radius=%.3f Amount=%.3f Virtual=%d QueueMs=%.3f FootprintMs=%.3f StampMs=%.3f WorkerQueueMs=%.3f LockWaitMs=%.3f DensityMs=%.3f WorkerMaterialMs=%.3f CallbackMs=%.3f LegacyMaterialMs=%.3f CommitMs=%.3f EditMs=%.3f TotalMs=%.3f Ahead=%d Remaining=%d FootprintCount=%d StampCount=%d BoundsCount=%lld Modified=%d Fused=%d"),
+			Perf.bCombined ? TEXT("Combined") : TEXT("Legacy"),
+			LogWorld->GetNetMode() == NM_Client ? TEXT("Client") : (LogWorld->GetNetMode() == NM_Standalone ? TEXT("Standalone") : TEXT("Server")),
+			*LogWorld->GetName(), static_cast<unsigned long long>(Perf.Id),
+			EditResult.AppliedAmount > 0.f ? TEXT("Changed") : TEXT("NoChange"),
+			Request.Radius, Request.Amount, Request.bUseVirtualSurface ? 1 : 0,
+			(Perf.StartedAt - Perf.EnqueuedAt) * 1000.0, EditResult.FootprintMs, T.StampMs,
+			T.WorkerQueueMs, T.LockWaitMs, T.DensityMs, T.WorkerMaterialMs, T.CallbackMs,
+			EditResult.LegacyMaterialMs, (FinishedAt - CommitStart) * 1000.0,
+			(FinishedAt - Perf.StartedAt) * 1000.0, (FinishedAt - Perf.EnqueuedAt) * 1000.0,
+			Perf.AheadAtEnqueue, PendingDirectionalAddCount, T.FootprintCount, T.StampCount,
+			static_cast<long long>(T.BoundsCount), EditResult.ModifiedValues.Num(), T.bFusedMaterial ? 1 : 0);
 	}
 
 	if (Completion)
@@ -288,7 +344,10 @@ void FDRSnowAddPipeline::CommitAddedSurfaceEdit(
 	}
 
 	// 서버와 클라이언트 모두 새로 추가한 내부 복셀의 재질까지 확정한다.
-	SurfaceEditor.FillAddedSnowMaterials(EditResult, Request.Context.TeamId);
+	if (!EditResult.bAddedMaterialsFinalized)
+	{
+		SurfaceEditor.FillAddedSnowMaterials(EditResult, Request.Context.TeamId);
+	}
 
 	if (EditResult.bUseModifiedValuesForVolume)
 	{

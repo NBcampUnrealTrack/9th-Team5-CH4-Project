@@ -50,6 +50,16 @@ public:
 	void Reset(int32 NewStateGeneration);
 
 private:
+	struct FDirectionalPerfContext
+	{
+		bool bEnabled = false;
+		bool bCombined = false;
+		uint64 Id = 0;
+		double EnqueuedAt = 0.0;
+		double StartedAt = 0.0;
+		int32 AheadAtEnqueue = 0;
+	};
+
 	struct FPendingDirectionalAdd
 	{
 		TWeakObjectPtr<UWorld> World;
@@ -57,8 +67,10 @@ private:
 		TOptional<float> AuthoritativeAmount;
 		TFunction<void(float)> Completion;
 		int32 StateGeneration = 0;
+		FDirectionalPerfContext Perf;
 	};
 
+	void EnqueueDirectionalAdd(FPendingDirectionalAdd&& PendingAdd);
 	void ProcessNextDirectionalAdd();
 	void HandleDirectionalAddCompleted(
 		TWeakObjectPtr<UWorld> World,
@@ -66,7 +78,8 @@ private:
 		TOptional<float> AuthoritativeAmount,
 		int32 RequestGeneration,
 		TFunction<void(float)> Completion,
-		FDRSnowSurfaceEditResult&& EditResult);
+		FDRSnowSurfaceEditResult&& EditResult,
+		const FDirectionalPerfContext& Perf);
 
 	// 지형 생성이 완료된 후 내부 재질 저장, 부피 갱신, 캐릭터 파묻힘 검사를 순서대로 진행합니다.
 	void CommitAddedSurfaceEdit(
@@ -86,6 +99,8 @@ private:
 	FDRSnowVolumeStore& VolumeStore;
 
 	TQueue<FPendingDirectionalAdd> PendingDirectionalAdds;
+	int32 PendingDirectionalAddCount = 0;
+	uint64 NextPerfId = 0;
 	int32 CurrentStateGeneration = 0;
 	bool bDirectionalAddInProgress = false;
 };

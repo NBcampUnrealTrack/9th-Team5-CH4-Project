@@ -12,6 +12,26 @@
 #include "TimerManager.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelWorld.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSurfaceEditor.h"
+#include "HAL/PlatformTime.h"
+
+namespace
+{
+void LogSnowReplayPerf(const TCHAR* Stage, UWorld* World, int32 Sequence, int32 Generation, int32 Pending)
+{
+	if (!IsValid(World) || !FDRSnowSurfaceEditor::IsDirectionalPerfLoggingEnabled())
+	{
+		return;
+	}
+	// Same-process timestamps only. Receive -> Complete excludes network travel,
+	// join-snapshot buffering, and asynchronous mesh/collision completion.
+	UE_LOG(LogTemp, Log,
+		TEXT("[DRSnowReplayPerf] Stage=%s Mode=%s World=%s Sequence=%d Generation=%d Time=%.9f Pending=%d"),
+		Stage, FDRSnowSurfaceEditor::IsCombinedDirectionalEditEnabled() ? TEXT("Combined") : TEXT("Legacy"),
+		*World->GetName(), Sequence, Generation, FPlatformTime::Seconds(), Pending);
+}
+}
+
 
 void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
@@ -403,6 +423,10 @@ void ADRMiningGameStateBase::QueuePendingSnowOperation(const FDRSnowOperationRec
 	{
 		return A.Sequence < B.Sequence;
 	});
+	if (Record.bIsAddOperation && Record.AddOperation.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+	{
+		LogSnowReplayPerf(TEXT("Queued"), GetWorld(), Record.Sequence, SnowApplicationGeneration, PendingSnowOperations.Num());
+	}
 	StartPendingSnowRetry();
 }
 
@@ -442,6 +466,7 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 			Record.AddOperation.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool;
 		if (bDirectional)
 		{
+			LogSnowReplayPerf(TEXT("Started"), GetWorld(), Record.Sequence, SnowApplicationGeneration, PendingSnowOperations.Num());
 			ActiveDirectionalSnowOperationSequence = Record.Sequence;
 		}
 
@@ -631,6 +656,7 @@ void ADRMiningGameStateBase::HandleDirectionalSnowAddCompleted(
 		return;
 	}
 
+	LogSnowReplayPerf(TEXT("Completed"), GetWorld(), OperationSequence, ApplicationGeneration, PendingSnowOperations.Num());
 	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	if (OperationSequence > 0)
 	{
