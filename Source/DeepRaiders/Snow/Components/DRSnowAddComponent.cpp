@@ -99,40 +99,14 @@ bool UDRSnowAddComponent::ExecuteAddRequest(
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
 			const FDRSnowAddOperation Operation = MakeSnowAddOperation(Request);
-			if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
+			const FDRSnowAddResult SnowResult = SnowSubsystem->AddSnow(Request);
+			bHandled = SnowResult.AddedAmount > 0.f;
+			if (bHandled)
 			{
-				const TWeakObjectPtr<UWorld> WeakWorld(World);
-				const FDRSnowAddResult SnowResult = SnowSubsystem->AddSnow(
-					Request,
-					[WeakWorld, Operation](const float AppliedAmount)
-					{
-						if (AppliedAmount <= 0.f)
-						{
-							return;
-						}
-
-						if (UWorld* CompletedWorld = WeakWorld.Get())
-						{
-							if (ADRMiningGameStateBase* MiningGameState =
-								CompletedWorld->GetGameState<ADRMiningGameStateBase>())
-							{
-								MiningGameState->RegisterSnowAdd(Operation, AppliedAmount);
-							}
-						}
-					});
-				bHandled = SnowResult.AddedAmount > 0.f;
-			}
-			else
-			{
-				const FDRSnowAddResult SnowResult = SnowSubsystem->AddSnow(Request);
-				bHandled = SnowResult.AddedAmount > 0.f;
-				if (bHandled)
+				if (ADRMiningGameStateBase* MiningGameState =
+					World->GetGameState<ADRMiningGameStateBase>())
 				{
-					if (ADRMiningGameStateBase* MiningGameState =
-						World->GetGameState<ADRMiningGameStateBase>())
-					{
-						MiningGameState->RegisterSnowAdd(Operation);
-					}
+					MiningGameState->RegisterSnowAdd(Operation, SnowResult.AddedAmount);
 				}
 			}
 		}

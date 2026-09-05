@@ -57,9 +57,17 @@ void FDRSnowOperationBatcher::Flush()
 	}
 
 	// 콜백에서 재진입해도 즉시 전송을 반복하지 않도록 발송 전에 쿨타임을 건다.
-	Timers.SetTimer(CooldownTimer,
-		FTimerDelegate::CreateSP(AsShared(), &FDRSnowOperationBatcher::Flush),
-		CooldownSeconds, false);
+	const FTimerDelegate FlushDelegate =
+		FTimerDelegate::CreateSP(AsShared(), &FDRSnowOperationBatcher::Flush);
+	if constexpr (CooldownSeconds <= 0.f)
+	{
+		// SetTimer의 0초는 타이머 해제이므로 다음 tick 예약 API를 사용한다.
+		CooldownTimer = Timers.SetTimerForNextTick(FlushDelegate);
+	}
+	else
+	{
+		Timers.SetTimer(CooldownTimer, FlushDelegate, CooldownSeconds, false);
+	}
 	const uint32 FlushGeneration = Generation;
 	for (int32 BatchIndex = 0;
 		BatchIndex < MaxBatchesPerFlush && !PendingOperations.IsEmpty();

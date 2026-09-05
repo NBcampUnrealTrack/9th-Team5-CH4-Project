@@ -15,9 +15,9 @@ struct DEEPRAIDERS_API FDRSnowOperationBatcher : public TSharedFromThis<FDRSnowO
 	void Enqueue(FDRSnowOperationRecord&& Record);
 	void Reset();
 
-	static constexpr float CooldownSeconds = 0.05f;
+	static constexpr float CooldownSeconds = 0.0f;
 	static constexpr int32 MaxOperationsPerBatch = 16;
-	static constexpr int32 MaxBatchesPerFlush = 4;
+	static constexpr int32 MaxBatchesPerFlush = 8;
 
 private:
 	void Flush();
