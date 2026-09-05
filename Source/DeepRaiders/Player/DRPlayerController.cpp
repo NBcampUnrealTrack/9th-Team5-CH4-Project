@@ -1432,7 +1432,6 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
 	bPendingSnowSnapshotFinished = false;
-	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	BufferedSnowOperations.Reset();
@@ -1656,8 +1655,6 @@ void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int
 
 	}
 
-	// Pawn이 이미 있거나 새로 생성된 경우 모두 snapshot 이후 작업을 재개해야 한다.
-	Client_ResumeSnowJoinOperations(SnapshotId);
 }
 
 void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
@@ -1732,11 +1729,6 @@ bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& R
 
 bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 {
-	if (bPendingSnowCheckpointApplied)
-	{
-		return true;
-	}
-
 	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
 		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
 		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount)
@@ -1746,7 +1738,9 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 
 	UWorld* World = GetWorld();
 	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	if (!IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
+	ADRMiningGameStateBase* MiningGameState = IsValid(World)
+		? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (!IsValid(MiningGameState) || !IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
 		PendingSnowVoxelWorldName,
 		PendingSnowVoxelSaveData,
 		PendingSnowVolumeData))
@@ -1763,27 +1757,17 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		return false;
 	}
 
-	if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
-	{
-		MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
-	}
-
-	bPendingSnowCheckpointApplied = true;
+	MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
+	World->GetTimerManager().ClearTimer(SnowJoinSnapshotRetryTimer);
+	// 이벤트 콜백에서 재진입해도 같은 스냅샷을 다시 적용하지 않는다.
+	bPendingSnowSnapshotFinished = false;
 	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
 	LogSnowJoinControlState(TEXT("ClientSnapshotApplied"));
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
-	return true;
-}
 
-void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 SnapshotId)
-{
-	LogSnowJoinControlState(TEXT("ClientResumeReceived"));
-	if (!bPendingSnowCheckpointApplied || SnapshotId != PendingSnowSnapshotId)
-	{
-		return;
-	}
-
+	// Voxel 작업은 Pawn 스폰이나 서버의 추가 응답을 기다릴 필요가 없다.
+	LogSnowJoinControlState(TEXT("ClientOperationsResumed"));
 	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
 	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
 	{
@@ -1809,10 +1793,10 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	PendingSnowVoxelSaveByteCount = 0;
 	PendingSnowVolumeByteCount = 0;
 	bPendingSnowSnapshotFinished = false;
-	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	BufferedSnowOperations.Reset();
+	// 조인 버퍼링을 해제한 뒤 전달해야 같은 작업을 다시 버퍼에 넣지 않는다.
 	ApplySnowJoinOperations(Operations);
 
 	UE_LOG(
@@ -1823,7 +1807,7 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 		AppliedVoxelSaveByteCount,
 		AppliedSnowVolumeByteCount,
 		Operations.Num());
-
+	return true;
 }
 
 void ADRPlayerController::LogSnowJoinControlState(const TCHAR* Stage) const
