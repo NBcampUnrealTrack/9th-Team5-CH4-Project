@@ -704,40 +704,46 @@ void ADRPlayerController::InitializeStartingQuickSlot()
 		InventoryComponent->TryAddItemToSlot(0, StartingShovelDefinition, 1);
 	}
 
-	if (IsValid(StartingRifle) 
+	if (IsValid(StartingPistol) 
 		&& !InventoryComponent->GetItemAtSlot(1))
 	{
-		InventoryComponent->TryAddItemToSlot(1, StartingRifle, 1);
+		InventoryComponent->TryAddItemToSlot(1, StartingPistol, 1);
 	}
-
-	if (IsValid(StartingShotgun) 
+	
+	if (IsValid(StartingRifle) 
 		&& !InventoryComponent->GetItemAtSlot(2))
 	{
-		InventoryComponent->TryAddItemToSlot(2, StartingShotgun, 1);
+		InventoryComponent->TryAddItemToSlot(2, StartingRifle, 1);
 	}
-
-	if (IsValid(StartingSprayer) 
+	
+	if (IsValid(StartingShotgun) 
 		&& !InventoryComponent->GetItemAtSlot(3))
 	{
-		InventoryComponent->TryAddItemToSlot(3, StartingSprayer, 1);
+		InventoryComponent->TryAddItemToSlot(3, StartingShotgun, 1);
 	}
-
-	if (IsValid(StartingCannon) 
+	
+	if (IsValid(StartingSprayer) 
 		&& !InventoryComponent->GetItemAtSlot(4))
 	{
-		InventoryComponent->TryAddItemToSlot(4, StartingCannon, 1);
+		InventoryComponent->TryAddItemToSlot(4, StartingSprayer, 1);
+	}
+	
+	if (IsValid(StartingCannon) 
+		&& !InventoryComponent->GetItemAtSlot(5))
+	{
+		InventoryComponent->TryAddItemToSlot(5, StartingCannon, 1);
 	}
 
 #if WITH_EDITOR
 
-	if (!InventoryComponent->GetItemAtSlot(5))
-	{
-		InventoryComponent->TryAddItemToSlot(5, TestItemDefinition1, TestItemQuantity1);
-	}
-
 	if (!InventoryComponent->GetItemAtSlot(6))
 	{
-		InventoryComponent->TryAddItemToSlot(6, TestItemDefinition2, TestItemQuantity2);
+		InventoryComponent->TryAddItemToSlot(6, TestItemDefinition1, TestItemQuantity1);
+	}
+
+	if (!InventoryComponent->GetItemAtSlot(7))
+	{
+		InventoryComponent->TryAddItemToSlot(7, TestItemDefinition2, TestItemQuantity2);
 	}
 
 #endif
@@ -752,6 +758,89 @@ void ADRPlayerController::Upgrade(FString WeaponName, FString StatName)
 	{
 		ServerUpgradeWeaponForDebug(MoveTemp(WeaponName), MoveTemp(StatName));
 	}
+#endif
+}
+
+void ADRPlayerController::GiveWeapon(FString WeaponName)
+{
+#if !UE_BUILD_SHIPPING
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	ServerGiveWeaponForDebug(MoveTemp(WeaponName));
+#endif
+}
+
+void ADRPlayerController::ServerGiveWeaponForDebug_Implementation(const FString& WeaponName)
+{
+#if !UE_BUILD_SHIPPING
+	if (!HasAuthority() || !IsValid(InventoryComponent) || !IsValid(QuickSlotComponent))
+	{
+		return;
+	}
+
+	FString WeaponKey = WeaponName.ToLower();
+	WeaponKey.ReplaceInline(TEXT("_"), TEXT(""));
+	WeaponKey.ReplaceInline(TEXT("-"), TEXT(""));
+
+	UDRItemDefinition* WeaponDefinition = nullptr;
+
+	if (WeaponKey == TEXT("rifle"))
+	{
+		WeaponDefinition = StartingRifle.Get();
+	}
+	else if (WeaponKey == TEXT("shotgun") || WeaponKey == TEXT("scattergun"))
+	{
+		WeaponDefinition = StartingShotgun.Get();
+	}
+	else if (WeaponKey == TEXT("sprayer"))
+	{
+		WeaponDefinition = StartingSprayer.Get();
+	}
+	else if (WeaponKey == TEXT("cannon"))
+	{
+		WeaponDefinition = StartingCannon.Get();
+	}
+
+	if (!IsValid(WeaponDefinition))
+	{
+		ClientMessage(TEXT("Usage: giveweapon " "<rifle|shotgun|sprayer|cannon>"));
+
+		return;
+	}
+
+	int32 EmptySlotIndex = INDEX_NONE;
+
+	for (int32 SlotIndex = 0; SlotIndex < InventoryComponent->GetMaxSlots(); ++SlotIndex)
+	{
+		if (InventoryComponent->GetItemAtSlot(SlotIndex) == nullptr)
+		{
+			EmptySlotIndex = SlotIndex;
+			break;
+		}
+	}
+
+	if (EmptySlotIndex == INDEX_NONE)
+	{
+		ClientMessage(TEXT("GiveWeapon failed: no empty slot"));
+
+		return;
+	}
+
+	const bool bAdded = InventoryComponent->TryAddItemToSlot(EmptySlotIndex, WeaponDefinition, 1);
+
+	if (!bAdded)
+	{
+		ClientMessage(FString::Printf(TEXT("GiveWeapon failed: %s"), *WeaponName));
+
+		return;
+	}
+
+	QuickSlotComponent->RequestSelectSlot(EmptySlotIndex);
+
+	ClientMessage(FString::Printf(TEXT("GiveWeapon succeeded: %s -> slot %d"), *WeaponName, EmptySlotIndex + 1));
 #endif
 }
 

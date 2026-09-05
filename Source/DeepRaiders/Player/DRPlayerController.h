@@ -246,8 +246,11 @@ protected:
 	TObjectPtr<UDRItemDefinition> StartingShovelDefinition;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
+	TObjectPtr<UDRItemDefinition> StartingPistol;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingRifle;
-
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> StartingShotgun;
 
@@ -268,6 +271,9 @@ public:
 	UFUNCTION(Exec)
 	void Upgrade(FString WeaponName, FString StatName);
 
+	UFUNCTION(Exec)
+	void GiveWeapon(FString WeaponName);
+	
 private:
 	UFUNCTION(Server, Reliable)
 	void ServerUpgradeWeaponForDebug(const FString& WeaponName, const FString& StatName);
@@ -280,6 +286,9 @@ private:
 
 	void ReportWeaponUpgradeDebugResult(const FString& Message);
 
+	UFUNCTION(Server, Reliable)
+	void ServerGiveWeaponForDebug(const FString& WeaponName);
+	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")
 	TObjectPtr<UDRItemDefinition> TestItemDefinition1;
