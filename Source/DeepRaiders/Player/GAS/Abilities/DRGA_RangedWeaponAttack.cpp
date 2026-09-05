@@ -130,6 +130,32 @@ void UDRGA_RangedWeaponAttack::EndAbility(const FGameplayAbilitySpecHandle Handl
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
+bool UDRGA_RangedWeaponAttack::CheckCooldown(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (ActorInfo == nullptr)
+	{
+		return false;
+	}
+
+	if (ActorInfo->IsNetAuthority())
+	{
+		return Super::CheckCooldown(Handle, ActorInfo, OptionalRelevantTags);
+	}
+
+	if (!ActorInfo->IsLocallyControlled())
+	{
+		return false;
+	}
+
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
+	const UDRQuickSlotComponent* QuickSlot = IsValid(PlayerController) ?
+		PlayerController->GetQuickSlotComponent() : nullptr;
+
+	return IsValid(QuickSlot)
+		&& QuickSlot->CanRequestLocalWeaponShot(QuickSlot->GetSelectedInstanceId());
+}
+
 void UDRGA_RangedWeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {

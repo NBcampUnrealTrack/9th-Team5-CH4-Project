@@ -375,18 +375,26 @@ void UDRMovementActionComponent::EvaluateZiplineManualTraverseContribution(const
 	OutOutput.OverrideVelocity = (DesiredLocation - Input.Location) / SafeDeltaTime;
 }
 
-bool UDRMovementActionComponent::IsZiplineTargetReached(const FVector& CurrentLocation) const
+bool UDRMovementActionComponent::IsZiplineTargetReached(
+	const FVector& CurrentLocation) const
 {
-	const FDRMovementActionState& State = GetSimulationActionState();
+	const FDRMovementActionState& State =
+		GetSimulationActionState();
 
-	if (!State.IsActive() || State.ActionType != EDRMovementActionType::Zipline || State.ZiplineRideMode != EDRZiplineRideMode::AutoTraverse)
+	if (!State.IsActive()
+		|| State.ActionType != EDRMovementActionType::Zipline
+		|| State.ZiplineRideMode != EDRZiplineRideMode::AutoTraverse
+		|| !State.bZiplineAutoDismountAtTarget)
 	{
 		return false;
 	}
 
 	constexpr float EndpointHoldTolerance = 2.f;
 
-	return FVector::DistSquared(CurrentLocation, State.GetZiplineRideTargetLocation()) <= FMath::Square(EndpointHoldTolerance);
+	return FVector::DistSquared(
+			CurrentLocation,
+			State.GetZiplineRideTargetLocation())
+		<= FMath::Square(EndpointHoldTolerance);
 }
 
 void UDRMovementActionComponent::RequestCancelZipline()
@@ -404,6 +412,77 @@ void UDRMovementActionComponent::RequestCancelZipline()
 	}
 
 	ServerRequestCancelZipline(State.SessionId);
+}
+
+void UDRMovementActionComponent::RequestZiplineJumpOff(const FVector& WorldDirection)
+{
+	if (!IsLocallyControlledOwner())
+	{
+		return;
+	}
+
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	if (!State.IsActive() || State.ActionType != EDRMovementActionType::Zipline)
+	{
+		return;
+	}
+
+	FVector SafeDirection = WorldDirection;
+	SafeDirection.Z = 0.f;
+	SafeDirection = SafeDirection.GetSafeNormal();
+
+	ServerRequestZiplineJumpOff(State.SessionId, SafeDirection);
+}
+
+void UDRMovementActionComponent::ServerRequestZiplineJumpOff_Implementation(int32 SessionId, FVector_NetQuantizeNormal WorldDirection)
+{
+	AActor* OwnerActor = GetOwner();
+
+	if (!IsValid(OwnerActor) || !OwnerActor->HasAuthority())
+	{
+		return;
+	}
+
+	if (!AuthoritativeActionState.IsActive() 
+		|| AuthoritativeActionState.ActionType != EDRMovementActionType::Zipline 
+		|| AuthoritativeActionState.SessionId != SessionId)
+	{
+		return;
+	}
+
+	ACharacter* Character = Cast<ACharacter>(OwnerActor);
+
+	UDRCharacterMovementComponent* Movement = 
+		IsValid(Character) 
+			? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement()) 
+			: nullptr;
+
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	FVector HorizontalDirection = FVector(WorldDirection);
+
+	HorizontalDirection.Z = 0.f;
+	HorizontalDirection = HorizontalDirection.GetSafeNormal();
+
+	/*
+	 * Zipline에서 사용하던 RailSpeed / Attach Correction Velocity를
+	 * JumpOff에 절대 승계하지 않는다.
+	 */
+	Movement->SetZiplineRailSpeed(0.f);
+	Movement->ResetManualZiplineInputState();
+
+	Movement->Velocity = 
+		HorizontalDirection * FMath::Max(ZiplineJumpOffHorizontalSpeed, 0.f) 
+		+ FVector::UpVector * FMath::Max(ZiplineJumpOffVerticalSpeed, 0.f);
+
+	EndMovementAction(EDRMovementActionEndReason::JumpOff);
+
+	Movement->ExitCustomMovementMode();
+	Character->ForceNetUpdate();
 }
 
 void UDRMovementActionComponent::ServerRequestCancelZipline_Implementation(int32 SessionId)

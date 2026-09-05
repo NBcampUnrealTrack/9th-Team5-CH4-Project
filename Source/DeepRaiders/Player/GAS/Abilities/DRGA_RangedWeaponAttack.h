@@ -26,6 +26,12 @@ protected:
 	virtual void InputPressed(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) override;
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 	
+	/*
+	 * Authority는 Cooldown GE 태그를 검사하고, 원격 소유 클라이언트는 QuickSlot의 로컬 발사 간격을 검사한다.
+	 */
+	virtual bool CheckCooldown(const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 	virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
@@ -46,8 +52,8 @@ protected:
 	 */
 	virtual bool SendLocalShotRequest();
 	
-	// 로컬 Cooldown과 Cost를 검사한 뒤 자식 GA에 발사를 요청
-	// 원격 클라이언트는 성공한 요청과 같은 Prediction Key로 Cooldown GE를 예측 적용
+	// 로컬 발사 간격과 Cost를 검사한 뒤 자식 GA에 발사를 요청
+	// 원격 클라이언트의 발사 간격은 QuickSlot이 관리하고, 실제 Cooldown과 Cost는 서버가 확정한다.
 	void TryRequestLocalShot();
 	
 	/*

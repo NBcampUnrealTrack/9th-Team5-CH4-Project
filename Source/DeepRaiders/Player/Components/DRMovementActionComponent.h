@@ -22,6 +22,7 @@ enum class EDRMovementActionEndReason : uint8
 	Invalidated UMETA(DisplayName = "Invalidated"),
 	OwnerDeath UMETA(DisplayName = "Owner Death"),
     Collision UMETA(DisplayName = "Collision"),
+	JumpOff UMETA(DisplayName = "Jump Off"),
 };
 
 UENUM(BlueprintType)
@@ -108,6 +109,11 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRZiplineRideMode ZiplineRideMode = EDRZiplineRideMode::AutoTraverse;
 
+	// AutoTraverse가 목표 Endpoint에 도착했을 때 자동으로 하차할지 여부.
+	// false이면 Endpoint에서 RailSpeed 0으로 정지한 채 탑승 상태를 유지한다.
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
+	bool bZiplineAutoDismountAtTarget = true;
+	
 	// ManualTraverse에서 W/S의 양의 진행 방향을 결정한다.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Movement Action")
 	EDRZiplineManualControlMode ZiplineManualControlMode = EDRZiplineManualControlMode::Vertical;
@@ -332,6 +338,11 @@ public:
 	// 소유 클라이언트가 활성화된 Zipline에서 이탈을 요청한다. (예: Space 입력)
 	void RequestCancelZipline();
 
+	// Zipline 탑승 중 Space 입력.
+	// 카메라 기준 WASD 방향으로 Zipline을 이탈하면서 점프한다.
+	// WorldDirection이 Zero이면 수직 방향으로만 점프한다.
+	void RequestZiplineJumpOff(const FVector& WorldDirection);
+	
 	FDRMovementActionEnded OnMovementActionEnded;
 	FDRMovementActionSimulated OnMovementActionSimulated;
 
@@ -398,4 +409,13 @@ private:
 	float ZiplineInteractionCooldown = 1.0f;
 
 	double LastZiplineInteractionServerTime = -BIG_NUMBER;
+	
+	UFUNCTION(Server, Reliable)
+	void ServerRequestZiplineJumpOff(int32 SessionId, FVector_NetQuantizeNormal WorldDirection);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Zipline|Jump Off", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
+	float ZiplineJumpOffHorizontalSpeed = 400.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Zipline|Jump Off", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
+	float ZiplineJumpOffVerticalSpeed = 200.f;
 };
