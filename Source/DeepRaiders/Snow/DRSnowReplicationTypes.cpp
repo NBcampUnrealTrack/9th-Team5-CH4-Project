@@ -1,4 +1,8 @@
 #include "DRSnowReplicationTypes.h"
+#include "DRSnowNetworkUtils.h"
+
+#include "VoxelMaterial.h"
+#include "VoxelTools/Gen/VoxelToolsBase.h"
 
 namespace
 {
@@ -15,69 +19,6 @@ int32 FloorDivide(const int32 Value, const int32 Divisor)
 	return Remainder < 0 ? Quotient - 1 : Quotient;
 }
 
-uint32 EncodeSignedInt(const int32 Value)
-{
-	return (static_cast<uint32>(Value) << 1) ^ static_cast<uint32>(Value >> 31);
-}
-
-int32 DecodeSignedInt(const uint32 Value)
-{
-	return static_cast<int32>((Value >> 1) ^ -static_cast<int32>(Value & 1));
-}
-
-int32 GetPackedUIntSize(uint32 Value)
-{
-	int32 ByteCount = 1;
-	while (Value >= 0x80)
-	{
-		Value >>= 7;
-		++ByteCount;
-	}
-	return ByteCount;
-}
-
-uint32 GetRunLength(const TArray<uint16>& Indices, const uint32 Start)
-{
-	uint32 End = Start + 1;
-	while (End < static_cast<uint32>(Indices.Num()) && Indices[End] == Indices[End - 1] + 1)
-	{
-		++End;
-	}
-	return End - Start;
-}
-
-bool UseRunEncoding(const TArray<uint16>& Indices, int32& OutIndexBytes)
-{
-	int32 DeltaBytes = 0;
-	int32 RunBytes = 0;
-	uint32 Previous = 0;
-	for (const uint16 Index : Indices)
-	{
-		DeltaBytes += GetPackedUIntSize(Index - Previous);
-		Previous = Index;
-	}
-	Previous = 0;
-	for (uint32 Start = 0; Start < static_cast<uint32>(Indices.Num());)
-	{
-		const uint32 Length = GetRunLength(Indices, Start);
-		RunBytes += GetPackedUIntSize(Indices[Start] - Previous) + GetPackedUIntSize(Length - 1);
-		Previous = Indices[Start + Length - 1];
-		Start += Length;
-	}
-	OutIndexBytes = FMath::Min(DeltaBytes, RunBytes);
-	return RunBytes < DeltaBytes;
-}
-
-bool SerializeCount(FArchive& Ar, uint32& Value, const uint32 Maximum)
-{
-	Ar.SerializeIntPacked(Value);
-	if (Value > Maximum)
-	{
-		Ar.SetError();
-		return false;
-	}
-	return !Ar.IsError();
-}
 }
 
 int32 FDRSnowMaterialPatch::NumVoxels() const
@@ -96,19 +37,19 @@ int32 FDRSnowMaterialPatch::NumVoxels() const
 int32 FDRSnowMaterialPatch::EstimateSerializedBytes() const
 {
 	// 각 set의 delta/연속 구간 선택 비트까지 포함한 전체 bit 수를 byte로 올림한다.
-	int32 Result = GetPackedUIntSize(Chunks.Num());
+	int32 Result = FDRSnowNetSerializeUtils::GetPackedUIntSize(Chunks.Num());
 	int32 EncodingBits = 0;
 	for (const FDRSnowMaterialChunkPatch& Chunk : Chunks)
 	{
-		Result += GetPackedUIntSize(EncodeSignedInt(Chunk.ChunkCoord.X));
-		Result += GetPackedUIntSize(EncodeSignedInt(Chunk.ChunkCoord.Y));
-		Result += GetPackedUIntSize(EncodeSignedInt(Chunk.ChunkCoord.Z));
-		Result += GetPackedUIntSize(Chunk.MaterialSets.Num());
+		Result += FDRSnowNetSerializeUtils::GetPackedUIntSize(FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.X));
+		Result += FDRSnowNetSerializeUtils::GetPackedUIntSize(FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.Y));
+		Result += FDRSnowNetSerializeUtils::GetPackedUIntSize(FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.Z));
+		Result += FDRSnowNetSerializeUtils::GetPackedUIntSize(Chunk.MaterialSets.Num());
 		for (const FDRSnowMaterialIndexSet& MaterialSet : Chunk.MaterialSets)
 		{
 			int32 IndexBytes = 0;
-			UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
-			Result += sizeof(uint8) + GetPackedUIntSize(MaterialSet.LocalVoxelIndices.Num()) + IndexBytes;
+			FDRSnowNetSerializeUtils::UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
+			Result += sizeof(uint8) + FDRSnowNetSerializeUtils::GetPackedUIntSize(MaterialSet.LocalVoxelIndices.Num()) + IndexBytes;
 			++EncodingBits;
 		}
 	}
@@ -120,7 +61,7 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 	bOutSuccess = false;
 
 	uint32 ChunkCount = Ar.IsSaving() ? static_cast<uint32>(Chunks.Num()) : 0;
-	if (!SerializeCount(Ar, ChunkCount, MaxChunkCount))
+	if (!FDRSnowNetSerializeUtils::SerializeCount(Ar, ChunkCount, MaxChunkCount))
 	{
 		return false;
 	}
@@ -132,24 +73,24 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 	uint32 TotalVoxelCount = 0;
 	for (FDRSnowMaterialChunkPatch& Chunk : Chunks)
 	{
-		uint32 EncodedX = Ar.IsSaving() ? EncodeSignedInt(Chunk.ChunkCoord.X) : 0;
-		uint32 EncodedY = Ar.IsSaving() ? EncodeSignedInt(Chunk.ChunkCoord.Y) : 0;
-		uint32 EncodedZ = Ar.IsSaving() ? EncodeSignedInt(Chunk.ChunkCoord.Z) : 0;
+		uint32 EncodedX = Ar.IsSaving() ? FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.X) : 0;
+		uint32 EncodedY = Ar.IsSaving() ? FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.Y) : 0;
+		uint32 EncodedZ = Ar.IsSaving() ? FDRSnowNetSerializeUtils::EncodeSignedInt(Chunk.ChunkCoord.Z) : 0;
 		Ar.SerializeIntPacked(EncodedX);
 		Ar.SerializeIntPacked(EncodedY);
 		Ar.SerializeIntPacked(EncodedZ);
 		if (Ar.IsLoading())
 		{
 			Chunk.ChunkCoord = FIntVector(
-				DecodeSignedInt(EncodedX),
-				DecodeSignedInt(EncodedY),
-				DecodeSignedInt(EncodedZ));
+				FDRSnowNetSerializeUtils::DecodeSignedInt(EncodedX),
+				FDRSnowNetSerializeUtils::DecodeSignedInt(EncodedY),
+				FDRSnowNetSerializeUtils::DecodeSignedInt(EncodedZ));
 		}
 
 		uint32 MaterialSetCount = Ar.IsSaving()
 			? static_cast<uint32>(Chunk.MaterialSets.Num())
 			: 0;
-		if (!SerializeCount(Ar, MaterialSetCount, MaxMaterialSetCountPerChunk))
+		if (!FDRSnowNetSerializeUtils::SerializeCount(Ar, MaterialSetCount, MaxMaterialSetCountPerChunk))
 		{
 			return false;
 		}
@@ -165,7 +106,7 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 			uint32 LocalVoxelCount = Ar.IsSaving()
 				? static_cast<uint32>(MaterialSet.LocalVoxelIndices.Num())
 				: 0;
-			if (!SerializeCount(Ar, LocalVoxelCount, MaxVoxelCountPerSet))
+			if (!FDRSnowNetSerializeUtils::SerializeCount(Ar, LocalVoxelCount, MaxVoxelCountPerSet))
 			{
 				return false;
 			}
@@ -195,7 +136,7 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 					Previous = LocalIndex;
 				}
 				int32 IndexBytes = 0;
-				bRuns = UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
+				bRuns = FDRSnowNetSerializeUtils::UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
 			}
 			Ar.SerializeBits(&bRuns, 1);
 
@@ -216,7 +157,7 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 				{
 					if (Ar.IsSaving())
 					{
-						LengthMinusOne = GetRunLength(MaterialSet.LocalVoxelIndices, Index) - 1;
+						LengthMinusOne = FDRSnowNetSerializeUtils::GetRunLength(MaterialSet.LocalVoxelIndices, Index) - 1;
 					}
 					Ar.SerializeIntPacked(LengthMinusOne);
 				}
@@ -270,4 +211,83 @@ FIntVector DRSnowMaterialPatchUtils::LocalIndexToVoxel(
 	const int32 Y = (LocalIndex / ChunkSize) % ChunkSize;
 	const int32 Z = LocalIndex / (ChunkSize * ChunkSize);
 	return ChunkCoord * ChunkSize + FIntVector(X, Y, Z);
+}
+
+namespace
+{
+bool HasMaterialChanged(const FModifiedVoxelMaterial& ModifiedMaterial)
+{
+	// FVoxelMaterial은 Voxel Plugin에서 bytewise-comparable 타입으로 선언되어 있다.
+	return FMemory::Memcmp(
+		&ModifiedMaterial.OldMaterial,
+		&ModifiedMaterial.NewMaterial,
+		sizeof(FVoxelMaterial)) != 0;
+}
+
+bool IsChunkBefore(const FIntVector& A, const FIntVector& B)
+{
+	if (A.X != B.X)
+	{
+		return A.X < B.X;
+	}
+	if (A.Y != B.Y)
+	{
+		return A.Y < B.Y;
+	}
+	return A.Z < B.Z;
+}
+}
+
+void FDRSnowMaterialPatchBuilder::AddChangedMaterials(
+	const uint8 MaterialIndex,
+	const TArray<FModifiedVoxelMaterial>& ModifiedMaterials)
+{
+	for (const FModifiedVoxelMaterial& ModifiedMaterial : ModifiedMaterials)
+	{
+		if (!HasMaterialChanged(ModifiedMaterial))
+		{
+			continue;
+		}
+
+		const FIntVector ChunkCoord =
+			DRSnowMaterialPatchUtils::VoxelToChunkCoord(ModifiedMaterial.Position);
+		Chunks.FindOrAdd(ChunkCoord)
+			.FindOrAdd(MaterialIndex)
+			.Add(DRSnowMaterialPatchUtils::VoxelToLocalIndex(ModifiedMaterial.Position));
+	}
+}
+
+FDRSnowMaterialPatch FDRSnowMaterialPatchBuilder::Build() const
+{
+	FDRSnowMaterialPatch Patch;
+	Patch.Chunks.Reserve(Chunks.Num());
+	for (const TPair<FIntVector, FLocalIndicesByMaterial>& Chunk : Chunks)
+	{
+		FDRSnowMaterialChunkPatch& ChunkPatch = Patch.Chunks.AddDefaulted_GetRef();
+		ChunkPatch.ChunkCoord = Chunk.Key;
+	}
+	Patch.Chunks.Sort([](const FDRSnowMaterialChunkPatch& A, const FDRSnowMaterialChunkPatch& B)
+	{
+		return IsChunkBefore(A.ChunkCoord, B.ChunkCoord);
+	});
+
+	for (FDRSnowMaterialChunkPatch& ChunkPatch : Patch.Chunks)
+	{
+		const FLocalIndicesByMaterial& MaterialMap = Chunks.FindChecked(ChunkPatch.ChunkCoord);
+
+		TArray<uint8> MaterialIndices;
+		MaterialMap.GenerateKeyArray(MaterialIndices);
+		MaterialIndices.Sort();
+		ChunkPatch.MaterialSets.Reserve(MaterialIndices.Num());
+
+		for (const uint8 MaterialIndex : MaterialIndices)
+		{
+			FDRSnowMaterialIndexSet& MaterialSet = ChunkPatch.MaterialSets.AddDefaulted_GetRef();
+			MaterialSet.MaterialIndex = MaterialIndex;
+			MaterialSet.LocalVoxelIndices = MaterialMap.FindChecked(MaterialIndex).Array();
+			MaterialSet.LocalVoxelIndices.Sort();
+		}
+	}
+
+	return Patch;
 }

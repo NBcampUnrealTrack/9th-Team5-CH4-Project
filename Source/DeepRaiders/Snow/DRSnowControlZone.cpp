@@ -6,7 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WidgetComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
-#include "DeepRaiders/Snow/DRSnowMaterialMapping.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/UI/HUD/DRPointLocationWidget.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"

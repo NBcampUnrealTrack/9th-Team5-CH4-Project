@@ -6,8 +6,6 @@
 #include "VoxelTools/VoxelSurfaceTools.h"
 
 class AVoxelWorld;
-class FDRSnowOwnershipStore;
-class FDRSnowVolumeStore;
 
 // Voxel 표현 편집의 실제 결과다. 원본 Store 갱신은 Subsystem이 이 결과를 사용해 처리한다.
 struct FDRSnowSurfaceEditResult
@@ -56,32 +54,24 @@ public:
 	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
 	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
-	// 서버 원본 Ownership/Volume을 읽어 최종 MaterialIndex 그룹을 만든다.
-	bool ResolveSnowMaterialsAtArea(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		const FDRSnowOwnershipStore& OwnershipStore,
-		const FDRSnowVolumeStore& VolumeStore,
-		FDRSnowResolvedMaterialEdit& OutResolvedEdit);
-	bool ResolveSnowMaterialsAtModifiedVoxels(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		const FDRSnowOwnershipStore& OwnershipStore,
-		const FDRSnowVolumeStore& VolumeStore,
-		FDRSnowResolvedMaterialEdit& OutResolvedEdit);
 	// Resolve 결과를 서버 VoxelWorld에 적용한다. OutMaterialPatch에는 실제 변경분만 기록한다.
 	bool ApplyResolvedSnowMaterials(
 		const FDRSnowResolvedMaterialEdit& ResolvedEdit,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
+	// 작은 패치의 도색을 게임 스레드에서 끝내고 동일한 청크 Bounds를 반환한다.
+	bool ApplySnowMaterialPatchSync(
+		AVoxelWorld* VoxelWorld,
+		FDRSnowMaterialPatch MaterialPatch,
+		TArray<FVoxelIntBox>& OutEditedChunkBounds);
 	// 정확한 patch 좌표를 작업 스레드에서 순차 적용하고, 완료 시 편집된 청크 Bounds를 반환한다.
 	bool ApplySnowMaterialPatchAsync(
 		AVoxelWorld* VoxelWorld,
 		FDRSnowMaterialPatch MaterialPatch,
 		TFunction<void(bool, TArray<FVoxelIntBox>&&)> Completion);
 
-private:
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const;
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const;
 
+private:
 	UWorld* World = nullptr;
 };

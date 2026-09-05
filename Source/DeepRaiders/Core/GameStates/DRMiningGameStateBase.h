@@ -50,6 +50,8 @@ struct FDRTeamRegisteredTeleportPoint
 	TObjectPtr<ADRTeleportPoint> TeleportPoint;
 };
 
+struct FDRSnowOperationBatcher;
+
 UCLASS()
 class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
 {
@@ -166,20 +168,8 @@ public:
 	void Multicast_ApplySnowOperations(const TArray<FDRSnowOperationRecord>& Records);
 
 private:
-	// 눈 작업 배치 전송 시스템 (서버 전용)
-	// 매 작업마다 RPC를 보내면 연사나 산탄 시 패킷 폭주가 발생하므로,
-	// 대기열에 모아두었다가 제한된 크기의 배치로 나누어 전송합니다.
-
-	// 작업을 대기열에 추가하고 배치 전송 타이머를 예약합니다.
+	// 서버 작업을 즉시 전송하거나 쿨타임 배치에 추가한다.
 	void QueueSnowOperationForBroadcast(FDRSnowOperationRecord&& Record);
-
-	// 타이머가 꺼져 있을 때만 다음 배치 전송을 예약합니다.
-	void ScheduleSnowOperationBroadcast();
-
-	// 대기열의 작업들을 분리하여 Multicast_ApplySnowOperations RPC로 일괄 발송합니다.
-	void FlushSnowOperationBroadcasts();
-
-	// 미전송 대기열과 타이머를 취소합니다 (게임 종료 및 상태 초기화 시 호출).
 	void ClearSnowOperationBroadcasts();
 
 	bool ApplySnowAddOnce(const FDRSnowOperationRecord& Record);
@@ -197,9 +187,8 @@ private:
 	void StopPendingSnowRetry();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
 
-	// 서버 전송용: 아직 클라이언트로 전송되지 않은 눈 작업 묶음 대기열
-	TArray<FDRSnowOperationRecord> PendingSnowBroadcastOperations;
-	FTimerHandle SnowOperationBroadcastTimer;
+	// 서버 전송 큐와 rate limit의 수명을 GameState에 묶는다.
+	TSharedPtr<FDRSnowOperationBatcher> SnowOperationBatcher;
 
 	// 공통: 눈 작업 고유 번호 (서버: 순차 발급, 클라이언트: 중복 처리 방지용)
 	int32 NextSnowOperationSequence = 0;

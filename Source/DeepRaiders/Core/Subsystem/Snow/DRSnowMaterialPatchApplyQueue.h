@@ -8,7 +8,7 @@
 class AVoxelWorld;
 class FDRSnowSurfaceEditor;
 
-// 네트워크로 받은 MaterialPatch를 수신 순서대로 하나씩 비동기 적용한다.
+// 네트워크 패치를 수신 순서대로 적용한다. 100복셀 이하는 동기, 나머지는 비동기다.
 // 각 패치가 끝나면 편집 청크를 즉시 렌더 갱신한 뒤 다음 작업을 시작한다.
 class DEEPRAIDERS_API FDRSnowMaterialPatchApplyQueue
 	: public TSharedFromThis<FDRSnowMaterialPatchApplyQueue>
@@ -31,6 +31,11 @@ private:
 	};
 
 	void ProcessNext();
+	void UpdateEditedBounds(
+		TWeakObjectPtr<AVoxelWorld> VoxelWorld,
+		int32 PatchGeneration,
+		bool bApplied,
+		const TArray<FVoxelIntBox>& EditedChunkBounds);
 	void HandlePatchCompleted(
 		TWeakObjectPtr<AVoxelWorld> VoxelWorld,
 		int32 PatchGeneration,

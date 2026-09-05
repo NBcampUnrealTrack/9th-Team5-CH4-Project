@@ -14,7 +14,6 @@ class AVoxelWorld;
 class FDRSnowAddPipeline;
 class FDRSnowMaterialPatchApplyQueue;
 class FDRSnowRemovalPipeline;
-class FDRSnowVoxelContainmentEvaluator;
 
 // UDRSnowSubsystem: 게임 내 눈 지형 및 점령 시스템의 메인 창구
 //
@@ -106,9 +105,6 @@ private:
 
 	// 복셀 플러그인을 직접 제어하여 실제 지형을 깎거나 쌓는 도구
 	FDRSnowSurfaceEditor SurfaceEditor;
-
-	// 지형이 변했을 때 플레이어가 눈 속에 묻혔는지 감지하는 판정기
-	TSharedPtr<FDRSnowVoxelContainmentEvaluator> ContainmentEvaluator;
 
 	// 난입 플레이어용 맵 상태 압축 및 복원 직렬화기
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;

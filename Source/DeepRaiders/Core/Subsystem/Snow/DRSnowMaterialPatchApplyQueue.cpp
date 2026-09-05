@@ -41,6 +41,7 @@ void FDRSnowMaterialPatchApplyQueue::Reset()
 
 void FDRSnowMaterialPatchApplyQueue::ProcessNext()
 {
+	check(IsInGameThread());
 	if (bPatchInProgress)
 	{
 		return;
@@ -53,6 +54,16 @@ void FDRSnowMaterialPatchApplyQueue::ProcessNext()
 		if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
 			PendingPatch.StateGeneration != CurrentStateGeneration)
 		{
+			continue;
+		}
+
+		// 진행 중인 비동기 패치가 없는 경우에만 실행하므로 앞선 패치를 추월하지 않는다.
+		if (PendingPatch.Patch.NumVoxels() <= 100)
+		{
+			TArray<FVoxelIntBox> EditedChunkBounds;
+			const bool bApplied = SurfaceEditor.ApplySnowMaterialPatchSync(
+				VoxelWorld, MoveTemp(PendingPatch.Patch), EditedChunkBounds);
+			UpdateEditedBounds(VoxelWorld, PendingPatch.StateGeneration, bApplied, EditedChunkBounds);
 			continue;
 		}
 
@@ -92,6 +103,17 @@ void FDRSnowMaterialPatchApplyQueue::HandlePatchCompleted(
 	const bool bApplied,
 	TArray<FVoxelIntBox>&& EditedChunkBounds)
 {
+	UpdateEditedBounds(VoxelWorld, PatchGeneration, bApplied, EditedChunkBounds);
+	bPatchInProgress = false;
+	ProcessNext();
+}
+
+void FDRSnowMaterialPatchApplyQueue::UpdateEditedBounds(
+	const TWeakObjectPtr<AVoxelWorld> VoxelWorld,
+	const int32 PatchGeneration,
+	const bool bApplied,
+	const TArray<FVoxelIntBox>& EditedChunkBounds)
+{
 	AVoxelWorld* ValidVoxelWorld = VoxelWorld.Get();
 	if (bApplied && PatchGeneration == CurrentStateGeneration &&
 		IsValid(ValidVoxelWorld) && ValidVoxelWorld->IsCreated())
@@ -103,7 +125,4 @@ void FDRSnowMaterialPatchApplyQueue::HandlePatchCompleted(
 				EditedChunkBoundsEntry.Extend(1));
 		}
 	}
-
-	bPatchInProgress = false;
-	ProcessNext();
 }

@@ -1,5 +1,7 @@
 #include "DRMiningGameStateBase.h"
 
+#include "DeepRaiders/Snow/DRSnowNetworkUtils.h"
+
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -10,13 +12,6 @@
 #include "TimerManager.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelWorld.h"
-
-namespace DRSnowOperationBroadcast
-{
-	constexpr float BatchInterval = 0.05f;
-	constexpr int32 MaxOperationsPerBatch = 16;
-	constexpr int32 MaxBatchesPerFlush = 4;
-}
 
 void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
@@ -205,74 +200,33 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 
 void ADRMiningGameStateBase::QueueSnowOperationForBroadcast(FDRSnowOperationRecord&& Record)
 {
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	PendingSnowBroadcastOperations.Add(MoveTemp(Record));
-	ScheduleSnowOperationBroadcast();
-}
-
-void ADRMiningGameStateBase::ScheduleSnowOperationBroadcast()
-{
 	UWorld* World = GetWorld();
-	if (!HasAuthority() || !IsValid(World) || PendingSnowBroadcastOperations.IsEmpty() ||
-		World->GetTimerManager().IsTimerActive(SnowOperationBroadcastTimer))
+	if (!HasAuthority() || !IsValid(World))
 	{
 		return;
 	}
-
-	World->GetTimerManager().SetTimer(
-		SnowOperationBroadcastTimer,
-		this,
-		&ThisClass::FlushSnowOperationBroadcasts,
-		DRSnowOperationBroadcast::BatchInterval,
-		false);
-}
-
-void ADRMiningGameStateBase::FlushSnowOperationBroadcasts()
-{
-	UWorld* World = GetWorld();
-	if (IsValid(World))
+	if (!SnowOperationBatcher)
 	{
-		World->GetTimerManager().ClearTimer(SnowOperationBroadcastTimer);
+		const TWeakObjectPtr<ADRMiningGameStateBase> WeakThis(this);
+		SnowOperationBatcher = MakeShared<FDRSnowOperationBatcher>(*World,
+			[WeakThis](const TArray<FDRSnowOperationRecord>& Batch)
+			{
+				if (ADRMiningGameStateBase* GameState = WeakThis.Get();
+					IsValid(GameState) && GameState->HasAuthority())
+				{
+					GameState->Multicast_ApplySnowOperations(Batch);
+				}
+			});
 	}
-	SnowOperationBroadcastTimer.Invalidate();
-
-	if (!HasAuthority() || PendingSnowBroadcastOperations.IsEmpty())
-	{
-		return;
-	}
-
-	for (int32 BatchIndex = 0;
-		BatchIndex < DRSnowOperationBroadcast::MaxBatchesPerFlush
-		&& !PendingSnowBroadcastOperations.IsEmpty();
-		++BatchIndex)
-	{
-		const int32 BatchSize = FMath::Min(
-			DRSnowOperationBroadcast::MaxOperationsPerBatch,
-			PendingSnowBroadcastOperations.Num());
-		TArray<FDRSnowOperationRecord> Batch;
-		Batch.Append(PendingSnowBroadcastOperations.GetData(), BatchSize);
-		PendingSnowBroadcastOperations.RemoveAt(0, BatchSize);
-		Multicast_ApplySnowOperations(Batch);
-	}
-
-	if (!PendingSnowBroadcastOperations.IsEmpty())
-	{
-		ScheduleSnowOperationBroadcast();
-	}
+	SnowOperationBatcher->Enqueue(MoveTemp(Record));
 }
 
 void ADRMiningGameStateBase::ClearSnowOperationBroadcasts()
 {
-	if (UWorld* World = GetWorld())
+	if (SnowOperationBatcher)
 	{
-		World->GetTimerManager().ClearTimer(SnowOperationBroadcastTimer);
+		SnowOperationBatcher->Reset();
 	}
-	SnowOperationBroadcastTimer.Invalidate();
-	PendingSnowBroadcastOperations.Reset();
 }
 
 void ADRMiningGameStateBase::ResetSnowOperationState()
