@@ -23,6 +23,8 @@ UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 	AssetTags.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 	SetAssetTags(AssetTags);
 
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);

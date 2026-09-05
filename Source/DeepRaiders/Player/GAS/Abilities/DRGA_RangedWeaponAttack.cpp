@@ -36,6 +36,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 
 	SetAssetTags(InitialTags);
 
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_BlinkRecovery);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
