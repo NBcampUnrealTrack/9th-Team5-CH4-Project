@@ -21,6 +21,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
 	
+	virtual bool ShouldIgnoreFriendlyBlockingHit() const override
+	{
+		return false;
+	}
+	
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Snow", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UDRSnowAddComponent> SnowAddComponent;

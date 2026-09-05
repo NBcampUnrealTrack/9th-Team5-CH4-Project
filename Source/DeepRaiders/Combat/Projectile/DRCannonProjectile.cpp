@@ -134,16 +134,6 @@ void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
 			continue;
 		}
 
-		const bool bIsSelf =
-			TargetActor == GetInstigator()
-			|| TargetActor == GetOwner();
-
-		// 본인은 Friendly여도 자해 허용.
-		if (!bIsSelf && IsFriendlyTarget(TargetActor))
-		{
-			continue;
-		}
-
 		FHitResult OcclusionHit;
 
 		const FVector TraceStart =
