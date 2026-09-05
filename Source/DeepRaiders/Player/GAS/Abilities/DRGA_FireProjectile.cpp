@@ -523,25 +523,22 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 	const float OverrideGravityZ =
 		World->GetGravityZ() * GravityScale;
 
-	FCollisionResponseParams ResponseParams =
-	FCollisionResponseParams::DefaultResponseParam;
-
-	TArray<AActor*> ActorsToIgnore;
-
-	if (UGameplayStatics::SuggestProjectileVelocity(
+	UGameplayStatics::FSuggestProjectileVelocityParameters Params(
 		this,
-		OutLaunchVelocity,
 		SpawnLocation,
 		AimPoint,
-		LaunchSpeed,
-		false, // bHighArc - 낮은 탄도 우선
-		0.0f,  // CollisionRadius
-		OverrideGravityZ,
-		ESuggestProjVelocityTraceOption::DoNotTrace,
-		ResponseParams,
-		ActorsToIgnore,
-		false, // bDrawDebug
-		true)  // bAcceptClosestOnNoSolutions
+		LaunchSpeed);
+
+	Params.bFavorHighArc = false;
+	Params.CollisionRadius = 0.0f;
+	Params.OverrideGravityZ = OverrideGravityZ;
+	Params.TraceOption = ESuggestProjVelocityTraceOption::DoNotTrace;
+	Params.bDrawDebug = false;
+	Params.bAcceptClosestOnNoSolutions = true;
+
+	if (UGameplayStatics::SuggestProjectileVelocity(
+		Params,
+		OutLaunchVelocity)
 		&& !OutLaunchVelocity.IsNearlyZero())
 	{
 		return true;
