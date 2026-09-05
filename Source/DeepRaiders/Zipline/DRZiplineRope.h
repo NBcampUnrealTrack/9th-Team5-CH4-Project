@@ -154,4 +154,9 @@ private:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Endpoints", meta = (AllowPrivateAccess = "true"))
 	bool bAutoOrientEndpoints = true;
+	
+	// Auto Traverse가 목표 Endpoint 도착 시 자동으로 하차할지 여부.
+	// false이면 끝점에서 정지한 채 Zipline 상태를 유지한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zipline|Ride|Auto", meta = (AllowPrivateAccess = "true"))
+	bool bAutoDismountAtTarget = false;
 };

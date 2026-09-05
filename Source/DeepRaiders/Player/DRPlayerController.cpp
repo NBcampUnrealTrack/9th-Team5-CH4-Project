@@ -392,6 +392,8 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(MoveAction.Get()))
 	{
 		EnhancedInput->BindAction(MoveAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandleMove);
+		EnhancedInput->BindAction(MoveAction.Get(), ETriggerEvent::Completed, this, &ThisClass::HandleMoveCompleted);
+		EnhancedInput->BindAction(MoveAction.Get(), ETriggerEvent::Canceled, this, &ThisClass::HandleMoveCompleted);
 	}
 
 	if (IsValid(LookAction.Get()))
@@ -593,6 +595,22 @@ void ADRPlayerController::HandleMove(const FInputActionValue& Value)
 	}
 
 	PlayerCharacter->MoveInput(Value.Get<FVector2D>());
+}
+
+void ADRPlayerController::HandleMoveCompleted(const FInputActionValue&)
+{
+	ADRPlayerCharacter* PlayerCharacter = GetDRPlayerCharacter();
+
+	if (!IsValid(PlayerCharacter))
+	{
+		return;
+	}
+
+	/*
+	 * MoveAction release 시 마지막 WASD를 반드시 지운다.
+	 * Zipline JumpOff에서 이전 프레임 입력을 잘못 재사용하는 것을 방지한다.
+	 */
+	PlayerCharacter->MoveInput(FVector2D::ZeroVector);
 }
 
 void ADRPlayerController::HandleLook(const FInputActionValue& Value)
