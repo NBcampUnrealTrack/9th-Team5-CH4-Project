@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "DeepRaiders/Upgrade/DRUpgradeTypes.h"
 #include "DRItemTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -56,8 +57,12 @@ struct DEEPRAIDERS_API FDRSnowProjectileWeaponRuntimeState : public FDRItemRunti
 public:
 	int32 GetUpgradeLevel(const FGameplayTag& UpgradeTag) const
 	{
-		const int32* FoundLevel = UpgradeLevels.Find(UpgradeTag);
-		return FoundLevel != nullptr ? FMath::Max(0, *FoundLevel) : 0;
+		const FDRUpgradeState* State = UpgradeLevels.FindByPredicate(
+			[&UpgradeTag](const FDRUpgradeState& Entry)
+			{
+				return Entry.UpgradeTag == UpgradeTag;
+			});
+		return State != nullptr ? FMath::Max(0, State->Level) : 0;
 	}
 
 	bool SetUpgradeLevel(const FGameplayTag& UpgradeTag, int32 NewLevel)
@@ -67,20 +72,31 @@ public:
 			return false;
 		}
 
+		const int32 Index = UpgradeLevels.IndexOfByPredicate(
+			[&UpgradeTag](const FDRUpgradeState& Entry)
+			{
+				return Entry.UpgradeTag == UpgradeTag;
+			});
 		if (NewLevel == 0)
 		{
-			UpgradeLevels.Remove(UpgradeTag);
+			if (Index != INDEX_NONE)
+			{
+				UpgradeLevels.RemoveAt(Index);
+			}
 		}
 		else
 		{
-			UpgradeLevels.FindOrAdd(UpgradeTag) = NewLevel;
+			FDRUpgradeState& State = Index != INDEX_NONE
+				? UpgradeLevels[Index] : UpgradeLevels.AddDefaulted_GetRef();
+			State.UpgradeTag = UpgradeTag;
+			State.Level = NewLevel;
 		}
 
 		return true;
 	}
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon|Upgrade")
-	TMap<FGameplayTag, int32> UpgradeLevels;
+	TArray<FDRUpgradeState> UpgradeLevels;
 };
 
 // 현재 기획에선 필요 없지만 고급 근접 무기의 제공 가능성 고려

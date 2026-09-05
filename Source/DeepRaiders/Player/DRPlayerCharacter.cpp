@@ -358,8 +358,7 @@ void ADRPlayerCharacter::RefreshTeamColor()
 
 void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset)
 {
-	if (!IsValid(WorldHandEquipmentMesh)
-		|| !IsValid(GetMesh()))
+	if (!IsValid(WorldHandEquipmentMesh) || !IsValid(GetMesh()))
 	{
 		return;
 	}
@@ -370,15 +369,26 @@ void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName 
 	}
 
 	WorldHandEquipmentMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachSocketName);
+
+	// 이전 무기의 팀별 Material Override 제거
+	WorldHandEquipmentMesh->EmptyOverrideMaterials();
+
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
 	WorldHandEquipmentMesh->SetRelativeTransform(WorldItemOffset);
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
-	
+
+	// 현재 아이템이 팀 Material을 지원하는 무기면 다시 적용
 	RefreshHeldWeaponTeamMaterial();
 }
 
 void ADRPlayerCharacter::ClearHandEquipmentVisual()
 {
+	if (!IsValid(WorldHandEquipmentMesh))
+	{
+		return;
+	}
+
+	WorldHandEquipmentMesh->EmptyOverrideMaterials();
 	WorldHandEquipmentMesh->SetStaticMesh(nullptr);
 	WorldHandEquipmentMesh->SetVisibility(false, true);
 }
