@@ -5,6 +5,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/NetConnection.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "InputMappingContext.h"
@@ -60,11 +61,17 @@
 #include "DrawDebugHelpers.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformTime.h"
 
 namespace DRSnowSnapshotTransfer
 {
 	constexpr int32 ChunkByteSize = 8 * 1024;
-	constexpr int32 MaxPendingChunkAcks = 4;
+	constexpr int32 InitialWindow = 8;
+	constexpr int32 MinWindow = 2;
+	constexpr int32 MaxWindow = 16;
+	constexpr double ExpectedAckSeconds = 0.25;
+	constexpr double AdjustmentInterval = 0.5;
+	constexpr float SendCheckInterval = 0.05f;
 	constexpr uint64 ProgressMessageKey = 0x4452534E;
 
 	uint64 MakeChunkKey(uint8 PayloadType, int32 ByteOffset)
@@ -252,6 +259,7 @@ void ADRPlayerController::Tick(float DeltaSeconds)
 		if (IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled())
 		{
 			SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Complete;
+			LogSnowJoinControlState(TEXT("ClientControlReady"));
 		}
 	}
 
@@ -534,6 +542,7 @@ void ADRPlayerController::SetupGASInputComponent()
 void ADRPlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	LogSnowJoinControlState(TEXT("ServerPossessed"));
 
 	ApplyViewPitchLimits();
 
@@ -552,10 +561,32 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 void ADRPlayerController::OnRep_Pawn()
 {
+	LogSnowJoinControlState(TEXT("ClientPawnReplicated"));
 	Super::OnRep_Pawn();
 
 	ApplyViewPitchLimits();
 	RefreshPlayerUI();
+}
+
+void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
+{
+	// RPC가 Pawn 복제보다 먼저 도착해 참조가 NULL인지 확인한다.
+	UE_LOG(LogTemp, Log, TEXT("[JoinControl] ClientRestart PC=%s IncomingPawn=%s"),
+		*GetNameSafe(this), *GetNameSafe(NewPawn));
+	Super::ClientRestart_Implementation(NewPawn);
+	LogSnowJoinControlState(TEXT("ClientRestartReturned"));
+}
+
+void ADRPlayerController::AcknowledgePossession(APawn* InPawn)
+{
+	Super::AcknowledgePossession(InPawn);
+	LogSnowJoinControlState(TEXT("ClientAcknowledged"));
+}
+
+void ADRPlayerController::ServerAcknowledgePossession_Implementation(APawn* InPawn)
+{
+	Super::ServerAcknowledgePossession_Implementation(InPawn);
+	LogSnowJoinControlState(TEXT("ServerReceivedAcknowledgement"));
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -1346,18 +1377,72 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 	OutgoingSnowPayloadType = 0;
 	OutgoingSnowByteOffset = 0;
 	PendingSnowChunkAcks.Reset();
+	SnowSnapshotWindow = DRSnowSnapshotTransfer::InitialWindow;
+	FastSnowSnapshotAcks = 0;
+	SnowSnapshotSaturationStart = -1.0;
+	LastSnowSnapshotWindowChange = FPlatformTime::Seconds();
 	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
 	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
 	OutgoingSnowOwnershipData = MoveTemp(Checkpoint.OwnershipData);
 
-	// 클라이언트가 확인한 만큼만 다음 청크를 보내 Reliable 버퍼 누적을 제한한다.
+	// ACK가 없거나 연결이 포화된 동안에도 전송 재개 여부를 확인한다.
+	World->GetTimerManager().SetTimer(
+		SnowSnapshotSendTimer, this, &ThisClass::SendNextSnowJoinSnapshotChunk,
+		DRSnowSnapshotTransfer::SendCheckInterval, true);
 	SendNextSnowJoinSnapshotChunk();
+}
+
+void ADRPlayerController::AdjustSnowSnapshotWindow(bool bIncrease, const TCHAR* Reason)
+{
+	const double Now = FPlatformTime::Seconds();
+	if (Now - LastSnowSnapshotWindowChange < DRSnowSnapshotTransfer::AdjustmentInterval)
+	{
+		return;
+	}
+
+	const int32 NewWindow = FMath::Clamp(
+		bIncrease ? SnowSnapshotWindow * 2 : SnowSnapshotWindow / 2,
+		DRSnowSnapshotTransfer::MinWindow, DRSnowSnapshotTransfer::MaxWindow);
+	if (NewWindow == SnowSnapshotWindow)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[JoinSnapshot] Window Id=%d %d->%d Reason=%s Pending=%d"),
+		OutgoingSnowSnapshotId, SnowSnapshotWindow, NewWindow, Reason, PendingSnowChunkAcks.Num());
+	SnowSnapshotWindow = NewWindow;
+	FastSnowSnapshotAcks = 0;
+	LastSnowSnapshotWindowChange = Now;
 }
 
 void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 {
+	if (OutgoingSnowSnapshotId == INDEX_NONE)
+	{
+		return;
+	}
+
+	UNetConnection* Connection = GetNetConnection();
+	const double Now = FPlatformTime::Seconds();
+	if (Connection != nullptr && !Connection->IsNetReady())
+	{
+		FastSnowSnapshotAcks = 0;
+		if (SnowSnapshotSaturationStart < 0.0)
+		{
+			SnowSnapshotSaturationStart = Now;
+		}
+		if (Now - SnowSnapshotSaturationStart >= DRSnowSnapshotTransfer::AdjustmentInterval)
+		{
+			AdjustSnowSnapshotWindow(false, TEXT("Saturated"));
+		}
+	}
+	else
+	{
+		SnowSnapshotSaturationStart = -1.0;
+	}
+
 	while (OutgoingSnowSnapshotId != INDEX_NONE
-		&& PendingSnowChunkAcks.Num() < DRSnowSnapshotTransfer::MaxPendingChunkAcks)
+		&& PendingSnowChunkAcks.Num() < SnowSnapshotWindow)
 	{
 		const TArray<uint8>* Payload = nullptr;
 		switch (OutgoingSnowPayloadType)
@@ -1386,6 +1471,12 @@ void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 			continue;
 		}
 
+		// Reliable RPC로 포화 상태를 더 악화시키지 않는다. 타이머가 다시 확인한다.
+		if (Connection != nullptr && !Connection->IsNetReady())
+		{
+			return;
+		}
+
 		const int32 ChunkSize = FMath::Min(
 			DRSnowSnapshotTransfer::ChunkByteSize,
 			Payload->Num() - OutgoingSnowByteOffset);
@@ -1394,7 +1485,8 @@ void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 		TArray<uint8> ChunkData;
 		ChunkData.Append(Payload->GetData() + SentByteOffset, ChunkSize);
 		PendingSnowChunkAcks.Add(
-			DRSnowSnapshotTransfer::MakeChunkKey(SentPayloadType, SentByteOffset));
+			DRSnowSnapshotTransfer::MakeChunkKey(SentPayloadType, SentByteOffset),
+			FPlatformTime::Seconds());
 		OutgoingSnowByteOffset += ChunkSize;
 		Client_ReceiveSnowJoinSnapshotChunk(
 			OutgoingSnowSnapshotId,
@@ -1415,9 +1507,31 @@ void ADRPlayerController::ServerAckSnowJoinSnapshotChunk_Implementation(
 	}
 
 	const uint64 ChunkKey = DRSnowSnapshotTransfer::MakeChunkKey(PayloadType, ByteOffset);
-	if (PendingSnowChunkAcks.Remove(ChunkKey) == 0)
+	double SentTime = 0.0;
+	if (!PendingSnowChunkAcks.RemoveAndCopyValue(ChunkKey, SentTime))
 	{
 		return;
+	}
+
+	const double AckSeconds = FPlatformTime::Seconds() - SentTime;
+	const UNetConnection* Connection = GetNetConnection();
+	if (AckSeconds >= DRSnowSnapshotTransfer::ExpectedAckSeconds)
+	{
+		FastSnowSnapshotAcks = 0;
+		AdjustSnowSnapshotWindow(false, TEXT("SlowAck"));
+	}
+	else if (Connection == nullptr || Connection->IsNetReady())
+	{
+		// 한 윈도우 분량의 빠른 ACK가 이어질 때만 늘려 순간적인 왕복 시간 변동을 무시한다.
+		FastSnowSnapshotAcks = FMath::Min(FastSnowSnapshotAcks + 1, SnowSnapshotWindow);
+		if (FastSnowSnapshotAcks >= SnowSnapshotWindow)
+		{
+			AdjustSnowSnapshotWindow(true, TEXT("FastAck"));
+		}
+	}
+	else
+	{
+		FastSnowSnapshotAcks = 0;
 	}
 
 	SendNextSnowJoinSnapshotChunk();
@@ -1431,6 +1545,8 @@ void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
 		return;
 	}
 
+	LogSnowJoinControlState(TEXT("ServerTransferFinished"));
+	World->GetTimerManager().ClearTimer(SnowSnapshotSendTimer);
 	Client_FinishSnowJoinSnapshot(OutgoingSnowSnapshotId);
 	bSnowSnapshotTransferFinished = true;
 	OutgoingSnowSnapshotId = INDEX_NONE;
@@ -1444,8 +1560,11 @@ void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
 
 void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
 {
+	LogSnowJoinControlState(TEXT("ServerReceivedSnapshotApplied"));
 	if (!bSnowSnapshotTransferFinished || SnapshotId != ExpectedAppliedSnowSnapshotId)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[JoinControl] ApplyNotifyRejected PC=%s ReceivedId=%d"),
+			*GetNameSafe(this), SnapshotId);
 		return;
 	}
 
@@ -1453,9 +1572,16 @@ void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int
 	ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	if (ADRMiningGameModeBase* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>() : nullptr)
 	{
-		if (GameMode->HandleSnowJoinSnapshotApplied(this))
+		const bool bRestarted = GameMode->HandleSnowJoinSnapshotApplied(this);
+		LogSnowJoinControlState(TEXT("ServerRestartPlayerReturned"));
+		if (bRestarted)
 		{
 			Client_ResumeSnowJoinOperations(SnapshotId);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[JoinControl] ResumeNotSent PC=%s SnapshotId=%d"),
+				*GetNameSafe(this), SnapshotId);
 		}
 	}
 }
@@ -1513,6 +1639,7 @@ void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(int32 Sna
 	}
 
 	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::ApplyingSnapshot;
+	LogSnowJoinControlState(TEXT("ClientTransferFinished"));
 	bPendingSnowSnapshotFinished = true;
 	TryApplyPendingSnowJoinSnapshot();
 }
@@ -1575,6 +1702,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 
 	bPendingSnowCheckpointApplied = true;
 	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
+	LogSnowJoinControlState(TEXT("ClientSnapshotApplied"));
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
 	return true;
@@ -1582,6 +1710,7 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 
 void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 SnapshotId)
 {
+	LogSnowJoinControlState(TEXT("ClientResumeReceived"));
 	if (!bPendingSnowCheckpointApplied || SnapshotId != PendingSnowSnapshotId)
 	{
 		return;
@@ -1627,6 +1756,24 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 		Operations.Num());
 
 	return;
+}
+
+void ADRPlayerController::LogSnowJoinControlState(const TCHAR* Stage) const
+{
+	// 서버/클라이언트 로그의 시각을 대조해 적용, Pawn 복제, 소유 확인 지연을 구분한다.
+	const APawn* ControlledPawn = GetPawn();
+	const UNetConnection* Connection = GetNetConnection();
+	UE_LOG(LogTemp, Log,
+		TEXT("[JoinControl] Stage=%s PC=%s Authority=%d State=%s PendingId=%d ExpectedId=%d ")
+		TEXT("Pawn=%s PawnController=%s AckPawn=%s LocalPawn=%d ")
+		TEXT("HasConnection=%d NetReady=%d QueuedBits=%d NetSpeed=%d"),
+		Stage, *GetNameSafe(this), HasAuthority(), *GetStateName().ToString(),
+		PendingSnowSnapshotId, ExpectedAppliedSnowSnapshotId, *GetNameSafe(ControlledPawn),
+		*GetNameSafe(IsValid(ControlledPawn) ? ControlledPawn->GetController() : nullptr),
+		*GetNameSafe(AcknowledgedPawn), IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled(),
+		Connection != nullptr, Connection != nullptr && Connection->IsNetReady(),
+		Connection != nullptr ? Connection->QueuedBits : 0,
+		Connection != nullptr ? Connection->CurrentNetSpeed : 0);
 }
 
 void ADRPlayerController::RetryPendingSnowJoinSnapshot()
