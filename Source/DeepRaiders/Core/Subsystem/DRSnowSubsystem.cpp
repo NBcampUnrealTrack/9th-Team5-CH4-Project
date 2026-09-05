@@ -115,7 +115,8 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 		GetWorld(),
 		Request,
 		AppliedAmount,
-		EDRSnowRemovalPath::Standard);
+		Request.RemovalMode == EDRSnowRemovalMode::AbsorbTool
+			? EDRSnowRemovalPath::Absorb : EDRSnowRemovalPath::Standard);
 	if (ReplayResult.bApplied)
 	{
 		MaterialPatchApplyQueue->Enqueue(
@@ -125,23 +126,9 @@ bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	return ReplayResult.bApplied;
 }
 
-bool UDRSnowSubsystem::ApplyReplicatedSnowAbsorbTool(
-	const FDRSnowSurfaceRemoveRequest& Request,
-	const float AppliedAmount,
-	const FDRSnowMaterialPatch& AuthoritativeMaterialPatch)
+bool UDRSnowSubsystem::IsMaterialPatchIdle() const
 {
-	const FDRSnowRemovalReplayResult ReplayResult = RemovalPipeline->Replay(
-		GetWorld(),
-		Request,
-		AppliedAmount,
-		EDRSnowRemovalPath::Absorb);
-	if (ReplayResult.bApplied)
-	{
-		MaterialPatchApplyQueue->Enqueue(
-			ReplayResult.VoxelWorld.Get(),
-			AuthoritativeMaterialPatch);
-	}
-	return ReplayResult.bApplied;
+	return !MaterialPatchApplyQueue || MaterialPatchApplyQueue->IsIdle();
 }
 
 int32 UDRSnowSubsystem::GetDominantTeamAtLocation(FVector Location) const

@@ -62,19 +62,21 @@ FDRSnowRemovalReplayResult FDRSnowRemovalPipeline::Replay(
 {
 	FDRSnowRemovalReplayResult Result;
 	SurfaceEditor.SetWorld(World);
-	if (!IsValid(World) || AuthoritativeAmount <= 0.f)
+	AVoxelWorld* VoxelWorld = Request.TargetVoxelWorld.Get();
+	if (!IsValid(World) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		AuthoritativeAmount <= 0.f || Request.Radius <= 0.f || Request.RequestedAmount <= 0.f)
 	{
 		return Result;
 	}
 
 	const FDRSnowSurfaceEditResult EditResult = RemoveSurface(Request, RemovalPath);
-	if (EditResult.AppliedAmount <= 0.f)
+	if (EditResult.AppliedAmount > 0.f)
 	{
-		return Result;
+		ApplyRemovedSurfaceEdit(World, Request, EditResult, AuthoritativeAmount);
 	}
 
-	ApplyRemovedSurfaceEdit(World, Request, EditResult, AuthoritativeAmount);
-	Result.VoxelWorld = EditResult.VoxelWorld;
+	// 로컬에서 이미 비어 있어도 서버 재질 패치를 적용하고 다음 작업으로 진행한다.
+	Result.VoxelWorld = VoxelWorld;
 	Result.bApplied = true;
 	return Result;
 }

@@ -406,7 +406,9 @@ bool ADRMiningGameStateBase::ApplySnowOperationRecord(const FDRSnowOperationReco
 bool ADRMiningGameStateBase::IsSnowOperationReady(const FDRSnowOperationRecord& Record) const
 {
 	UWorld* World = GetWorld();
-	if (!IsValid(World) || !IsValid(World->GetSubsystem<UDRSnowSubsystem>()))
+	const UDRSnowSubsystem* SnowSubsystem = IsValid(World)
+		? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
+	if (!IsValid(SnowSubsystem) || !SnowSubsystem->IsMaterialPatchIdle())
 	{
 		return false;
 	}
@@ -607,9 +609,9 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Reco
 				}).AddedAmount > 0.f;
 		}
 
-		return SnowSubsystem->ApplyReplicatedSnowAdd(
-			Request,
-			Record.ServerAppliedAmount).AddedAmount > 0.f;
+		SnowSubsystem->ApplyReplicatedSnowAdd(Request, Record.ServerAppliedAmount);
+		// 이미 채워진 눈벽처럼 로컬 변화가 없어도 재시도하며 큐를 막지 않는다.
+		return true;
 	}
 
 	return false;
@@ -661,15 +663,10 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-	return Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool
-		? SnowSubsystem->ApplyReplicatedSnowAbsorbTool(
-			Request,
-			Operation.AppliedAmount,
-			Record.MaterialPatch)
-		: SnowSubsystem->ApplyReplicatedSnowRemoval(
-			Request,
-			Operation.AppliedAmount,
-			Record.MaterialPatch);
+	return SnowSubsystem->ApplyReplicatedSnowRemoval(
+		Request,
+		Operation.AppliedAmount,
+		Record.MaterialPatch);
 }
 
 void ADRMiningGameStateBase::HandleDirectionalSnowAddCompleted(

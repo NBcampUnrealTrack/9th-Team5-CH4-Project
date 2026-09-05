@@ -36,6 +36,38 @@ int32 GetPackedUIntSize(uint32 Value)
 	return ByteCount;
 }
 
+uint32 GetRunLength(const TArray<uint16>& Indices, const uint32 Start)
+{
+	uint32 End = Start + 1;
+	while (End < static_cast<uint32>(Indices.Num()) && Indices[End] == Indices[End - 1] + 1)
+	{
+		++End;
+	}
+	return End - Start;
+}
+
+bool UseRunEncoding(const TArray<uint16>& Indices, int32& OutIndexBytes)
+{
+	int32 DeltaBytes = 0;
+	int32 RunBytes = 0;
+	uint32 Previous = 0;
+	for (const uint16 Index : Indices)
+	{
+		DeltaBytes += GetPackedUIntSize(Index - Previous);
+		Previous = Index;
+	}
+	Previous = 0;
+	for (uint32 Start = 0; Start < static_cast<uint32>(Indices.Num());)
+	{
+		const uint32 Length = GetRunLength(Indices, Start);
+		RunBytes += GetPackedUIntSize(Indices[Start] - Previous) + GetPackedUIntSize(Length - 1);
+		Previous = Indices[Start + Length - 1];
+		Start += Length;
+	}
+	OutIndexBytes = FMath::Min(DeltaBytes, RunBytes);
+	return RunBytes < DeltaBytes;
+}
+
 bool SerializeCount(FArchive& Ar, uint32& Value, const uint32 Maximum)
 {
 	Ar.SerializeIntPacked(Value);
@@ -63,8 +95,9 @@ int32 FDRSnowMaterialPatch::NumVoxels() const
 
 int32 FDRSnowMaterialPatch::EstimateSerializedBytes() const
 {
-	// NetSerialize의 packed count, signed chunk 좌표, local-index delta 형식을 따른다.
+	// 각 set의 delta/연속 구간 선택 비트까지 포함한 전체 bit 수를 byte로 올림한다.
 	int32 Result = GetPackedUIntSize(Chunks.Num());
+	int32 EncodingBits = 0;
 	for (const FDRSnowMaterialChunkPatch& Chunk : Chunks)
 	{
 		Result += GetPackedUIntSize(EncodeSignedInt(Chunk.ChunkCoord.X));
@@ -73,19 +106,13 @@ int32 FDRSnowMaterialPatch::EstimateSerializedBytes() const
 		Result += GetPackedUIntSize(Chunk.MaterialSets.Num());
 		for (const FDRSnowMaterialIndexSet& MaterialSet : Chunk.MaterialSets)
 		{
-			Result += sizeof(uint8) + GetPackedUIntSize(MaterialSet.LocalVoxelIndices.Num());
-			uint32 PreviousIndex = 0;
-			for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
-			{
-				const uint32 Delta = LocalIndex >= PreviousIndex
-					? LocalIndex - PreviousIndex
-					: LocalIndex;
-				Result += GetPackedUIntSize(Delta);
-				PreviousIndex = LocalIndex;
-			}
+			int32 IndexBytes = 0;
+			UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
+			Result += sizeof(uint8) + GetPackedUIntSize(MaterialSet.LocalVoxelIndices.Num()) + IndexBytes;
+			++EncodingBits;
 		}
 	}
-	return Result;
+	return Result + (EncodingBits + 7) / 8;
 }
 
 bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSuccess)
@@ -154,33 +181,60 @@ bool FDRSnowMaterialPatch::NetSerialize(FArchive& Ar, UPackageMap*, bool& bOutSu
 				MaterialSet.LocalVoxelIndices.SetNum(LocalVoxelCount);
 			}
 
-			uint32 PreviousIndex = 0;
-			for (uint32 Index = 0; Index < LocalVoxelCount; ++Index)
+			uint8 bRuns = 0;
+			if (Ar.IsSaving())
 			{
-				uint32 Delta = 0;
-				if (Ar.IsSaving())
+				uint32 Previous = 0;
+				for (const uint16 LocalIndex : MaterialSet.LocalVoxelIndices)
 				{
-					const uint32 LocalIndex = MaterialSet.LocalVoxelIndices[Index];
-					if (LocalIndex < PreviousIndex)
+					if (LocalIndex < Previous || LocalIndex >= MaxVoxelCountPerSet)
 					{
 						Ar.SetError();
 						return false;
 					}
-					Delta = LocalIndex - PreviousIndex;
+					Previous = LocalIndex;
 				}
-				Ar.SerializeIntPacked(Delta);
+				int32 IndexBytes = 0;
+				bRuns = UseRunEncoding(MaterialSet.LocalVoxelIndices, IndexBytes);
+			}
+			Ar.SerializeBits(&bRuns, 1);
 
+			uint32 PreviousIndex = 0;
+			for (uint32 Index = 0; Index < LocalVoxelCount;)
+			{
+				uint32 Delta = Ar.IsSaving() ? MaterialSet.LocalVoxelIndices[Index] - PreviousIndex : 0;
+				Ar.SerializeIntPacked(Delta);
+				// 덧셈 전에 검사하여 uint32 overflow를 막는다.
+				if (Ar.IsError() || Delta >= MaxVoxelCountPerSet - PreviousIndex)
+				{
+					Ar.SetError();
+					return false;
+				}
 				const uint32 LocalIndex = PreviousIndex + Delta;
-				if (LocalIndex >= MaxVoxelCountPerSet)
+				uint32 LengthMinusOne = 0;
+				if (bRuns)
+				{
+					if (Ar.IsSaving())
+					{
+						LengthMinusOne = GetRunLength(MaterialSet.LocalVoxelIndices, Index) - 1;
+					}
+					Ar.SerializeIntPacked(LengthMinusOne);
+				}
+				if (Ar.IsError() || LengthMinusOne >= LocalVoxelCount - Index ||
+					LengthMinusOne >= MaxVoxelCountPerSet - LocalIndex)
 				{
 					Ar.SetError();
 					return false;
 				}
 				if (Ar.IsLoading())
 				{
-					MaterialSet.LocalVoxelIndices[Index] = static_cast<uint16>(LocalIndex);
+					for (uint32 Offset = 0; Offset <= LengthMinusOne; ++Offset)
+					{
+						MaterialSet.LocalVoxelIndices[Index + Offset] = static_cast<uint16>(LocalIndex + Offset);
+					}
 				}
-				PreviousIndex = LocalIndex;
+				PreviousIndex = LocalIndex + LengthMinusOne;
+				Index += LengthMinusOne + 1;
 			}
 		}
 	}

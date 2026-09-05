@@ -430,7 +430,7 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 {
 	FDRSnowSurfaceEditResult Result;
 	const bool bUsesOrientedBox = Request.EditTool == EDRSnowVoxelEditTool::OrientedBoxTool;
-	if (Request.Amount <= 0.f ||
+	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool || Request.Amount <= 0.f ||
 		(bUsesOrientedBox && (Request.BoxExtent.X <= 0.f || Request.BoxExtent.Y <= 0.f || Request.BoxExtent.Z <= 0.f)) ||
 		(!bUsesOrientedBox && Request.Radius <= 0.f))
 	{
@@ -446,67 +446,6 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	if (bUsesOrientedBox)
 	{
 		return AddOrientedBoxSnow(VoxelWorld, Request);
-	}
-
-	if (Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool)
-	{
-		// Directional 도구의 실제 변경 목록은 Subsystem이 Ownership/Volume 원본 데이터를 갱신할 때 사용한다.
-		FVoxelSurfaceEditsProcessedVoxels SurfaceFootprint;
-		if (!Request.bUseVirtualSurface)
-		{
-			SurfaceFootprint =
-				UDRDirectionalSurfaceTool::FindSurfaceFootprint(
-					VoxelWorld,
-					Request.WorldLocation,
-					Request.Radius,
-					SnowSurfaceFalloff,
-					Request.Amount,
-					true);
-		}
-		if (Request.bUseVirtualSurface ||
-			(Request.bAllowVirtualSurfaceFallback && SurfaceFootprint.Voxels->Num() == 0))
-		{
-			SurfaceFootprint =
-				UDRDirectionalSurfaceTool::MakeVirtualSurfaceFootprint(
-					VoxelWorld,
-					Request.WorldLocation,
-					Request.SurfaceNormal,
-					Request.Radius,
-					SnowSurfaceFalloff,
-					Request.Amount,
-					true);
-		}
-
-		TArray<FModifiedVoxelValue> ModifiedValues;
-		FVoxelIntBox EditedBounds;
-		const float ModifiedValueAmount = UDRDirectionalSurfaceTool::ApplySurfaceVolumeEdit(
-			VoxelWorld,
-			SurfaceFootprint,
-			SnowSurfaceDistanceDivisor,
-			true,
-			ModifiedValues,
-			EditedBounds);
-		Result.AppliedAmount = FMath::Min(Request.Amount, ModifiedValueAmount);
-		if (Result.AppliedAmount > 0.f)
-		{
-			if (EditedBounds.IsValid())
-			{
-				PaintProcessedMaterialSurface(
-					VoxelWorld,
-					UDRDirectionalSurfaceTool::MakeModifiedValueVoxelGroup(
-						EditedBounds,
-						ModifiedValues,
-						true),
-					DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
-			}
-
-			Result.VoxelWorld = VoxelWorld;
-			Result.EditedBounds = EditedBounds;
-			Result.ModifiedValues = MoveTemp(ModifiedValues);
-			Result.bUseModifiedValuesForVolume = true;
-		}
-
-		return Result;
 	}
 
 	if (Request.EditTool == EDRSnowVoxelEditTool::SphereTool)

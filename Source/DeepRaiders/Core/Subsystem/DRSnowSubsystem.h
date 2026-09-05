@@ -68,11 +68,8 @@ public:
 		const FDRSnowSurfaceRemoveRequest& Request,
 		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
 
-	// 클라이언트 복제: 눈총 흡수 결과를 로컬 상태에 동기화합니다.
-	bool ApplyReplicatedSnowAbsorbTool(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		float AppliedAmount,
-		const FDRSnowMaterialPatch& AuthoritativeMaterialPatch);
+	// 이전 제거의 색상 보정이 끝나야 다음 Sequence를 적용할 수 있다.
+	bool IsMaterialPatchIdle() const;
 
 	// 점령 상태 조회
 	// 특정 위치에서 가장 많은 지분을 가진 팀 ID 반환

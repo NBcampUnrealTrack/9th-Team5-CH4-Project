@@ -289,6 +289,15 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 	// TeamId가 아닌 MaterialIndex 패치
 	UPROPERTY()
 	FDRSnowMaterialPatch MaterialPatch;
+
+	// 작업 종류와 도구에 필요한 필드만 전송한다. 위치/float 정밀도는 기존과 동일하다.
+	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);
+};
+
+template<>
+struct TStructOpsTypeTraits<FDRSnowOperationRecord> : TStructOpsTypeTraitsBase2<FDRSnowOperationRecord>
+{
+	enum { WithNetSerializer = true };
 };
 
 // 눈 투사체나 눈 충돌체가 캐릭터/대상에게 피해를 줄 때 사용하는 요청 데이터다.

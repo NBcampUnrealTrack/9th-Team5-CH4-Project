@@ -20,6 +20,7 @@ public:
 		AVoxelWorld* VoxelWorld,
 		FDRSnowMaterialPatch MaterialPatch);
 	void Reset();
+	bool IsIdle() const { return !bPatchInProgress && PendingPatches.IsEmpty(); }
 
 private:
 	struct FPendingPatch
