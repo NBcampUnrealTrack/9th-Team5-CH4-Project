@@ -257,9 +257,19 @@ void ADRPlayerCharacter::HandleJumpPressed()
 	}
 
 	if (IsValid(MovementActionComponent)
-		&& MovementActionComponent->GetSimulationActionState().ActionType == EDRMovementActionType::Zipline)
+		&& MovementActionComponent->IsZiplineActive())
 	{
-		MovementActionComponent->RequestCancelZipline();
+		/*
+		 * 평상시 Manual W/S의 의미는 Rail 이동이다.
+		 *
+		 * Space가 눌린 그 순간에만 현재 WASD를
+		 * ControlRotation 기준 world 방향으로 다시 해석해서
+		 * JumpOff 방향으로 사용한다.
+		 */
+		const FVector JumpDirection = GetSkillMovementDirection();
+
+		MovementActionComponent->RequestZiplineJumpOff(JumpDirection);
+
 		return;
 	}
 

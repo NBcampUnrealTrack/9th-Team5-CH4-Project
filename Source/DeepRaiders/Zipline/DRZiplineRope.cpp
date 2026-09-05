@@ -140,6 +140,7 @@ bool ADRZiplineRope::Interact_Implementation(APawn* Interactor)
 	State.ZiplineTargetRideOffset = RideOffset;
 	State.ZiplineRideMode = RideMode;
 	State.ZiplineManualControlMode = ManualControlMode;
+	State.bZiplineAutoDismountAtTarget = bAutoDismountAtTarget;
 	State.MaxSpeed = MaxSpeed;
 
 	/*
