@@ -7,7 +7,6 @@
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 
 class AVoxelWorld;
-class FDRSnowOwnershipStore;
 class FDRSnowSurfaceEditor;
 class FDRSnowVolumeStore;
 class UWorld;
@@ -19,7 +18,7 @@ struct FDRSnowSurfaceEditResult;
 // 기본 순서:
 //   1. 지형 생성 (SurfaceEditor)
 //   2. 점령 부피 가산 (VolumeStore)
-//   3. 팀 소유권 및 색상 등록 (OwnershipStore)
+//   3. 추가한 내부 복셀의 팀 재질 저장 (SurfaceEditor)
 //   4. 캐릭터 파묻힘 판정 (ContainmentEvaluator)
 //
 // 도구별 특성:
@@ -31,7 +30,6 @@ class DEEPRAIDERS_API FDRSnowAddPipeline : public TSharedFromThis<FDRSnowAddPipe
 public:
 	FDRSnowAddPipeline(
 		FDRSnowSurfaceEditor& InSurfaceEditor,
-		FDRSnowOwnershipStore& InOwnershipStore,
 		FDRSnowVolumeStore& InVolumeStore);
 
 	// 서버: 도구 종류에 맞게 지형 생성, 점령 부피 누적, 팀 색상 등록을 일괄 수행합니다.
@@ -70,7 +68,7 @@ private:
 		TFunction<void(float)> Completion,
 		FDRSnowSurfaceEditResult&& EditResult);
 
-	// 지형 생성이 완료된 후 팀 소유권 등록, 부피 갱신, 캐릭터 파묻힘 검사를 순서대로 진행합니다.
+	// 지형 생성이 완료된 후 내부 재질 저장, 부피 갱신, 캐릭터 파묻힘 검사를 순서대로 진행합니다.
 	void CommitAddedSurfaceEdit(
 		UWorld* World,
 		const FDRSnowSurfaceAddRequest& Request,
@@ -85,7 +83,6 @@ private:
 		float MaxAddedAmount);
 
 	FDRSnowSurfaceEditor& SurfaceEditor;
-	FDRSnowOwnershipStore& OwnershipStore;
 	FDRSnowVolumeStore& VolumeStore;
 
 	TQueue<FPendingDirectionalAdd> PendingDirectionalAdds;
@@ -99,60 +96,31 @@ enum class EDRSnowRemovalPath : uint8
 	Absorb
 };
 
-struct FDRSnowRemovalExecutionResult
-{
-	FDRSnowRemoveResult RemoveResult;
-	FDRSnowMaterialPatch MaterialPatch;
-};
-
-struct FDRSnowRemovalReplayResult
-{
-	bool bApplied = false;
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
-};
-
 // 눈 제거의 전체 도메인 순서를 소유한다.
-// Surface 편집 → 서버 원본 갱신 → 재질 해석/적용 순서가 이 클래스 밖으로 흩어지지 않는다.
+// Surface 편집 → 점령 부피 갱신 순서가 이 클래스 밖으로 흩어지지 않는다.
 class DEEPRAIDERS_API FDRSnowRemovalPipeline
 {
 public:
 	FDRSnowRemovalPipeline(
 		FDRSnowSurfaceEditor& InSurfaceEditor,
-		FDRSnowOwnershipStore& InOwnershipStore,
 		FDRSnowVolumeStore& InVolumeStore);
 
-	FDRSnowRemovalExecutionResult Execute(
+	FDRSnowRemoveResult Execute(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
-		EDRSnowRemovalPath RemovalPath,
-		bool bBuildMaterialPatch);
+		EDRSnowRemovalPath RemovalPath);
 
-	FDRSnowRemovalReplayResult Replay(
+	bool Replay(
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AuthoritativeAmount,
 		EDRSnowRemovalPath RemovalPath);
 
 private:
-	// 서버 원본 Ownership/Volume을 읽어 최종 MaterialIndex 그룹을 만든다.
-	bool ResolveSnowMaterialsAtArea(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		FDRSnowResolvedMaterialEdit& OutResolvedEdit) const;
-	bool ResolveSnowMaterialsAtModifiedVoxels(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		FDRSnowResolvedMaterialEdit& OutResolvedEdit) const;
 	FDRSnowSurfaceEditResult RemoveSurface(
 		const FDRSnowSurfaceRemoveRequest& Request,
 		EDRSnowRemovalPath RemovalPath) const;
-	bool ResolveMaterials(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		EDRSnowRemovalPath RemovalPath,
-		FDRSnowResolvedMaterialEdit& OutResolvedEdit) const;
 	void ApplyRemovedSurfaceEdit(
-		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		const FDRSnowSurfaceEditResult& EditResult,
 		float VolumeAmount);
@@ -163,6 +131,5 @@ private:
 		float MaxRemovedAmount);
 
 	FDRSnowSurfaceEditor& SurfaceEditor;
-	FDRSnowOwnershipStore& OwnershipStore;
 	FDRSnowVolumeStore& VolumeStore;
 };

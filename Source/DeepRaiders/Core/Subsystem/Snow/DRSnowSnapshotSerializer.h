@@ -89,14 +89,6 @@ struct DEEPRAIDERS_API FDRJoinSnapshotSizeReport
 	FDRSnapshotSnowVolumeSizeReport SnowVolume;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
-	// 호환용 측정 필드다. Ownership은 서버 전용이므로 항상 0이다.
-	int64 OwnershipCompressedBytes = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
-	// 호환용 측정 필드다. Ownership은 서버 전용이므로 항상 0이다.
-	float OwnershipCompressedMB = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
 	int64 TotalCompressedBytes = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")

@@ -164,7 +164,7 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[JoinSnapshot] Created Id=%d Sequence=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=ServerOnly"),
+		TEXT("[JoinSnapshot] Created Id=%d Sequence=%d Voxel=%d bytes SnowVolume=%d bytes"),
 		LatestCheckpoint->SnapshotId,
 		LatestCheckpoint->OperationSequence,
 		LatestCheckpoint->VoxelSaveData.Num(),

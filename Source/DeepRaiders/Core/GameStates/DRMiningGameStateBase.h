@@ -151,8 +151,7 @@ public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation, float ServerAppliedAmount);
 	void RegisterSnowRemove(
-		const FDRSnowRemoveOperation& Operation,
-		FDRSnowMaterialPatch MaterialPatch);
+		const FDRSnowRemoveOperation& Operation);
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);

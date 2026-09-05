@@ -130,9 +130,6 @@ bool FDRSnowOperationRecord::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& 
 		{
 			SerializeEnum(Ar, Op.RemovalBrushShape, 2);
 		}
-		bool bPatchSuccess = true;
-		MaterialPatch.NetSerialize(Ar, Map, bPatchSuccess);
-		bSuccess &= bPatchSuccess;
 	}
 	bOutSuccess = bSuccess && !Ar.IsError();
 	return bOutSuccess;

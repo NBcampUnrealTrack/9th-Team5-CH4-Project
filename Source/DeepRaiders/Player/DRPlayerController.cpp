@@ -1030,7 +1030,6 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 		return;
 	}
 
-
 	const bool bIsItemUseInput = InputId == static_cast<int32>(EDRAbilityInputId::Primary)
 		|| InputId == static_cast<int32>(EDRAbilityInputId::Secondary);
 
@@ -1588,7 +1587,7 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=ServerOnly RecentOperations=%d"),
+		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes RecentOperations=%d"),
 		AppliedSnapshotId,
 		AppliedVoxelSaveByteCount,
 		AppliedSnowVolumeByteCount,
@@ -1631,7 +1630,6 @@ UInputAction* ADRPlayerController::GetSkillInputAction(
 		return nullptr;
 	}
 }
-
 
 #pragma region Debug
 

@@ -158,10 +158,9 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 	{
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			FDRSnowMaterialPatch MaterialPatch;
 			const FDRSnowRemoveResult RemoveResult = bUseAbsorbTool
-				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request, &MaterialPatch)
-				: SnowSubsystem->RemoveSnow(Request, &MaterialPatch);
+				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request)
+				: SnowSubsystem->RemoveSnow(Request);
 			RemovedAmount = RemoveResult.RemovedAmount;
 			if (RemovedAmount > 0.f)
 			{
@@ -185,7 +184,7 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 						IsValid(Request.TargetVoxelWorld.Get())
 							? Request.TargetVoxelWorld->GetFName()
 							: NAME_None;
-					MiningGameState->RegisterSnowRemove(Operation, MoveTemp(MaterialPatch));
+					MiningGameState->RegisterSnowRemove(Operation);
 				}
 			}
 		}

@@ -4,16 +4,6 @@
 #include "DRSnowTypes.h"
 #include "TimerManager.h"
 
-struct DEEPRAIDERS_API FDRSnowNetSerializeUtils
-{
-	static uint32 EncodeSignedInt(int32 Value);
-	static int32 DecodeSignedInt(uint32 Value);
-	static int32 GetPackedUIntSize(uint32 Value);
-	static uint32 GetRunLength(const TArray<uint16>& Indices, uint32 Start);
-	static bool UseRunEncoding(const TArray<uint16>& Indices, int32& OutIndexBytes);
-	static bool SerializeCount(FArchive& Ar, uint32& Value, uint32 Maximum);
-};
-
 // 첫 작업은 즉시 전송하고, 쿨타임 중 들어온 작업만 다음 전송으로 묶는다.
 struct DEEPRAIDERS_API FDRSnowOperationBatcher : public TSharedFromThis<FDRSnowOperationBatcher>
 {

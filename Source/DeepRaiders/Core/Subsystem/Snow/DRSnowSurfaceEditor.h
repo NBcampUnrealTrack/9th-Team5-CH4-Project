@@ -7,36 +7,20 @@
 
 class AVoxelWorld;
 
-// Voxel 표현 편집의 실제 결과다. 원본 Store 갱신은 Subsystem이 이 결과를 사용해 처리한다.
+// Voxel 표현 편집의 실제 결과다. 점령 부피 갱신은 Pipeline이 이 결과를 사용해 처리한다.
 struct FDRSnowSurfaceEditResult
 {
 	// 요청량이 아니라 Voxel 값이 실제로 변한 양이다.
 	float AppliedAmount = 0.f;
 	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
 	FVoxelIntBox EditedBounds;
-	// 서버 Ownership 원본이 실제로 추가/제거된 위치를 기록할 수 있도록 채운다.
+	// 실제 추가/제거 위치를 재질 채우기와 점령 부피 갱신에 사용한다.
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	// DirectionalSurfaceTool처럼 Volume도 실제 변경 위치를 따라가야 하는 경로만 true다.
 	bool bUseModifiedValuesForVolume = false;
 };
 
-// 서버가 Ownership/Volume으로 결정한 최종 MaterialIndex와 실제 paint 입력을 보관한다.
-// 네트워크 패치는 paint 이후 실제로 바뀐 voxel만 사용해 별도로 만든다.
-struct FDRSnowResolvedMaterialGroup
-{
-	uint8 MaterialIndex = 0;
-	FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels;
-};
-
-struct FDRSnowResolvedMaterialEdit
-{
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
-	TArray<FDRSnowResolvedMaterialGroup> Groups;
-
-	bool IsEmpty() const { return Groups.IsEmpty(); }
-};
-
-// Voxel value/material 표현 편집만 담당한다. 원본 amount와 ownership은 Subsystem이 관리한다.
+// Voxel value/material 표현 편집만 담당한다. 점령 부피는 Pipeline이 관리한다.
 class DEEPRAIDERS_API FDRSnowSurfaceEditor
 {
 public:
@@ -47,6 +31,8 @@ public:
 	}
 
 	FDRSnowSurfaceEditResult AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
+	// 실제 새로 추가한 복셀 전체에 재질을 저장해 내부 색을 유지한다.
+	void FillAddedSnowMaterials(const FDRSnowSurfaceEditResult& EditResult, int32 TeamId);
 	bool AddDirectionalSnowAtAreaAsync(
 		const FDRSnowSurfaceAddRequest& Request,
 		TFunction<void(FDRSnowSurfaceEditResult&&)> Completion);
@@ -54,20 +40,6 @@ public:
 	// 눈총 frustum 전용 제거 경로다. 일반 아이템 제거에서는 사용하지 않는다.
 	FDRSnowSurfaceEditResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
 	FDRSnowSurfaceEditResult RemoveSnowAtArea(const FDRSnowSurfaceRemoveRequest& Request);
-	// Resolve 결과를 서버 VoxelWorld에 적용한다. OutMaterialPatch에는 실제 변경분만 기록한다.
-	bool ApplyResolvedSnowMaterials(
-		const FDRSnowResolvedMaterialEdit& ResolvedEdit,
-		FDRSnowMaterialPatch* OutMaterialPatch = nullptr);
-	// 작은 패치의 도색을 게임 스레드에서 끝내고 동일한 청크 Bounds를 반환한다.
-	bool ApplySnowMaterialPatchSync(
-		AVoxelWorld* VoxelWorld,
-		FDRSnowMaterialPatch MaterialPatch,
-		TArray<FVoxelIntBox>& OutEditedChunkBounds);
-	// 정확한 patch 좌표를 작업 스레드에서 순차 적용하고, 완료 시 편집된 청크 Bounds를 반환한다.
-	bool ApplySnowMaterialPatchAsync(
-		AVoxelWorld* VoxelWorld,
-		FDRSnowMaterialPatch MaterialPatch,
-		TFunction<void(bool, TArray<FVoxelIntBox>&&)> Completion);
 
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const;
 	AVoxelWorld* ResolveVoxelWorld(const FDRSnowSurfaceRemoveRequest& Request) const;

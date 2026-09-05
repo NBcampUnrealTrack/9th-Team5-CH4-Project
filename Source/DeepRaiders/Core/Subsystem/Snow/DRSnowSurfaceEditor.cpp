@@ -2,7 +2,6 @@
 
 #include "DeepRaiders/Snow/DRDirectionalSurfaceTool.h"
 #include "DeepRaiders/Snow/DRSnowAbsorbTool.h"
-#include "DeepRaiders/Snow/DRSnowReplicationTypes.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "EngineUtils.h"
 #include "ProfilingDebugging/CountersTrace.h"
@@ -35,7 +34,7 @@ FVoxelPaintMaterial MakeIndexPaintMaterial(
 	else if (MaterialConfig == EVoxelMaterialConfig::MultiIndex)
 	{
 		PaintMaterial.Type = EVoxelPaintMaterialType::MultiIndex;
-		PaintMaterial.SingleIndex.Channel.Channel = MaterialIndex;
+		PaintMaterial.MultiIndex.Channel.Channel = MaterialIndex;
 		PaintMaterial.MultiIndex.TargetValue = 1.f;
 	}
 
@@ -136,8 +135,7 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 bool PaintProcessedMaterialSurface(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
-	const uint8 MaterialIndex,
-	TArray<FModifiedVoxelMaterial>* OutModifiedMaterials = nullptr)
+	const uint8 MaterialIndex)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Repaint_EditMaterials);
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || ProcessedVoxels.Voxels->Num() == 0 ||
@@ -155,12 +153,8 @@ bool PaintProcessedMaterialSurface(
 		MakeIndexPaintMaterial(VoxelWorld->MaterialConfig, MaterialIndex),
 		ProcessedVoxels,
 		true,
-		OutModifiedMaterials != nullptr,
+		false,
 		true);
-	if (OutModifiedMaterials)
-	{
-		OutModifiedMaterials->Append(MoveTemp(ModifiedMaterials));
-	}
 	return EditedMaterialBounds.IsValid();
 }
 
@@ -242,139 +236,6 @@ FVoxelSurfaceEditsProcessedVoxels MakeNewlyAddedVoxelGroup(
 	return MakeProcessedVoxelGroup(SourceVoxels, MoveTemp(NewVoxels));
 }
 
-struct FDRSnowMaterialPatchAsyncState : TSharedFromThis<FDRSnowMaterialPatchAsyncState>
-{
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
-	FDRSnowMaterialPatch Patch;
-	TFunction<void(bool, TArray<FVoxelIntBox>&&)> Completion;
-	TArray<FVoxelIntBox> EditedChunkBounds;
-	int32 ChunkIndex = 0;
-	int32 MaterialSetIndex = 0;
-	bool bEditedCurrentChunk = false;
-	bool bAppliedAny = false;
-	bool bSynchronous = false;
-
-	void ProcessNextMaterialSet()
-	{
-		AVoxelWorld* World = VoxelWorld.Get();
-		if (!IsValid(World) || !World->IsCreated())
-		{
-			Finish();
-			return;
-		}
-
-		while (ChunkIndex < Patch.Chunks.Num())
-		{
-			const FDRSnowMaterialChunkPatch& Chunk = Patch.Chunks[ChunkIndex];
-			if (MaterialSetIndex >= Chunk.MaterialSets.Num())
-			{
-				if (bEditedCurrentChunk)
-				{
-					EditedChunkBounds.Add(GetChunkBounds(Chunk.ChunkCoord));
-				}
-				++ChunkIndex;
-				MaterialSetIndex = 0;
-				bEditedCurrentChunk = false;
-				continue;
-			}
-
-			const FDRSnowMaterialIndexSet& MaterialSet = Chunk.MaterialSets[MaterialSetIndex];
-			FVoxelSurfaceEditsProcessedVoxels ProcessedVoxels =
-				MakeProcessedVoxels(Chunk.ChunkCoord, MaterialSet.LocalVoxelIndices);
-			if (ProcessedVoxels.Voxels->IsEmpty())
-			{
-				++MaterialSetIndex;
-				continue;
-			}
-
-			if (bSynchronous)
-			{
-				TArray<FModifiedVoxelMaterial> ModifiedMaterials;
-				FVoxelIntBox EditedBounds;
-				UVoxelSurfaceEditTools::EditVoxelMaterials(
-					ModifiedMaterials,
-					EditedBounds,
-					World,
-					MakeIndexPaintMaterial(World->MaterialConfig, MaterialSet.MaterialIndex),
-					ProcessedVoxels,
-					false,
-					false,
-					false);
-				bAppliedAny = true;
-				bEditedCurrentChunk = true;
-				++MaterialSetIndex;
-				continue;
-			}
-
-			const TSharedRef<FDRSnowMaterialPatchAsyncState> State = AsShared();
-			UVoxelSurfaceEditTools::EditVoxelMaterialsAsync(
-				World,
-				MakeIndexPaintMaterial(World->MaterialConfig, MaterialSet.MaterialIndex),
-				ProcessedVoxels,
-				FOnVoxelToolComplete_WithModifiedMaterials::CreateLambda(
-					[State](const TArray<FModifiedVoxelMaterial>&)
-					{
-						State->bAppliedAny = true;
-						State->bEditedCurrentChunk = true;
-						++State->MaterialSetIndex;
-						State->ProcessNextMaterialSet();
-					}),
-				nullptr,
-				false,
-				false,
-				false);
-			return;
-		}
-
-		Finish();
-	}
-
-private:
-	static FVoxelIntBox GetChunkBounds(const FIntVector& ChunkCoord)
-	{
-		const FIntVector ChunkMin = ChunkCoord * DRSnowMaterialPatchUtils::ChunkSize;
-		return FVoxelIntBox(
-			ChunkMin,
-			ChunkMin + FIntVector(DRSnowMaterialPatchUtils::ChunkSize));
-	}
-
-	static FVoxelSurfaceEditsProcessedVoxels MakeProcessedVoxels(
-		const FIntVector& ChunkCoord,
-		const TArray<uint16>& LocalVoxelIndices)
-	{
-		constexpr int32 MaxLocalIndex =
-			DRSnowMaterialPatchUtils::ChunkSize *
-			DRSnowMaterialPatchUtils::ChunkSize *
-			DRSnowMaterialPatchUtils::ChunkSize;
-
-		TArray<FVoxelSurfaceEditsVoxel> Voxels;
-		Voxels.Reserve(LocalVoxelIndices.Num());
-		for (const uint16 LocalIndex : LocalVoxelIndices)
-		{
-			if (LocalIndex >= MaxLocalIndex)
-			{
-				continue;
-			}
-
-			FVoxelSurfaceEditsVoxel& Voxel = Voxels.AddDefaulted_GetRef();
-			Voxel.Position = DRSnowMaterialPatchUtils::LocalIndexToVoxel(ChunkCoord, LocalIndex);
-			Voxel.Strength = 1.f;
-		}
-
-		FVoxelSurfaceEditsProcessedVoxels Result;
-		Result.Bounds = GetChunkBounds(ChunkCoord);
-		Result.Voxels = MakeVoxelShared<TArray<FVoxelSurfaceEditsVoxel>>(MoveTemp(Voxels));
-		return Result;
-	}
-
-	void Finish()
-	{
-		if (Completion)
-		{
-			Completion(bAppliedAny, MoveTemp(EditedChunkBounds));
-		}
-	}
-};
 
 
 }
@@ -525,6 +386,41 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::AddSnowAtArea(
 	Result.EditedBounds = EditedBounds;
 	Result.ModifiedValues = MoveTemp(ModifiedValues);
 	return Result;
+}
+
+void FDRSnowSurfaceEditor::FillAddedSnowMaterials(
+	const FDRSnowSurfaceEditResult& EditResult,
+	const int32 TeamId)
+{
+	check(IsInGameThread());
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_FillAddedMaterials);
+	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
+	if (EditResult.AppliedAmount <= 0.f || !EditResult.EditedBounds.IsValid() ||
+		!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB)
+	{
+		return;
+	}
+
+	const FVoxelPaintMaterial PaintMaterial = MakeIndexPaintMaterial(
+		VoxelWorld->MaterialConfig, DRSnowMaterialMapping::TeamToMaterialIndex(TeamId));
+	FVoxelData& Data = VoxelWorld->GetData();
+	{
+		FVoxelWriteScopeLock Lock(Data, EditResult.EditedBounds, FUNCTION_FNAME);
+		// 표면 목록이 아닌 실제 값 변경 목록을 사용해 새로 추가한 내부까지 칠한다.
+		// Bounds는 잠금 범위일 뿐이다. 기존 고체와 도구 밖의 복셀은 보존한다.
+		for (const FModifiedVoxelValue& Value : EditResult.ModifiedValues)
+		{
+			if (Value.OldValue <= 0.f || Value.NewValue >= Value.OldValue)
+			{
+				continue;
+			}
+			FVoxelMaterial Material = Data.GetMaterial(Value.Position, 0);
+			PaintMaterial.ApplyToMaterial(Material, 1.f);
+			Data.SetMaterial(Value.Position, Material);
+		}
+	}
+	UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, EditResult.EditedBounds.Extend(1));
 }
 
 bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
@@ -776,90 +672,8 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowAtArea(
 	return Result;
 }
 
-bool FDRSnowSurfaceEditor::ApplyResolvedSnowMaterials(
-	const FDRSnowResolvedMaterialEdit& ResolvedEdit,
-	FDRSnowMaterialPatch* OutMaterialPatch)
-{
-	if (OutMaterialPatch)
-	{
-		*OutMaterialPatch = FDRSnowMaterialPatch();
-	}
 
-	AVoxelWorld* VoxelWorld = ResolvedEdit.VoxelWorld.Get();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
-	{
-		return false;
-	}
 
-	bool bPaintedAny = false;
-	FDRSnowMaterialPatchBuilder PatchBuilder;
-	for (const FDRSnowResolvedMaterialGroup& Group : ResolvedEdit.Groups)
-	{
-		TArray<FModifiedVoxelMaterial> ModifiedMaterials;
-		const bool bPaintedGroup = PaintProcessedMaterialSurface(
-			VoxelWorld,
-			Group.ProcessedVoxels,
-			Group.MaterialIndex,
-			OutMaterialPatch ? &ModifiedMaterials : nullptr);
-		bPaintedAny |= bPaintedGroup;
-		if (OutMaterialPatch && bPaintedGroup)
-		{
-			PatchBuilder.AddChangedMaterials(Group.MaterialIndex, ModifiedMaterials);
-		}
-	}
-
-	if (OutMaterialPatch)
-	{
-		*OutMaterialPatch = PatchBuilder.Build();
-		TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/VoxelCount"), OutMaterialPatch->NumVoxels());
-		TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/ChunkCount"), OutMaterialPatch->Chunks.Num());
-		TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Patch/EstimatedBytes"), OutMaterialPatch->EstimateSerializedBytes());
-	}
-	return bPaintedAny;
-}
-
-bool FDRSnowSurfaceEditor::ApplySnowMaterialPatchSync(
-	AVoxelWorld* VoxelWorld,
-	FDRSnowMaterialPatch MaterialPatch,
-	TArray<FVoxelIntBox>& OutEditedChunkBounds)
-{
-	check(IsInGameThread());
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_ApplyMaterialPatchSync);
-	OutEditedChunkBounds.Reset();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB || MaterialPatch.IsEmpty())
-	{
-		return false;
-	}
-
-	TSharedRef<FDRSnowMaterialPatchAsyncState> State = MakeShared<FDRSnowMaterialPatchAsyncState>();
-	State->VoxelWorld = VoxelWorld;
-	State->Patch = MoveTemp(MaterialPatch);
-	State->bSynchronous = true;
-	State->ProcessNextMaterialSet();
-	OutEditedChunkBounds = MoveTemp(State->EditedChunkBounds);
-	return State->bAppliedAny;
-}
-
-bool FDRSnowSurfaceEditor::ApplySnowMaterialPatchAsync(
-	AVoxelWorld* VoxelWorld,
-	FDRSnowMaterialPatch MaterialPatch,
-	TFunction<void(bool, TArray<FVoxelIntBox>&&)> Completion)
-{
-	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_QueueMaterialPatchAsync);
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
-		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB || MaterialPatch.IsEmpty())
-	{
-		return false;
-	}
-
-	TSharedRef<FDRSnowMaterialPatchAsyncState> State = MakeShared<FDRSnowMaterialPatchAsyncState>();
-	State->VoxelWorld = VoxelWorld;
-	State->Patch = MoveTemp(MaterialPatch);
-	State->Completion = MoveTemp(Completion);
-	State->ProcessNextMaterialSet();
-	return true;
-}
 
 AVoxelWorld* FDRSnowSurfaceEditor::ResolveVoxelWorld(const FDRSnowSurfaceAddRequest& Request) const
 {

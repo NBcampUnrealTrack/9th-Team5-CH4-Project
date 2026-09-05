@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DRSnowReplicationTypes.h"
 #include "VoxelWorld.h"
 #include "DRSnowTypes.generated.h"
 
@@ -313,10 +312,6 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 	// 방향성 눈 추가에서 서버가 실제로 적용한 양
 	UPROPERTY()
 	float ServerAppliedAmount = 0.f;
-
-	// TeamId가 아닌 MaterialIndex 패치
-	UPROPERTY()
-	FDRSnowMaterialPatch MaterialPatch;
 
 	// 작업 종류와 도구에 필요한 필드만 전송한다. 위치/float 정밀도는 기존과 동일하다.
 	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);

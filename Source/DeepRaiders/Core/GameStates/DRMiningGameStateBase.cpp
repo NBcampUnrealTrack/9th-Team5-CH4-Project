@@ -182,8 +182,7 @@ void ADRMiningGameStateBase::RegisterSnowAdd(
 }
 
 void ADRMiningGameStateBase::RegisterSnowRemove(
-	const FDRSnowRemoveOperation& Operation,
-	FDRSnowMaterialPatch MaterialPatch)
+	const FDRSnowRemoveOperation& Operation)
 {
 	if (!HasAuthority())
 	{
@@ -194,7 +193,6 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = false;
 	Record.RemoveOperation = Operation;
-	Record.MaterialPatch = MoveTemp(MaterialPatch);
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
 
@@ -362,7 +360,7 @@ bool ADRMiningGameStateBase::IsSnowOperationReady(const FDRSnowOperationRecord& 
 	UWorld* World = GetWorld();
 	const UDRSnowSubsystem* SnowSubsystem = IsValid(World)
 		? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	if (!IsValid(SnowSubsystem) || !SnowSubsystem->IsMaterialPatchIdle())
+	if (!IsValid(SnowSubsystem))
 	{
 		return false;
 	}
@@ -619,8 +617,7 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
 	return SnowSubsystem->ApplyReplicatedSnowRemoval(
 		Request,
-		Operation.AppliedAmount,
-		Record.MaterialPatch);
+		Operation.AppliedAmount);
 }
 
 void ADRMiningGameStateBase::HandleDirectionalSnowAddCompleted(
