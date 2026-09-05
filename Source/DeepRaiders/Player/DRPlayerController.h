@@ -95,6 +95,9 @@ protected:
 
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnRep_Pawn() override;
+	virtual void ClientRestart_Implementation(APawn* NewPawn) override;
+	virtual void AcknowledgePossession(APawn* InPawn) override;
+	virtual void ServerAcknowledgePossession_Implementation(APawn* InPawn) override;
 
 	virtual void OnRep_PlayerState() override;
 
@@ -407,9 +410,11 @@ private:
 	void ServerNotifySnowJoinSnapshotApplied(int32 SnapshotId);
 
 	void SendNextSnowJoinSnapshotChunk();
+	void AdjustSnowSnapshotWindow(bool bIncrease, const TCHAR* Reason);
 	void FinishSnowJoinSnapshotTransfer();
 	bool TryApplyPendingSnowJoinSnapshot();
 	void RetryPendingSnowJoinSnapshot();
+	void LogSnowJoinControlState(const TCHAR* Stage) const;
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
 
 	float GetSnowJoinSnapshotProgress() const; // 현재 중도 접속 스냅샷의 네트워크 수신 진행률을 0~1 범위로 반환
@@ -420,7 +425,13 @@ private:
 	TArray<uint8> OutgoingSnowVoxelSaveData;
 	TArray<uint8> OutgoingSnowVolumeData;
 	TArray<uint8> OutgoingSnowOwnershipData;
-	TSet<uint64> PendingSnowChunkAcks;
+	// 전송 시각으로 ACK 왕복 시간을 측정하고 동시 전송 수를 2~16개로 조절한다.
+	TMap<uint64, double> PendingSnowChunkAcks;
+	int32 SnowSnapshotWindow = 8;
+	int32 FastSnowSnapshotAcks = 0;
+	double SnowSnapshotSaturationStart = -1.0;
+	double LastSnowSnapshotWindowChange = 0.0;
+	FTimerHandle SnowSnapshotSendTimer;
 	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	bool bSnowSnapshotTransferFinished = false;
 
