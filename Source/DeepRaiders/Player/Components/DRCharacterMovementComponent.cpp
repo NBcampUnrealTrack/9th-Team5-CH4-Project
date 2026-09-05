@@ -11,7 +11,7 @@
 #include "VoxelWorld.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
-
+#include "Components/StaticMeshComponent.h"
 
 namespace
 {
@@ -987,6 +987,12 @@ bool UDRCharacterMovementComponent::TryHandleZiplineBlockingCollision(const FHit
         }
     }
 
+    if (Hit.GetComponent()
+        && Hit.GetComponent()->IsA<UStaticMeshComponent>())
+    {
+        return false;
+    }
+    
     /*
      * Zipline 이동 중 World blocking collision이 발생하면
      * 현재 Rider만 Rail에서 해제한다.
