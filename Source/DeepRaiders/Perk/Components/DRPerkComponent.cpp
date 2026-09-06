@@ -568,6 +568,50 @@ void UDRPerkComponent::HandleSkillActivated(
 	}
 }
 
+void UDRPerkComponent::HandleSkillCompleted(
+	const UDRSkillDefinition* SkillDefinition)
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent)
+		|| !IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid())
+	{
+		return;
+	}
+
+	ApplySkillEffectRules(
+		AbilitySystemComponent,
+		SkillDefinition,
+		SkillDefinition->BaseEffectRules,
+		EDRSkillEffectTrigger::OnSkillCompleted,
+		false,
+		nullptr);
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillDefinition->SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::OwnerCharacter)
+		{
+			continue;
+		}
+
+		ApplySkillEffectRules(
+			AbilitySystemComponent,
+			PerkDefinition,
+			PerkDefinition->EffectRules,
+			EDRSkillEffectTrigger::OnSkillCompleted,
+			false,
+			nullptr);
+	}
+}
+
 bool UDRPerkComponent::HasSkillPerk(
 	FGameplayTag SkillId,
 	FGameplayTag PerkTag) const

@@ -99,6 +99,9 @@ public:
 		const UDRSkillDefinition* SkillDefinition,
 		TArray<FActiveGameplayEffectHandle>& OutActiveEffectHandles);
 
+	/** 스킬이 정상 종료됐을 때 기본 효과와 장착 퍽의 종료 후 효과를 실행한다. 서버 전용. */
+	void HandleSkillCompleted(const UDRSkillDefinition* SkillDefinition);
+
 	/** 특정 스킬에 장착된 설정 변경형 퍽 태그를 반환한다. */
 	bool HasSkillPerk(FGameplayTag SkillId, FGameplayTag PerkTag) const;
 

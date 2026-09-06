@@ -22,7 +22,10 @@ enum class EDRSkillEffectTrigger : uint8
 	OnSkillCommitted,
 
 	/** 스킬이 활성화된 동안 적용하고, 종료 또는 취소 시 회수한다. */
-	WhileSkillActive
+	WhileSkillActive,
+
+	/** 스킬이 취소되지 않고 정상적으로 종료된 직후 한 번 적용한다. */
+	OnSkillCompleted
 };
 
 /** 스킬 기본 효과와 장착 퍽 효과가 공통으로 사용하는 GE 적용 규칙이다. */
