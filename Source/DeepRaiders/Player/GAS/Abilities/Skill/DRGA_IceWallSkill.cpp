@@ -2,6 +2,7 @@
 
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementTargetActor.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Skill/IceWall/DRIceWall.h"
@@ -12,6 +13,11 @@
 
 UDRGA_IceWallSkill::UDRGA_IceWallSkill()
 {
+	FGameplayTagContainer IceWallAbilityTags;
+	IceWallAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
+	IceWallAbilityTags.AddTag(DRGameplayTags::Ability_Skill_IceWall);
+	SetAssetTags(IceWallAbilityTags);
+
 	TargetActorClass = ADRPlacementTargetActor::StaticClass();
 	IceWallClass = ADRIceWall::StaticClass();
 }

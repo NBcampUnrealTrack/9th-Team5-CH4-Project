@@ -11,6 +11,8 @@
 #include "GameFramework/Pawn.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
+#include "DeepRaiders/Skill/Barrier/DRBarrierGenerator.h"
 
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "Kismet/GameplayStatics.h"
@@ -41,6 +43,8 @@ ADRProjectile::ADRProjectile(const FObjectInitializer& ObjectInitializer)
 	}
 
 	CollisionComponent->SetCollisionProfileName(TEXT("DRProjectile"));
+	CollisionComponent->SetCollisionResponseToChannel(DRCollisionChannels::BarrierTrace, ECR_Ignore);
+	CollisionComponent->SetGenerateOverlapEvents(true);
 
 	CollisionComponent->SetCanEverAffectNavigation(false);
 
@@ -99,6 +103,10 @@ void ADRProjectile::PostInitializeComponents()
 void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// BP에 저장된 예전 Profile 값과 무관하게 히트스캔 전용 구체는 물리탄이 항상 무시한다.
+	CollisionComponent->SetCollisionResponseToChannel(DRCollisionChannels::BarrierTrace, ECR_Ignore);
+	CollisionComponent->SetGenerateOverlapEvents(true);
 
 	/*
 	 * 서버는 GA에서 전달한 ballistic velocity를 사용한다.
@@ -183,6 +191,11 @@ void ADRProjectile::InitializeProjectile(
 	FalloffSettings = InFalloffSettings;
 	SetActorTickEnabled(FalloffSettings.bEnabled && EffectiveMaxRange > KINDA_SMALL_NUMBER);
 
+	// Deferred Spawn 내부에서 시작할 경우 FinishSpawning의 최초 충돌 등록이 BeginPlay보다 먼저다.
+	// 따라서 BP Profile에 저장된 값과 무관하게 이 시점에 Trace 전용 배리어를 Ignore해야 한다.
+	CollisionComponent->SetCollisionResponseToChannel(DRCollisionChannels::BarrierTrace, ECR_Ignore);
+	CollisionComponent->SetGenerateOverlapEvents(true);
+
 	// 사거리 강화로 비행 시간이 기존 InitialLifeSpan을 넘더라도 먼저 제거되지 않게 한다.
 	if (FalloffSettings.bEnabled && EffectiveMaxRange > KINDA_SMALL_NUMBER)
 	{
@@ -236,12 +249,11 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 
 	// 아군과 충돌하면 무시하고 계속 진행
 	if (ShouldIgnoreFriendlyBlockingHit()
-		&& IsValid(HitActor) 
+		&& IsValid(HitActor)
 		&& IsFriendlyTarget(HitActor))
 	{
 		CollisionComponent->IgnoreActorWhenMoving(HitActor, true);
 		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
-
 		ProjectileMovement->Activate(true);
 		ProjectileMovement->UpdateComponentVelocity();
 
@@ -251,6 +263,46 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 	bImpactHandled = true;
 
 	HandleImpact(ImpactResult);
+}
+
+void ADRProjectile::HandleBarrierOverlap(ADRBarrierGenerator* BarrierGenerator)
+{
+	if (!HasAuthority()
+		|| bImpactHandled
+		|| !IsValid(BarrierGenerator)
+		|| BarrierGenerator->IsBroken())
+	{
+		return;
+	}
+
+	// 아군탄은 애초에 Blocking Hit가 발생하지 않았으므로 아무 처리 없이 그대로 비행한다.
+	if (IsFriendlyTarget(BarrierGenerator))
+	{
+		return;
+	}
+
+	bImpactHandled = true;
+
+	const FVector ImpactPoint = GetActorLocation();
+	FVector ImpactNormal = (ImpactPoint - BarrierGenerator->GetActorLocation()).GetSafeNormal();
+	if (ImpactNormal.IsNearlyZero())
+	{
+		ImpactNormal = -GetActorForwardVector();
+	}
+
+	FHitResult BarrierHit(
+		BarrierGenerator,
+		BarrierGenerator->GetBarrierCollisionComponent(),
+		ImpactPoint,
+		ImpactNormal);
+	BarrierHit.bBlockingHit = true;
+	BarrierHit.TraceStart = LaunchLocation;
+	BarrierHit.TraceEnd = ImpactPoint;
+	BarrierHit.Location = ImpactPoint;
+	BarrierHit.ImpactPoint = ImpactPoint;
+
+	UpdateFalloffAtLocation(ImpactPoint);
+	HandleImpact(BarrierHit);
 }
 
 void ADRProjectile::HandleImpact(const FHitResult& ImpactResult)
@@ -404,13 +456,12 @@ void ADRProjectile::RefreshFriendlyCollisionIgnores()
 	}
 	
 	TArray<APawn*> FriendlyPawns;
-	
 	DRCombatTeam::GetFriendlyPawns(GetWorld(), SourceTeamId, FriendlyPawns);
-	
+
 	for (APawn* FriendlyPawn : FriendlyPawns)
 	{
 		if (IsValid(FriendlyPawn)
-			&& FriendlyPawn !=  GetInstigator())
+			&& FriendlyPawn != GetInstigator())
 		{
 			CollisionComponent->IgnoreActorWhenMoving(FriendlyPawn, true);
 		}

@@ -539,18 +539,41 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 	
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
-	
-	const bool bBlockingHit = World->LineTraceSingleByChannel(OutHitResult, ViewLocation, TraceEnd,
-		DRCollisionChannels::Projectile, QueryParams);
-	
-	// 충돌하지 않은 경우 시선의 끝을 반환
-	if (!bBlockingHit)
+
+	// 아군 배리어처럼 팀을 가진 비 Pawn Actor도 조준점을 가로막지 않게 한다.
+	// 내부에서 배리어 출구 면이 발사 원점보다 가까운 조준점으로 선택되면
+	// Projectile 발사 방향이 뒤집힐 수 있으므로 실제 발사 전에 제외해야 한다.
+	constexpr int32 MaxFriendlyPassThroughIterations = 16;
+	for (int32 Iteration = 0; Iteration < MaxFriendlyPassThroughIterations; ++Iteration)
 	{
-		OutHitResult = FHitResult(ViewLocation, TraceEnd);
-		OutHitResult.Location = TraceEnd;
-		OutHitResult.ImpactPoint = TraceEnd;
+		const bool bBlockingHit = World->LineTraceSingleByChannel(
+			OutHitResult,
+			ViewLocation,
+			TraceEnd,
+			DRCollisionChannels::Projectile,
+			QueryParams);
+
+		if (!bBlockingHit)
+		{
+			OutHitResult = FHitResult(ViewLocation, TraceEnd);
+			OutHitResult.Location = TraceEnd;
+			OutHitResult.ImpactPoint = TraceEnd;
+			return true;
+		}
+
+		AActor* HitActor = OutHitResult.GetActor();
+		if (!IsValid(HitActor) || !IsFriendlyTarget(HitActor))
+		{
+			return true;
+		}
+
+		QueryParams.AddIgnoredActor(HitActor);
 	}
-	
+
+	// 비정상적으로 많은 아군 Actor가 겹친 경우에도 역방향 조준점은 만들지 않는다.
+	OutHitResult = FHitResult(ViewLocation, TraceEnd);
+	OutHitResult.Location = TraceEnd;
+	OutHitResult.ImpactPoint = TraceEnd;
 	return true;
 }
 

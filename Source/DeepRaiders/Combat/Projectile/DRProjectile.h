@@ -8,6 +8,7 @@
 #include "DRProjectile.generated.h"
 
 class UAbilitySystemComponent;
+class ADRBarrierGenerator;
 class UProjectileMovementComponent;
 class UShapeComponent;
 class UStaticMeshComponent;
@@ -29,6 +30,9 @@ public:
 
 	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
 	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
+
+	/** BarrierCollision Overlap에서 호출한다. 아군탄은 통과하고 적탄만 배리어에 충돌시킨다. */
+	void HandleBarrierOverlap(ADRBarrierGenerator* BarrierGenerator);
 	
 	// 서버에서 Projectile Spawn을 완료하기 전에 반드시 호출
 	void InitializeProjectile(

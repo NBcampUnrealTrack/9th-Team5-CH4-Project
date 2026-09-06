@@ -196,6 +196,11 @@ namespace DRGameplayTags
 		"Snow wall skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_IceWall,
+		"Ability.Skill.IceWall",
+		"Ice wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Skill_Grab,
 		"Ability.Skill.Grab",
 		"Grab skill.");
@@ -204,6 +209,11 @@ namespace DRGameplayTags
 		Ability_Skill_Grapple,
 		"Ability.Skill.Grapple",
 		"Grapple skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Barrier,
+		"Ability.Skill.Barrier",
+		"Deployable barrier skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
@@ -426,6 +436,11 @@ namespace DRGameplayTags
 		"Cooldown for the snow wall skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_IceWall,
+		"Cooldown.Skill.IceWall",
+		"Cooldown for the ice wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SpearThrow,
 		"Cooldown.Skill.SpearThrow",
 		"Cooldown for the spear throw skill.");
@@ -434,6 +449,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_SlowProjectile,
 		"Cooldown.Skill.SlowProjectile",
 		"Cooldown for the slow projectile skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Barrier,
+		"Cooldown.Skill.Barrier",
+		"Cooldown for the deployable barrier skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,

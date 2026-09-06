@@ -1,6 +1,7 @@
 ﻿
 #include "DRCombatTeamLibrary.h"
 
+#include "DeepRaiders/Core/Interface/DRCombatTeamInterface.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
@@ -19,6 +20,11 @@ const ADRPlayerState* ResolvePlayerState(const AActor* Actor)
 
 DEEPRAIDERS_API int32 DRCombatTeam::GetActorTeamId(const AActor* Actor)
 {
+	if (const IDRCombatTeamInterface* TeamActor = Cast<IDRCombatTeamInterface>(Actor))
+	{
+		return TeamActor->GetCombatTeamId();
+	}
+
 	const ADRPlayerState* PlayerState = ResolvePlayerState(Actor);
 	return IsValid(PlayerState) ? PlayerState->GetTeamId() : INDEX_NONE;
 }
