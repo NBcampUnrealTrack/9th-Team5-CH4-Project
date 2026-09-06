@@ -8,9 +8,46 @@
 #include "VoxelWorld.h"
 #include "HAL/PlatformTime.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
+#include "Async/Async.h"
+#include "HAL/IConsoleManager.h"
+#include "CoreGlobals.h"
 
 namespace
 {
+TAutoConsoleVariable<int32> CVarDRSnowFastCompletion(
+	TEXT("dr.Snow.FastCompletion"), 1,
+	TEXT("1: also offer directional completion to the game-thread task graph. 0: VoxelWorld Tick only."));
+TAutoConsoleVariable<int32> CVarDRSnowFastCompletionMax(
+	TEXT("dr.Snow.FastCompletionsPerFrame"), 4, TEXT("Maximum additional task-graph completions per process/frame."));
+TAutoConsoleVariable<float> CVarDRSnowFastCompletionBudget(
+	TEXT("dr.Snow.FastCompletionBudgetMs"), 4.f, TEXT("Soft GT callback/continuation budget per process/frame; original Tick remains the fallback."));
+
+// Process-wide because the task graph belongs to the process. Use separate
+// server/client processes for comparisons. Checked only on the game thread.
+struct FDRSnowFastCompletionBudget
+{
+	uint64 Frame = MAX_uint64;
+	int32 Count = 0;
+	double SpentMs = 0.0;
+	bool TryBegin()
+	{
+		if (Frame != GFrameCounter) { Frame = GFrameCounter; Count = 0; SpentMs = 0.0; }
+		if (Count >= FMath::Max(1, CVarDRSnowFastCompletionMax.GetValueOnGameThread()) ||
+			SpentMs >= FMath::Max(0.1f, CVarDRSnowFastCompletionBudget.GetValueOnGameThread())) { return false; }
+		++Count;
+		return true;
+	}
+};
+
+// Both consumers run on the game thread. Sharing this envelope also avoids
+// copying the potentially large ModifiedValues array into TFunction copies.
+struct FDRSnowCompletionEnvelope
+{
+	FDRDirectionalSurfaceEditComplete Completion;
+	TArray<FModifiedVoxelValue> ModifiedValues;
+	bool bConsumed = false;
+};
+
 class FDRDirectionalSurfaceEditWork final : public FVoxelAsyncWork
 {
 public:
@@ -381,6 +418,8 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 	}
 
 	const auto GameThreadTasks = VoxelWorld->GetGameThreadTasks();
+	const TWeakObjectPtr<AVoxelWorld> WeakVoxelWorld(VoxelWorld);
+	const bool bFastCompletion = CVarDRSnowFastCompletion.GetValueOnGameThread() != 0;
 	if (Timings)
 	{
 		Timings->StampMs = (FPlatformTime::Seconds() - StampStart) * 1000.0;
@@ -398,6 +437,8 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 		bAdd,
 		Timings,
 		DispatchTime,
+		WeakVoxelWorld,
+		bFastCompletion,
 		WorkerPostEdit = MoveTemp(WorkerPostEdit),
 		StampValueByPosition = MoveTemp(StampValueByPosition),
 		GameThreadTasks,
@@ -450,19 +491,54 @@ bool UDRDirectionalSurfaceTool::ApplySurfaceVolumeEditAsync(
 		}
 
 		const double WorkerDone = Timings ? FPlatformTime::Seconds() : 0.0;
-		GameThreadTasks->AddTask([
+		auto Envelope = MakeShared<FDRSnowCompletionEnvelope, ESPMode::ThreadSafe>();
+		Envelope->Completion = MoveTemp(Completion);
+		Envelope->ModifiedValues = MoveTemp(DataImpl.ModifiedValues);
+		auto RunOnce = [
 			Bounds,
 			Timings,
 			WorkerDone,
-			Completion = MoveTemp(Completion),
-			ModifiedValues = MoveTemp(DataImpl.ModifiedValues)]() mutable
+			Envelope](const bool bFromTaskGraph)
 		{
+			check(IsInGameThread());
+			if (Envelope->bConsumed)
+			{
+				return;
+			}
+			static FDRSnowFastCompletionBudget FastBudget;
+			if (bFromTaskGraph && !FastBudget.TryBegin())
+			{
+				return; // Still owned by the original VoxelWorld queue.
+			}
+			Envelope->bConsumed = true;
+			const double CallbackStart = bFromTaskGraph ? FPlatformTime::Seconds() : 0.0;
+			auto Callback = MoveTemp(Envelope->Completion);
 			if (Timings)
 			{
 				Timings->CallbackMs = (FPlatformTime::Seconds() - WorkerDone) * 1000.0;
+				Timings->bTaskGraphCompletion = bFromTaskGraph;
 			}
-			Completion(MoveTemp(ModifiedValues), Bounds);
-		});
+			Callback(MoveTemp(Envelope->ModifiedValues), Bounds);
+			if (bFromTaskGraph)
+			{
+				FastBudget.SpentMs += (FPlatformTime::Seconds() - CallbackStart) * 1000.0;
+			}
+		};
+		// Keep the plugin queue's existing teardown/flush behavior. Whichever
+		// game-thread consumer gets here first consumes the result exactly once.
+		GameThreadTasks->AddTask([RunOnce]() { RunOnce(false); });
+		if (bFastCompletion)
+		{
+			AsyncTask(ENamedThreads::GameThread, [WeakVoxelWorld, GameThreadTasks, RunOnce]()
+			{
+				AVoxelWorld* CurrentWorld = WeakVoxelWorld.Get();
+				if (IsValid(CurrentWorld) && CurrentWorld->IsCreated() &&
+					CurrentWorld->GetGameThreadTasks() == GameThreadTasks)
+				{
+					RunOnce(true);
+				}
+			});
+		}
 	};
 
 	FVoxelToolHelpers::StartAsyncEditTask(

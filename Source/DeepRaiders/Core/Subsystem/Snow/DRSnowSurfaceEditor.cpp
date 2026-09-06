@@ -30,8 +30,8 @@ constexpr float SnowSurfaceDistanceDivisor = 4.f;
 constexpr float SnowSurfaceFalloff = 0.35f;
 
 TAutoConsoleVariable<int32> CVarDRSnowPatchVersion(
-	TEXT("dr.Snow.PatchVersion"), 104,
-	TEXT("Compiled SnowEdit patch version: 104 = 1.4."), ECVF_ReadOnly);
+	TEXT("dr.Snow.PatchVersion"), 105,
+	TEXT("Compiled SnowEdit project patch version: 105 = 1.5; plugin stays 104."), ECVF_ReadOnly);
 
 TAutoConsoleVariable<int32> CVarDRSnowFusedMaterialEdit(
 	TEXT("dr.Snow.FusedMaterialEdit"), 1,
@@ -280,16 +280,19 @@ void FDRSnowSurfaceEditor::SetWorld(UWorld* InWorld)
 	{
 		const IConsoleVariable* PluginVersion = IConsoleManager::Get().FindConsoleVariable(TEXT("voxel.DR.SnowPatchVersion"));
 		const IConsoleVariable* CpuParallel = IConsoleManager::Get().FindConsoleVariable(TEXT("voxel.DR.CpuJumpFloodParallel"));
-		UE_LOG(LogTemp, Log, TEXT("[DRSnowBuild] Version=1.4 PID=%u Role=%s World=%s NetMode=%d CanRender=%d PluginVersion=%d FusedRequested=%d Combined=%d CpuParallel=%d"),
+		const IConsoleVariable* FastCompletion = IConsoleManager::Get().FindConsoleVariable(TEXT("dr.Snow.FastCompletion"));
+		const IConsoleVariable* FastReplay = IConsoleManager::Get().FindConsoleVariable(TEXT("dr.Snow.FastReplay"));
+		UE_LOG(LogTemp, Log, TEXT("[DRSnowBuild] Version=1.5 PID=%u Role=%s World=%s NetMode=%d CanRender=%d PluginVersion=%d FusedRequested=%d Combined=%d CpuParallel=%d FastCompletion=%d FastReplay=%d"),
 			FPlatformProcess::GetCurrentProcessId(),
 			World->GetNetMode() == NM_Client ? TEXT("Client") : (World->GetNetMode() == NM_Standalone ? TEXT("Standalone") : TEXT("Server")),
 			*World->GetName(), static_cast<int32>(World->GetNetMode()), FApp::CanEverRender() ? 1 : 0,
 			PluginVersion ? PluginVersion->GetInt() : -1,
 			CVarDRSnowFusedMaterialEdit.GetValueOnGameThread(), CVarDRSnowDirectionalCombinedEdit.GetValueOnGameThread(),
-			CpuParallel ? CpuParallel->GetInt() : -1);
+			CpuParallel ? CpuParallel->GetInt() : -1,
+			FastCompletion ? FastCompletion->GetInt() : -1, FastReplay ? FastReplay->GetInt() : -1);
 		if (!PluginVersion || PluginVersion->GetInt() != 104)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[DRSnowBuild] Plugin version mismatch. Rebuild the actual Voxel module; do not use this run for v1.4 comparisons."));
+			UE_LOG(LogTemp, Warning, TEXT("[DRSnowBuild] Plugin version mismatch. v1.5 requires the committed v1.4 plugin (104)."));
 		}
 	}
 }

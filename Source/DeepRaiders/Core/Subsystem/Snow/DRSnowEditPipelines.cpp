@@ -259,7 +259,7 @@ void FDRSnowAddPipeline::ProcessNextDirectionalAdd()
 		{
 			if (Perf.bEnabled)
 			{
-				UE_LOG(LogTemp, Log, TEXT("[DRSnowPerf] Version=1.4 Mode=%s Role=%s World=%s Id=%llu Status=NotStarted Radius=%.3f Amount=%.3f QueueMs=%.3f EditMs=%.3f Ahead=%d"),
+				UE_LOG(LogTemp, Log, TEXT("[DRSnowPerf] Version=1.5 Mode=%s Role=%s World=%s Id=%llu Status=NotStarted Radius=%.3f Amount=%.3f QueueMs=%.3f EditMs=%.3f Ahead=%d"),
 					Perf.bCombined ? TEXT("Combined") : TEXT("Legacy"),
 					World->GetNetMode() == NM_Client ? TEXT("Client") : (World->GetNetMode() == NM_Standalone ? TEXT("Standalone") : TEXT("Server")),
 					*World->GetName(), static_cast<unsigned long long>(Perf.Id), Request.Radius, Request.Amount,
@@ -309,7 +309,7 @@ void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 			? *EditResult.DirectionalTimings : EmptyTimings;
 		UWorld* LogWorld = World.Get();
 		UE_LOG(LogTemp, Log,
-			TEXT("[DRSnowPerf] Version=1.4 Mode=%s Role=%s World=%s Id=%llu Status=%s Radius=%.3f Amount=%.3f Virtual=%d QueueMs=%.3f FootprintMs=%.3f StampMs=%.3f WorkerQueueMs=%.3f LockWaitMs=%.3f DensityMs=%.3f WorkerMaterialMs=%.3f CallbackMs=%.3f LegacyMaterialMs=%.3f CommitMs=%.3f EditMs=%.3f TotalMs=%.3f Ahead=%d Remaining=%d FootprintCount=%d StampCount=%d BoundsCount=%lld Modified=%d Fused=%d"),
+			TEXT("[DRSnowPerf] Version=1.5 Mode=%s Role=%s World=%s Id=%llu Status=%s Radius=%.3f Amount=%.3f Virtual=%d QueueMs=%.3f FootprintMs=%.3f StampMs=%.3f WorkerQueueMs=%.3f LockWaitMs=%.3f DensityMs=%.3f WorkerMaterialMs=%.3f CallbackMs=%.3f LegacyMaterialMs=%.3f CommitMs=%.3f EditMs=%.3f TotalMs=%.3f Ahead=%d Remaining=%d FootprintCount=%d StampCount=%d BoundsCount=%lld Modified=%d Fused=%d TaskGraph=%d"),
 			Perf.bCombined ? TEXT("Combined") : TEXT("Legacy"),
 			LogWorld->GetNetMode() == NM_Client ? TEXT("Client") : (LogWorld->GetNetMode() == NM_Standalone ? TEXT("Standalone") : TEXT("Server")),
 			*LogWorld->GetName(), static_cast<unsigned long long>(Perf.Id),
@@ -320,7 +320,8 @@ void FDRSnowAddPipeline::HandleDirectionalAddCompleted(
 			EditResult.LegacyMaterialMs, (FinishedAt - CommitStart) * 1000.0,
 			(FinishedAt - Perf.StartedAt) * 1000.0, (FinishedAt - Perf.EnqueuedAt) * 1000.0,
 			Perf.AheadAtEnqueue, PendingDirectionalAddCount, T.FootprintCount, T.StampCount,
-			static_cast<long long>(T.BoundsCount), EditResult.ModifiedValues.Num(), T.bFusedMaterial ? 1 : 0);
+			static_cast<long long>(T.BoundsCount), EditResult.ModifiedValues.Num(), T.bFusedMaterial ? 1 : 0,
+			T.bTaskGraphCompletion ? 1 : 0);
 	}
 
 	if (Completion)

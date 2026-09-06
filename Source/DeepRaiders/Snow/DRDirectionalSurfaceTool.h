@@ -21,6 +21,7 @@ struct FDRDirectionalSurfaceEditTimings
 	double WorkerMaterialMs = 0.0;
 	bool bFusedMaterial = false;
 	double CallbackMs = 0.0;
+	bool bTaskGraphCompletion = false;
 	int32 FootprintCount = 0;
 	int32 StampCount = 0;
 	int64 BoundsCount = 0;
