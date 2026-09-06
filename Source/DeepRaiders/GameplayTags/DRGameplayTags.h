@@ -52,6 +52,11 @@ namespace DRGameplayTags
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Debuff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Enhancement);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_SnowReduction);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_RangeBonus);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_HitScaleBonus);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_ExtremeSlow);

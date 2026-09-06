@@ -12,6 +12,7 @@ enum class EDRMovementActionType : uint8
 	None UMETA(DisplayName = "None"),
 	Grapple UMETA(DisplayName = "Grapple"),
 	Zipline UMETA(DisplayName = "Zipline"),
+	Grab UMETA(DisplayName = "Grab"),
 };
 
 UENUM(BlueprintType)

@@ -2,6 +2,11 @@
 
 namespace DRGameplayTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(Perk_Skill_Grab_Debuff, "Perk.Skill.Grab.Debuff");
+	UE_DEFINE_GAMEPLAY_TAG(Perk_Skill_Grab_Enhancement, "Perk.Skill.Grab.Enhancement");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_SnowReduction, "Data.Perk.Grab.SnowReduction");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_RangeBonus, "Data.Perk.Grab.RangeBonus");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_HitScaleBonus, "Data.Perk.Grab.HitScaleBonus");
 	UE_DEFINE_GAMEPLAY_TAG(
 		Character_Upgrade_MaxHealth, 
 		"Character.Upgrade.MaxHealth");
