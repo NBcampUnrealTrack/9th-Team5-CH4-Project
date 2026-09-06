@@ -54,6 +54,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_ExtremeSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_AllySpeed);
 	
 	// Weapon Upgrade - Rifle
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
@@ -111,6 +113,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaRadius);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);

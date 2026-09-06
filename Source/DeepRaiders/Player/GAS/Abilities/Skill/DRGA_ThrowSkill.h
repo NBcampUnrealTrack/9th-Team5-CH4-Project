@@ -41,6 +41,26 @@ protected:
 		bool bReplicateEndAbility,
 		bool bWasCancelled) override;
 
+	virtual bool SpawnServerProjectile(
+		const FVector& LaunchLocation,
+		const FVector& LaunchDirection);
+
+	const UDRThrowableItemDefinition* GetActiveDefinition() const
+	{
+		return ActiveDefinition;
+	}
+
+	const FDRThrowActionSettings& GetThrowActionSettings() const
+	{
+		return ActionSettings;
+	}
+
+	void ExecuteThrowGameplayCue(
+		const FVector& LaunchLocation,
+		const FVector& LaunchDirection);
+
+	int32 GetSourceTeamId() const;
+
 private:
 	void StartTargeting();
 	void StartBlockingStateTasks();
@@ -51,11 +71,8 @@ private:
 
 	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FVector& OutAimDirection) const;
 	bool ResolveServerLaunchData(FVector& OutLaunchLocation, FVector& OutLaunchDirection) const;
-	bool SpawnServerProjectile(const FVector& LaunchLocation, const FVector& LaunchDirection);
 
-	void ExecuteThrowGameplayCue(const FVector& LaunchLocation, const FVector& LaunchDirection);
 	void BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
-	int32 GetSourceTeamId() const;
 
 	UFUNCTION()
 	void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);

@@ -89,7 +89,18 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 			CandidateActors.Add(TargetActor);
 		}
 	}
-	
+
+	AActor* InstigatorActor = GetInstigator();
+	if (ShouldAffectInstigator()
+		&& IsValid(InstigatorActor)
+		&& FVector::DistSquared(ExplosionLocation, InstigatorActor->GetActorLocation())
+			<= FMath::Square(ItemSettings.ExplosionRadius)
+		&& !UniqueActors.Contains(InstigatorActor))
+	{
+		UniqueActors.Add(InstigatorActor);
+		CandidateActors.Add(InstigatorActor);
+	}
+
 	FCollisionQueryParams OcclusionQuery(SCENE_QUERY_STAT(DRThrowableOcclusion), false);
 	OcclusionQuery.AddIgnoredActor(this);
 	// 발사자는 차폐물로 취급하지 않는다.

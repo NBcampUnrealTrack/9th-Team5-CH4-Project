@@ -214,6 +214,16 @@ namespace DRGameplayTags
 		Perk_Skill_HotPack_InstantCare,
 		"Perk.Skill.HotPack.InstantCare",
 		"Changes Hot Pack into a throwable instant recovery skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_SlowProjectile_ExtremeSlow,
+		"Perk.Skill.SlowProjectile.ExtremeSlow",
+		"Strengthens the slow projectile movement speed reduction.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_SlowProjectile_AllySpeed,
+		"Perk.Skill.SlowProjectile.AllySpeed",
+		"Grants movement speed to allies in the impact radius.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Rifle,
@@ -479,6 +489,11 @@ namespace DRGameplayTags
 		Data_Effect_MoveSpeed,
 		"Data.Effect.MoveSpeed",
 		"Effect MoveSpeed passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Effect_Duration,
+		"Data.Effect.Duration",
+		"Effect duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_QuickSlot_ActivationInterval_Duration,

@@ -624,6 +624,41 @@ float UDRPerkComponent::GetSkillEffectValue(
 	return TotalValue;
 }
 
+float UDRPerkComponent::GetSkillPerkEffectValue(
+	FGameplayTag SkillId,
+	FGameplayTag PerkTag,
+	EDRSkillEffectTrigger Trigger,
+	FGameplayTag EffectValueTag) const
+{
+	if (!SkillId.IsValid() || !PerkTag.IsValid() || !EffectValueTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill
+			|| PerkDefinition->PerkTag != PerkTag)
+		{
+			continue;
+		}
+
+		for (const FDRSkillEffectRule& EffectRule : PerkDefinition->EffectRules)
+		{
+			if (EffectRule.Trigger == Trigger)
+			{
+				const float* EffectValue = EffectRule.EffectValues.Find(EffectValueTag);
+				return EffectValue != nullptr ? *EffectValue : 0.0f;
+			}
+		}
+	}
+
+	return 0.0f;
+}
+
 bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
