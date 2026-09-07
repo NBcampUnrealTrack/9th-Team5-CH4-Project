@@ -24,8 +24,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stealthed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Aiming_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_GamePreparing);
 	
 	// Ability
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Root);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
@@ -47,13 +49,22 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SpearThrow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SlowProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_IceWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grab);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grapple);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Barrier);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Debuff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Enhancement);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_SnowReduction);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_RangeBonus);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_HitScaleBonus);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_ExtremeSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_AllySpeed);
 	
 	// Weapon Upgrade - Rifle
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
@@ -100,8 +111,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grab);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grapple);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_IceWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Barrier);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
@@ -111,6 +124,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaRadius);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);

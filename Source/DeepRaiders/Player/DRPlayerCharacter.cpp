@@ -82,6 +82,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	Movement->bUseControllerDesiredRotation = true;
 	Movement->RotationRate = FRotator(0.f, 720.f, 0.f);
 
+	// 카메라 경로는 다른 캐릭터에 의해 당겨지지 않는다. 지형/설치물만 Camera 채널을 막는다.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 450.f;

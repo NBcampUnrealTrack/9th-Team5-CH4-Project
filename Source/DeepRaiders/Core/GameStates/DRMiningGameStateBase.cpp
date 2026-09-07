@@ -319,8 +319,8 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 
 	DOREPLIFETIME(ADRMiningGameStateBase, TeamRegisteredTeleports);
 	DOREPLIFETIME(ADRMiningGameStateBase, GameRemainingSeconds);
-	DOREPLIFETIME(ADRMiningGameStateBase, bGameStarted);
-	DOREPLIFETIME(ADRMiningGameStateBase, bGameEnded);
+	DOREPLIFETIME(ADRMiningGameStateBase, GameFlowState);
+	DOREPLIFETIME(ADRMiningGameStateBase, GameFlowMessage);
 	DOREPLIFETIME(ADRMiningGameStateBase, GameEndDebugText);
 	DOREPLIFETIME(ADRMiningGameStateBase, GameResultText);
 	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseIndex);
@@ -328,7 +328,7 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseMessages);
 }
 
-void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded)
+void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds)
 {
 	if (!HasAuthority())
 	{
@@ -336,15 +336,47 @@ void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds, bool bSta
 	}
 
 	GameRemainingSeconds = FMath::Max(0, RemainingSeconds);
-	bGameStarted = bStarted;
-	bGameEnded = bEnded;
 	OnRep_GameTimerState();
 	ForceNetUpdate();
 }
 
 void ADRMiningGameStateBase::OnRep_GameTimerState()
 {
-	OnGameTimerChanged.Broadcast(GameRemainingSeconds, bGameStarted, bGameEnded);
+	OnGameTimerChanged.Broadcast(GameRemainingSeconds, IsGameStarted(), IsGameEnded());
+}
+
+// 서버의 경기 상태를 복제하고 기존 HUD/음악 이벤트도 함께 갱신한다.
+void ADRMiningGameStateBase::SetGameFlowState(EDRGameFlowState NewState, const FText& NewMessage)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const bool bStateChanged = GameFlowState != NewState;
+	const bool bMessageChanged = !GameFlowMessage.EqualTo(NewMessage);
+	GameFlowState = NewState;
+	GameFlowMessage = NewMessage;
+	if (bStateChanged)
+	{
+		OnRep_GameFlowState();
+	}
+	if (bMessageChanged)
+	{
+		OnRep_GameFlowMessage();
+	}
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_GameFlowState()
+{
+	OnGameFlowStateChanged.Broadcast(GameFlowState);
+	OnRep_GameTimerState();
+}
+
+void ADRMiningGameStateBase::OnRep_GameFlowMessage()
+{
+	OnGameFlowMessageChanged.Broadcast(GameFlowMessage);
 }
 
 void ADRMiningGameStateBase::SetGamePhaseState(

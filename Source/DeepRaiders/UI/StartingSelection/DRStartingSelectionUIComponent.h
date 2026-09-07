@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/GameStates/DRGameFlowState.h"
 #include "Components/ActorComponent.h"
 #include "DRStartingSelectionUIComponent.generated.h"
 
@@ -29,6 +30,10 @@ private:
 	void HideStartingSelection();
 
 	void ShowStartingSelection();
+	void RefreshMoveInput();
+
+	UFUNCTION()
+	void HandleGameFlowStateChanged(EDRGameFlowState GameFlowState);
 
 	UFUNCTION()
 	void HandleGameTimerChanged(
@@ -52,4 +57,5 @@ private:
 	TObjectPtr<UDRUIManagerSubsystem> UIManager;
 
 	bool IsMoveInputBlocked = false;
+	bool bIsGameLoading = false;
 };

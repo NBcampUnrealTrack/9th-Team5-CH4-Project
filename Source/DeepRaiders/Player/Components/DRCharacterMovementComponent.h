@@ -130,6 +130,7 @@ private:
 	void ApplyMoveSpeedMultiplier(float Multiplier);
 
 	void PhysMovementAction(float DeltaTime, int32 Iterations);
+	void PhysGrabPull(float DeltaTime, UDRMovementActionComponent* MovementAction);
 	void UpdateZiplineFacing(const FDRMovementActionState& State, float DeltaTime);
 	UDRMovementActionComponent* GetMovementActionComponent() const;
 

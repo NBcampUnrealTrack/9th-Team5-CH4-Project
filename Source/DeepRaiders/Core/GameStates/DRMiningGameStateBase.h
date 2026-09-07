@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DRGameFlowState.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "GameFramework/GameStateBase.h"
@@ -38,6 +39,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	const TArray<FText>&,
 	PlayerMessages);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameFlowStateChanged, EDRGameFlowState, GameFlowState);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameFlowMessageChanged, const FText&, GameFlowMessage);
+
 USTRUCT()
 struct FDRTeamRegisteredTeleportPoint
 {
@@ -63,7 +70,22 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded);
+	void SetGameTimerState(int32 RemainingSeconds);
+	void SetGameFlowState(
+		EDRGameFlowState NewState,
+		const FText& NewMessage = FText::GetEmpty());
+
+	UFUNCTION(BlueprintPure, Category = "Game|Flow")
+	EDRGameFlowState GetGameFlowState() const { return GameFlowState; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Flow")
+	FText GetGameFlowMessage() const { return GameFlowMessage; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Game|Flow")
+	FDRGameFlowStateChanged OnGameFlowStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Game|Flow")
+	FDRGameFlowMessageChanged OnGameFlowMessageChanged;
 	void SetGamePhaseState(
 		int32 PhaseIndex,
 		int32 RemainingSeconds,
@@ -72,8 +94,8 @@ public:
 	void SetGameResultText(const FText& ResultText);
 
 	int32 GetGameRemainingSeconds() const { return GameRemainingSeconds; }
-	bool IsGameStarted() const { return bGameStarted; }
-	bool IsGameEnded() const { return bGameEnded; }
+	bool IsGameStarted() const { return GameFlowState == EDRGameFlowState::Playing; }
+	bool IsGameEnded() const { return GameFlowState == EDRGameFlowState::Results; }
 	UFUNCTION(BlueprintPure, Category = "Game|Phase")
 	int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
 
@@ -116,11 +138,17 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
 	int32 GameRemainingSeconds = 0;
 
-	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
-	bool bGameStarted = false;
+	UFUNCTION()
+	void OnRep_GameFlowState();
 
-	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
-	bool bGameEnded = false;
+	UFUNCTION()
+	void OnRep_GameFlowMessage();
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameFlowState)
+	EDRGameFlowState GameFlowState = EDRGameFlowState::WaitingForPlayers;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameFlowMessage)
+	FText GameFlowMessage;
 
 	UPROPERTY(ReplicatedUsing = OnRep_GameEndDebugText)
 	FString GameEndDebugText;

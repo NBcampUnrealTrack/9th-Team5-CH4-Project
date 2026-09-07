@@ -36,6 +36,12 @@ void UDRHUDViewModel::HandleGameTimerChanged(
 	RefreshGameStateText();
 }
 
+void UDRHUDViewModel::HandleGameFlowMessageChanged(const FText& GameFlowMessage)
+{
+	CurrentGameFlowMessage = GameFlowMessage;
+	RefreshGameStartStatus();
+}
+
 void UDRHUDViewModel::HandleGamePhaseChanged(
 	int32 PhaseIndex,
 	int32,
@@ -64,7 +70,11 @@ void UDRHUDViewModel::RefreshGameStartStatus()
 	FText NewStatusText;
 	const bool bShowReadyState = GameStartActor.IsValid()
 		&& !GameStartActor->IsGameStarted();
-	if (bShowReadyState && GameStartCountdown > 0)
+	if (!CurrentGameFlowMessage.IsEmpty())
+	{
+		NewStatusText = CurrentGameFlowMessage;
+	}
+	else if (bShowReadyState && GameStartCountdown > 0)
 	{
 		NewStatusText = FText::AsNumber(GameStartCountdown);
 	}

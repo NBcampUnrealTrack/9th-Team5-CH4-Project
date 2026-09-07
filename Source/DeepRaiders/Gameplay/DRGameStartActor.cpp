@@ -2,6 +2,7 @@
 
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
@@ -51,7 +52,11 @@ void ADRGameStartActor::GetLifetimeReplicatedProps(
 
 bool ADRGameStartActor::CanInteract_Implementation(APawn* Interactor) const
 {
-	return !bGameStarted && IsValid(Interactor) && IsValid(Interactor->GetPlayerState());
+	const ADRMiningGameStateBase* GameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	const bool bCanReady = IsValid(GameState)
+		&& (GameState->GetGameFlowState() == EDRGameFlowState::WaitingForPlayers
+			|| GameState->GetGameFlowState() == EDRGameFlowState::Countdown);
+	return bCanReady && IsValid(Interactor) && IsValid(Interactor->GetPlayerState());
 }
 
 bool ADRGameStartActor::Interact_Implementation(APawn* Interactor)
@@ -172,27 +177,18 @@ void ADRGameStartActor::RefreshReadyState()
 	BroadcastReadyStatus();
 	ForceNetUpdate();
 
+	ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>();
+	if (!IsValid(GameMode))
+	{
+		return;
+	}
 	if (bAllPlayersReady)
 	{
-		if (!GetWorldTimerManager().IsTimerActive(GameStartTimerHandle))
-		{
-			CountdownSecondsRemaining = FMath::Max(1, GameStartCountdownSeconds);
-			BroadcastReadyStatus();
-			ForceNetUpdate();
-			GetWorldTimerManager().SetTimer(
-				GameStartTimerHandle,
-				this,
-				&ThisClass::HandleGameStartCountdown,
-				1.f,
-				true);
-		}
+		GameMode->RequestGameStart(this, GameStartCountdownSeconds);
 	}
 	else
 	{
-		GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
-		CountdownSecondsRemaining = 0;
-		BroadcastReadyStatus();
-		ForceNetUpdate();
+		GameMode->CancelGameCountdown(this);
 	}
 }
 
@@ -203,34 +199,14 @@ void ADRGameStartActor::BroadcastReadyStatus()
 	OnGameStartCountdownChanged.Broadcast(CountdownSecondsRemaining);
 }
 
-void ADRGameStartActor::HandleGameStartCountdown()
+void ADRGameStartActor::SetCountdownSecondsRemaining(int32 SecondsRemaining)
 {
-	const UWorld* World = GetWorld();
-	const AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
-	ReadyPlayers.RemoveAll([GameState](const TObjectPtr<APlayerState>& PlayerState)
+	if (!HasAuthority())
 	{
-		return !IsValid(PlayerState) || !IsValid(GameState) || PlayerState->IsOnlyASpectator() ||
-			!GameState->PlayerArray.Contains(PlayerState);
-	});
-
-	TotalPlayerCount = GetEligiblePlayerCount();
-	if (TotalPlayerCount <= 0 || ReadyPlayers.Num() < TotalPlayerCount)
-	{
-		GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
-		CountdownSecondsRemaining = 0;
-		BroadcastReadyStatus();
-		ForceNetUpdate();
 		return;
 	}
 
-	--CountdownSecondsRemaining;
-	if (CountdownSecondsRemaining <= 0)
-	{
-		GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
-		StartGame();
-		return;
-	}
-
+	CountdownSecondsRemaining = FMath::Max(0, SecondsRemaining);
 	BroadcastReadyStatus();
 	ForceNetUpdate();
 }
@@ -255,19 +231,14 @@ void ADRGameStartActor::RefreshLocalReadyColor()
 		FVector(Color.R, Color.G, Color.B));
 }
 
-void ADRGameStartActor::StartGame()
+void ADRGameStartActor::NotifyGameStarted()
 {
-	if (bGameStarted)
+	if (!HasAuthority() || bGameStarted)
 	{
 		return;
 	}
 
-	ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>();
-	if (!IsValid(GameMode) || !GameMode->StartGame())
-	{
-		return;
-	}
-
+	CountdownSecondsRemaining = 0;
 	bGameStarted = true;
 	BroadcastReadyStatus();
 	OnAllPlayersReady.Broadcast();
@@ -281,7 +252,10 @@ void ADRGameStartActor::ResetForNextGame()
 		return;
 	}
 
-	GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
+	if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+	{
+		GameMode->CancelGameCountdown(this);
+	}
 	ReadyPlayers.Reset();
 	CountdownSecondsRemaining = 0;
 	bGameStarted = false;

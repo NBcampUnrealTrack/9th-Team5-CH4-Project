@@ -36,6 +36,7 @@ public:
 
 	/** 복셀 월드 초기화 후 배치 carve를 다시 시작한다. */
 	void RestartCarveBatch();
+	bool ShouldCarveOnGameStart(int32 PhaseIndex) const;
 
 protected:
 	virtual void BeginPlay() override;

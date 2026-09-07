@@ -195,6 +195,11 @@ void UDRGA_CharacterSkillBase::EndAbility(
 	}
 	ActiveSkillEffectHandles.Reset();
 
+	if (!bWasCancelled)
+	{
+		NotifySkillCompleted(Handle, ActorInfo);
+	}
+
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -273,5 +278,27 @@ void UDRGA_CharacterSkillBase::NotifySkillActivated(
 		PerkComponent->HandleSkillActivated(
 			SkillDefinition,
 			ActiveSkillEffectHandles);
+	}
+}
+
+void UDRGA_CharacterSkillBase::NotifySkillCompleted(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	const UDRSkillDefinition* SkillDefinition =
+		Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo));
+	ADRPlayerState* PlayerState =
+		Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+	UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	if (IsValid(SkillDefinition) && IsValid(PerkComponent))
+	{
+		PerkComponent->HandleSkillCompleted(SkillDefinition);
 	}
 }

@@ -59,6 +59,11 @@ protected:
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo) const;
 
+	/** 스킬이 취소되지 않고 정상 종료된 후, 종료 트리거 효과를 실행한다. */
+	void NotifySkillCompleted(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo) const;
+
 #if WITH_EDITOR
 	static bool IsCooldownEffectValid(
 		const UGameplayEffect* CooldownEffect,

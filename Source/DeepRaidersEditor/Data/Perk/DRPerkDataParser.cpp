@@ -8,13 +8,11 @@ namespace PerkColumns
 {
 	const FString RowName = TEXT("RowName");
 	const FString Price = TEXT("Price");
-	const FString Values = TEXT("Values");
 
 	const TArray<FString> RequiredHeaders =
 	{
 		RowName,
-		Price,
-		Values
+		Price
 	};
 }
 
@@ -22,28 +20,6 @@ namespace PerkParser
 {
 	const FString AssetPath = TEXT("/Game/DeepRaiders/Data/DataAssets/Perk");
 	const FString AssetNameFormat = TEXT("DA_DR{0}");
-	const FName EffectValueTagName = TEXT("Data.Perk.Value");
-
-	bool ParseEffectValues(
-		const FString& Source,
-		TMap<FGameplayTag, float>& OutValues)
-	{
-		using namespace SheetParserUtils;
-
-		OutValues.Reset();
-		float Value = 0.0f;
-		const FGameplayTag EffectValueTag = FGameplayTag::RequestGameplayTag(
-			EffectValueTagName,
-			false);
-		if (!EffectValueTag.IsValid()
-			|| !Detail::TryParseFloat(Source, Value))
-		{
-			return false;
-		}
-
-		OutValues.Add(EffectValueTag, Value);
-		return true;
-	}
 }
 
 bool UDRPerkDataParser::OnParseComplete(FString& OutError)
@@ -72,19 +48,6 @@ bool UDRPerkDataParser::OnParseComplete(FString& OutError)
 		FSheetRowReader Row(RowData, Index, Report);
 		const FName RowName = Row.GetRequiredName(PerkColumns::RowName);
 		const int32 Price = Row.GetRequiredInt(PerkColumns::Price);
-		const FString Values = Row.GetRequiredString(PerkColumns::Values);
-		TMap<FGameplayTag, float> ParsedValues;
-		if (!PerkParser::ParseEffectValues(Values, ParsedValues))
-		{
-			Report.AddIssue(
-				EParseIssueSeverity::Error,
-				TEXT("숫자로 변환할 수 없거나 Data.Perk.Value 태그가 등록되지 않았습니다."),
-				Index,
-				RowName,
-				PerkColumns::Values,
-				Values);
-			continue;
-		}
 
 		if (!Row.IsValid())
 		{
@@ -107,7 +70,6 @@ bool UDRPerkDataParser::OnParseComplete(FString& OutError)
 
 		PerkDefinition->Modify();
 		PerkDefinition->Price = Price;
-		PerkDefinition->EffectValues = MoveTemp(ParsedValues);
 		PerkDefinition->MarkPackageDirty();
 		Report.AddSuccess();
 	}

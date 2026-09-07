@@ -214,14 +214,6 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 		EffectSpec.Data->AddDynamicAssetTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
 	}
 	
-	for (const TPair<FGameplayTag, float>& EffectValue
-		: PerkDefinition->EffectValues)
-	{
-		EffectSpec.Data->SetSetByCallerMagnitude(
-			EffectValue.Key,
-			EffectValue.Value);
-	}
-
 	return AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
 		*EffectSpec.Data.Get());
 }
@@ -568,6 +560,50 @@ void UDRPerkComponent::HandleSkillActivated(
 	}
 }
 
+void UDRPerkComponent::HandleSkillCompleted(
+	const UDRSkillDefinition* SkillDefinition)
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent)
+		|| !IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid())
+	{
+		return;
+	}
+
+	ApplySkillEffectRules(
+		AbilitySystemComponent,
+		SkillDefinition,
+		SkillDefinition->BaseEffectRules,
+		EDRSkillEffectTrigger::OnSkillCompleted,
+		false,
+		nullptr);
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillDefinition->SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::OwnerCharacter)
+		{
+			continue;
+		}
+
+		ApplySkillEffectRules(
+			AbilitySystemComponent,
+			PerkDefinition,
+			PerkDefinition->EffectRules,
+			EDRSkillEffectTrigger::OnSkillCompleted,
+			false,
+			nullptr);
+	}
+}
+
 bool UDRPerkComponent::HasSkillPerk(
 	FGameplayTag SkillId,
 	FGameplayTag PerkTag) const
@@ -622,6 +658,41 @@ float UDRPerkComponent::GetSkillEffectValue(
 	}
 
 	return TotalValue;
+}
+
+float UDRPerkComponent::GetSkillPerkEffectValue(
+	FGameplayTag SkillId,
+	FGameplayTag PerkTag,
+	EDRSkillEffectTrigger Trigger,
+	FGameplayTag EffectValueTag) const
+{
+	if (!SkillId.IsValid() || !PerkTag.IsValid() || !EffectValueTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition)
+			|| PerkEntry.EquippedSkillId != SkillId
+			|| PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill
+			|| PerkDefinition->PerkTag != PerkTag)
+		{
+			continue;
+		}
+
+		for (const FDRSkillEffectRule& EffectRule : PerkDefinition->EffectRules)
+		{
+			if (EffectRule.Trigger == Trigger)
+			{
+				const float* EffectValue = EffectRule.EffectValues.Find(EffectValueTag);
+				return EffectValue != nullptr ? *EffectValue : 0.0f;
+			}
+		}
+	}
+
+	return 0.0f;
 }
 
 bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)

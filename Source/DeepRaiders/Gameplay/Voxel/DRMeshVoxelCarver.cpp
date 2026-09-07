@@ -1,6 +1,7 @@
 #include "DRMeshVoxelCarver.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
@@ -167,6 +168,11 @@ void ADRMeshVoxelCarver::RestartCarveBatch()
 	PendingCarvers.Reset();
 	bStartedForCurrentGame = false;
 	ActiveGamePhaseIndex = INDEX_NONE;
+}
+
+bool ADRMeshVoxelCarver::ShouldCarveOnGameStart(int32 PhaseIndex) const
+{
+	return bCarveOnGameStart && StartPhaseIndex == PhaseIndex;
 }
 
 void ADRMeshVoxelCarver::HandleGamePhaseChanged(
@@ -541,6 +547,7 @@ void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 		if (++RetryCount >= DRMeshVoxelCarver::MaxRetryCount)
 		{
 			GetWorldTimerManager().ClearTimer(RetryTimerHandle);
+			UE_LOG(LogTemp, Error, TEXT("Game start carve batch failed: voxel world is not ready."));
 		}
 		return;
 	}
@@ -582,4 +589,11 @@ void ADRMeshVoxelCarver::ExecuteNextCarver()
 	}
 
 	PendingCarvers.Reset();
+	if (bCarveBatchForGameStart)
+	{
+		if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+		{
+			GameMode->NotifyGameStartCarversReady();
+		}
+	}
 }
