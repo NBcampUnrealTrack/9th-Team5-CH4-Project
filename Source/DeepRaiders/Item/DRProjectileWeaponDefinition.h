@@ -94,9 +94,6 @@ struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
 	bool bCanPenetrateTargets = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxServerAimDeviationDegrees = 30.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bSnowAddEnabled = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -104,12 +101,7 @@ struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SnowAddAmount = 1.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRSnowVoxelEditTool SnowAddEditTool = EDRSnowVoxelEditTool::DirectionalSurfaceTool;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bSnowAddAllowVirtualSurfaceFallback = true;
+	
 };
 
 UCLASS(BlueprintType)

@@ -108,18 +108,6 @@ struct DEEPRAIDERS_API FDRRangedWeaponDataTableRow : public FTableRowBase
 	FName RowName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bUseCameraAimCorrection = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MinCameraAimCorrectionDistance = 100.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxCameraAimCorrectionAngleDegrees = 30.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FVector StartOffset = FVector(-15.f, 10.f, 10.f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bHeatEnabled = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -160,12 +148,7 @@ struct DEEPRAIDERS_API FDRRangedWeaponDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SnowAbsorbInnerRadiusRatio = 0.5f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRSnowRemovalBrushShape SnowAbsorbBrushShape = EDRSnowRemovalBrushShape::Sphere;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRSnowRemovalMode SnowAbsorbRemovalMode = EDRSnowRemovalMode::AbsorbTool;
+	
 };
 
 UCLASS(Abstract, BlueprintType)

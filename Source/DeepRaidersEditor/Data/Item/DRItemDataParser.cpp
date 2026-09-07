@@ -321,13 +321,6 @@ namespace ItemParser
 	bool ValidateRangedWeaponRow(const FDRRangedWeaponDataTableRow& Row, FParseReport& Report, const int32 RowIndex)
 	{
 		bool bValid = ValidateRowName(Row.RowName, Report, RowIndex);
-		bValid &= !Row.StartOffset.ContainsNaN();
-		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName,
-			GET_MEMBER_NAME_STRING_CHECKED(FDRRangedWeaponDataTableRow, MinCameraAimCorrectionDistance),
-			Row.MinCameraAimCorrectionDistance, 0.f);
-		bValid &= ValidateRange(Report, RowIndex, Row.RowName,
-			GET_MEMBER_NAME_STRING_CHECKED(FDRRangedWeaponDataTableRow, MaxCameraAimCorrectionAngleDegrees),
-			Row.MaxCameraAimCorrectionAngleDegrees, 0.f, 90.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("HeatPerShot"), Row.HeatPerShot, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("HeatPerSecond"), Row.HeatPerSecond, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("HeatDecayDelay"), Row.HeatDecayDelay, 0.f);
@@ -381,8 +374,6 @@ namespace ItemParser
 			Report, RowIndex, Row.RowName, TEXT("FullStrengthRangeRatio"), Row.FullStrengthRangeRatio, 0.f, 0.99f);
 		bValid &= ValidateRange(
 			Report, RowIndex, Row.RowName, TEXT("MinSizeMultiplier"), Row.MinSizeMultiplier, 0.f, 1.f);
-		bValid &= ValidateRange(Report, RowIndex, Row.RowName, TEXT("MaxServerAimDeviationDegrees"),
-			Row.MaxServerAimDeviationDegrees, 0.f, 180.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAddRadius"), Row.SnowAddRadius, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAddAmount"), Row.SnowAddAmount, 0.f);
 		return bValid;
@@ -441,16 +432,11 @@ namespace ItemParser
 		Definition.bCanBeDropped = Row.bCanBeDropped;
 		Definition.bCanBeSold = Row.bCanBeSold;
 		Definition.Price = Row.Price;
-		Definition.AbilityLifetimePolicy = Row.AbilityLifetimePolicy;
 		Definition.QuickSlotActivationInterval = Row.QuickSlotActivationInterval;
 	}
 
 	void ApplyRangedWeaponFields(UDRRangedWeaponDefinition& Definition, const FDRRangedWeaponDataTableRow& Row)
 	{
-		Definition.AimCorrectionSettings.bUseCameraAimCorrection = Row.bUseCameraAimCorrection;
-		Definition.AimCorrectionSettings.MinCameraAimCorrectionDistance = Row.MinCameraAimCorrectionDistance;
-		Definition.AimCorrectionSettings.MaxCameraAimCorrectionAngleDegrees = Row.MaxCameraAimCorrectionAngleDegrees;
-		Definition.StartOffset = Row.StartOffset;
 		Definition.HeatSettings.bEnabled = Row.bHeatEnabled;
 		Definition.HeatSettings.HeatPerShot = Row.HeatPerShot;
 		Definition.HeatSettings.HeatPerSecond = Row.HeatPerSecond;
@@ -465,8 +451,6 @@ namespace ItemParser
 		Definition.SnowAbsorbSettings.MaxSweepsPerTick = Row.SnowAbsorbMaxSweepsPerTick;
 		Definition.SnowAbsorbSettings.bUseAdaptiveQuery = Row.bSnowAbsorbUseAdaptiveQuery;
 		Definition.SnowAbsorbSettings.InnerRadiusRatio = Row.SnowAbsorbInnerRadiusRatio;
-		Definition.SnowAbsorbSettings.BrushShape = Row.SnowAbsorbBrushShape;
-		Definition.SnowAbsorbSettings.RemovalMode = Row.SnowAbsorbRemovalMode;
 	}
 
 	void ApplyProjectileWeaponFields(UDRProjectileWeaponItemDefinition& Definition,
@@ -486,12 +470,9 @@ namespace ItemParser
 		Definition.FalloffSettings.FullStrengthRangeRatio = Row.FullStrengthRangeRatio;
 		Definition.FalloffSettings.MinSizeMultiplier = Row.MinSizeMultiplier;
 		Definition.bCanPenetrateTargets = Row.bCanPenetrateTargets;
-		Definition.MaxServerAimDeviationDegrees = Row.MaxServerAimDeviationDegrees;
 		Definition.SnowAddSettings.bEnabled = Row.bSnowAddEnabled;
 		Definition.SnowAddSettings.Radius = Row.SnowAddRadius;
 		Definition.SnowAddSettings.Amount = Row.SnowAddAmount;
-		Definition.SnowAddSettings.EditTool = Row.SnowAddEditTool;
-		Definition.SnowAddSettings.bAllowVirtualSurfaceFallback = Row.bSnowAddAllowVirtualSurfaceFallback;
 	}
 
 	void ApplySprayerWeaponFields(UDRSprayerWeaponDefinition& Definition, const FDRSprayerWeaponDataTableRow& Row)
@@ -520,14 +501,13 @@ namespace ItemParser
 		Definition.ThrowSettings.WorldImpactData.bAddSnow = Row.bAddSnow;
 		Definition.ThrowSettings.WorldImpactData.SnowRadius = Row.SnowRadius;
 		Definition.ThrowSettings.WorldImpactData.SnowAmount = Row.SnowAmount;
-		Definition.ThrowSettings.WorldImpactData.SnowEditTool = Row.SnowEditTool;
 		Definition.ThrowSettings.WorldImpactData.bAllowVirtualSurfaceFallback = Row.bAllowVirtualSurfaceFallback;
 	}
 
 	void ApplySkillFields(UDRSkillDefinition& Definition, const FDRSkillDataTableRow& Row)
 	{
-		Definition.SkillId = Row.SkillId;
-		Definition.CooldownTag = Row.CooldownTag;
+		Definition.DisplayName = FText::FromString(Row.DisplayName);
+		Definition.Description = FText::FromString(Row.Description);
 		Definition.CooldownDuration = Row.CooldownDuration;
 		Definition.SkillSlot = Row.SkillSlot;
 	}

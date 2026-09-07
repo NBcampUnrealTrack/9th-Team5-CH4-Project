@@ -15,12 +15,12 @@ struct DEEPRAIDERS_API FDRSkillDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FName RowName = NAME_None;
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FGameplayTag SkillId;
-
+	FString DisplayName;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FGameplayTag CooldownTag;
+	FString Description;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float CooldownDuration = 1.f;

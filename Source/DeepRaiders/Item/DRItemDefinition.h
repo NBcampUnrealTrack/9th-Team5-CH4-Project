@@ -56,10 +56,7 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 Price = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRItemAbilityLifetimePolicy AbilityLifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float QuickSlotActivationInterval = 0.2f;
 };

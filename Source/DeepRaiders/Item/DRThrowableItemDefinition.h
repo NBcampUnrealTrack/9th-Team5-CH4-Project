@@ -42,9 +42,6 @@ struct DEEPRAIDERS_API FDRThrowableItemDataTableRow : public FTableRowBase
 	float SnowAmount = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRSnowVoxelEditTool SnowEditTool = EDRSnowVoxelEditTool::SurfaceTool;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bAllowVirtualSurfaceFallback = true;
 };
 
