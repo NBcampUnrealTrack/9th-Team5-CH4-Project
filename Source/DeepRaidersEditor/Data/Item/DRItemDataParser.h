@@ -6,9 +6,6 @@
 
 class UDataTable;
 
-const FString DRITEM_ASSET_PATH = TEXT("/Game/DeepRaiders/Data/DataAssets/Item");
-const FString DRITEM_NAME_FORMAT = TEXT("DA_DR{0}");
-
 UCLASS(EditInlineNew)
 class DEEPRAIDERSEDITOR_API UDRItemDataParser : public UGoogleSheetParserBase
 {
@@ -17,6 +14,11 @@ class DEEPRAIDERSEDITOR_API UDRItemDataParser : public UGoogleSheetParserBase
 public:
 	UPROPERTY(EditAnywhere, Category = "Output")
 	TObjectPtr<UDataTable> TargetTable;
+
+	UPROPERTY(EditAnywhere, Category = "Output", meta = (
+		DisplayName = "Target Asset Root Folder",
+		ToolTip = "DA_DR{RowName} Item Definition을 재귀 검색할 Content 루트 폴더입니다."))
+	FString TargetAssetFolder;
 
 protected:
 	virtual bool OnParseComplete(FString& OutError) override;

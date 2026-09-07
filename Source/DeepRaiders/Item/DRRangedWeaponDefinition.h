@@ -99,6 +99,75 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	EDRSnowRemovalMode RemovalMode = EDRSnowRemovalMode::AbsorbTool;
 };
 
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRRangedWeaponDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bUseCameraAimCorrection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MinCameraAimCorrectionDistance = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxCameraAimCorrectionAngleDegrees = 30.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FVector StartOffset = FVector(-15.f, 10.f, 10.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bHeatEnabled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HeatPerShot = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HeatPerSecond = 20.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HeatDecayDelay = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HeatRecoveryDuration = 4.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bSnowAbsorbEnabled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbRadius = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbPower = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbSpeed = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbRange = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbSweepRadius = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 SnowAbsorbMaxSweepsPerTick = 32;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bSnowAbsorbUseAdaptiveQuery = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbInnerRadiusRatio = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRSnowRemovalBrushShape SnowAbsorbBrushShape = EDRSnowRemovalBrushShape::Sphere;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRSnowRemovalMode SnowAbsorbRemovalMode = EDRSnowRemovalMode::AbsorbTool;
+};
+
 UCLASS(Abstract, BlueprintType)
 class DEEPRAIDERS_API UDRRangedWeaponDefinition : public UDRItemDefinition
 {

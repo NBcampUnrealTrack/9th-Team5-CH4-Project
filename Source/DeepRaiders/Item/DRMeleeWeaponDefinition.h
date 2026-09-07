@@ -12,6 +12,21 @@ class UGameplayEffect;
  * 공통 Item 데이터는 UDRItemDefinition이 담당하고,
  * 근접 전투에 필요한 수치만 이 클래스가 가진다.
  */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRMeleeWeaponDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float BaseDamage = 40.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SweepRadius = 35.f;
+};
+
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRMeleeWeaponItemDefinition : public UDRItemDefinition
 {

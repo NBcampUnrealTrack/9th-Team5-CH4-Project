@@ -15,6 +15,7 @@ public class DeepRaidersEditor : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new[]
 		{
+			"AssetRegistry",
 			"CoreUObject",
 			"Engine",
 			"GameplayTags",

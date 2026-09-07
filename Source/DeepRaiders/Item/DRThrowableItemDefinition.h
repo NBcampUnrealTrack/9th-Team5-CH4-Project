@@ -12,6 +12,42 @@ class ADRThrowableProjectile;
 /* 
  * 투척하여 충돌 지점 주변 대상에게 효과를 적용하는 소모성 아이템 Definition
  */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRThrowableItemDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float InitialSpeed = 1400.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float GravityScale = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ExplosionRadius = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxAimDistance = 3000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bAddSnow = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowRadius = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAmount = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRSnowVoxelEditTool SnowEditTool = EDRSnowVoxelEditTool::SurfaceTool;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bAllowVirtualSurfaceFallback = true;
+};
+
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRThrowableItemDefinition : public UDRItemDefinition
 {

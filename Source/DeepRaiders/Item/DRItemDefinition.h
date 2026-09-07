@@ -35,6 +35,9 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString WorldInteractionText;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	EDRItemCategory Category;
@@ -44,12 +47,21 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 MaxStackSize = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 bCanBeDropped : 1 = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	uint8 bCanBeSold:1 = false;
+	uint8 bCanBeSold : 1 = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 Price = 0;	
+	int32 Price = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRItemAbilityLifetimePolicy AbilityLifetimePolicy = EDRItemAbilityLifetimePolicy::EquippedOnly;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float QuickSlotActivationInterval = 0.2f;
 };
 
 UCLASS(BlueprintType, AutoExpandCategories = ( "Item", "Item|Trade", "Item|Mesh"))

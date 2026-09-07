@@ -9,6 +9,36 @@
 
 class UGameplayEffect;
 
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSprayerWeaponDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowCostPerSecond = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SprayTickInterval = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SprayRange = 700.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SprayHalfAngleDegrees = 20.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SprayOriginForwardOffset = 50.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SprayOriginHeightOffset = 60.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float HitReactionInterval = 0.5f;
+};
+
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRSprayerWeaponDefinition : public UDRRangedWeaponDefinition
 {
