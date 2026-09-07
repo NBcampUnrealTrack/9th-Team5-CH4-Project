@@ -18,6 +18,7 @@ class UDRSkillComponent;
 class UGameplayAbility;
 class UGameplayEffect;
 class UDRQuickSlotComponent;
+class UDRShieldComponent;
 class UDRItemDefinition;
 struct FOnAttributeChangeData;
 class UDRCombatStatsComponent;
@@ -72,6 +73,12 @@ public:
 	UDRCombatStatsComponent* GetCombatStatsComponent() const
 	{
 		return CombatStatsComponent;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Shield")
+	UDRShieldComponent* GetShieldComponent() const
+	{
+		return ShieldComponent;
 	}
 	
 	/*
@@ -229,6 +236,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat Stats")
 	TObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shield")
+	TObjectPtr<UDRShieldComponent> ShieldComponent;
 	
 	void BindStatusPolicy();
 	void UnbindStatusPolicy();

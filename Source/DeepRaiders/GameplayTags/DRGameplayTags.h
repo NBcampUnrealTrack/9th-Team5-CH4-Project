@@ -69,6 +69,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_AllySpeed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_StatBoost);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_CannonProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_PortableGenerator);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_TeslaField);
 	
 	// Weapon Upgrade - Rifle
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
@@ -141,6 +143,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_DamageBonusRatio);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_FireRateBonusRatio);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_RangeBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Barrier_MaxHealthMultiplier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_DamageModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FireIntervalModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);

@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Skill/DRSkillTypes.h"
+#include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
 #include "DRPerkComponent.generated.h"
 
@@ -118,6 +119,13 @@ public:
 		EDRSkillEffectTrigger Trigger,
 		FGameplayTag EffectValueTag) const;
 
+	/** 장착된 스킬 대상으로 지정된 모든 Rule을 완성된 GameplayEffectSpec으로 생성한다. */
+	void BuildEquippedSkillEffectSpecs(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		FGameplayTag SkillId,
+		EDRSkillEffectTrigger Trigger,
+		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
+
 	/** 고유 ID가 일치하는 퍽의 효과와 슬롯을 함께 제거한다. */
 	bool TryRemovePerk(FGuid PerkInstanceId);
 
@@ -156,12 +164,20 @@ private:
 		const FDRSkillEffectRule& EffectRule,
 		bool bPersistThroughDeath) const;
 
+	/** EffectRule의 클래스, 출처, 정책 및 모든 SetByCaller 값을 하나의 Spec으로 완성한다. */
+	FGameplayEffectSpecHandle BuildSkillEffectRuleSpec(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UObject* SourceObject,
+		const FDRSkillEffectRule& EffectRule,
+		bool bPersistThroughDeath) const;
+
 	void ApplySkillEffectRules(
 		UAbilitySystemComponent* AbilitySystemComponent,
 		const UObject* SourceObject,
 		const TArray<FDRSkillEffectRule>& EffectRules,
 		EDRSkillEffectTrigger Trigger,
 		bool bPersistThroughDeath,
+		const UDRPerkDefinition* PerkDefinition,
 		TArray<FActiveGameplayEffectHandle>* OutActiveEffectHandles) const;
 
 	bool HasUsableSkillEffectRule(const UDRPerkDefinition* PerkDefinition) const;

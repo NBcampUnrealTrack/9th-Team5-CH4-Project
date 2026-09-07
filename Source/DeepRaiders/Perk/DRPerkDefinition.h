@@ -39,7 +39,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	EDRPerkTrigger Trigger = EDRPerkTrigger::WhileEquipped;
 
-	/** 효과가 캐릭터 ASC에 적용되는지, 스킬이 설정을 읽어 변경되는지 결정한다. */
+	/**
+	 * 이 퍽 EffectRule의 기본 적용 대상이다.
+	 * Rule의 TargetOverride가 UsePerkDefault인 기존 에셋은 이 값을 그대로 사용한다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	EDRPerkEffectTarget EffectTarget = EDRPerkEffectTarget::OwnerCharacter;
 
