@@ -89,7 +89,17 @@ namespace DRGameplayTags
 		State_Aiming_Throw,
 		"State.Aiming.Throw",
 		"Player is aiming a throwable action.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_GamePreparing,
+		"State.GamePreparing",
+		"Player actions are blocked while the game is preparing.");
 	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Root,
+		"Ability",
+		"Root tag for all gameplay abilities.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",

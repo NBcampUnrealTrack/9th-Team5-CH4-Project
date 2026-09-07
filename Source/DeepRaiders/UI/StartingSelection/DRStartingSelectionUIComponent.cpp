@@ -36,11 +36,17 @@ void UDRStartingSelectionUIComponent::InitializeStartingSelection(
 	MiningGameState->OnGameTimerChanged.AddDynamic(
 		this,
 		&ThisClass::HandleGameTimerChanged);
+	MiningGameState->OnGameFlowStateChanged.AddDynamic(
+		this,
+		&ThisClass::HandleGameFlowStateChanged);
 
-	if (MiningGameState->IsGameStarted())
+	bIsGameLoading = MiningGameState->GetGameFlowState() == EDRGameFlowState::Loading
+		|| MiningGameState->GetGameFlowState() == EDRGameFlowState::Countdown;
+	if (bIsGameLoading || MiningGameState->IsGameStarted())
 	{
 		ShowStartingSelection();
 	}
+	RefreshMoveInput();
 }
 
 void UDRStartingSelectionUIComponent::ShowStartingSelection()
@@ -76,9 +82,19 @@ void UDRStartingSelectionUIComponent::ShowStartingSelection()
 	UIManager->RegisterCloseHandler(
 		StartingSelectionWidget, FSimpleDelegate::CreateUObject(this, &ThisClass::HideStartingSelection));
 	PlayerController->FlushPressedKeys();
-	PlayerController->SetIgnoreMoveInput(true);
-	IsMoveInputBlocked = true;
 	StartingSelectionWidget->InitializeSelection(SelectionComponent);
+	RefreshMoveInput();
+}
+
+void UDRStartingSelectionUIComponent::HandleGameFlowStateChanged(EDRGameFlowState GameFlowState)
+{
+	bIsGameLoading = GameFlowState == EDRGameFlowState::Loading
+		|| GameFlowState == EDRGameFlowState::Countdown;
+	if (bIsGameLoading)
+	{
+		ShowStartingSelection();
+	}
+	RefreshMoveInput();
 }
 
 void UDRStartingSelectionUIComponent::HandleGameTimerChanged(
@@ -100,6 +116,9 @@ void UDRStartingSelectionUIComponent::EndPlay(
 		MiningGameState->OnGameTimerChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGameFlowStateChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameFlowStateChanged);
 	}
 
 	HideStartingSelection();
@@ -130,11 +149,23 @@ void UDRStartingSelectionUIComponent::HideStartingSelection()
 
 	StartingSelectionWidget = nullptr;
 
-	if (IsValid(PlayerController) && IsMoveInputBlocked)
+	RefreshMoveInput();
+}
+
+void UDRStartingSelectionUIComponent::RefreshMoveInput()
+{
+	if (!IsValid(PlayerController))
 	{
-		PlayerController->FlushPressedKeys();
-		PlayerController->SetIgnoreMoveInput(false);
+		return;
 	}
 
-	IsMoveInputBlocked = false;
+	const bool bShouldBlock = bIsGameLoading || IsValid(StartingSelectionWidget);
+	if (IsMoveInputBlocked == bShouldBlock)
+	{
+		return;
+	}
+
+	PlayerController->FlushPressedKeys();
+	PlayerController->SetIgnoreMoveInput(bShouldBlock);
+	IsMoveInputBlocked = bShouldBlock;
 }

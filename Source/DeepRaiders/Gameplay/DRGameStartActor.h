@@ -66,6 +66,10 @@ public:
 	/** 경기 종료 후 다시 준비할 수 있도록 상태를 초기화한다. */
 	void ResetForNextGame();
 
+	// GameMode가 결정한 카운트다운과 시작 상태를 기존 UI 이벤트에 전달한다.
+	void SetCountdownSecondsRemaining(int32 SecondsRemaining);
+	void NotifyGameStarted();
+
 	UPROPERTY(BlueprintAssignable, Category = "Game Start")
 	FDRReadyStateChanged OnReadyStateChanged;
 
@@ -116,8 +120,6 @@ private:
 	void RefreshReadyState();
 	void RefreshLocalReadyColor();
 	void BroadcastReadyStatus();
-	void HandleGameStartCountdown();
-	void StartGame();
 	int32 GetEligiblePlayerCount() const;
 
 	UPROPERTY(ReplicatedUsing = OnRep_ReadyPlayers)
@@ -132,5 +134,4 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_TotalPlayerCount)
 	int32 TotalPlayerCount = 0;
 
-	FTimerHandle GameStartTimerHandle;
 };

@@ -24,8 +24,10 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stealthed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Aiming_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_GamePreparing);
 	
 	// Ability
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Root);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
