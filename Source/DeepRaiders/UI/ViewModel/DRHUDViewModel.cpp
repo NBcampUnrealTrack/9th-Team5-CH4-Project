@@ -40,6 +40,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		MaxHealthChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxHealthAttribute()).AddUObject(
 				this, &ThisClass::HandleMaxHealthChanged);
+		ShieldChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetShieldAttribute()).AddUObject(
+				this, &ThisClass::HandleShieldChanged);
 		SnowGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleSnowGaugeChanged);
@@ -132,6 +135,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 
 	// 최초 리프레쉬
 	RefreshHealth();
+	RefreshShield();
 	RefreshSnowGaugeText();
 	RefreshHeatGauge();
 	RefreshOverheatedState();
@@ -199,6 +203,8 @@ void UDRHUDViewModel::Deinitialize()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetMaxHealthAttribute()).Remove(MaxHealthChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetShieldAttribute()).Remove(ShieldChangedHandle);
+		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute()).Remove(SnowGaugeChangedHandle);
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetHeatGaugeAttribute()).Remove(HeatGaugeChangedHandle);
@@ -222,6 +228,7 @@ void UDRHUDViewModel::Deinitialize()
 
 	HealthChangedHandle.Reset();
 	MaxHealthChangedHandle.Reset();
+	ShieldChangedHandle.Reset();
 	SnowGaugeChangedHandle.Reset();
 	HeatGaugeChangedHandle.Reset();
 	MaxHeatGaugeChangedHandle.Reset();
@@ -251,6 +258,8 @@ void UDRHUDViewModel::Deinitialize()
 	bInterpolateGauges = false;
 
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(CurrentShield, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(ShieldRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(0));
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeOpacity, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, 100.f);

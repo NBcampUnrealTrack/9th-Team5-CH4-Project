@@ -24,6 +24,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, Health)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHealth)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, Shield)
 
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, FreezeGauge)
 
@@ -34,6 +35,7 @@ public:
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHeatGauge)
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingShield)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
 
@@ -50,6 +52,8 @@ protected:
 	FGameplayAttributeData Health;
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Player|Health")
 	FGameplayAttributeData MaxHealth;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Shield, Category = "Player|Shield")
+	FGameplayAttributeData Shield;
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_FreezeGauge, Category = "Player|Freeze")
 	FGameplayAttributeData FreezeGauge;
@@ -67,6 +71,8 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingDamage;
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
+	FGameplayAttributeData IncomingShield;
 
 	/** 0.0~0.95 범위의 받는 피해 감소 비율이다. 0.5는 50% 감소를 뜻한다. */
 	UPROPERTY(
@@ -106,6 +112,8 @@ protected:
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
+	UFUNCTION()
+	void OnRep_Shield(const FGameplayAttributeData& OldShield);
 
 	UFUNCTION()
 	void OnRep_FreezeGauge(const FGameplayAttributeData& OldFreezeGauge);
@@ -143,6 +151,7 @@ protected:
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
+	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 
 	void ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const;
 	

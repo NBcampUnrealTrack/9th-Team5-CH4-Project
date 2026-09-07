@@ -168,6 +168,9 @@ private:
 
 	bool RestoreReplacedSkill(const FDRPerkEntry& PerkEntry) const;
 
+	/** 차지 퍽 판매 시 다음 한 칸의 충전 시간만 일반 쿨다운으로 보존한다. */
+	void NormalizeChargeCooldownOnRemoval(const FDRPerkEntry& PerkEntry) const;
+
 	/** 소유 클라이언트의 초기화 요청을 서버에서 실행한다. */
 	UFUNCTION(Server, Reliable)
 	void ServerResetPerks();

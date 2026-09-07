@@ -242,6 +242,15 @@ void ADRPlayerState::ResetForGameStart()
 	}
 
 	ResetHeatState();
+	if (IsValid(AbilitySystemComponent))
+	{
+		FGameplayTagContainer ShieldTags;
+		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
+		AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+		AbilitySystemComponent->SetNumericAttributeBase(
+			UDRPlayerAttributeSet::GetShieldAttribute(),
+			0.f);
+	}
 	if (IsValid(PerkComponent))
 	{
 		PerkComponent->ResetPerks();
@@ -274,6 +283,7 @@ void ADRPlayerState::ResetForRespawn()
 
 	// Respawn Attribute 초기화
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), Attributes->GetMaxHealth());
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetShieldAttribute(), 0.f);
 }
 
 bool ADRPlayerState::IsFrozen() const
@@ -485,6 +495,14 @@ void ADRPlayerState::BindStatusPolicy()
 		.AddUObject(
 			this,
 			&ThisClass::HandleVoxelContainedTagChanged);
+
+	PersonalShieldTagChangedHandle =
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_PersonalShield,
+			EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(
+			this,
+			&ThisClass::HandlePersonalShieldTagChanged);
 }
 
 void ADRPlayerState::UnbindStatusPolicy()
@@ -532,6 +550,31 @@ void ADRPlayerState::UnbindStatusPolicy()
 		.Remove(VoxelContainedTagChangedHandle);
 		VoxelContainedTagChangedHandle.Reset();
 	}
+
+	if (PersonalShieldTagChangedHandle.IsValid())
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_PersonalShield,
+			EGameplayTagEventType::NewOrRemoved)
+		.Remove(PersonalShieldTagChangedHandle);
+		PersonalShieldTagChangedHandle.Reset();
+	}
+}
+
+void ADRPlayerState::HandlePersonalShieldTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	if (!HasAuthority()
+		|| NewCount > 0
+		|| !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	AbilitySystemComponent->SetNumericAttributeBase(
+		UDRPlayerAttributeSet::GetShieldAttribute(),
+		0.f);
 }
 
 void ADRPlayerState::HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data)

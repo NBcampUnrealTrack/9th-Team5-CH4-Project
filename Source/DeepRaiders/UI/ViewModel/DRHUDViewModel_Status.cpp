@@ -165,6 +165,12 @@ void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeDa
 void UDRHUDViewModel::HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
 	RefreshHealth();
+	RefreshShield();
+}
+
+void UDRHUDViewModel::HandleShieldChanged(const FOnAttributeChangeData& ChangeData)
+{
+	RefreshShield();
 }
 
 void UDRHUDViewModel::HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData)
@@ -219,6 +225,26 @@ void UDRHUDViewModel::RefreshHealth()
 		UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, TargetCurrentHealth);
 		UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, TargetHealthRatio);
 	}
+}
+
+void UDRHUDViewModel::RefreshShield()
+{
+	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
+		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
+		: nullptr;
+	const float NewShield = IsValid(AttributeSet)
+		? AttributeSet->GetShield()
+		: 0.f;
+	const float NewMaxHealth = IsValid(AttributeSet)
+		? AttributeSet->GetMaxHealth()
+		: 0.f;
+
+	UE_MVVM_SET_PROPERTY_VALUE(CurrentShield, NewShield);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		ShieldRatio,
+		NewMaxHealth > KINDA_SMALL_NUMBER
+			? FMath::Max(0.f, NewShield / NewMaxHealth)
+			: 0.f);
 }
 
 void UDRHUDViewModel::RefreshHeatGauge()

@@ -8,9 +8,8 @@
 
 class ADRPlayerCharacter;
 class UAbilitySystemComponent;
-class UDRGA_StackedSpearThrowSkill;
 class UDRSkillComponent;
-class UDRSkillDefinition;
+class UDRPerkComponent;
 class UTexture2D;
 
 /** HUD의 단일 스킬 슬롯 표시 값을 제공한다. */
@@ -45,10 +44,13 @@ protected:
 	bool IsOnCooldown = false;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Skill")
-	FText StackText;
+	int32 CurrentCharges = 1;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Skill")
-	bool IsStackVisible = false;
+	int32 MaxCharges = 1;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Skill")
+	bool UsesCharges = false;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Skill")
 	bool IsVisible = false;
@@ -56,21 +58,20 @@ protected:
 private:
 	UFUNCTION()
 	void HandleSkillChanged();
+	UFUNCTION()
+	void HandlePerksChanged();
 
-	void HandleStackChanged();
-	void HandleCooldownTagChanged(FGameplayTag, int32);
+	void HandleCooldownTagChanged(FGameplayTag Tag, int32 NewCount);
 	void RefreshSkill();
 	void RefreshInputKey();
 	void RefreshCooldown();
-	void RefreshStack();
-	void UpdateStackAbility(const UDRSkillDefinition* SkillDefinition);
 	void UpdateCooldownTag(FGameplayTag NewCooldownTag);
 	void StopCooldownTimer();
 
 	TWeakObjectPtr<ADRPlayerCharacter> PlayerCharacter;
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
-	TWeakObjectPtr<UDRGA_StackedSpearThrowSkill> StackedSpearAbility;
 	TWeakObjectPtr<UDRSkillComponent> SkillComponent;
+	TWeakObjectPtr<UDRPerkComponent> PerkComponent;
 	EDRSkillSlot SkillSlot = EDRSkillSlot::Count;
 	FGameplayTag CooldownTag;
 	FDelegateHandle CooldownTagChangedHandle;

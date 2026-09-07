@@ -6,6 +6,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Skill/Components/DRSkillComponent.h"
+#include "DeepRaiders/Skill/Effects/DRGE_SkillCooldown.h"
 #include "GameplayEffect.h"
 #include "Net/UnrealNetwork.h"
 
@@ -733,6 +734,8 @@ bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 		return false;
 	}
 
+	NormalizeChargeCooldownOnRemoval(PerkEntries[PerkIndex]);
+
 	PerkEntries[PerkIndex] = FDRPerkEntry();
 	UE_LOG(
 		LogTemp,
@@ -824,6 +827,89 @@ bool UDRPerkComponent::RestoreReplacedSkill(const FDRPerkEntry& PerkEntry) const
 	}
 
 	return SkillComponent->EquipSkill(PerkEntry.ReplacedSkillDefinition);
+}
+
+void UDRPerkComponent::NormalizeChargeCooldownOnRemoval(
+	const FDRPerkEntry& PerkEntry) const
+{
+	const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+	UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+	if (!IsValid(PerkDefinition)
+		|| PerkDefinition->PerkTag != DRGameplayTags::Perk_Skill_Charges
+		|| !PerkEntry.EquippedSkillId.IsValid()
+		|| !IsValid(AbilitySystemComponent)
+		|| !IsValid(SkillComponent))
+	{
+		return;
+	}
+
+	const UDRSkillDefinition* SkillDefinition = nullptr;
+	for (int32 SlotIndex = 0;
+		SlotIndex < static_cast<int32>(EDRSkillSlot::Count);
+		++SlotIndex)
+	{
+		const UDRSkillDefinition* Candidate = SkillComponent->GetCurrentSkill(
+			static_cast<EDRSkillSlot>(SlotIndex));
+		if (IsValid(Candidate)
+			&& Candidate->SkillId == PerkEntry.EquippedSkillId)
+		{
+			SkillDefinition = Candidate;
+			break;
+		}
+	}
+
+	if (!IsValid(SkillDefinition) || !SkillDefinition->CooldownTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayTagContainer CooldownTags(SkillDefinition->CooldownTag);
+	const FGameplayEffectQuery Query =
+		FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
+	float NextChargeRemaining = 0.f;
+	for (const TPair<float, float>& TimeAndDuration
+		: AbilitySystemComponent->GetActiveEffectsTimeRemainingAndDuration(Query))
+	{
+		if (TimeAndDuration.Key > 0.f
+			&& (NextChargeRemaining <= 0.f
+				|| TimeAndDuration.Key < NextChargeRemaining))
+		{
+			NextChargeRemaining = TimeAndDuration.Key;
+		}
+	}
+
+	AbilitySystemComponent->RemoveActiveEffects(Query);
+	if (NextChargeRemaining <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext =
+		AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(const_cast<UDRSkillDefinition*>(SkillDefinition));
+	FGameplayEffectSpecHandle CooldownSpec =
+		AbilitySystemComponent->MakeOutgoingSpec(
+			UDRGE_SkillCooldown::StaticClass(),
+			1.f,
+			EffectContext);
+	if (!CooldownSpec.IsValid())
+	{
+		return;
+	}
+
+	CooldownSpec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Cooldown_Duration,
+		NextChargeRemaining);
+	CooldownSpec.Data->DynamicGrantedTags.AddTag(
+		SkillDefinition->CooldownTag);
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
+		*CooldownSpec.Data.Get());
 }
 
 void UDRPerkComponent::RequestResetPerks()

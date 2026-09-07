@@ -16,6 +16,12 @@ UDRGE_SkillCooldown::UDRGE_SkillCooldown(
 	DurationMagnitude = FGameplayEffectModifierMagnitude(Duration);
 }
 
+UDRGE_SkillChargeCooldown::UDRGE_SkillChargeCooldown(
+	const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+}
+
 void UDRGE_SkillCooldown::ConfigureCooldown(
 	const FObjectInitializer& ObjectInitializer,
 	FGameplayTag CooldownTag)

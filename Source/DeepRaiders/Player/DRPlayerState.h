@@ -84,7 +84,7 @@ public:
 		ADRPlayerState* SourcePlayerState,
 		float AppliedDamage,
 		bool bFatal);
-	
+
 	/*
 	 * 서버에서 다른 플레이어가 가한 유효 피격이 확정됐을 때 호출한다.
 	 * Health Damage와 FreezeGauge 증가가 공통으로 이 경로를 사용한다.
@@ -200,7 +200,7 @@ protected:
 	/** Infinite GE. BP에서 State.Overheated를 Granted Tag로 부여한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat")
 	TSubclassOf<UGameplayEffect> OverheatedEffectClass;
-	
+
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
 	void EvaluateDeadState();
 	FDelegateHandle HealthChangedHandle;
@@ -237,6 +237,7 @@ protected:
 	void HandleHeatGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void HandlePersonalShieldTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	
 	void EvaluateFrozenState(float FreezeGauge, float Health);
 
@@ -257,6 +258,7 @@ protected:
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
 	FDelegateHandle VoxelContainedTagChangedHandle;
+	FDelegateHandle PersonalShieldTagChangedHandle;
 
 	// Heat / Overheat
 	void EvaluateOverheatedState(float HeatGauge);

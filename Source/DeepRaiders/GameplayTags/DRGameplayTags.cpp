@@ -51,6 +51,11 @@ namespace DRGameplayTags
 		"Player may move after blinking but cannot attack or use skills.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_PersonalShield,
+		"State.PersonalShield",
+		"Player currently has a consumable personal shield.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_UI_InventoryOpen,
 		"State.UI.InventoryOpen",
 		"Local player's inventory UI is open.");
@@ -456,11 +461,6 @@ namespace DRGameplayTags
 		"Cooldown for the spear throw skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Cooldown_Skill_SpearThrow_FireInterval,
-		"Cooldown.Interval.SpearThrow",
-		"Minimum interval between stacked spear throws.");
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SlowProjectile,
 		"Cooldown.Skill.SlowProjectile",
 		"Cooldown for the slow projectile skill.");
@@ -524,6 +524,16 @@ namespace DRGameplayTags
 		Data_BlinkRecovery_Duration,
 		"Data.BlinkRecovery.Duration",
 		"Blink recovery duration passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_Charges_Max,
+		"Data.Perk.Charges.Max",
+		"Maximum skill charges granted by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Shield_Amount,
+		"Data.Shield.Amount",
+		"Personal shield amount passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Effect_MoveSpeed,

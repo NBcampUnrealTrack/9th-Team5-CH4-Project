@@ -16,6 +16,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Overheated);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PersonalShield);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
@@ -113,7 +114,6 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_IceWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow_FireInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Barrier);
 	
@@ -124,6 +124,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Charges_Max);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Shield_Amount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);

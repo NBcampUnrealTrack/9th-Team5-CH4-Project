@@ -3,11 +3,14 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 {
 	InitMaxHealth(100.f);
 	InitHealth(100.f);
+	InitShield(0.f);
+	InitIncomingShield(0.f);
 
 	InitFreezeGauge(0.f);
 
@@ -35,6 +38,7 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, Health, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, Shield, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, FreezeGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, SnowGauge, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, MaxSnowGauge, COND_None, REPNOTIFY_Always);
@@ -64,6 +68,11 @@ void UDRPlayerAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth
 void UDRPlayerAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, MaxHealth, OldMaxHealth);
+}
+
+void UDRPlayerAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldShield)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, Shield, OldShield);
 }
 
 void UDRPlayerAttributeSet::OnRep_FreezeGauge(const FGameplayAttributeData& OldFreezeGauge)
@@ -206,6 +215,11 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
 	}
+	else if (Attribute == GetShieldAttribute()
+		|| Attribute == GetIncomingShieldAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
 	else if (Attribute == GetMaxSnowGaugeAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
@@ -236,9 +250,88 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	}
 }
 
+bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
+{
+	if (!Super::PreGameplayEffectExecute(Data))
+	{
+		return false;
+	}
+
+	/*
+	 * 일반 분사 공격은 Health Damage 대신 FreezeGauge를 직접 증가시킨다.
+	 * 양수 빙결 누적도 공격으로 간주하여 개인 쉴드가 먼저 흡수하고,
+	 * 쉴드를 초과한 값만 실제 FreezeGauge에 적용한다.
+	 */
+	if (Data.EvaluatedData.Attribute != GetFreezeGaugeAttribute()
+		|| Data.EvaluatedData.Magnitude <= KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	const float ShieldBefore = GetShield();
+	if (ShieldBefore <= KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	const float AbsorbedFreeze = FMath::Min(
+		ShieldBefore,
+		Data.EvaluatedData.Magnitude);
+	const float ShieldAfter = ShieldBefore - AbsorbedFreeze;
+	Data.EvaluatedData.Magnitude -= AbsorbedFreeze;
+	SetShield(ShieldAfter);
+
+	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	if (ShieldAfter <= KINDA_SMALL_NUMBER && IsValid(TargetASC))
+	{
+		FGameplayTagContainer ShieldTags;
+		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
+		TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+	}
+
+	if (Data.EvaluatedData.Magnitude > KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	// 완전히 흡수되면 FreezeGauge Modifier 자체를 실행하지 않는다.
+	// PostGameplayEffectExecute가 호출되지 않으므로 유효 피격 기록은 여기서 처리한다.
+	UAbilitySystemComponent* SourceASC =
+		Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
+	ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
+		? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
+		: nullptr;
+	ADRPlayerState* SourcePlayerState = IsValid(SourceASC)
+		? Cast<ADRPlayerState>(SourceASC->GetOwnerActor())
+		: nullptr;
+	if (IsValid(TargetPlayerState) && TargetPlayerState->HasAuthority())
+	{
+		TargetPlayerState->HandleHostileHitResolved(SourcePlayerState);
+	}
+
+	return false;
+}
+
 void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
+
+	if (Data.EvaluatedData.Attribute == GetIncomingShieldAttribute())
+	{
+		const float GrantedShield = GetIncomingShield();
+		SetIncomingShield(0.f);
+		const UAbilitySystemComponent* TargetASC =
+			GetOwningAbilitySystemComponent();
+		if (GrantedShield > KINDA_SMALL_NUMBER
+			&& IsValid(TargetASC)
+			&& TargetASC->HasMatchingGameplayTag(
+				DRGameplayTags::State_PersonalShield))
+		{
+			// 쉴드 지속 GE가 먼저 적용된 경우에만 잔량을 갱신한다.
+			SetShield(FMath::Max(GetShield(), GrantedShield));
+		}
+		return;
+	}
 
 	// FreezeGain Instant GE가 실제 적용 완료된 시점에서
 	// 확정된 Gauge / Health로 빙결 상태를 평가한다.
@@ -306,8 +399,16 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 
 	const float FinalDamageReduction = GetDamageReduction();
 	const float FinalDamage = RawDamage * (1.f - FinalDamageReduction);
-	const float HealthAfter = FMath::Clamp(HealthBefore - FinalDamage, 0.f, GetMaxHealth());
-	const float AppliedDamage = HealthBefore - HealthAfter;
+	const float ShieldBefore = GetShield();
+	const float ShieldDamage = FMath::Min(ShieldBefore, FinalDamage);
+	const float ShieldAfter = ShieldBefore - ShieldDamage;
+	const float HealthDamage = FinalDamage - ShieldDamage;
+	const float HealthAfter = FMath::Clamp(
+		HealthBefore - HealthDamage,
+		0.f,
+		GetMaxHealth());
+	const float AppliedHealthDamage = HealthBefore - HealthAfter;
+	const float AppliedDamage = ShieldDamage + AppliedHealthDamage;
 
 	if (AppliedDamage <= KINDA_SMALL_NUMBER)
 	{
@@ -315,6 +416,15 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 	}
 
 	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	SetShield(ShieldAfter);
+	if (ShieldBefore > KINDA_SMALL_NUMBER
+		&& ShieldAfter <= KINDA_SMALL_NUMBER
+		&& IsValid(TargetASC))
+	{
+		FGameplayTagContainer ShieldTags;
+		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
+		TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+	}
 	UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
 
 	ADRPlayerState* TargetPlayerState = IsValid(TargetASC) ? Cast<ADRPlayerState>(TargetASC->GetOwnerActor()) : nullptr;

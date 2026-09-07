@@ -43,6 +43,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Health")
 	float HealthRatio = 0.f;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	float CurrentShield = 0.f;
+
+	/** 현재 최대 체력 대비 쉴드 비율이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	float ShieldRatio = 0.f;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	FText SnowGaugeText;
 
@@ -83,6 +90,7 @@ protected:
 private:
 	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleShieldChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
@@ -97,6 +105,7 @@ private:
 	void HandleSelectedQuickSlotItemChanged(UDRItemDefinition* ItemDefinition);
 
 	void RefreshHealth();
+	void RefreshShield();
 	void RefreshSnowGaugeText();
 	void RefreshHeatGauge();
 	void RefreshOverheatedState();
@@ -107,6 +116,7 @@ private:
 	TWeakObjectPtr<UDRQuickSlotComponent> QuickSlotComponent;
 	FDelegateHandle HealthChangedHandle;
 	FDelegateHandle MaxHealthChangedHandle;
+	FDelegateHandle ShieldChangedHandle;
 	FDelegateHandle SnowGaugeChangedHandle;
 	FDelegateHandle HeatGaugeChangedHandle;
 	FDelegateHandle MaxHeatGaugeChangedHandle;

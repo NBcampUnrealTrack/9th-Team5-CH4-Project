@@ -8,6 +8,7 @@
 #include "DeepRaiders/Skill/Effects/DRGE_SkillCooldown.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
+#include "GameplayEffectTypes.h"
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
@@ -29,6 +30,17 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 
 UGameplayEffect* UDRGA_CharacterSkillBase::GetCooldownGameplayEffect() const
 {
+	const FGameplayAbilitySpec* AbilitySpec = IsInstantiated()
+		? GetCurrentAbilitySpec()
+		: nullptr;
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (AbilitySpec != nullptr
+		&& UsesCharges(AbilitySpec->Handle, ActorInfo))
+	{
+		return UDRGE_SkillChargeCooldown::StaticClass()
+			->GetDefaultObject<UGameplayEffect>();
+	}
+
 	return UDRGE_SkillCooldown::StaticClass()->GetDefaultObject<UGameplayEffect>();
 }
 
@@ -44,6 +56,36 @@ const FGameplayTagContainer* UDRGA_CharacterSkillBase::GetCooldownTags() const
 	return &CurrentCooldownTags;
 }
 
+bool UDRGA_CharacterSkillBase::CheckCooldown(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTagContainer* OptionalRelevantTags) const
+{
+	int32 MaxCharges = 0;
+	if (!UsesCharges(Handle, ActorInfo, &MaxCharges))
+	{
+		return Super::CheckCooldown(Handle, ActorInfo, OptionalRelevantTags);
+	}
+
+	const UDRSkillDefinition* SkillDefinition = ActorInfo != nullptr
+		? Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo))
+		: nullptr;
+	if (!IsValid(SkillDefinition))
+	{
+		return false;
+	}
+
+	const bool bHasAvailableCharge = GetConsumedChargeCount(
+		ActorInfo,
+		SkillDefinition->CooldownTag) < MaxCharges;
+	if (!bHasAvailableCharge && OptionalRelevantTags != nullptr)
+	{
+		OptionalRelevantTags->AddTag(SkillDefinition->CooldownTag);
+	}
+
+	return bHasAvailableCharge;
+}
+
 #if WITH_EDITOR
 EDataValidationResult UDRGA_CharacterSkillBase::IsDataValid(
 	FDataValidationContext& Context) const
@@ -52,6 +94,12 @@ EDataValidationResult UDRGA_CharacterSkillBase::IsDataValid(
 
 	if (!IsCooldownEffectValid(
 		UDRGE_SkillCooldown::StaticClass()->GetDefaultObject<UGameplayEffect>(),
+		Context))
+	{
+		Result = EDataValidationResult::Invalid;
+	}
+	if (!IsCooldownEffectValid(
+		UDRGE_SkillChargeCooldown::StaticClass()->GetDefaultObject<UGameplayEffect>(),
 		Context))
 	{
 		Result = EDataValidationResult::Invalid;
@@ -104,6 +152,33 @@ bool UDRGA_CharacterSkillBase::CanActivateAbility(
 		return false;
 	}
 
+	// CanActivate 시점에는 GetCurrentAbilitySpec()이 아직 현재 Handle을 가리키지
+	// 않을 수 있다. 전달된 Handle의 SourceObject에서 개별 쿨다운 태그를 직접
+	// 검사해 동일 스킬의 연속 사용을 막는다.
+	const UDRSkillDefinition* SkillDefinition = ActorInfo != nullptr
+		? Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo))
+		: nullptr;
+	const UAbilitySystemComponent* AbilitySystemComponent = ActorInfo != nullptr
+		? ActorInfo->AbilitySystemComponent.Get()
+		: nullptr;
+	int32 MaxCharges = 0;
+	const bool bUsesCharges = UsesCharges(Handle, ActorInfo, &MaxCharges);
+	if (IsValid(SkillDefinition)
+		&& SkillDefinition->CooldownTag.IsValid()
+		&& IsValid(AbilitySystemComponent)
+		&& ((!bUsesCharges
+				&& AbilitySystemComponent->HasMatchingGameplayTag(SkillDefinition->CooldownTag))
+			|| (bUsesCharges
+				&& GetConsumedChargeCount(ActorInfo, SkillDefinition->CooldownTag)
+					>= MaxCharges)))
+	{
+		if (OptionalRelevantTags != nullptr)
+		{
+			OptionalRelevantTags->AddTag(SkillDefinition->CooldownTag);
+		}
+		return false;
+	}
+
 	return IsValid(GetPlayerCharacter(ActorInfo))
 		&& ActorInfo != nullptr
 		&& IsValid(Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get()));
@@ -124,45 +199,41 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 		return;
 	}
 
-	ApplyCooldownTag(
-		Handle,
-		ActorInfo,
-		ActivationInfo,
-		SkillDefinition->CooldownTag,
-		SkillDefinition->CooldownDuration);
-
-	NotifySkillCommitted(Handle, ActorInfo);
-	NotifySkillActivated(Handle, ActorInfo);
-}
-
-void UDRGA_CharacterSkillBase::ApplyCooldownTag(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo,
-	FGameplayTag CooldownTag,
-	float Duration) const
-{
-	if (ActorInfo == nullptr || !CooldownTag.IsValid() || Duration <= 0.f)
-	{
-		return;
-	}
-
 	FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(
 		Handle,
 		ActorInfo,
 		ActivationInfo,
-		GetCooldownGameplayEffect()->GetClass(),
+		UsesCharges(Handle, ActorInfo)
+			? UDRGE_SkillChargeCooldown::StaticClass()
+			: UDRGE_SkillCooldown::StaticClass(),
 		GetAbilityLevel(Handle, ActorInfo));
+
 	if (!CooldownSpec.IsValid())
 	{
 		return;
 	}
 
+	const bool bUsesCharges = UsesCharges(Handle, ActorInfo);
+	const float EffectiveCooldownDuration = bUsesCharges
+		? SkillDefinition->CooldownDuration + GetChargeQueueTailRemaining(
+			ActorInfo,
+			SkillDefinition->CooldownTag)
+		: SkillDefinition->CooldownDuration;
+
 	CooldownSpec.Data->SetSetByCallerMagnitude(
 		DRGameplayTags::Data_Cooldown_Duration,
-		Duration);
-	CooldownSpec.Data->DynamicGrantedTags.AddTag(CooldownTag);
-	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
+		EffectiveCooldownDuration);
+	CooldownSpec.Data->DynamicGrantedTags.AddTag(
+		SkillDefinition->CooldownTag);
+
+	ApplyGameplayEffectSpecToOwner(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		CooldownSpec);
+
+	NotifySkillCommitted(Handle, ActorInfo);
+	NotifySkillActivated(Handle, ActorInfo);
 }
 
 void UDRGA_CharacterSkillBase::EndAbility(
@@ -222,6 +293,104 @@ FGameplayTag UDRGA_CharacterSkillBase::GetCooldownTag() const
 	}
 
 	return FGameplayTag();
+}
+
+bool UDRGA_CharacterSkillBase::UsesCharges(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	int32* OutMaxCharges) const
+{
+	if (OutMaxCharges != nullptr)
+	{
+		*OutMaxCharges = 1;
+	}
+
+	const UDRSkillDefinition* SkillDefinition = ActorInfo != nullptr
+		? Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo))
+		: nullptr;
+	const ADRPlayerState* PlayerState = ActorInfo != nullptr
+		? Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get())
+		: nullptr;
+	const UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	if (!IsValid(SkillDefinition)
+		|| !SkillDefinition->SkillId.IsValid()
+		|| !IsValid(PerkComponent)
+		|| !PerkComponent->HasSkillPerk(
+			SkillDefinition->SkillId,
+			DRGameplayTags::Perk_Skill_Charges))
+	{
+		return false;
+	}
+
+	const float ConfiguredMaxCharges =
+		PerkComponent->GetSkillPerkEffectValue(
+			SkillDefinition->SkillId,
+			DRGameplayTags::Perk_Skill_Charges,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Perk_Charges_Max);
+	const int32 MaxCharges = ConfiguredMaxCharges > 0.0f
+		? FMath::Max(1, FMath::RoundToInt(ConfiguredMaxCharges))
+		: 3;
+	if (OutMaxCharges != nullptr)
+	{
+		*OutMaxCharges = MaxCharges;
+	}
+
+	return MaxCharges > 1;
+}
+
+int32 UDRGA_CharacterSkillBase::GetConsumedChargeCount(
+	const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTag CooldownTag) const
+{
+	const UAbilitySystemComponent* AbilitySystemComponent = ActorInfo != nullptr
+		? ActorInfo->AbilitySystemComponent.Get()
+		: nullptr;
+	if (!IsValid(AbilitySystemComponent) || !CooldownTag.IsValid())
+	{
+		return 0;
+	}
+
+	FGameplayTagContainer CooldownTags(CooldownTag);
+	const FGameplayEffectQuery Query =
+		FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
+	int32 ConsumedCharges = 0;
+	for (const FActiveGameplayEffectHandle EffectHandle
+		: AbilitySystemComponent->GetActiveEffects(Query))
+	{
+		ConsumedCharges += AbilitySystemComponent->GetCurrentStackCount(EffectHandle);
+	}
+
+	return ConsumedCharges;
+}
+
+float UDRGA_CharacterSkillBase::GetChargeQueueTailRemaining(
+	const FGameplayAbilityActorInfo* ActorInfo,
+	FGameplayTag CooldownTag) const
+{
+	const UAbilitySystemComponent* AbilitySystemComponent = ActorInfo != nullptr
+		? ActorInfo->AbilitySystemComponent.Get()
+		: nullptr;
+	if (!IsValid(AbilitySystemComponent) || !CooldownTag.IsValid())
+	{
+		return 0.f;
+	}
+
+	FGameplayTagContainer CooldownTags(CooldownTag);
+	const FGameplayEffectQuery Query =
+		FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags);
+	float QueueTailRemaining = 0.f;
+	for (const TPair<float, float>& TimeAndDuration
+		: AbilitySystemComponent->GetActiveEffectsTimeRemainingAndDuration(Query))
+	{
+		QueueTailRemaining = FMath::Max(
+			QueueTailRemaining,
+			TimeAndDuration.Key);
+	}
+
+	return QueueTailRemaining;
 }
 
 void UDRGA_CharacterSkillBase::NotifySkillCommitted(
