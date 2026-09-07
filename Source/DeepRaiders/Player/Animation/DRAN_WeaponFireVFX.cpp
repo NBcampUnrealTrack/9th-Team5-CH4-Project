@@ -21,6 +21,12 @@ void UDRAN_WeaponFireVFX::Notify(
 	{
 		return;
 	}
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[FIRE] FIRE_MOMENT T=%.6f Frame=%llu"),
+		FPlatformTime::Seconds(),
+		GFrameCounter);
 
-	Character->PlayProjectileFireVFXFromNotify();
+	Character->PlayProjectileFirePresentationFromNotify();
 }
