@@ -228,12 +228,38 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 	CooldownSpec.Data->DynamicGrantedTags.AddTag(
 		SkillDefinition->CooldownTag);
 
+	UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get();
+	const FString ActivationPredictionKey = ActivationInfo.GetActivationPredictionKey().ToString();
+	const FString ScopedPredictionKey = IsValid(AbilitySystemComponent)
+		? AbilitySystemComponent->GetPredictionKeyForNewAction().ToString()
+		: TEXT("None");
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[SkillCooldown][Apply] Skill=%s Tag=%s Authority=%d Local=%d Duration=%.2f ActivationKey=%s ScopedKey=%s"),
+		*SkillDefinition->SkillId.ToString(),
+		*SkillDefinition->CooldownTag.ToString(),
+		ActorInfo->IsNetAuthority(),
+		ActorInfo->IsLocallyControlled(),
+		EffectiveCooldownDuration,
+		*ActivationPredictionKey,
+		*ScopedPredictionKey);
+
 	const FActiveGameplayEffectHandle AppliedCooldownHandle =
 		ApplyGameplayEffectSpecToOwner(
 		Handle,
 		ActorInfo,
 		ActivationInfo,
 		CooldownSpec);
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[SkillCooldown][Applied] Skill=%s Tag=%s Authority=%d Handle=%s Applied=%d"),
+		*SkillDefinition->SkillId.ToString(),
+		*SkillDefinition->CooldownTag.ToString(),
+		ActorInfo->IsNetAuthority(),
+		*AppliedCooldownHandle.ToString(),
+		AppliedCooldownHandle.WasSuccessfullyApplied());
 	if (AppliedCooldownHandle.WasSuccessfullyApplied())
 	{
 		ScheduleCooldownSafetyCleanup(
@@ -443,11 +469,19 @@ void UDRGA_CharacterSkillBase::ScheduleCooldownSafetyCleanup(
 	{
 		if (UAbilitySystemComponent* ASC = WeakAbilitySystem.Get())
 		{
-			if (ASC->GetActiveGameplayEffect(CooldownEffectHandle) != nullptr)
+			const bool bEffectStillActive = ASC->GetActiveGameplayEffect(CooldownEffectHandle) != nullptr;
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[SkillCooldown][SafetyCleanup] Tag=%s Handle=%s Active=%d TagPresent=%d"),
+				*CooldownTag.ToString(),
+				*CooldownEffectHandle.ToString(),
+				bEffectStillActive,
+				ASC->HasMatchingGameplayTag(CooldownTag));
+			if (bEffectStillActive)
 			{
 				ASC->RemoveActiveGameplayEffect(CooldownEffectHandle);
 			}
-			ASC->SetLooseGameplayTagCount(CooldownTag, 0);
 		}
 	});
 
