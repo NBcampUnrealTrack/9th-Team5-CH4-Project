@@ -8,6 +8,8 @@
 #include "DeepRaiders/Skill/Components/DRSkillComponent.h"
 #include "DeepRaiders/Skill/Effects/DRGE_SkillCooldown.h"
 #include "GameplayEffect.h"
+#include "Abilities/GameplayAbility.h"
+#include "GameplayAbilitySpec.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -97,8 +99,15 @@ bool UDRPerkComponent::CanAddPerk(
 		return false;
 	}
 
+	const bool bHasGrantedAbility =
+		PerkDefinition->GrantedAbilities.ContainsByPredicate(
+			[](const FDRPerkGrantedAbility& GrantedAbility)
+			{
+				return GrantedAbility.AbilityClass != nullptr;
+			});
 	const bool IsEffectConfigured = PerkDefinition->PerkEffectClass != nullptr
 		|| !PerkDefinition->EffectRules.IsEmpty()
+		|| bHasGrantedAbility
 		|| PerkDefinition->PerkTag.IsValid()
 		|| IsValid(PerkDefinition->ReplacementSkillDefinition);
 	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
@@ -304,6 +313,105 @@ FGameplayEffectSpecHandle UDRPerkComponent::BuildSkillEffectRuleSpec(
 	return EffectSpec;
 }
 
+bool UDRPerkComponent::AcquireGrantedAbilities(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UDRPerkDefinition* PerkDefinition)
+{
+	if (!IsValid(AbilitySystemComponent)
+		|| !AbilitySystemComponent->IsOwnerActorAuthoritative()
+		|| !IsValid(PerkDefinition))
+	{
+		return false;
+	}
+
+	TArray<TSubclassOf<UGameplayAbility>> AcquiredAbilityClasses;
+	TSet<TSubclassOf<UGameplayAbility>> ProcessedAbilityClasses;
+	for (const FDRPerkGrantedAbility& GrantedAbility : PerkDefinition->GrantedAbilities)
+	{
+		const TSubclassOf<UGameplayAbility> AbilityClass = GrantedAbility.AbilityClass;
+		if (!AbilityClass || ProcessedAbilityClasses.Contains(AbilityClass))
+		{
+			continue;
+		}
+		ProcessedAbilityClasses.Add(AbilityClass);
+
+		if (int32* RefCount = GrantedAbilityRefCounts.Find(AbilityClass))
+		{
+			++(*RefCount);
+			AcquiredAbilityClasses.Add(AbilityClass);
+			continue;
+		}
+
+		FGameplayAbilitySpec AbilitySpec(
+			AbilityClass,
+			FMath::Max(1, GrantedAbility.AbilityLevel));
+		AbilitySpec.SourceObject = const_cast<UDRPerkDefinition*>(PerkDefinition);
+		const FGameplayAbilitySpecHandle AbilityHandle =
+			AbilitySystemComponent->GiveAbility(AbilitySpec);
+		if (!AbilityHandle.IsValid())
+		{
+			for (const TSubclassOf<UGameplayAbility> AcquiredClass : AcquiredAbilityClasses)
+			{
+				int32* AcquiredRefCount = GrantedAbilityRefCounts.Find(AcquiredClass);
+				if (AcquiredRefCount != nullptr && --(*AcquiredRefCount) <= 0)
+				{
+					if (const FGameplayAbilitySpecHandle* AcquiredHandle =
+						GrantedAbilityHandles.Find(AcquiredClass))
+					{
+						AbilitySystemComponent->CancelAbilityHandle(*AcquiredHandle);
+						AbilitySystemComponent->ClearAbility(*AcquiredHandle);
+					}
+					GrantedAbilityRefCounts.Remove(AcquiredClass);
+					GrantedAbilityHandles.Remove(AcquiredClass);
+				}
+			}
+			return false;
+		}
+
+		GrantedAbilityRefCounts.Add(AbilityClass, 1);
+		GrantedAbilityHandles.Add(AbilityClass, AbilityHandle);
+		AcquiredAbilityClasses.Add(AbilityClass);
+	}
+
+	return true;
+}
+
+void UDRPerkComponent::ReleaseGrantedAbilities(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UDRPerkDefinition* PerkDefinition)
+{
+	if (!IsValid(AbilitySystemComponent) || !IsValid(PerkDefinition))
+	{
+		return;
+	}
+
+	TSet<TSubclassOf<UGameplayAbility>> ProcessedAbilityClasses;
+	for (const FDRPerkGrantedAbility& GrantedAbility : PerkDefinition->GrantedAbilities)
+	{
+		const TSubclassOf<UGameplayAbility> AbilityClass = GrantedAbility.AbilityClass;
+		if (!AbilityClass || ProcessedAbilityClasses.Contains(AbilityClass))
+		{
+			continue;
+		}
+		ProcessedAbilityClasses.Add(AbilityClass);
+
+		int32* RefCount = GrantedAbilityRefCounts.Find(AbilityClass);
+		if (RefCount == nullptr || --(*RefCount) > 0)
+		{
+			continue;
+		}
+
+		if (const FGameplayAbilitySpecHandle* AbilityHandle =
+			GrantedAbilityHandles.Find(AbilityClass))
+		{
+			AbilitySystemComponent->CancelAbilityHandle(*AbilityHandle);
+			AbilitySystemComponent->ClearAbility(*AbilityHandle);
+		}
+		GrantedAbilityRefCounts.Remove(AbilityClass);
+		GrantedAbilityHandles.Remove(AbilityClass);
+	}
+}
+
 void UDRPerkComponent::ApplySkillEffectRules(
 	UAbilitySystemComponent* AbilitySystemComponent,
 	const UObject* SourceObject,
@@ -401,6 +509,21 @@ bool UDRPerkComponent::AddPerk(
 			LogTemp,
 			Warning,
 			TEXT("[Perk][EffectFailed] Player=%s Perk=%s Reason=InvalidEffectHandle"),
+			*GetNameSafe(PlayerState),
+			*GetNameSafe(PerkDefinition));
+		return false;
+	}
+
+	if (!AcquireGrantedAbilities(AbilitySystemComponent, PerkDefinition))
+	{
+		if (EffectHandle.IsValid())
+		{
+			AbilitySystemComponent->RemoveActiveGameplayEffect(EffectHandle);
+		}
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Perk][AbilityGrantFailed] Player=%s Perk=%s"),
 			*GetNameSafe(PlayerState),
 			*GetNameSafe(PerkDefinition));
 		return false;
@@ -831,6 +954,7 @@ bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 	}
 
 	NormalizeChargeCooldownOnRemoval(PerkEntries[PerkIndex]);
+	ReleaseGrantedAbilities(AbilitySystemComponent, RemovedPerkDefinition);
 
 	PerkEntries[PerkIndex] = FDRPerkEntry();
 	UE_LOG(
@@ -883,6 +1007,10 @@ bool UDRPerkComponent::ResetPerks()
 			IsResetSucceeded = false;
 			continue;
 		}
+
+		ReleaseGrantedAbilities(
+			AbilitySystemComponent,
+			PerkEntry.PerkDefinition);
 
 		PerkEntry = FDRPerkEntry();
 	}

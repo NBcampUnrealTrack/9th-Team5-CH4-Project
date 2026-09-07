@@ -5,10 +5,12 @@
 #include "Components/ActorComponent.h"
 #include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "GameplayEffectTypes.h"
+#include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
 #include "DRPerkComponent.generated.h"
 
 class UAbilitySystemComponent;
+class UGameplayAbility;
 class UDRPerkDefinition;
 class UDRSkillDefinition;
 
@@ -171,6 +173,16 @@ private:
 		const FDRSkillEffectRule& EffectRule,
 		bool bPersistThroughDeath) const;
 
+	/** 퍽이 선언한 Ability들을 참조 횟수 기반으로 부여한다. */
+	bool AcquireGrantedAbilities(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UDRPerkDefinition* PerkDefinition);
+
+	/** 퍽이 선언한 Ability 참조를 반납하고 마지막 참조면 ASC에서 회수한다. */
+	void ReleaseGrantedAbilities(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UDRPerkDefinition* PerkDefinition);
+
 	void ApplySkillEffectRules(
 		UAbilitySystemComponent* AbilitySystemComponent,
 		const UObject* SourceObject,
@@ -211,5 +223,9 @@ private:
 		Category = "Perk",
 		meta = (AllowPrivateAccess = true, ClampMin = 1, UIMin = 1))
 	int32 MaxPerkSlotCount = 5;
+
+	/** 서로 다른 퍽이 같은 Ability를 요구할 때 중복 Spec 생성을 막는 서버 전용 상태다. */
+	TMap<TSubclassOf<UGameplayAbility>, int32> GrantedAbilityRefCounts;
+	TMap<TSubclassOf<UGameplayAbility>, FGameplayAbilitySpecHandle> GrantedAbilityHandles;
 
 };

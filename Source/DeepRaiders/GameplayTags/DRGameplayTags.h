@@ -44,6 +44,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Blink);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_ForwardDash);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Perk_SuperJump_RocketBoots);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_HotPack);
@@ -71,6 +72,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_CannonProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_PortableGenerator);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_TeslaField);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SuperJump_RocketBoots);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_SuperJump_RocketBoots_MoveSpeed);
 	
 	// Weapon Upgrade - Rifle
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);

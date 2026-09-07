@@ -303,6 +303,25 @@ void ADRPlayerCharacter::HandleJumpPressed()
 		return;
 	}
 
+	const UDRCharacterMovementComponent* MovementComponent =
+		Cast<UDRCharacterMovementComponent>(GetCharacterMovement());
+	if (IsValid(MovementComponent)
+		&& MovementComponent->IsSuperJumpActive()
+		&& MovementComponent->IsFalling())
+	{
+		if (UAbilitySystemComponent* AbilitySystemComponent = GetAbilitySystemComponent())
+		{
+			FGameplayTagContainer RocketBootsAbilityTags;
+			RocketBootsAbilityTags.AddTag(
+				DRGameplayTags::Ability_Perk_SuperJump_RocketBoots);
+			AbilitySystemComponent->TryActivateAbilitiesByTag(
+				RocketBootsAbilityTags);
+		}
+
+		// SuperJump 체공 중 점프 입력은 보조 Ability 요청으로 소비한다.
+		return;
+	}
+
 	Jump();
 }
 

@@ -14,6 +14,15 @@ namespace DRGameplayTags
 		Perk_Skill_Barrier_TeslaField,
 		"Perk.Skill.Barrier.TeslaField");
 	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_SuperJump_RocketBoots,
+		"Perk.Skill.SuperJump.RocketBoots");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_SuperJump_HeroLanding,
+		"Perk.Skill.SuperJump.HeroLanding");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Data_Perk_SuperJump_RocketBoots_MoveSpeed,
+		"Data.Perk.SuperJump.RocketBoots.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(
 		Character_Upgrade_MaxHealth, 
 		"Character.Upgrade.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(
@@ -185,6 +194,11 @@ namespace DRGameplayTags
 		Ability_Skill_SuperJump,
 		"Ability.Skill.SuperJump",
 		"Super jump skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Perk_SuperJump_RocketBoots,
+		"Ability.Perk.SuperJump.RocketBoots",
+		"Horizontal air dash granted by the Super Jump rocket boots perk.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Skill_CombatRoll,

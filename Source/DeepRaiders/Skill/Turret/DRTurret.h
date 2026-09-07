@@ -7,6 +7,7 @@
 #include "GameFramework/Actor.h"
 #include "DRTurret.generated.h"
 
+struct FGameplayEffectSpecHandle;
 class UAbilitySystemComponent;
 class UDRProjectileWeaponItemDefinition;
 class ADRPlayerState;

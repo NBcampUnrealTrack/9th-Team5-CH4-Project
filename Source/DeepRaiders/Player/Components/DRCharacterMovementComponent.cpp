@@ -603,6 +603,12 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
 
 void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
 {
+	++SuperJumpSequence;
+	if (SuperJumpSequence == 0)
+	{
+		++SuperJumpSequence;
+	}
+
     if (!bSuperJumpAirControlActive)
     {
         AirControlBeforeSuperJump = AirControl;
@@ -610,6 +616,29 @@ void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirCont
     }
 
     AirControl = FMath::Max(AirControl, NewAirControl);
+}
+
+bool UDRCharacterMovementComponent::PerformHorizontalAirDash(
+    const FVector& WorldDirection,
+    float MoveSpeed)
+{
+    if (!IsFalling() || MoveSpeed <= 0.f)
+    {
+        return false;
+    }
+
+    const FVector HorizontalDirection =
+        FVector(WorldDirection.X, WorldDirection.Y, 0.f).GetSafeNormal();
+    if (HorizontalDirection.IsNearlyZero())
+    {
+        return false;
+    }
+
+    ClearAirborneMomentumPreservation();
+    Velocity.X = HorizontalDirection.X * MoveSpeed;
+    Velocity.Y = HorizontalDirection.Y * MoveSpeed;
+    UpdateComponentVelocity();
+    return true;
 }
 
 void UDRCharacterMovementComponent::EndPlay(
@@ -755,6 +784,7 @@ void UDRCharacterMovementComponent::ProcessLanded(
     ClearAirborneMomentumPreservation();
 
     Super::ProcessLanded(Hit, RemainingTime, Iterations);
+	OnCharacterLanded.Broadcast(Hit);
 }
 
 FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_Client() const

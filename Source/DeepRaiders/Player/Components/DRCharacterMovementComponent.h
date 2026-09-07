@@ -13,6 +13,7 @@ class UCurveFloat;
 struct FOnAttributeChangeData;
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FDRCharacterMovementUpdated, float, const FVector&, const FVector&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FDRCharacterLanded, const FHitResult&);
 
 UENUM()
 enum class EDRCustomMovementMode : uint8
@@ -37,10 +38,27 @@ public:
 	/** 이동 갱신 직후 필요한 후처리 컴포넌트에 전달한다. */
 	FDRCharacterMovementUpdated OnCharacterMovementUpdated;
 
+	/** 이동 판정에서 확정된 착지를 후속 처리 객체에 알린다. */
+	FDRCharacterLanded OnCharacterLanded;
+
 	void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
 	/** 슈퍼점프 체공 중에만 공중 조작력을 높이고, 착지 시 원래 값으로 복원한다. */
 	void ActivateSuperJumpAirControl(float NewAirControl);
+
+	bool IsSuperJumpActive() const
+	{
+		return bSuperJumpAirControlActive;
+	}
+
+	/** 로컬 예측과 서버가 동일하게 증가시키는 SuperJump 실행 식별값이다. */
+	uint32 GetSuperJumpSequence() const
+	{
+		return SuperJumpSequence;
+	}
+
+	/** 요청된 월드 수평 방향과 속도로 현재 공중 속도를 대체한다. */
+	bool PerformHorizontalAirDash(const FVector& WorldDirection, float MoveSpeed);
 
 	/** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
 	void SetWantsJetpack(bool bNewWantsJetpack);
@@ -159,6 +177,7 @@ private:
 	float AirControlBeforeSuperJump = 0.f;
 
 	bool bSuperJumpAirControlActive = false;
+	uint32 SuperJumpSequence = 0;
 
 	bool CanApplyJetpackThrust() const;
 
