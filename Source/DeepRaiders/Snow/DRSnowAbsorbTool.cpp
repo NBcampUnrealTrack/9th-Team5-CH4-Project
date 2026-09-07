@@ -6,7 +6,10 @@
 #include "ProfilingDebugging/CountersTrace.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "VoxelTools/Gen/VoxelSurfaceEditTools.h"
+#include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
+#include "VoxelData/VoxelDataIncludes.h"
+#include "VoxelMaterial.h"
 #include "VoxelWorld.h"
 
 namespace
@@ -29,6 +32,100 @@ float SmoothStep(const float Value)
 {
 	const float ClampedValue = FMath::Clamp(Value, 0.f, 1.f);
 	return ClampedValue * ClampedValue * (3.f - 2.f * ClampedValue);
+}
+
+// Repair material data after the density edit but before the first render update.
+// Unlike FVoxelSurfaceEditToolsImpl::PropagateVoxelMaterials this path never
+// asserts when a surface sample has no filled neighbor: it simply leaves that
+// sample unchanged. Only voxels that actually changed density are considered.
+void RepairAbsorbMaterialsBeforeRender(
+	AVoxelWorld* VoxelWorld,
+	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
+	const TArray<FModifiedVoxelValue>& ModifiedValues,
+	const FVoxelIntBox& EditedBounds)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_RepairMaterials);
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
+		VoxelWorld->MaterialConfig == EVoxelMaterialConfig::RGB ||
+		!ProcessedVoxels.Info.bHasSurfacePositions ||
+		ProcessedVoxels.Voxels->IsEmpty() || ModifiedValues.IsEmpty() ||
+		!EditedBounds.IsValid())
+	{
+		return;
+	}
+
+	TMap<FIntVector, const FVoxelSurfaceEditsVoxel*> SurfaceVoxelByPosition;
+	SurfaceVoxelByPosition.Reserve(ProcessedVoxels.Voxels->Num());
+	for (const FVoxelSurfaceEditsVoxel& SurfaceVoxel : *ProcessedVoxels.Voxels)
+	{
+		SurfaceVoxelByPosition.Add(SurfaceVoxel.Position, &SurfaceVoxel);
+	}
+
+	FVoxelData& Data = VoxelWorld->GetData();
+	const FVoxelIntBox LockBounds = ProcessedVoxels.Bounds.Extend(1);
+	int32 RepairedCount = 0;
+	int32 NoSourceCount = 0;
+	{
+		FVoxelWriteScopeLock Lock(Data, LockBounds, FUNCTION_FNAME);
+		for (const FModifiedVoxelValue& ModifiedValue : ModifiedValues)
+		{
+			if (ModifiedValue.NewValue <= ModifiedValue.OldValue)
+			{
+				continue;
+			}
+
+			const FVoxelSurfaceEditsVoxel* const* FoundSurfaceVoxel =
+				SurfaceVoxelByPosition.Find(ModifiedValue.Position);
+			if (!FoundSurfaceVoxel || !*FoundSurfaceVoxel)
+			{
+				++NoSourceCount;
+				continue;
+			}
+
+			const FVoxelSurfaceEditsVoxel& SurfaceVoxel = **FoundSurfaceVoxel;
+			const FVector SurfaceWorldLocation =
+				VoxelWorld->LocalToGlobalFloat(FVoxelVector(SurfaceVoxel.SurfacePosition));
+			const TArray<FIntVector> Neighbors =
+				VoxelWorld->GetNeighboringPositions(SurfaceWorldLocation);
+
+			bool bFoundFilledNeighbor = false;
+			double ClosestDistanceSquared = TNumericLimits<double>::Max();
+			FIntVector ClosestPosition(ForceInit);
+			for (const FIntVector& Neighbor : Neighbors)
+			{
+				const FVoxelValue NeighborValue = Data.GetValue(Neighbor, 0);
+				if (NeighborValue.IsEmpty())
+				{
+					continue;
+				}
+
+				const double DistanceSquared = static_cast<double>(
+					(FVoxelVector(Neighbor) - SurfaceVoxel.SurfacePosition).SizeSquared());
+				if (!bFoundFilledNeighbor || DistanceSquared < ClosestDistanceSquared)
+				{
+					bFoundFilledNeighbor = true;
+					ClosestDistanceSquared = DistanceSquared;
+					ClosestPosition = Neighbor;
+				}
+			}
+
+			if (!bFoundFilledNeighbor)
+			{
+				++NoSourceCount;
+				continue;
+			}
+
+			Data.SetMaterial(ModifiedValue.Position, Data.GetMaterial(ClosestPosition, 0));
+			++RepairedCount;
+		}
+	}
+
+	if (CVarDRSnowAbsorbLog.GetValueOnGameThread() != 0)
+	{
+		UE_LOG(LogDRSnowAbsorb, Log,
+			TEXT("Material repair: Modified=%d Repaired=%d NoFilledNeighbor=%d"),
+			ModifiedValues.Num(), RepairedCount, NoSourceCount);
+	}
 }
 
 void DrawAbsorbRange(
@@ -272,6 +369,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_EditValues);
+		// Hold the render update until material data is repaired. This prevents the
+		// renderer from ever seeing the intermediate density-only state.
 		UVoxelSurfaceEditTools::EditVoxelValues(
 			OutModifiedValues,
 			OutEditedBounds,
@@ -280,7 +379,13 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 			DistanceDivisor,
 			true,
 			true,
-			bUpdateRender);
+			false);
+	}
+	RepairAbsorbMaterialsBeforeRender(
+		VoxelWorld, ProcessedVoxels, OutModifiedValues, OutEditedBounds);
+	if (bUpdateRender && OutEditedBounds.IsValid())
+	{
+		FVoxelToolHelpers::UpdateWorld(VoxelWorld, OutEditedBounds);
 	}
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Absorb/Full/ModifiedValues"), OutModifiedValues.Num());
 
@@ -498,6 +603,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_EditValues);
+		// Hold the render update until material data is repaired. This prevents the
+		// renderer from ever seeing the intermediate density-only state.
 		UVoxelSurfaceEditTools::EditVoxelValues(
 			OutModifiedValues,
 			OutEditedBounds,
@@ -506,7 +613,13 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 			DistanceDivisor,
 			true,
 			true,
-			bUpdateRender);
+			false);
+	}
+	RepairAbsorbMaterialsBeforeRender(
+		VoxelWorld, ProcessedVoxels, OutModifiedValues, OutEditedBounds);
+	if (bUpdateRender && OutEditedBounds.IsValid())
+	{
+		FVoxelToolHelpers::UpdateWorld(VoxelWorld, OutEditedBounds);
 	}
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Absorb/Adaptive/ModifiedValues"), OutModifiedValues.Num());
 
