@@ -9,11 +9,30 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/EngineTypes.h"
+#include "HAL/IConsoleManager.h"
 
 namespace DRProjectileAim
 {
 	constexpr float MinAimDistance = 1.0f;
 	constexpr float MaxClientViewLocationError = 500.0f;
+}
+
+namespace DRLocalProjectilePrediction
+{
+	TAutoConsoleVariable<int32> CVarShowLocalPredicted(
+		TEXT("dr.Projectile.ShowLocalPredicted"),
+		1,
+		TEXT("Show owning-client local predicted projectile. 0=off, 1=on."));
+
+	TAutoConsoleVariable<float> CVarLifetimeSeconds(
+		TEXT("dr.Projectile.LocalVisualLifetime"),
+		0.0f,
+		TEXT("Local predicted projectile lifetime. 0=auto from range/speed, >0=manual seconds."));
+
+	TAutoConsoleVariable<int32> CVarDebug(
+		TEXT("dr.Projectile.LocalVisualDebug"),
+		0,
+		TEXT("Log local projectile prediction/reconciliation. 0=off, 1=on."));
 }
 
 bool UDRGA_FireProjectile::IsAttackConfigurationValid(
@@ -116,13 +135,27 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 		return false;
 	}
 
+	++LocalShotSequence;
+	if (LocalShotSequence == 0)
+	{
+		++LocalShotSequence;
+	}
+
+	const uint32 ShotSequence = LocalShotSequence;
+
 	if (!ActorInfo->IsNetAuthority())
 	{
 		PlayLocalFirePresentation(GameplayFireOrigin, AimPoint);
+		TrySpawnLocalVisualProjectile(
+			GameplayFireOrigin,
+			AimPoint,
+			ShotSequence);
 	}
 
 	FGameplayAbilityTargetDataHandle TargetData(
-		new FGameplayAbilityTargetData_SingleTargetHit(ShotAimHit));
+		new FDRGameplayAbilityTargetData_ProjectileShot(
+			ShotAimHit,
+			ShotSequence));
 
 	if (ActorInfo->IsNetAuthority())
 	{
@@ -217,10 +250,12 @@ void UDRGA_FireProjectile::HandleServerShotTargetData(
 
 	FVector AimPoint;
 	FVector AimDirection;
+	uint32 ShotSequence = 0;
 	const bool bValidAim = ValidateServerShotTargetData(
 		TargetData,
 		AimPoint,
-		AimDirection);
+		AimDirection,
+		ShotSequence);
 
 	/*
 	 * 원격 클라이언트 TargetData는 성공/실패와 관계없이 이번 Shot 데이터로 소비한다.
@@ -239,28 +274,58 @@ void UDRGA_FireProjectile::HandleServerShotTargetData(
 
 	if (!bValidAim)
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ProjectilePrediction][SERVER_REJECT] "
+				"Shot=%u Reason=AimValidation"),
+			ShotSequence);
+
 		return;
 	}
 
 	if (!TryCommitServerShot())
 	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ProjectilePrediction][SERVER_REJECT] "
+				"Shot=%u Reason=Commit"),
+			ShotSequence);
+
 		return;
 	}
 
-	// 실제 Projectile이 하나 이상 생성된 발사만 Heat를 누적한다.
-	if (ExecuteServerProjectileShot(AimPoint, AimDirection))
+	if (ExecuteServerProjectileShot(
+		AimPoint,
+		AimDirection,
+		ShotSequence))
 	{
 		ApplyHeatForSuccessfulShot();
+	}
+	else
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT(
+				"[ProjectilePrediction][SERVER_REJECT] "
+				"Shot=%u Reason=ProjectileSpawn"),
+			ShotSequence);
 	}
 }
 
 bool UDRGA_FireProjectile::ValidateServerShotTargetData(
 	const FGameplayAbilityTargetDataHandle& TargetData,
 	FVector& OutAimPoint,
-	FVector& OutAimDirection) const
+	FVector& OutAimDirection,
+	uint32& OutShotSequence) const
 {
 	OutAimPoint = FVector::ZeroVector;
 	OutAimDirection = FVector::ZeroVector;
+	OutShotSequence = 0;
 
 	if (TargetData.Num() != 1)
 	{
@@ -268,14 +333,23 @@ bool UDRGA_FireProjectile::ValidateServerShotTargetData(
 	}
 
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-	const FHitResult* AimHit = Data != nullptr
-		? Data->GetHitResult()
-		: nullptr;
-
-	if (AimHit == nullptr)
+	if (Data == nullptr
+		|| Data->GetScriptStruct()
+			!= FDRGameplayAbilityTargetData_ProjectileShot::StaticStruct())
 	{
 		return false;
 	}
+
+	const auto* ShotData =
+		static_cast<const FDRGameplayAbilityTargetData_ProjectileShot*>(Data);
+
+	const FHitResult* AimHit = ShotData->GetHitResult();
+	if (AimHit == nullptr || ShotData->ShotSequence == 0)
+	{
+		return false;
+	}
+
+	OutShotSequence = ShotData->ShotSequence;
 
 	const FVector ClientViewLocation = AimHit->TraceStart;
 	const FVector AimPoint = AimHit->bBlockingHit
@@ -356,7 +430,8 @@ bool UDRGA_FireProjectile::ValidateServerShotTargetData(
 
 bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 	const FVector& AimPoint,
-	const FVector& AimDirection)
+	const FVector& AimDirection,
+	uint32 ShotSequence)
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	if (ActorInfo == nullptr
@@ -447,7 +522,8 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 			LaunchVelocity,
 			AvatarActor,
 			AbilitySystem,
-			ImpactEffectSpecs))
+			ImpactEffectSpecs,
+			ShotSequence))
 		{
 			bSpawnedAnyProjectile = true;
 		}
@@ -554,12 +630,135 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 	return true;
 }
 
+void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
+	const FVector& SpawnLocation,
+	const FVector& AimPoint,
+	uint32 ShotSequence)
+{
+	if (DRLocalProjectilePrediction::CVarShowLocalPredicted.GetValueOnGameThread() == 0
+		|| ShotSequence == 0)
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr
+		|| ActorInfo->IsNetAuthority()
+		|| !ActorInfo->IsLocallyControlled())
+	{
+		return;
+	}
+
+	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
+		GetCurrentWeaponDefinition();
+
+	if (!IsValid(WeaponDefinition)
+		|| !WeaponDefinition->ProjectileClass)
+	{
+		return;
+	}
+
+	/*
+	 * 현재 reconciliation은 Rifle 검증 단계다.
+	 * 1발 + 무산포만 local predicted proxy를 만든다.
+	 */
+	if (GetWeaponProjectileCount() != 1
+		|| WeaponDefinition->SpreadHalfAngleDegrees > KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FVector LaunchVelocity;
+	if (!ResolveProjectileLaunchVelocity(
+			SpawnLocation,
+			AimPoint,
+			LaunchVelocity)
+		|| LaunchVelocity.ContainsNaN()
+		|| LaunchVelocity.IsNearlyZero())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+
+	if (!IsValid(World) || !IsValid(AvatarActor))
+	{
+		return;
+	}
+
+	const FVector LaunchDirection = LaunchVelocity.GetSafeNormal();
+	if (LaunchDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const float ConfiguredLifetime =
+		DRLocalProjectilePrediction::CVarLifetimeSeconds.GetValueOnGameThread();
+
+	const float ProjectileSpeed = FMath::Max(LaunchVelocity.Size(), 1.f);
+	const float AutoLifetime = FMath::Clamp(
+		GetMaxAttackDistance() / ProjectileSpeed + 0.25f,
+		0.15f,
+		5.0f);
+
+	const float LifetimeSeconds =
+		ConfiguredLifetime > KINDA_SMALL_NUMBER
+			? FMath::Clamp(ConfiguredLifetime, 0.02f, 5.0f)
+			: AutoLifetime;
+
+	const FTransform SpawnTransform(
+		LaunchDirection.Rotation(),
+		SpawnLocation);
+
+	ADRProjectile* VisualProjectile =
+		World->SpawnActorDeferred<ADRProjectile>(
+			WeaponDefinition->ProjectileClass,
+			SpawnTransform,
+			AvatarActor,
+			Cast<APawn>(AvatarActor),
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (!IsValid(VisualProjectile))
+	{
+		return;
+	}
+
+	/*
+	 * InitializeProjectile()는 절대 호출하지 않는다.
+	 * 이 인스턴스에는 ASC / EffectSpec / Snow / Team gameplay data가 없다.
+	 */
+	VisualProjectile->ConfigureAsLocalVisualProjectile(
+		LaunchVelocity,
+		LifetimeSeconds,
+		ShotSequence);
+
+	UGameplayStatics::FinishSpawningActor(
+		VisualProjectile,
+		SpawnTransform);
+
+	if (DRLocalProjectilePrediction::CVarDebug.GetValueOnGameThread() != 0)
+	{
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("[ProjectilePrediction][LOCAL_SPAWN] Shot=%u Weapon=%s Projectile=%s Origin=%s Velocity=%s Lifetime=%.3f"),
+			ShotSequence,
+			*GetNameSafe(WeaponDefinition),
+			*GetNameSafe(VisualProjectile),
+			*SpawnLocation.ToCompactString(),
+			*LaunchVelocity.ToCompactString(),
+			LifetimeSeconds);
+	}
+}
+
 bool UDRGA_FireProjectile::SpawnProjectile(
 	const FVector& SpawnLocation,
 	const FVector& LaunchVelocity,
 	AActor* AvatarActor,
 	UAbilitySystemComponent* AbilitySystem,
-	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs)
+	const TArray<FGameplayEffectSpecHandle>& ImpactEffectSpecs,
+	uint32 ShotSequence)
 {
 	const UDRProjectileWeaponItemDefinition* WeaponDefinition =
 		GetCurrentWeaponDefinition();
@@ -619,6 +818,8 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	{
 		return false;
 	}
+
+	Projectile->SetShotSequence(ShotSequence);
 
 	Projectile->InitializeProjectile(
 		AbilitySystem,

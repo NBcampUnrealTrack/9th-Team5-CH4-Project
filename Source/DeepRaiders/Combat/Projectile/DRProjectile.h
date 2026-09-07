@@ -31,6 +31,20 @@ public:
 	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
 	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
 
+	/** 서버 authoritative projectile과 owner local predicted projectile을 매칭하기 위한 sequence. */
+	void SetShotSequence(uint32 InShotSequence) { ShotSequence = InShotSequence; }
+	uint32 GetShotSequence() const { return ShotSequence; }
+
+	/**
+	 * Owning client 전용 local predicted visual projectile으로 설정한다.
+	 * Deferred Spawn 중 FinishSpawningActor() 전에만 호출한다.
+	 * Replication / Damage / Snow / GAS gameplay은 전부 사용하지 않는다.
+	 */
+	void ConfigureAsLocalVisualProjectile(
+		const FVector& InLaunchVelocity,
+		float LifetimeSeconds,
+		uint32 InShotSequence);
+
 	/** BarrierCollision Overlap에서 호출한다. 아군탄은 통과하고 적탄만 배리어에 충돌시킨다. */
 	void HandleBarrierOverlap(ADRBarrierGenerator* BarrierGenerator);
 	
@@ -48,6 +62,7 @@ public:
 protected:
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	
 	// ProjectileMovement가 Blocking Hit로 정지했을 때
@@ -64,7 +79,10 @@ protected:
 	// Projectile Effect가 적용된 플레이어에게 피격 Presentation Cue를 실행한다.
 	void ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
 	
-	bool ApplyBreakableDamage(AActor* Target);
+	bool ApplyBreakableDamage(const FHitResult& ImpactResult);
+	
+	// 기존 Explosion/Throwable 계열의 Actor 기반 호출 호환용.
+	bool ApplyBreakableDamage(AActor* TargetActor);
 	
 	// 같은 팀인지 검사
 	bool IsFriendlyTarget(const AActor* TargetActor) const;
@@ -113,6 +131,16 @@ private:
 	UFUNCTION()
 	void OnRep_SizeMultiplier();
 
+	UFUNCTION()
+	void OnRep_ShotSequence();
+
+	void RegisterLocalPrediction();
+	void UnregisterLocalPrediction();
+	void TryReconcileOwnerPrediction();
+	void ApplyOwnerServerProjectileVisibility(bool bVisible);
+
+	void HandleLocalPredictionConfirmTimeout();
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 	
@@ -130,7 +158,20 @@ private:
 	
 	int32 SourceTeamId = INDEX_NONE;
 	
-	bool bImpactHandled = false;	
+	bool bImpactHandled = false;
+
+	/** 이 인스턴스는 owner client가 만든 gameplay 없는 predicted visual proxy이다. */
+	bool bLocalVisualProjectile = false;
+
+	/** 대응하는 authoritative projectile replica가 owner client에 도착했는지 여부. */
+	bool bAuthoritativeConfirmed = false;
+	/**
+	 * 이 authoritative replica가 이미 owner prediction과
+	 * reconcile 되었는지 여부.
+	 *
+	 * BeginPlay + OnRep_ShotSequence 중복 호출 방지용.
+	 */
+	bool bOwnerPredictionReconciled = false;
 	
 	TWeakObjectPtr<UObject> PresentationSourceObject;
 
@@ -146,4 +187,7 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_SizeMultiplier)
 	uint8 ReplicatedSizeMultiplier = MAX_uint8;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ShotSequence)
+	uint32 ShotSequence = 0;
 };
