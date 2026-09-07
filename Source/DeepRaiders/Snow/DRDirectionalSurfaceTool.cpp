@@ -267,6 +267,16 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeVirtualSurfaceF
 					continue;
 				}
 
+				// A constant one-voxel backing creates a flat cylindrical side wall.
+				// Taper the virtual support with the same radial falloff as the snow
+				// footprint so its thickness collapses toward the patch boundary.
+				// This only clips virtual Add candidates; density math stays unchanged.
+				const float BackingDepth = VoxelWorld->VoxelSize * FalloffWeight;
+				if (bAdd && SignedWorldDistance < -BackingDepth)
+				{
+					continue;
+				}
+
 				FVoxelSurfaceEditsVoxel Voxel;
 				Voxel.Position = Position;
 				Voxel.Normal = SafeNormal;
