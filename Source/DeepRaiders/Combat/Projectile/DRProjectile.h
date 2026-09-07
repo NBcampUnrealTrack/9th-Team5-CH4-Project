@@ -64,7 +64,7 @@ protected:
 	// Projectile Effect가 적용된 플레이어에게 피격 Presentation Cue를 실행한다.
 	void ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult);
 	
-	bool ApplyBreakableDamage(const FHitResult& ImpactResult);
+	bool ApplyBreakableDamage(AActor* Target);
 	
 	// 같은 팀인지 검사
 	bool IsFriendlyTarget(const AActor* TargetActor) const;

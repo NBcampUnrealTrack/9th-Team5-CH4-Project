@@ -9,6 +9,7 @@
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 #include "DrawDebugHelpers.h"
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
 ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(CollisionComponentName))
@@ -105,7 +106,7 @@ void ADRCannonProjectile::HandleImpact(
 		}
 	}
 
-	ApplyBreakableDamage(ImpactResult);
+	ApplyBreakableDamage(ImpactResult.GetActor());
 
 	const FVector ExplosionLocation =
 		ImpactResult.ImpactPoint;
@@ -114,6 +115,7 @@ void ADRCannonProjectile::HandleImpact(
 
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQuery.AddObjectTypesToQuery(DRCollisionChannels::Breakable);
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRCannonExplosion), false);
 
@@ -145,7 +147,16 @@ void ADRCannonProjectile::HandleImpact(
 	for (const FOverlapResult& Overlap : OverlapResults)
 	{
 		AActor* TargetActor = Overlap.GetActor();
+		
+		// Breakable
+		if (ApplyBreakableDamage(TargetActor))
+		{
+			ExecuteImpactGameplayCue(ImpactResult);
 
+			Destroy();
+			return;
+		}
+		
 		if (!IsValid(TargetActor)
 			|| UniqueActors.Contains(TargetActor))
 		{

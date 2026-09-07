@@ -59,6 +59,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable")
 	TSubclassOf<ADRThrowableProjectile> ProjectileClass;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Effect", meta = (ClampMin = "0.0", UIMin = "0.0"))
+	float BreakableDamage = 1.f;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
 	FDRWeaponPresentationData ThrowPresentation;
 

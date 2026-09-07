@@ -4,6 +4,7 @@
 #include "DeepRaiders/Item/DRThrowableItemDefinition.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 #include "Engine/OverlapResult.h"
@@ -38,7 +39,7 @@ void ADRThrowableProjectile::InitializeThrowable(
 	InitializeProjectile(
 		InSourceAbilitySystem,
 		InImpactEffectSpecs,
-		0.f,
+		ThrowableItemDefinition->BreakableDamage,
 		ItemSettings.WorldImpactData,
 		InSourceTeamId,
 		InPresentationSourceObject);
@@ -62,6 +63,7 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
+	ObjectQuery.AddObjectTypesToQuery(DRCollisionChannels::Breakable);
 	
 	FCollisionQueryParams OverlapQuery(SCENE_QUERY_STAT(DRThrowableProjectile), false);
 	OverlapQuery.AddIgnoredActor(this);
@@ -134,6 +136,15 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		{
 			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::Occluded);
 			continue;
+		}
+		
+		// Breakable
+		if (ApplyBreakableDamage(TargetActor))
+		{
+			ExecuteImpactGameplayCue(ImpactResult);
+
+			Destroy();
+			return;
 		}
 		
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);

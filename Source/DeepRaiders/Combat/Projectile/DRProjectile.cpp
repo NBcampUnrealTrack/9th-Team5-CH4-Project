@@ -311,7 +311,7 @@ void ADRProjectile::HandleImpact(const FHitResult& ImpactResult)
 	if (IsValid(HitActor) && HitActor != GetOwner() && HitActor != GetInstigator())
 	{
 		// Breakable
-		if (ApplyBreakableDamage(ImpactResult))
+		if (ApplyBreakableDamage(HitActor))
 		{
 			ExecuteImpactGameplayCue(ImpactResult);
 
@@ -357,6 +357,7 @@ void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySyst
 		}
 
 		FGameplayEffectSpec ImpactSpec(*SpecHandle.Data.Get());
+		ImpactSpec.GetContext().AddOrigin(ImpactResult.ImpactPoint);
 		ImpactSpec.GetContext().AddHitResult(ImpactResult, true);
 		ScaleImpactSetByCallerMagnitude(ImpactSpec, DRGameplayTags::Data_Damage);
 		ScaleImpactSetByCallerMagnitude(ImpactSpec, DRGameplayTags::Data_Freeze_Amount);
@@ -403,9 +404,9 @@ void ADRProjectile::ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetA
 	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Snowball_Impact, Parameters);
 }
 
-bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
+bool ADRProjectile::ApplyBreakableDamage(AActor* Target)
 {
-	ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(ImpactResult.GetActor());
+	ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(Target);
 
 	if (!IsValid(BreakableTarget) 
 		|| BreakableTarget->IsBroken() 
@@ -420,12 +421,12 @@ bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
 	{
 		DamageDirection = GetActorForwardVector();
 	}
-
+	
 	const float AppliedDamage = UGameplayStatics::ApplyPointDamage(
 			BreakableTarget,
 			BreakableDamageAmount * CurrentFalloffStrength,
 			DamageDirection,
-			ImpactResult,
+			FHitResult(),
 			GetInstigatorController(),
 			this,
 			UDamageType::StaticClass());

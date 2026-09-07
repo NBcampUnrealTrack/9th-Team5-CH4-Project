@@ -3,7 +3,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
-#include  "Net/UnrealNetwork.h"
+#include "Net/UnrealNetwork.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
 ADRBreakableActor::ADRBreakableActor()
 {
@@ -14,7 +15,8 @@ ADRBreakableActor::ADRBreakableActor()
 	
 	BreakableMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BreakableMeshComponent"));
 	SetRootComponent(BreakableMeshComponent);
-	BreakableMeshComponent->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+	BreakableMeshComponent->SetCollisionProfileName(TEXT("DRBreakable"));
+	BreakableMeshComponent->SetCollisionObjectType(DRCollisionChannels::Breakable);
 	BreakableMeshComponent->SetSimulatePhysics(false);
 }
 
