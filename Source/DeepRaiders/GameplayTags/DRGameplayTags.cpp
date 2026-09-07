@@ -456,6 +456,11 @@ namespace DRGameplayTags
 		"Cooldown for the spear throw skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SpearThrow_FireInterval,
+		"Cooldown.Interval.SpearThrow",
+		"Minimum interval between stacked spear throws.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SlowProjectile,
 		"Cooldown.Skill.SlowProjectile",
 		"Cooldown for the slow projectile skill.");

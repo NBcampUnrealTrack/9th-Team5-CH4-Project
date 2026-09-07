@@ -14,7 +14,9 @@ public:
 		UAbilitySystemComponent* InSourceAbilitySystem,
 		const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
 		int32 InSourceTeamId,
-		float InKnockbackStrength);
+		float InKnockbackStrength,
+		float InInitialSpeed,
+		float InMaximumRange);
 
 protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;

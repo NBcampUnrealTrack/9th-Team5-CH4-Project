@@ -22,7 +22,9 @@ void UDRGA_BarrierSkill::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
+	FTransform SpawnTransform;
 	if (!IsValid(Character) || !BarrierGeneratorClass
+		|| !ResolveBarrierSpawnTransform(Character, SpawnTransform)
 		|| !CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -31,20 +33,45 @@ void UDRGA_BarrierSkill::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	if (ActorInfo->IsNetAuthority())
 	{
-		const float CapsuleHalfHeight = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-		const FVector SpawnLocation = Character->GetActorLocation() - FVector::UpVector * CapsuleHalfHeight;
-		const FTransform SpawnTransform(Character->GetActorRotation(), SpawnLocation);
-		ADRBarrierGenerator* Generator = Character->GetWorld()->SpawnActorDeferred<ADRBarrierGenerator>(
-			BarrierGeneratorClass, SpawnTransform, Character, Character,
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (!IsValid(Generator))
+		UWorld* World = Character->GetWorld();
+		ADRBarrierGenerator* BarrierGenerator = IsValid(World)
+			? World->SpawnActorDeferred<ADRBarrierGenerator>(
+			BarrierGeneratorClass,
+			SpawnTransform,
+			Character,
+			Character,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn)
+			: nullptr;
+		if (!IsValid(BarrierGenerator))
 		{
 			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 			return;
 		}
-		Generator->Initialize(Character, BarrierRadius, BarrierDuration, BarrierMaxHealth);
-		Generator->FinishSpawning(SpawnTransform);
+
+		BarrierGenerator->Initialize(
+			Character,
+			BarrierRadius,
+			BarrierDuration,
+			BarrierMaxHealth);
+		BarrierGenerator->FinishSpawning(SpawnTransform);
 	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+bool UDRGA_BarrierSkill::ResolveBarrierSpawnTransform(
+	ADRPlayerCharacter* Character,
+	FTransform& OutSpawnTransform) const
+{
+	if (!IsValid(Character))
+	{
+		return false;
+	}
+
+	const float CapsuleHalfHeight =
+		Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	const FVector SpawnLocation =
+		Character->GetActorLocation() - FVector::UpVector * CapsuleHalfHeight;
+	OutSpawnTransform = FTransform(Character->GetActorRotation(), SpawnLocation);
+	return true;
 }

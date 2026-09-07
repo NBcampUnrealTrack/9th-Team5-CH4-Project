@@ -25,7 +25,6 @@ public:
 protected:
 	virtual UGameplayEffect* GetCooldownGameplayEffect() const override;
 	virtual const FGameplayTagContainer* GetCooldownTags() const override;
-
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -48,6 +47,12 @@ protected:
 	ADRPlayerCharacter* GetPlayerCharacter(const FGameplayAbilityActorInfo* ActorInfo) const;
 	const UDRSkillDefinition* GetCurrentSkillDefinition() const;
 	FGameplayTag GetCooldownTag() const;
+	void ApplyCooldownTag(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		FGameplayTag CooldownTag,
+		float Duration) const;
 
 	/** 스킬 Commit 성공 뒤, 해당 스킬에 장착된 퍽의 사용 시 효과를 실행한다. */
 	void NotifySkillCommitted(

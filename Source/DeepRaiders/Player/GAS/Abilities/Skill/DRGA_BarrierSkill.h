@@ -20,6 +20,9 @@ protected:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
+	virtual bool ResolveBarrierSpawnTransform(
+		ADRPlayerCharacter* Character,
+		FTransform& OutSpawnTransform) const;
 
 	/** GA Blueprint에서 생성기 모양/VFX를 가진 Actor 클래스를 교체할 수 있다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Barrier")

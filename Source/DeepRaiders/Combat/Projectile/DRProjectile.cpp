@@ -189,7 +189,7 @@ void ADRProjectile::InitializeProjectile(
 	LaunchLocation = GetActorLocation();
 	EffectiveMaxRange = FMath::Max(InEffectiveMaxRange, 0.f);
 	FalloffSettings = InFalloffSettings;
-	SetActorTickEnabled(FalloffSettings.bEnabled && EffectiveMaxRange > KINDA_SMALL_NUMBER);
+	SetActorTickEnabled(EffectiveMaxRange > KINDA_SMALL_NUMBER);
 
 	// Deferred Spawn 내부에서 시작할 경우 FinishSpawning의 최초 충돌 등록이 BeginPlay보다 먼저다.
 	// 따라서 BP Profile에 저장된 값과 무관하게 이 시점에 Trace 전용 배리어를 Ignore해야 한다.
@@ -197,7 +197,7 @@ void ADRProjectile::InitializeProjectile(
 	CollisionComponent->SetGenerateOverlapEvents(true);
 
 	// 사거리 강화로 비행 시간이 기존 InitialLifeSpan을 넘더라도 먼저 제거되지 않게 한다.
-	if (FalloffSettings.bEnabled && EffectiveMaxRange > KINDA_SMALL_NUMBER)
+	if (EffectiveMaxRange > KINDA_SMALL_NUMBER)
 	{
 		const float ProjectileSpeed = FMath::Max(ProjectileMovement->InitialSpeed, 1.f);
 		InitialLifeSpan = FMath::Max(InitialLifeSpan, EffectiveMaxRange / ProjectileSpeed + 1.f);

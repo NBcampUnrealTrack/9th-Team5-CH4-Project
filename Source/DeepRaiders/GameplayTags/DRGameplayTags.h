@@ -113,6 +113,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_IceWall);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow_FireInterval);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Barrier);
 	

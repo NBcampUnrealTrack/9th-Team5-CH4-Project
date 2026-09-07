@@ -4,11 +4,13 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/GAS/Abilities/Skill/DRGA_StackedSpearThrowSkill.h"
 #include "DeepRaiders/Skill/Components/DRSkillComponent.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "GameplayAbilitySpec.h"
 #include "InputAction.h"
 #include "TimerManager.h"
 
@@ -42,7 +44,6 @@ void UDRSkillSlotViewModel::Initialize(
 	}
 
 	RefreshSkill();
-	RefreshCooldown();
 }
 
 void UDRSkillSlotViewModel::Deinitialize()
@@ -54,6 +55,10 @@ void UDRSkillSlotViewModel::Deinitialize()
 		SkillComponent->OnSkillChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleSkillChanged);
+	}
+	if (StackedSpearAbility.IsValid())
+	{
+		StackedSpearAbility->GetStackChangedDelegate().RemoveAll(this);
 	}
 
 	if (AbilitySystemComponent.IsValid()
@@ -67,6 +72,7 @@ void UDRSkillSlotViewModel::Deinitialize()
 
 	PlayerCharacter.Reset();
 	AbilitySystemComponent.Reset();
+	StackedSpearAbility.Reset();
 	SkillComponent.Reset();
 	SkillSlot = EDRSkillSlot::Count;
 	CooldownTag = FGameplayTag();
@@ -78,12 +84,19 @@ void UDRSkillSlotViewModel::Deinitialize()
 	UE_MVVM_SET_PROPERTY_VALUE(CooldownText, FText::GetEmpty());
 	UE_MVVM_SET_PROPERTY_VALUE(CooldownRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(IsOnCooldown, false);
+	UE_MVVM_SET_PROPERTY_VALUE(StackText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(IsStackVisible, false);
 	UE_MVVM_SET_PROPERTY_VALUE(IsVisible, false);
 }
 
 void UDRSkillSlotViewModel::HandleSkillChanged()
 {
 	RefreshSkill();
+}
+
+void UDRSkillSlotViewModel::HandleStackChanged()
+{
+	RefreshStack();
 }
 
 void UDRSkillSlotViewModel::HandleCooldownTagChanged(FGameplayTag, int32)
@@ -100,7 +113,9 @@ void UDRSkillSlotViewModel::RefreshSkill()
 	const FGameplayTag NewCooldownTag = IsSkillEquipped
 		? SkillDefinition->CooldownTag
 		: FGameplayTag();
+	UpdateStackAbility(SkillDefinition);
 	UpdateCooldownTag(NewCooldownTag);
+	RefreshStack();
 
 	UE_MVVM_SET_PROPERTY_VALUE(
 		Icon,
@@ -230,6 +245,45 @@ void UDRSkillSlotViewModel::RefreshCooldown()
 	else
 	{
 		StopCooldownTimer();
+	}
+}
+
+void UDRSkillSlotViewModel::RefreshStack()
+{
+	const bool IsNewStackVisible = StackedSpearAbility.IsValid();
+	const FText NewStackText = IsNewStackVisible
+		? FText::Format(
+			NSLOCTEXT("DRSkillSlot", "StackCount", "{0}/{1}"),
+			StackedSpearAbility->GetCurrentStackCount(),
+			StackedSpearAbility->GetMaximumStackCount())
+		: FText::GetEmpty();
+
+	UE_MVVM_SET_PROPERTY_VALUE(StackText, NewStackText);
+	UE_MVVM_SET_PROPERTY_VALUE(IsStackVisible, IsNewStackVisible);
+}
+
+void UDRSkillSlotViewModel::UpdateStackAbility(
+	const UDRSkillDefinition* SkillDefinition)
+{
+	if (StackedSpearAbility.IsValid())
+	{
+		StackedSpearAbility->GetStackChangedDelegate().RemoveAll(this);
+	}
+
+	const FGameplayAbilitySpec* AbilitySpec = AbilitySystemComponent.IsValid()
+		&& IsValid(SkillDefinition)
+		? AbilitySystemComponent->FindAbilitySpecFromClass(
+			TSubclassOf<UGameplayAbility>(SkillDefinition->SkillAbility.Get()))
+		: nullptr;
+	StackedSpearAbility = AbilitySpec != nullptr
+		? Cast<UDRGA_StackedSpearThrowSkill>(AbilitySpec->GetPrimaryInstance())
+		: nullptr;
+
+	if (StackedSpearAbility.IsValid())
+	{
+		StackedSpearAbility->GetStackChangedDelegate().AddUObject(
+			this,
+			&ThisClass::HandleStackChanged);
 	}
 }
 
