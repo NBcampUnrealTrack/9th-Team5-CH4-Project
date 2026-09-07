@@ -8,6 +8,27 @@
 
 class UDRGA_CharacterSkillBase;
 
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRSkillDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString DisplayName;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CooldownDuration = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRSkillSlot SkillSlot = EDRSkillSlot::One;
+};
+
 /** 지정된 슬롯에 장착할 스킬 정의다. */
 UCLASS(
 	BlueprintType,

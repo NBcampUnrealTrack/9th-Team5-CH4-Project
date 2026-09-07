@@ -43,6 +43,67 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAddSettings
 	bool bAllowVirtualSurfaceFallback = true;
 };
 
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRProjectileWeaponResourceType ResourceType = EDRProjectileWeaponResourceType::SnowGauge;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowCostPerShot = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 InitialAmmo = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float BaseFireInterval = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bAutomaticFire = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MaxAttackDistance = 10000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float NoHitAimDistance = 3000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float BreakableDamage = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 ProjectileCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SpreadHalfAngleDegrees = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bFalloffEnabled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float FullStrengthRangeRatio = 0.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MinSizeMultiplier = 0.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bCanPenetrateTargets = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bSnowAddEnabled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAddRadius = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAddAmount = 1.f;
+	
+};
+
 UCLASS(BlueprintType)
 class DEEPRAIDERS_API UDRProjectileWeaponItemDefinition : public UDRRangedWeaponDefinition
 {

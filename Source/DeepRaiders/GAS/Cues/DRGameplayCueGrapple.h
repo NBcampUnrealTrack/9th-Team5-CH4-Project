@@ -81,7 +81,7 @@ private:
 	TObjectPtr<UNiagaraComponent> HookNiagaraComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
-	FName LaunchSocketName = TEXT("VFXPoint");
+	FName LaunchSocketName = TEXT("S_HandGrip_R");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
 	FName SkillLaunchSocketName = TEXT("S_HandGrip_R");
