@@ -3,6 +3,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRPlayerAttributeSet::UDRPlayerAttributeSet()
@@ -11,6 +12,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitHealth(100.f);
 	InitShield(0.f);
 	InitIncomingShield(0.f);
+	InitIncomingKnockbackDistance(0.f);
 
 	InitFreezeGauge(0.f);
 
@@ -240,6 +242,10 @@ void UDRPlayerAttributeSet::ClampAttributeValue(const FGameplayAttribute& Attrib
 	{
 		NewValue = FMath::Max(NewValue, 0.f);
 	}
+	else if (Attribute == GetIncomingKnockbackDistanceAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
+	}
 	else if (Attribute == GetDamageReductionAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, 0.95f);
@@ -315,6 +321,29 @@ bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackD
 void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
+
+	if (Data.EvaluatedData.Attribute == GetIncomingKnockbackDistanceAttribute())
+	{
+		const float KnockbackDistance = GetIncomingKnockbackDistance();
+		SetIncomingKnockbackDistance(0.f);
+
+		const FGameplayEffectContextHandle& EffectContext = Data.EffectSpec.GetContext();
+		UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+		ADRPlayerCharacter* TargetCharacter = IsValid(TargetASC)
+			? Cast<ADRPlayerCharacter>(TargetASC->GetAvatarActor())
+			: nullptr;
+
+		if (KnockbackDistance <= KINDA_SMALL_NUMBER
+			|| !EffectContext.HasOrigin()
+			|| !IsValid(TargetCharacter)
+			|| !TargetCharacter->HasAuthority())
+		{
+			return;
+		}
+
+		TargetCharacter->ApplyKnockback(EffectContext.GetOrigin(), KnockbackDistance);
+		return;
+	}
 
 	if (Data.EvaluatedData.Attribute == GetIncomingShieldAttribute())
 	{

@@ -121,6 +121,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Freeze_Amount);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Distance);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);

@@ -36,6 +36,7 @@ public:
 	
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingShield)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingKnockbackDistance)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
 	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
 
@@ -73,6 +74,8 @@ protected:
 	FGameplayAttributeData IncomingDamage;
 	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
 	FGameplayAttributeData IncomingShield;
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
+	FGameplayAttributeData IncomingKnockbackDistance;
 
 	/** 0.0~0.95 범위의 받는 피해 감소 비율이다. 0.5는 50% 감소를 뜻한다. */
 	UPROPERTY(

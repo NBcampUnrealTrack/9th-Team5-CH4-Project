@@ -352,7 +352,7 @@ namespace ItemParser
 	bool ValidateRowValues(const FDRMeleeWeaponDataTableRow& Row, FParseReport& Report, const int32 RowIndex)
 	{
 		bool bValid = ValidateRowName(Row.RowName, Report, RowIndex);
-		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("BaseDamage"), Row.BaseDamage, 0.f);
+		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("BreakableDamage"), Row.BreakableDamage, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SweepRadius"), Row.SweepRadius, 0.f);
 		return bValid;
 	}
@@ -488,7 +488,7 @@ namespace ItemParser
 
 	void ApplyMeleeWeaponFields(UDRMeleeWeaponItemDefinition& Definition, const FDRMeleeWeaponDataTableRow& Row)
 	{
-		Definition.BaseDamage = Row.BaseDamage;
+		Definition.BreakableDamage = Row.BreakableDamage;
 		Definition.SweepRadius = Row.SweepRadius;
 	}
 

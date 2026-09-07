@@ -25,6 +25,7 @@ public:
 	void HandleControllerReady();
 
 	void BindAbilitySystem(UAbilitySystemComponent* ASC);
+	void ApplyRagdollKnockback(const FVector& Origin, float Distance);
 	
 private:
 	ADRPlayerCharacter* GetOwnerCharacter() const;
@@ -39,6 +40,9 @@ private:
 	void HandleDeathFromServer();
 	void ApplyDeathRagdoll();
 	void ClearDeathRagdollPresentation();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastApplyRagdollKnockback(FVector_NetQuantizeNormal Direction, float VelocityChange);
 
 	void HandleDeadTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 
@@ -64,6 +68,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn")
 	FName RespawnRagdollBoneName = TEXT("pelvis");
+
+	/** 넉백 거리(cm)를 래그돌 전체에 적용할 속도 변화(cm/s)로 변환한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Death", meta = (ClampMin = "0.0"))
+	float RagdollKnockbackVelocityScale = 4.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn", meta = (ClampMin = "0.0", Units = "cm"))
 	float RespawnGroundTraceDistance = 2000.f;

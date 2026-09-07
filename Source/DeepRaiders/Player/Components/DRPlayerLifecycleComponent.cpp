@@ -237,6 +237,55 @@ void UDRPlayerLifecycleComponent::ApplyDeathRagdoll()
 	}
 }
 
+void UDRPlayerLifecycleComponent::ApplyRagdollKnockback(const FVector& Origin, float Distance)
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	if (!IsValid(Character)
+		|| !Character->HasAuthority()
+		|| !Character->IsDead()
+		|| Distance <= KINDA_SMALL_NUMBER
+		|| Origin.ContainsNaN())
+	{
+		return;
+	}
+
+	FVector Direction = Character->GetActorLocation() - Origin;
+	if (!Direction.Normalize())
+	{
+		Direction = Character->GetActorForwardVector().GetSafeNormal();
+	}
+
+	const float VelocityChange = Distance * FMath::Max(RagdollKnockbackVelocityScale, 0.f);
+	if (Direction.IsNearlyZero() || VelocityChange <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	MulticastApplyRagdollKnockback(Direction, VelocityChange);
+}
+
+void UDRPlayerLifecycleComponent::MulticastApplyRagdollKnockback_Implementation(
+	FVector_NetQuantizeNormal Direction,
+	float VelocityChange)
+{
+	ApplyDeathRagdoll();
+
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	USkeletalMeshComponent* CharacterMesh = IsValid(Character) ? Character->GetMesh() : nullptr;
+	if (!IsValid(CharacterMesh)
+		|| !CharacterMesh->IsSimulatingPhysics()
+		|| VelocityChange <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	CharacterMesh->AddImpulseToAllBodiesBelow(
+		FVector(Direction).GetSafeNormal() * VelocityChange,
+		RespawnRagdollBoneName,
+		true,
+		true);
+}
+
 void UDRPlayerLifecycleComponent::ClearDeathRagdollPresentation()
 {
 	if (!bDeathRagdollApplied)

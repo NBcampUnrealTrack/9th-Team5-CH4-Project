@@ -224,6 +224,30 @@ bool ADRPlayerCharacter::IsDead() const
 	return IsValid(ASC) && ASC->HasMatchingGameplayTag(DRGameplayTags::State_Dead);
 }
 
+void ADRPlayerCharacter::ApplyKnockback(const FVector& Origin, float Distance)
+{
+	if (!HasAuthority() || Distance <= KINDA_SMALL_NUMBER || Origin.ContainsNaN())
+	{
+		return;
+	}
+
+	if (IsDead())
+	{
+		if (IsValid(PlayerLifecycleComponent))
+		{
+			PlayerLifecycleComponent->ApplyRagdollKnockback(Origin, Distance);
+		}
+
+		return;
+	}
+
+	if (UDRCharacterMovementComponent* Movement =
+		Cast<UDRCharacterMovementComponent>(GetCharacterMovement()))
+	{
+		Movement->ApplyKnockback(Origin, Distance);
+	}
+}
+
 float ADRPlayerCharacter::GetMaxHealth() const
 {
 	const UDRPlayerAttributeSet* Attributes = GetPlayerAttributeSet();

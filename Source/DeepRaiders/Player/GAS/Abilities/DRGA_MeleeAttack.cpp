@@ -58,7 +58,11 @@ void UDRGA_MeleeAttack::ActivateAbility(
 	UDRMeleeWeaponItemDefinition* WeaponDefinition = Cast<UDRMeleeWeaponItemDefinition>(GetSourceObject(Handle, ActorInfo));
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
 
-	if (!IsValid(WeaponDefinition) || !IsValid(Character) || !WeaponDefinition->DamageEffectClass || !IsValid(WeaponDefinition->ItemAnimationSet) || !IsValid(WeaponDefinition->ItemAnimationSet->PrimaryActionMontage))
+	if (!IsValid(WeaponDefinition)
+		|| !IsValid(Character)
+		|| WeaponDefinition->ImpactEffects.IsEmpty()
+		|| !IsValid(WeaponDefinition->ItemAnimationSet)
+		|| !IsValid(WeaponDefinition->ItemAnimationSet->PrimaryActionMontage))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 
@@ -152,7 +156,7 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 	if (ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(HitActor))
 	{
 		if (BreakableTarget->IsBroken()
-			|| WeaponDefinition->BaseDamage <= 0.f)
+			|| WeaponDefinition->BreakableDamage <= 0.f)
 		{
 			return;
 		}
@@ -164,7 +168,7 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 			DamageDirection = Attacker->GetActorForwardVector();
 		}
 		
-		const float AppliedDamage = UGameplayStatics::ApplyPointDamage(BreakableTarget, WeaponDefinition->BaseDamage,
+		const float AppliedDamage = UGameplayStatics::ApplyPointDamage(BreakableTarget, WeaponDefinition->BreakableDamage,
 			DamageDirection, HitResult, Attacker->GetController(), Attacker, UDamageType::StaticClass());
 		
 		if (AppliedDamage > KINDA_SMALL_NUMBER)
@@ -228,30 +232,50 @@ void UDRGA_MeleeAttack::HandleMeleeHit(const FHitResult& HitResult)
 		return;
 	}
 
-	const float DamageAmount = bTargetFrozen
-		                           // Frozen Enemy = Execute
-		                           ? Target->GetCurrentHealth()
-
-		                           // Normal Enemy
-		                           : WeaponDefinition->BaseDamage;
-
-	if (DamageAmount <= 0.f)
-	{
-		return;
-	}
-
 	const float HealthBefore = Target->GetCurrentHealth();
-	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-	Context.AddSourceObject(WeaponDefinition);
-
-	FGameplayEffectSpecHandle DamageSpec = SourceASC->MakeOutgoingSpec(WeaponDefinition->DamageEffectClass, GetAbilityLevel(), Context);
-	if (!DamageSpec.IsValid())
+	for (const FDRGameplayEffectData& EffectData : WeaponDefinition->ImpactEffects)
 	{
-		return;
+		if (!EffectData.EffectClass)
+		{
+			continue;
+		}
+
+		FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
+		EffectContext.AddSourceObject(WeaponDefinition);
+		EffectContext.AddOrigin(Attacker->GetActorLocation());
+		EffectContext.AddHitResult(HitResult, true);
+
+		FGameplayEffectSpecHandle EffectSpec = SourceASC->MakeOutgoingSpec(
+			EffectData.EffectClass,
+			EffectData.EffectLevel,
+			EffectContext);
+		if (!EffectSpec.IsValid())
+		{
+			continue;
+		}
+
+		for (const TPair<FGameplayTag, float>& Magnitude : EffectData.SetByCallerMagnitudes)
+		{
+			if (Magnitude.Key.IsValid())
+			{
+				const float Value = bTargetFrozen && Magnitude.Key == DRGameplayTags::Data_Damage
+					? HealthBefore
+					: Magnitude.Value;
+				EffectSpec.Data->SetSetByCallerMagnitude(Magnitude.Key, Value);
+			}
+		}
+
+		const bool bRequiresHealthDamage =
+			EffectData.SetByCallerMagnitudes.Contains(DRGameplayTags::Data_Damage);
+		const float HealthBeforeEffect = Target->GetCurrentHealth();
+		SourceASC->ApplyGameplayEffectSpecToTarget(*EffectSpec.Data.Get(), TargetASC);
+		if (bRequiresHealthDamage
+			&& HealthBeforeEffect - Target->GetCurrentHealth() <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
 	}
 
-	DamageSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Damage, DamageAmount);
-	SourceASC->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
 	const float AppliedDamage = FMath::Max(0.f, HealthBefore - Target->GetCurrentHealth());
 	if (AppliedDamage <= KINDA_SMALL_NUMBER)
 	{

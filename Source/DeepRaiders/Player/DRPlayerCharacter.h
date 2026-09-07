@@ -66,6 +66,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Health")
 	bool IsDead() const;
 
+	/** 서버에서 확정된 넉백을 현재 생존 상태에 맞는 이동 또는 래그돌 반응으로 전달한다. */
+	void ApplyKnockback(const FVector& Origin, float Distance);
+
 	virtual void Landed(const FHitResult& Hit) override;
 
 	/** 서버에서 기록한 가장 최근 착지 위치를 반환한다. */

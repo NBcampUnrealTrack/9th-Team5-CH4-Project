@@ -9,6 +9,7 @@
 class FSavedMove_DRCharacter;
 class AVoxelWorld;
 class UAbilitySystemComponent;
+class UCurveFloat;
 struct FOnAttributeChangeData;
 
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FDRCharacterMovementUpdated, float, const FVector&, const FVector&);
@@ -86,6 +87,9 @@ public:
 	{
 		return bAirborneMomentumPreservationActive;
 	}
+
+	/** 현재 속도를 대체하고 Origin 반대 방향으로 지정된 거리만큼 이동한다. */
+	bool ApplyKnockback(const FVector& Origin, float Distance);
 	
 	// 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
 	void SetCustomMovementMode(EDRCustomMovementMode NewMode);
@@ -123,6 +127,10 @@ protected:
 
 	virtual void PhysCustom(float deltaTime, int32 Iterations) override;
 
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "KnockBack")
+	TObjectPtr<UCurveFloat> KnockBackCurve;
+	
 private:
 	void UnbindAbilitySystem();
 	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
@@ -179,6 +187,11 @@ private:
  	*/
 	bool bAirborneMomentumPreservationActive = false;
 	float PreservedLateralSpeed = 0.f;
+
+	/** 충돌하지 않은 넉백이 목표 위치에 도달하는 데 사용할 고정 시간이다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Knockback",
+		meta = (AllowPrivateAccess = "true", ClampMin = "0.01", Units = "s"))
+	float KnockbackDuration = 0.2f;
 	
 	/** 현재 출력 상승 진행 시간 */
 	float JetpackSpoolElapsed = 0.f;
@@ -206,6 +219,6 @@ private:
 	/** 제트팩 사용 중 최대 상승 속도 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Jetpack", meta = ( AllowPrivateAccess = "true", ClampMin = "0.0", Units = "cm/s"))
 	float MaxJetpackRiseSpeed = 900.f;
-
+	
 	friend class FSavedMove_DRCharacter;
 };

@@ -11,6 +11,7 @@
 #include "VoxelWorld.h"
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/RootMotionSource.h"
 #include "Components/StaticMeshComponent.h"
 
 namespace
@@ -802,6 +803,76 @@ void UDRCharacterMovementComponent::ClearAirborneMomentumPreservation()
 {
     bAirborneMomentumPreservationActive = false;
     PreservedLateralSpeed = 0.f;
+}
+
+bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float Distance)
+{
+	if (!IsValid(CharacterOwner)
+		|| !CharacterOwner->HasAuthority()
+		|| Distance <= KINDA_SMALL_NUMBER
+		|| Origin.ContainsNaN()
+		|| MovementMode == MOVE_None
+		|| IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+	{
+		return false;
+	}
+
+	FVector KnockbackDirection = CharacterOwner->GetActorLocation() - Origin;
+	if (!KnockbackDirection.Normalize())
+	{
+		KnockbackDirection = CharacterOwner->GetActorForwardVector().GetSafeNormal();
+	}
+
+	if (KnockbackDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	if (UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
+		IsValid(MovementAction) && MovementAction->IsMovementActionActive())
+	{
+		MovementAction->EndMovementAction(EDRMovementActionEndReason::Cancelled);
+	}
+
+	if (IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+	{
+		ExitCustomMovementMode();
+	}
+
+	if (BoundAbilitySystemComponent.IsValid())
+	{
+		FGameplayTagContainer InterruptedAbilityTags;
+		InterruptedAbilityTags.AddTag(DRGameplayTags::Ability_Skill_CombatRoll);
+		BoundAbilitySystemComponent->CancelAbilities(&InterruptedAbilityTags);
+	}
+
+	static const FName KnockbackRootMotionSourceName(TEXT("DRKnockback"));
+	RemoveRootMotionSource(KnockbackRootMotionSourceName);
+
+	StopMovementImmediately();
+	ClearAccumulatedForces();
+	ClearAirborneMomentumPreservation();
+
+	const FVector StartLocation = CharacterOwner->GetActorLocation();
+	TSharedPtr<FRootMotionSource_MoveToDynamicForce> KnockbackSource =
+		MakeShared<FRootMotionSource_MoveToDynamicForce>();
+	KnockbackSource->InstanceName = KnockbackRootMotionSourceName;
+	KnockbackSource->Priority = 1000;
+	KnockbackSource->AccumulateMode = ERootMotionAccumulateMode::Override;
+	KnockbackSource->Duration = FMath::Max(KnockbackDuration, 0.01f);
+	KnockbackSource->StartLocation = StartLocation;
+	KnockbackSource->InitialTargetLocation = StartLocation + KnockbackDirection * Distance;
+	KnockbackSource->TargetLocation = KnockbackSource->InitialTargetLocation;
+	KnockbackSource->bRestrictSpeedToExpected = true;
+	KnockbackSource->TimeMappingCurve = IsValid(KnockBackCurve) ?
+        KnockBackCurve.Get() : UCurveFloat::StaticClass()->GetDefaultObject<UCurveFloat>();
+	KnockbackSource->Settings.SetFlag(ERootMotionSourceSettingsFlags::UseSensitiveLiftoffCheck);
+	KnockbackSource->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+	KnockbackSource->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+
+	ApplyRootMotionSource(KnockbackSource);
+	CharacterOwner->ForceNetUpdate();
+	return true;
 }
 
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)

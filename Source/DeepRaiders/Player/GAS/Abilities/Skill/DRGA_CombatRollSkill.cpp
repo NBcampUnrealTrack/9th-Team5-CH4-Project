@@ -11,6 +11,11 @@
 
 UDRGA_CombatRollSkill::UDRGA_CombatRollSkill()
 {
+	FGameplayTagContainer CombatRollAbilityTags;
+	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
+	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Skill_CombatRoll);
+	SetAssetTags(CombatRollAbilityTags);
+
 	// 발사 입력을 누르고 있는 중에도 구르기는 발동해야 한다.
 	// 구르기 시작 시 유지 중인 총격 Ability를 종료한다.
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Ranged);

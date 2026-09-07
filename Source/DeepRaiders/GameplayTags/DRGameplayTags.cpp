@@ -511,6 +511,11 @@ namespace DRGameplayTags
 		"Damage amount passed through GAS.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Knockback_Distance,
+		"Data.Knockback.Distance",
+		"Target displacement requested by an instant knockback GameplayEffect.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Health_Heal,
 		"Data.Health.Heal",
 		"Health Heal amount passed through GAS.");
