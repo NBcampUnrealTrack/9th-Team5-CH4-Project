@@ -536,7 +536,8 @@ bool FDRSnowSurfaceEditor::AddDirectionalSnowAtAreaAsync(
 			Request.Radius,
 			SnowSurfaceFalloff,
 			Request.Amount,
-			true);
+			true,
+			Request.VirtualSurfaceSupportMask);
 	}
 
 	const double FootprintMs = bMeasure ? (FPlatformTime::Seconds() - FootprintStart) * 1000.0 : 0.0;

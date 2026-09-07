@@ -89,6 +89,19 @@ bool FDRSnowOperationRecord::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& 
 			{
 				SerializeVector(Op.SurfaceNormal);
 			}
+			if (Op.bUseVirtualSurface)
+			{
+				bool bHasSupportMask = Op.VirtualSurfaceSupportMask != 0;
+				SerializeFlag(Ar, bHasSupportMask);
+				if (bHasSupportMask)
+				{
+					Ar << Op.VirtualSurfaceSupportMask;
+				}
+				else if (Ar.IsLoading())
+				{
+					Op.VirtualSurfaceSupportMask = 0;
+				}
+			}
 			SerializeOptionalFloat(Ar, ServerAppliedAmount, Op.Amount);
 		}
 		else if (Ar.IsLoading())

@@ -1,5 +1,5 @@
 #include "DRDirectionalSurfaceTool.h"
-
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "VoxelAsyncWork.h"
 #include "VoxelData/VoxelDataImpl.inl"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
@@ -211,7 +211,8 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeVirtualSurfaceF
 	float Radius,
 	float Falloff,
 	float Strength,
-	bool bAdd)
+	bool bAdd,
+	const int64 VirtualSurfaceSupportMask)
 {
 	FVoxelSurfaceEditsProcessedVoxels Result;
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || Radius <= 0.f || Strength <= 0.f)
@@ -223,6 +224,14 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeVirtualSurfaceF
 	if (SafeNormal.IsNearlyZero())
 	{
 		return Result;
+	}
+
+	FVector SupportTangent;
+	FVector SupportBitangent;
+	const uint64 SupportMask = static_cast<uint64>(VirtualSurfaceSupportMask);
+	if (SupportMask != 0)
+	{
+		DRSnowVirtualSurfaceSupport::BuildBasis(SafeNormal, SupportTangent, SupportBitangent);
 	}
 
 	const float ShellWorldThickness = FMath::Max(VoxelWorld->VoxelSize, VoxelWorld->VoxelSize * Strength);
@@ -254,6 +263,24 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::MakeVirtualSurfaceF
 				if (PlanarDistance > Radius)
 				{
 					continue;
+				}
+
+				if (SupportMask != 0)
+				{
+					constexpr int32 Resolution = DRSnowVirtualSurfaceSupport::Resolution;
+					const float NormalizedX = FVector::DotProduct(PlanarDelta, SupportTangent) / Radius;
+					const float NormalizedY = FVector::DotProduct(PlanarDelta, SupportBitangent) / Radius;
+					const int32 MaskX = FMath::Clamp(
+						FMath::RoundToInt((NormalizedX * 0.5f + 0.5f) * (Resolution - 1)),
+						0, Resolution - 1);
+					const int32 MaskY = FMath::Clamp(
+						FMath::RoundToInt((NormalizedY * 0.5f + 0.5f) * (Resolution - 1)),
+						0, Resolution - 1);
+					const uint64 Bit = uint64(1) << DRSnowVirtualSurfaceSupport::GetBitIndex(MaskX, MaskY);
+					if ((SupportMask & Bit) == 0)
+					{
+						continue;
+					}
 				}
 
 				const float FalloffStart = Radius * FMath::Clamp(Falloff, 0.f, 1.f);

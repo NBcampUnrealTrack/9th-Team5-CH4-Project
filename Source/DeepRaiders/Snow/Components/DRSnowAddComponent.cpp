@@ -1,6 +1,7 @@
 #include "DRSnowAddComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Interface/DRSnowInteractableInterface.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
@@ -9,6 +10,70 @@
 
 namespace
 {
+int64 BuildStaticMeshSupportMask(const FHitResult& HitResult, const float Radius, const float VoxelSize)
+{
+	UStaticMeshComponent* HitMesh = Cast<UStaticMeshComponent>(HitResult.GetComponent());
+	const FVector Normal = HitResult.ImpactNormal.GetSafeNormal();
+	if (!IsValid(HitMesh) || !HitResult.bBlockingHit || Radius <= 0.f || Normal.IsNearlyZero())
+	{
+		return 0;
+	}
+
+	FVector Tangent;
+	FVector Bitangent;
+	DRSnowVirtualSurfaceSupport::BuildBasis(Normal, Tangent, Bitangent);
+	if (Tangent.IsNearlyZero() || Bitangent.IsNearlyZero())
+	{
+		return 0;
+	}
+
+	constexpr int32 Resolution = DRSnowVirtualSurfaceSupport::Resolution;
+	const float SampleStep = (Radius * 2.f) / static_cast<float>(Resolution - 1);
+	// Short component-local complex traces clip to the hit mesh silhouette without
+	// accidentally accepting nearby actors or the fallback VoxelWorld.
+	const float TraceHalfDepth = FMath::Max(10.f, VoxelSize * 2.f);
+	constexpr float MinAlignedNormalDot = 0.75f;
+	FCollisionQueryParams QueryParams;
+	QueryParams.bTraceComplex = true;
+
+	uint64 Mask = 0;
+	for (int32 Y = 0; Y < Resolution; ++Y)
+	{
+		const float PlaneY = -Radius + SampleStep * Y;
+		for (int32 X = 0; X < Resolution; ++X)
+		{
+			const float PlaneX = -Radius + SampleStep * X;
+
+			const FVector SamplePoint =
+				HitResult.ImpactPoint +
+				Tangent * PlaneX +
+				Bitangent * PlaneY;
+			FHitResult SupportHit;
+			if (!HitMesh->LineTraceComponent(
+				SupportHit,
+				SamplePoint + Normal * TraceHalfDepth,
+				SamplePoint - Normal * TraceHalfDepth,
+				QueryParams))
+			{
+				continue;
+			}
+
+			const FVector SupportNormal = SupportHit.ImpactNormal.GetSafeNormal();
+			if (SupportNormal.IsNearlyZero() || FVector::DotProduct(SupportNormal, Normal) < MinAlignedNormalDot)
+			{
+				continue;
+			}
+
+			Mask |= uint64(1) << DRSnowVirtualSurfaceSupport::GetBitIndex(X, Y);
+		}
+	}
+
+	// The original blocking hit is authoritative for the center sample.
+	const int32 Center = Resolution / 2;
+	Mask |= uint64(1) << DRSnowVirtualSurfaceSupport::GetBitIndex(Center, Center);
+	return static_cast<int64>(Mask);
+}
+
 FDRSnowAddOperation MakeSnowAddOperation(const FDRSnowSurfaceAddRequest& Request)
 {
 	FDRSnowAddOperation Operation;
@@ -22,6 +87,7 @@ FDRSnowAddOperation MakeSnowAddOperation(const FDRSnowSurfaceAddRequest& Request
 	Operation.EditTool = Request.EditTool;
 	Operation.bAllowVirtualSurfaceFallback = Request.bAllowVirtualSurfaceFallback;
 	Operation.bUseVirtualSurface = Request.bUseVirtualSurface;
+	Operation.VirtualSurfaceSupportMask = Request.VirtualSurfaceSupportMask;
 	Operation.TeamId = Request.Context.TeamId;
 	Operation.VoxelWorldName = IsValid(Request.TargetVoxelWorld.Get())
 		? Request.TargetVoxelWorld->GetFName()
@@ -51,6 +117,13 @@ bool UDRSnowAddComponent::TryAddSnowFromHit(
 	{
 		Request.TargetVoxelWorld = ResolveFallbackVoxelWorld();
 		Request.bUseVirtualSurface = Request.bAllowVirtualSurfaceFallback;
+		if (Request.bUseVirtualSurface &&
+			Request.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool &&
+			IsValid(Request.TargetVoxelWorld.Get()))
+		{
+			Request.VirtualSurfaceSupportMask = BuildStaticMeshSupportMask(
+				HitResult, Request.Radius, Request.TargetVoxelWorld->VoxelSize);
+		}
 	}
 
 	return ExecuteAddRequest(Request, GetInteractableActorFromHit(HitResult));

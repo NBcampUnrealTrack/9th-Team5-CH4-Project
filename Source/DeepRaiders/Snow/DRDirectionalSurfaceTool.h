@@ -86,7 +86,8 @@ public:
 		float Radius,
 		float Falloff,
 		float Strength,
-		bool bAdd);
+		bool bAdd,
+		int64 VirtualSurfaceSupportMask = 0);
 
 	// Apply all direction-compatible processed samples, including sub-voxel
 	// changes that do not cross zero. Preserve the stable v1.2 accumulation rule.

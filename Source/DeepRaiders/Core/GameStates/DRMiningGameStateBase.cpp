@@ -931,6 +931,7 @@ bool ADRMiningGameStateBase::ApplySnowAddOnce(const FDRSnowOperationRecord& Reco
 	Request.EditTool = Operation.EditTool;
 	Request.bAllowVirtualSurfaceFallback = Operation.bAllowVirtualSurfaceFallback;
 	Request.bUseVirtualSurface = Operation.bUseVirtualSurface;
+	Request.VirtualSurfaceSupportMask = Operation.VirtualSurfaceSupportMask;
 	Request.Context.TeamId = Operation.TeamId;
 
 	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
