@@ -8,6 +8,7 @@
 #include "DRTurret.generated.h"
 
 class UAbilitySystemComponent;
+class UDRProjectileWeaponItemDefinition;
 class ADRPlayerState;
 class ADRProjectile;
 class APawn;
@@ -19,6 +20,10 @@ struct DEEPRAIDERS_API FDRTurretWeaponSettings
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon")
 	TSubclassOf<ADRProjectile> ProjectileClass;
+
+	/** 피격 VFX와 사운드 조회에만 사용하는 무기 Definition이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon")
+	TObjectPtr<UDRProjectileWeaponItemDefinition> ProjectilePresentationDefinition;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon",
 		meta = (ClampMin = "0.01", Units = "s"))
@@ -66,6 +71,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Turret")
 	bool IsInstalledBy(const ADRPlayerState* PlayerState) const;
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayFirePresentation(
+		UDRProjectileWeaponItemDefinition* PresentationDefinition,
+		FVector_NetQuantize FireLocation,
+		FRotator FireRotation);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -91,6 +102,10 @@ private:
 	void UpdateTargetAndFire(float DeltaSeconds);
 	APawn* FindNearestEnemy() const;
 	bool FireAtTarget(APawn* TargetPawn);
+	bool ResolveProjectileLaunchVelocity(
+		const FVector& SpawnLocation,
+		const FVector& AimPoint,
+		FVector& OutLaunchVelocity) const;
 	void BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 	int32 GetCurrentOwnerTeamId() const;
 

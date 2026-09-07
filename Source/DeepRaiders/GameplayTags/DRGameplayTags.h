@@ -67,6 +67,8 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_ExtremeSlow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_AllySpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_StatBoost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_CannonProjectile);
 	
 	// Weapon Upgrade - Rifle
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
@@ -136,6 +138,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_HealthRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_FreezeGaugeRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_DamageBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_FireRateBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_RangeBonusRatio);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_DamageModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FireIntervalModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);
