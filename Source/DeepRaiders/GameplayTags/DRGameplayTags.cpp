@@ -231,6 +231,11 @@ namespace DRGameplayTags
 		"Deployable barrier skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Turret,
+		"Ability.Skill.Turret",
+		"Deployable turret skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
 		"Perk.Skill.Charges",
 		"Changes the equipped skill to use rechargeable charges.");
@@ -469,6 +474,11 @@ namespace DRGameplayTags
 		Cooldown_Skill_Barrier,
 		"Cooldown.Skill.Barrier",
 		"Cooldown for the deployable barrier skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Turret,
+		"Cooldown.Skill.Turret",
+		"Cooldown for the deployable turret skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,
