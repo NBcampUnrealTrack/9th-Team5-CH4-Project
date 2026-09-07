@@ -158,9 +158,10 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 	{
 		if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 		{
-			RemovedAmount = bUseAbsorbTool
-				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request).RemovedAmount
-				: SnowSubsystem->RemoveSnow(Request).RemovedAmount;
+			const FDRSnowRemoveResult RemoveResult = bUseAbsorbTool
+				? SnowSubsystem->RemoveSnowWithAbsorbTool(Request)
+				: SnowSubsystem->RemoveSnow(Request);
+			RemovedAmount = RemoveResult.RemovedAmount;
 			if (RemovedAmount > 0.f)
 			{
 				if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())

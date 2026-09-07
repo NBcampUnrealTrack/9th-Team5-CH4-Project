@@ -4,6 +4,34 @@
 #include "VoxelWorld.h"
 #include "DRSnowTypes.generated.h"
 
+// TeamId는 게임 규칙용 식별자이고 MaterialIndex는 Voxel 표현용 식별자다.
+// 현재 프로젝트의 고정 규칙(Neutral=0, Team N=N+1)을 한곳에서 관리한다.
+namespace DRSnowMaterialMapping
+{
+	FORCEINLINE uint8 TeamToMaterialIndex(const int32 TeamId)
+	{
+		if (TeamId == INDEX_NONE)
+		{
+			return 0;
+		}
+
+		ensureMsgf(
+			TeamId >= 0 && TeamId <= MAX_uint8 - 1,
+			TEXT("Snow TeamId %d cannot be represented by a uint8 MaterialIndex"),
+			TeamId);
+		return static_cast<uint8>(
+			FMath::Clamp(TeamId, 0, static_cast<int32>(MAX_uint8) - 1) + 1);
+	}
+
+	FORCEINLINE int32 MaterialIndexToTeamId(const uint8 MaterialIndex)
+	{
+		return MaterialIndex == 0
+			? INDEX_NONE
+			: static_cast<int32>(MaterialIndex) - 1;
+	}
+}
+
+
 class AActor;
 class APawn;
 
@@ -280,6 +308,19 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FDRSnowRemoveOperation RemoveOperation;
+
+	// 방향성 눈 추가에서 서버가 실제로 적용한 양
+	UPROPERTY()
+	float ServerAppliedAmount = 0.f;
+
+	// 작업 종류와 도구에 필요한 필드만 전송한다. 위치/float 정밀도는 기존과 동일하다.
+	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);
+};
+
+template<>
+struct TStructOpsTypeTraits<FDRSnowOperationRecord> : TStructOpsTypeTraitsBase2<FDRSnowOperationRecord>
+{
+	enum { WithNetSerializer = true };
 };
 
 // 눈 투사체나 눈 충돌체가 캐릭터/대상에게 피해를 줄 때 사용하는 요청 데이터다.

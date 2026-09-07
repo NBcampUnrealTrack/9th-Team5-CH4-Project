@@ -13,6 +13,23 @@
 #include "Curves/CurveFloat.h"
 #include "Async/ParallelFor.h"
 #include "DrawDebugHelpers.h"
+#include "HAL/IConsoleManager.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/App.h"
+
+namespace
+{
+TAutoConsoleVariable<int32> CVarDRVoxelSnowPatchVersion(
+	TEXT("voxel.DR.SnowPatchVersion"), 104,
+	TEXT("Compiled Voxel-side SnowEdit patch version: 104 = 1.4."), ECVF_ReadOnly);
+TAutoConsoleVariable<int32> CVarDRCpuJumpFloodParallel(
+	TEXT("voxel.DR.CpuJumpFloodParallel"), 1,
+	TEXT("1: forward the surface query multithreading option to CPU JumpFlood. 0: original single-threaded CPU JumpFlood. GPU selection is unchanged."), ECVF_Default);
+TAutoConsoleVariable<int32> CVarDRDistanceFieldPerf(
+	TEXT("voxel.DR.DistanceFieldPerf"), 0,
+	TEXT("1: log JumpFlood path and call duration. This is not mesh/collision time."), ECVF_Default);
+}
 
 bool FVoxelSurfaceEditsStack::HasErrors(const FVoxelSurfaceEditsVoxels& Voxels, FString& OutErrors) const
 {
@@ -179,7 +196,19 @@ FVoxelSurfaceEditsVoxels UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceFieldI
 	TArray<float> Distances;
 	TArray<FVector3f> SurfacePositions;
 	FVoxelDistanceFieldUtilities::GetSurfacePositionsFromDensities(Size, Values, Distances, SurfacePositions);
-	FVoxelDistanceFieldUtilities::JumpFlood(Size, SurfacePositions);
+	const bool bCpuParallel = bMultiThreaded && CVarDRCpuJumpFloodParallel.GetValueOnAnyThread() != 0;
+	const bool bMeasureJump = CVarDRDistanceFieldPerf.GetValueOnAnyThread() != 0;
+	const bool bGpuPath = IsInGameThread() && FApp::CanEverRender();
+	const double JumpStart = bMeasureJump ? FPlatformTime::Seconds() : 0.0;
+	FVoxelDistanceFieldUtilities::JumpFlood(Size, SurfacePositions, bCpuParallel);
+	if (bMeasureJump)
+	{
+		const double JumpMs = (FPlatformTime::Seconds() - JumpStart) * 1000.0;
+		UE_LOG(LogTemp, Log, TEXT("[DRSnowDistanceField] Version=1.4 PID=%u Path=%s GameThread=%d CanRender=%d CPUParallel=%d SizeX=%d SizeY=%d SizeZ=%d JumpMs=%.3f"),
+			FPlatformProcess::GetCurrentProcessId(), bGpuPath ? TEXT("GPUHelper") : TEXT("CPU"),
+			IsInGameThread() ? 1 : 0, FApp::CanEverRender() ? 1 : 0,
+			(!bGpuPath && bCpuParallel) ? 1 : 0, Size.X, Size.Y, Size.Z, JumpMs);
+	}
 	FVoxelDistanceFieldUtilities::GetDistancesFromSurfacePositions(Size, SurfacePositions, Distances);
 	
 	VOXEL_ASYNC_SCOPE_COUNTER("Create OutVoxels");

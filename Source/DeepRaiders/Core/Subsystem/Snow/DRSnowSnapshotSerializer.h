@@ -6,7 +6,6 @@
 #include "DRSnowSnapshotSerializer.generated.h"
 
 class AVoxelWorld;
-class FDRSnowOwnershipStore;
 class FDRSnowVolumeStore;
 
 struct FDRSnowJoinCheckpoint
@@ -17,7 +16,6 @@ struct FDRSnowJoinCheckpoint
 	FName VoxelWorldName = NAME_None;
 	TArray<uint8> VoxelSaveData;
 	TArray<uint8> SnowVolumeData;
-	TArray<uint8> OwnershipData;
 
 	bool IsValid() const
 	{
@@ -91,12 +89,6 @@ struct DEEPRAIDERS_API FDRJoinSnapshotSizeReport
 	FDRSnapshotSnowVolumeSizeReport SnowVolume;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
-	int64 OwnershipCompressedBytes = 0;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
-	float OwnershipCompressedMB = 0.f;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
 	int64 TotalCompressedBytes = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Join Snapshot")
@@ -106,11 +98,8 @@ struct DEEPRAIDERS_API FDRJoinSnapshotSizeReport
 class DEEPRAIDERS_API FDRSnowSnapshotSerializer
 {
 public:
-	FDRSnowSnapshotSerializer(
-		FDRSnowVolumeStore& InVolumeStore,
-		FDRSnowOwnershipStore& InOwnershipStore)
+	explicit FDRSnowSnapshotSerializer(FDRSnowVolumeStore& InVolumeStore)
 		: VolumeStore(InVolumeStore)
-		, OwnershipStore(InOwnershipStore)
 	{
 	}
 
@@ -130,8 +119,7 @@ public:
 	bool ApplyCheckpoint(
 		FName VoxelWorldName,
 		const TArray<uint8>& VoxelSaveData,
-		const TArray<uint8>& SnowVolumeData,
-		const TArray<uint8>& OwnershipData);
+		const TArray<uint8>& SnowVolumeData);
 
 	// serializer는 UObject가 아니므로 VoxelWorld 탐색에 쓸 World context를 호출 전에 받는다.
 	void SetWorld(UWorld* InWorld)
@@ -141,7 +129,6 @@ public:
 
 private:
 	static constexpr int32 SnowVolumeSnapshotVersion = 2;
-	static constexpr int32 OwnershipSnapshotVersion = 1;
 	static float BytesToMB(int64 Bytes);
 	static void SerializeSnowCell(
 		FArchive& Archive,
@@ -162,13 +149,10 @@ private:
 		FDRSnapshotSnowVolumeSizeReport* OutSizeReport) const;
 	bool SerializeSnowVolume(TArray<uint8>& OutCompressedData) const;
 	bool DeserializeSnowVolume(const TArray<uint8>& CompressedData);
-	bool SerializeOwnership(AVoxelWorld* VoxelWorld, TArray<uint8>& OutCompressedData) const;
-	bool DeserializeOwnership(AVoxelWorld* VoxelWorld, const TArray<uint8>& CompressedData);
 
 	int32 NextSnapshotId = 1;
 	int32 LatestCheckpointId = INDEX_NONE;
 	TMap<int32, FDRSnowJoinCheckpoint> CheckpointsById;
 	UWorld* World = nullptr;
 	FDRSnowVolumeStore& VolumeStore;
-	FDRSnowOwnershipStore& OwnershipStore;
 };

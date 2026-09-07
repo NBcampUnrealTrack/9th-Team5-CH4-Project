@@ -29,7 +29,7 @@ public class DeepRaiders : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"CableComponent"
+			"CableComponent", "NetCore"
 		});
 
 		// Uncomment if you are using Slate UI

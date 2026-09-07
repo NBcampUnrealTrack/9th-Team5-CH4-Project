@@ -387,8 +387,7 @@ public:
 		int32 CheckpointSequence,
 		FName VoxelWorldName,
 		int32 VoxelSaveByteCount,
-		int32 SnowVolumeByteCount,
-		int32 OwnershipByteCount);
+		int32 SnowVolumeByteCount);
 
 	UFUNCTION(Client, Reliable)
 	void Client_ReceiveSnowJoinSnapshotChunk(
@@ -399,9 +398,6 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void Client_FinishSnowJoinSnapshot(int32 SnapshotId);
-
-	UFUNCTION(Client, Reliable)
-	void Client_ResumeSnowJoinOperations(int32 SnapshotId);
 
 	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
 	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
@@ -434,7 +430,6 @@ private:
 	int32 OutgoingSnowByteOffset = 0;
 	TArray<uint8> OutgoingSnowVoxelSaveData;
 	TArray<uint8> OutgoingSnowVolumeData;
-	TArray<uint8> OutgoingSnowOwnershipData;
 	// 전송 시각으로 ACK 왕복 시간을 측정하고 동시 전송 수를 2~16개로 조절한다.
 	TMap<uint64, double> PendingSnowChunkAcks;
 	int32 SnowSnapshotWindow = 8;
@@ -450,13 +445,10 @@ private:
 	FName PendingSnowVoxelWorldName = NAME_None;
 	int32 PendingSnowVoxelSaveByteCount = 0;
 	int32 PendingSnowVolumeByteCount = 0;
-	int32 PendingSnowOwnershipByteCount = 0;
 	bool bPendingSnowSnapshotFinished = false;
-	bool bPendingSnowCheckpointApplied = false;
 	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
-	TArray<uint8> PendingSnowOwnershipData;
 	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
 	FTimerHandle SnowJoinSnapshotRetryTimer;
 #pragma endregion
