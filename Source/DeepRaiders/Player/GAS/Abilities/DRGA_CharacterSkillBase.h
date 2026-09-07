@@ -62,6 +62,11 @@ protected:
 	float GetChargeQueueTailRemaining(
 		const FGameplayAbilityActorInfo* ActorInfo,
 		FGameplayTag CooldownTag) const;
+	void ScheduleCooldownSafetyCleanup(
+		const FGameplayAbilityActorInfo* ActorInfo,
+		FActiveGameplayEffectHandle CooldownEffectHandle,
+		FGameplayTag CooldownTag,
+		float CooldownDuration) const;
 
 	/** 스킬 Commit 성공 뒤, 해당 스킬에 장착된 퍽의 사용 시 효과를 실행한다. */
 	void NotifySkillCommitted(
