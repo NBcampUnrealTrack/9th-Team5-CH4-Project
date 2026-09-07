@@ -31,6 +31,31 @@ namespace DRSnowMaterialMapping
 	}
 }
 
+// StaticMesh virtual-surface hits use a tiny fixed 7x7 support mask.
+// The server builds it from the actual hit component and replicates the 49 bits
+// so client replay clips the same virtual footprint without doing local traces.
+namespace DRSnowVirtualSurfaceSupport
+{
+	static constexpr int32 Resolution = 7;
+	static constexpr int32 SampleCount = Resolution * Resolution;
+	static_assert(SampleCount <= 63, "Virtual surface support mask must fit in signed int64");
+
+	FORCEINLINE int32 GetBitIndex(const int32 X, const int32 Y)
+	{
+		return Y * Resolution + X;
+	}
+
+	FORCEINLINE void BuildBasis(const FVector& InNormal, FVector& OutTangent, FVector& OutBitangent)
+	{
+		const FVector Normal = InNormal.GetSafeNormal();
+		const FVector Reference = FMath::Abs(Normal.Z) < 0.99f
+			? FVector::UpVector
+			: FVector::ForwardVector;
+		OutTangent = FVector::CrossProduct(Reference, Normal).GetSafeNormal();
+		OutBitangent = FVector::CrossProduct(Normal, OutTangent).GetSafeNormal();
+	}
+}
+
 
 class AActor;
 class APawn;
@@ -136,6 +161,11 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	bool bUseVirtualSurface = false;
 
+	// 7x7 StaticMesh support samples. 0 means legacy/unmasked virtual plane.
+	// UPROPERTY also carries the value through the detailed ServerTryAddSnow(Request) RPC.
+	UPROPERTY()
+	int64 VirtualSurfaceSupportMask = 0;
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
 };
@@ -229,6 +259,10 @@ struct DEEPRAIDERS_API FDRSnowAddOperation
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	bool bUseVirtualSurface = false;
+
+	// Replicated by FDRSnowOperationRecord::NetSerialize only for virtual surfaces.
+	UPROPERTY()
+	int64 VirtualSurfaceSupportMask = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	int32 TeamId = INDEX_NONE;
