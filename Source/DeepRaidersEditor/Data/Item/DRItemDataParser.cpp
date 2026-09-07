@@ -430,6 +430,7 @@ namespace ItemParser
 		Definition.Rarity = Row.Rarity;
 		Definition.MaxStackSize = Row.MaxStackSize;
 		Definition.bCanBeDropped = Row.bCanBeDropped;
+		Definition.bDropOnDeath = Row.bDropOnDeath;
 		Definition.bCanBeSold = Row.bCanBeSold;
 		Definition.Price = Row.Price;
 		Definition.QuickSlotActivationInterval = Row.QuickSlotActivationInterval;

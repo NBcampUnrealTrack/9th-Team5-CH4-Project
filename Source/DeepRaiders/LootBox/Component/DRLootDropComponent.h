@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/LootBox/DRLootTypes.h"
 #include "DRLootDropComponent.generated.h"
 
@@ -24,6 +25,13 @@ public:
 	
 	// 고정 시드 테스트용 C++ 전용 오버로드
 	int32 GenerateAndSpawnLoot(EDRLootTier LootTier, const FTransform& SourceTransform, FRandomStream& RandomStream);
+
+	/* 기존 ItemInstance의 InstanceId, Quantity, RuntimeState를 유지하여 WorldItem으로 생성한다. */
+	int32 SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances, const FTransform& SourceTransform) const;
+
+	// 고정 시드 테스트용 C++ 전용 오버로드
+	int32 SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances, const FTransform& SourceTransform,
+		FRandomStream& RandomStream) const;
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot")

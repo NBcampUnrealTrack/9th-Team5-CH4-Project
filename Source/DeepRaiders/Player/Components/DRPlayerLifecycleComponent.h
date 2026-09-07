@@ -38,6 +38,7 @@ private:
 
 	// Death
 	void HandleDeathFromServer();
+	void DropInventoryItemsFromServer();
 	void ApplyDeathRagdoll();
 	void ClearDeathRagdollPresentation();
 

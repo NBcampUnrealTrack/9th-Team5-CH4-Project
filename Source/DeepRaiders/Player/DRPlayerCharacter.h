@@ -34,6 +34,7 @@ class UDRMovementActionComponent;
 class UDRPlayerCameraComponent;
 class UDRCharacterShadowComponent;
 class UDRPlayerNameplateComponent;
+class UDRLootDropComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
@@ -163,6 +164,11 @@ public:
 		return MovementActionComponent;
 	}
 
+	UDRLootDropComponent* GetDeathLootDropComponent() const
+	{
+		return DeathLootDropComponent;
+	}
+
 	/**
 	 * HUD에서 사용할 제트팩 연료 비율.
 	 * 소유 게스트는 서버 Fuel Snapshot의
@@ -230,6 +236,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRLootDropComponent> DeathLootDropComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;

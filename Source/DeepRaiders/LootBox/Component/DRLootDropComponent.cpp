@@ -67,6 +67,99 @@ int32 UDRLootDropComponent::GenerateAndSpawnLoot(EDRLootTier LootTier, const FTr
 	return SpawnLootQuantities(GeneratedQuantities, SourceTransform, RandomStream);
 }
 
+int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances,
+	const FTransform& SourceTransform) const
+{
+	FRandomStream RandomStream(FMath::Rand());
+
+	return SpawnItemInstances(ItemInstances, SourceTransform, RandomStream);
+}
+
+int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances,
+	const FTransform& SourceTransform, FRandomStream& RandomStream) const
+{
+	if (ItemInstances.IsEmpty())
+	{
+		return 0;
+	}
+
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+
+	if (!IsValid(Owner)
+		|| !Owner->HasAuthority()
+		|| !IsValid(World))
+	{
+		return 0;
+	}
+
+	UDRWorldItemSubsystem* WorldItemSubsystem = World->GetSubsystem<UDRWorldItemSubsystem>();
+	if (!IsValid(WorldItemSubsystem))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s]: WorldItemSubsystem is unavailable."), *GetName());
+		return 0;
+	}
+
+	TArray<const FDRItemInstance*> SpawnEntries;
+	SpawnEntries.Reserve(ItemInstances.Num());
+
+	for (const FDRItemInstance& ItemInstance : ItemInstances)
+	{
+		if (ItemInstance.IsValid())
+		{
+			SpawnEntries.Add(&ItemInstance);
+		}
+	}
+
+	if (SpawnEntries.IsEmpty())
+	{
+		return 0;
+	}
+
+	const float SafeMinRadius = FMath::Max(0.f, MinSpawnRadius);
+	const float SafeMaxRadius = FMath::Max(SafeMinRadius, MaxSpawnRadius);
+	const float MaxJitterRadians = FMath::DegreesToRadians(FMath::Max(0.f, MaxSpawnAngleJitterDegrees));
+	const float BaseAngle = RandomStream.FRandRange(0.f, UE_TWO_PI);
+
+	// 상자나 SpawnPoint의 Scale이 Item Actor에 전파되지 않게 한다.
+	const FTransform CleanSourceTransform(SourceTransform.GetRotation(), SourceTransform.GetLocation(),
+		FVector::OneVector);
+
+	int32 SpawnedActorCount = 0;
+
+	for (int32 Index = 0; Index < SpawnEntries.Num(); ++Index)
+	{
+		const FDRItemInstance& ItemInstance = *SpawnEntries[Index];
+		const float EvenAngle = UE_TWO_PI * static_cast<float>(Index) / static_cast<float>(SpawnEntries.Num());
+		const float SpawnAngle = BaseAngle * EvenAngle + RandomStream.FRandRange(-MaxJitterRadians, MaxJitterRadians);
+		const float SpawnRadius = RandomStream.FRandRange(SafeMinRadius, SafeMaxRadius);
+
+		const FVector SpawnDirection(FMath::Cos(SpawnAngle), FMath::Sin(SpawnAngle), 0.f);
+		const FVector TargetLocation = CleanSourceTransform.GetLocation() + SpawnDirection * SpawnRadius;
+		const FRotator TargetRotation(0.f, RandomStream.FRandRange(0.f, 360.f), 0.f);
+		const FTransform TargetTransform(TargetRotation, TargetLocation, FVector::OneVector);
+
+		FDRWorldItemSpawnParams SpawnParams;
+		SpawnParams.SourceTransform = CleanSourceTransform;
+		SpawnParams.TargetTransform = TargetTransform;
+		SpawnParams.IgnoredActor = Owner;
+		SpawnParams.bPlayEmergence = true;
+
+		ADRWorldItemActor* SpawnedItem = WorldItemSubsystem->SpawnWorldItem(ItemInstance, SpawnParams);
+
+		if (IsValid(SpawnedItem))
+		{
+			++SpawnedActorCount;
+			continue;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("[%s]: Failed to spawn item instance '%s'."),
+			*GetName(), *GetNameSafe(ItemInstance.Definition));
+	}
+
+	return SpawnedActorCount;
+}
+
 bool UDRLootDropComponent::BuildValidLootPools(TArray<const FDRLootTableRow*>& OutAllRows,
                                                TMap<EDRItemRarity, TArray<const FDRLootTableRow*>>& OutRowsByRarity)
 const
@@ -231,30 +324,7 @@ int32 UDRLootDropComponent::SpawnLootQuantities(const TMap<UDRItemDefinition*, i
 		return 0;
 	}
 
-	AActor* Owner = GetOwner();
-	UWorld* World = GetWorld();
-
-	if (!IsValid(Owner)
-		|| !Owner->HasAuthority()
-		|| !IsValid(World))
-	{
-		return 0;
-	}
-
-	UDRWorldItemSubsystem* WorldItemSubsystem = World->GetSubsystem<UDRWorldItemSubsystem>();
-	if (!IsValid(WorldItemSubsystem))
-	{
-		UE_LOG(LogTemp, Error, TEXT("[%s]: WorldItemSubsystem is unavailable."), *GetName());
-		return 0;
-	}
-
-	struct FSpawnEntry
-	{
-		UDRItemDefinition* Definition = nullptr;
-		int32 Quantity = 0;
-	};
-
-	TArray<FSpawnEntry> SpawnEntries;
+	TArray<FDRItemInstance> SpawnEntries;
 
 	for (const TPair<UDRItemDefinition*, int32>& Pair : GeneratedQuantities)
 	{
@@ -271,11 +341,15 @@ int32 UDRLootDropComponent::SpawnLootQuantities(const TMap<UDRItemDefinition*, i
 
 		while (RemainingQuantity > 0)
 		{
-			FSpawnEntry& Entry = SpawnEntries.AddDefaulted_GetRef();
-			Entry.Definition = Definition;
-			Entry.Quantity = FMath::Min(RemainingQuantity, MaxStackSize);
+			const int32 SpawnQuantity = FMath::Min(RemainingQuantity, MaxStackSize);
+			FDRItemInstance ItemInstance = DRItemInstanceFactory::Create(Definition, SpawnQuantity);
 
-			RemainingQuantity -= Entry.Quantity;
+			if (ItemInstance.IsValid())
+			{
+				SpawnEntries.Add(MoveTemp(ItemInstance));
+			}
+
+			RemainingQuantity -= SpawnQuantity;
 		}
 	}
 
@@ -285,53 +359,12 @@ int32 UDRLootDropComponent::SpawnLootQuantities(const TMap<UDRItemDefinition*, i
 	}
 
 	// TMap 순회 순서에 따라 Seed 기반 테스트의 스폰 순서가 바뀌지 않게 한다.
-	SpawnEntries.Sort([](const FSpawnEntry& Left, const FSpawnEntry& Right)
+	SpawnEntries.Sort([](const FDRItemInstance& Left, const FDRItemInstance& Right)
 	{
 		return Left.Definition->GetPathName() < Right.Definition->GetPathName();
 	});
 
-	const float SafeMinRadius = FMath::Max(0.f, MinSpawnRadius);
-	const float SafeMaxRadius = FMath::Max(SafeMinRadius, MaxSpawnRadius);
-	const float MaxJitterRadians = FMath::DegreesToRadians(FMath::Max(0.f, MaxSpawnAngleJitterDegrees));
-	const float BaseAngle = RandomStream.FRandRange(0.f, UE_TWO_PI);
-
-	// 상자나 SpawnPoint의 Scale이 Item Actor에 전파되지 않게 한다.
-	const FTransform CleanSourceTransform(SourceTransform.GetRotation(), SourceTransform.GetLocation(),
-	                                      FVector::OneVector);
-
-	int32 SpawnedActorCount = 0;
-
-	for (int32 Index = 0; Index < SpawnEntries.Num(); ++Index)
-	{
-		const FSpawnEntry& Entry = SpawnEntries[Index];
-		const float EvenAngle = UE_TWO_PI * static_cast<float>(Index) / static_cast<float>(SpawnEntries.Num());
-		const float SpawnAngle = BaseAngle * EvenAngle + RandomStream.FRandRange(-MaxJitterRadians, MaxJitterRadians);
-		const float SpawnRadius = RandomStream.FRandRange(SafeMinRadius, SafeMaxRadius);
-
-		const FVector SpawnDirection(FMath::Cos(SpawnAngle), FMath::Sin(SpawnAngle), 0.f);
-		const FVector TargetLocation = CleanSourceTransform.GetLocation() + SpawnDirection * SpawnRadius;
-		const FRotator TargetRotation(0.f, RandomStream.FRandRange(0.f, 360.f), 0.f);
-		const FTransform TargetTransform(TargetRotation, TargetLocation, FVector::OneVector);
-		
-		FDRWorldItemSpawnParams SpawnParams;
-		SpawnParams.SourceTransform = CleanSourceTransform;
-		SpawnParams.TargetTransform = TargetTransform;
-		SpawnParams.IgnoredActor = Owner;
-		SpawnParams.bPlayEmergence = true;
-		
-		ADRWorldItemActor* SpawnedItem = WorldItemSubsystem->SpawnWorldItemFromDefinitionWithParams(
-			Entry.Definition, SpawnParams, Entry.Quantity);
-		
-		if (IsValid(SpawnedItem))
-		{
-			++SpawnedActorCount;
-			continue;
-		}
-		UE_LOG(LogTemp, Warning, TEXT("[%s]: Failed to spawn loot '%s'."),
-			*GetName(),	*GetNameSafe(Entry.Definition));
-	}
-
-	return SpawnedActorCount;
+	return SpawnItemInstances(SpawnEntries, SourceTransform, RandomStream);
 }
 
 bool UDRLootDropComponent::SelectRarity(const FDRLootTierConfig& TierConfig, FRandomStream& RandomStream,

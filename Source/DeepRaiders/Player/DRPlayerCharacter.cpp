@@ -21,6 +21,7 @@
 #include "DeepRaiders/Player/Components/DRMeleeCombatComponent.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerLifecycleComponent.h"
+#include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -65,6 +66,7 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	MeleeCombatComponent = CreateDefaultSubobject<UDRMeleeCombatComponent>(TEXT("MeleeCombatComponent"));
 	JetpackComponent = CreateDefaultSubobject<UDRJetpackComponent>(TEXT("JetpackComponent"));
 	PlayerLifecycleComponent = CreateDefaultSubobject<UDRPlayerLifecycleComponent>(TEXT("PlayerLifecycleComponent"));
+	DeathLootDropComponent = CreateDefaultSubobject<UDRLootDropComponent>(TEXT("DeathLootDropComponent"));
 	HeldItemComponent = CreateDefaultSubobject<UDRHeldItemComponent>(TEXT("HeldItemComponent"));
 	FreezeVisualComponent = CreateDefaultSubobject<UDRFreezeVisualComponent>(TEXT("FreezeVisualComponent"));
 	SilhouetteComponent = CreateDefaultSubobject<UDRSilhouetteComponent>(TEXT("SilhouetteComponent"));

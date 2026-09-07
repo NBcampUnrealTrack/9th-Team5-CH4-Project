@@ -50,6 +50,9 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	uint8 bCanBeDropped : 1 = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	uint8 bDropOnDeath : 1 = true;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	uint8 bCanBeSold : 1 = false;
@@ -101,9 +104,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item", meta = (ClampMin = 1, UIMin = 1))
 	int32 MaxStackSize = 1;
 	
-	// 아이템 버리기, 사망 시 드랍 여부
+	// 플레이어가 직접 버릴 수 있는지 여부
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Policy")
 	uint8 bCanBeDropped : 1 = true;
+
+	// 사망 시 월드 아이템으로 드롭할지 여부
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Policy")
+	uint8 bDropOnDeath : 1 = true;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Trade")
 	uint8 bCanBeSold:1 = false;

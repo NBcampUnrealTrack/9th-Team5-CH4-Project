@@ -3,6 +3,10 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRJetpackComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
+#include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "Camera/CameraShakeBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -161,6 +165,7 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 	}
 
 	ApplyDeathRagdoll();
+	DropInventoryItemsFromServer();
 
 	Character->GetWorldTimerManager().SetTimer(
 		RespawnTimerHandle, this, &ThisClass::RespawnAtPlayerStart, RespawnDelay, false);
@@ -174,6 +179,54 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 	Character->ForceNetUpdate();
 
 	UE_LOG(LogTemp, Warning, TEXT( "[Death] " "Character=%s " "RespawnDelay=%.1f"), *GetNameSafe(Character), RespawnDelay);
+}
+
+void UDRPlayerLifecycleComponent::DropInventoryItemsFromServer()
+{
+	ADRPlayerCharacter* Character = GetOwnerCharacter();
+	ADRPlayerController* Controller = IsValid(Character) ? Cast<ADRPlayerController>(Character->GetController()) : nullptr;
+	UDRInventoryComponent* Inventory = IsValid(Controller) ? Controller->GetInventoryComponent() : nullptr;
+	UDRLootDropComponent* LootDrop = IsValid(Character) ? Character->GetDeathLootDropComponent() : nullptr;
+
+	if (!IsValid(Character) || !Character->HasAuthority() || !IsValid(Inventory) || !IsValid(LootDrop))
+	{
+		return;
+	}
+
+	TArray<FDRItemInstance> DroppedItems;
+	TArray<FGuid> DroppedInstanceIds;
+
+	for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
+	{
+		if (!ItemInstance.IsValid()
+			|| !IsValid(ItemInstance.Definition)
+			|| !ItemInstance.Definition->bDropOnDeath)
+		{
+			continue;
+		}
+
+		DroppedItems.Add(ItemInstance);
+		DroppedInstanceIds.Add(ItemInstance.InstanceId);
+	}
+
+	if (DroppedItems.IsEmpty())
+	{
+		return;
+	}
+
+	if (!Inventory->TryRemoveItemInstanceArray(DroppedInstanceIds))
+	{
+		UE_LOG(LogTemp, Error, TEXT("[DeathDrop] Failed to remove inventory items. Character=%s Count=%d"),
+			*GetNameSafe(Character), DroppedInstanceIds.Num());
+		return;
+	}
+
+	const int32 SpawnedItemCount = LootDrop->SpawnItemInstances(DroppedItems, Character->GetActorTransform());
+	if (SpawnedItemCount != DroppedItems.Num())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[DeathDrop] Some items failed to spawn. Character=%s Requested=%d Spawned=%d"),
+			*GetNameSafe(Character), DroppedItems.Num(), SpawnedItemCount);
+	}
 }
 
 void UDRPlayerLifecycleComponent::ApplyDeathRagdoll()
