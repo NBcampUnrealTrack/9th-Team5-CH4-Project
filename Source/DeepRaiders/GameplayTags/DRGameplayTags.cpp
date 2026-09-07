@@ -259,6 +259,16 @@ namespace DRGameplayTags
 		Perk_Skill_SlowProjectile_AllySpeed,
 		"Perk.Skill.SlowProjectile.AllySpeed",
 		"Grants movement speed to allies in the impact radius.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_Turret_StatBoost,
+		"Perk.Skill.Turret.StatBoost",
+		"Increases turret damage, fire rate, and attack range.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_Turret_CannonProjectile,
+		"Perk.Skill.Turret.CannonProjectile",
+		"Changes the turret projectile to a cannon projectile.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Rifle,
@@ -584,6 +594,21 @@ namespace DRGameplayTags
 		Data_Perk_HotPack_FreezeGaugeRecovery,
 		"Data.Perk.HotPack.FreezeGaugeRecovery",
 		"Additional freeze gauge recovery granted to the hot pack by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_Turret_DamageBonusRatio,
+		"Data.Perk.Turret.DamageBonusRatio",
+		"Turret damage bonus ratio granted by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_Turret_FireRateBonusRatio,
+		"Data.Perk.Turret.FireRateBonusRatio",
+		"Turret fire rate bonus ratio granted by an equipped perk.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_Turret_RangeBonusRatio,
+		"Data.Perk.Turret.RangeBonusRatio",
+		"Turret attack range bonus ratio granted by an equipped perk.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Weapon_DamageModifier,

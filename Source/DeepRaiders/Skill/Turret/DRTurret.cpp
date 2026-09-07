@@ -4,7 +4,9 @@
 #include "Components/SceneComponent.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Skill/Effects/DRGE_SkillCooldown.h"
@@ -12,6 +14,7 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraFunctionLibrary.h"
 #include "DrawDebugHelpers.h"
 
 ADRTurret::ADRTurret()
@@ -173,30 +176,24 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 	}
 
 	const FVector SpawnLocation = GetActorLocation() + FVector::UpVector * 40.f;
-	const FVector AimDirection =
-		(TargetPawn->GetActorLocation() - SpawnLocation).GetSafeNormal();
-	if (AimDirection.IsNearlyZero())
+	FVector LaunchVelocity;
+	if (!ResolveProjectileLaunchVelocity(
+		SpawnLocation,
+		TargetPawn->GetActorLocation(),
+		LaunchVelocity))
 	{
 		return false;
 	}
 
-	SetActorRotation(AimDirection.Rotation());
-	const ADRProjectile* ProjectileDefault =
-		WeaponSettings.ProjectileClass->GetDefaultObject<ADRProjectile>();
-	const float LaunchSpeed = IsValid(ProjectileDefault)
-		? FMath::Max(ProjectileDefault->GetConfiguredInitialSpeed(), 1.f)
-		: 0.f;
-	if (LaunchSpeed <= 0.f)
-	{
-		return false;
-	}
+	const FVector LaunchDirection = LaunchVelocity.GetSafeNormal();
+	SetActorRotation(LaunchDirection.Rotation());
 
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
 	FDRProjectileWorldImpactData WorldImpactData;
 	WorldImpactData = WeaponSettings.WorldImpactData;
 
-	const FTransform SpawnTransform(AimDirection.Rotation(), SpawnLocation);
+	const FTransform SpawnTransform(LaunchDirection.Rotation(), SpawnLocation);
 	ADRTurret* SourceActor = this;
 	ADRProjectile* Projectile = GetWorld()->SpawnActorDeferred<ADRProjectile>(
 		WeaponSettings.ProjectileClass,
@@ -215,11 +212,106 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		WeaponSettings.BreakableDamage,
 		WorldImpactData,
 		GetCurrentOwnerTeamId(),
-		this,
+		WeaponSettings.ProjectilePresentationDefinition,
 		WeaponSettings.MaxAttackDistance,
 		WeaponSettings.FalloffSettings);
-	Projectile->SetInitialLaunchVelocity(AimDirection * LaunchSpeed);
+	Projectile->SetInitialLaunchVelocity(LaunchVelocity);
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
+	MulticastPlayFirePresentation(
+		WeaponSettings.ProjectilePresentationDefinition,
+		SpawnLocation,
+		LaunchDirection.Rotation());
+	return true;
+}
+
+void ADRTurret::MulticastPlayFirePresentation_Implementation(
+	UDRProjectileWeaponItemDefinition* PresentationDefinition,
+	const FVector_NetQuantize FireLocation,
+	const FRotator FireRotation)
+{
+	if (GetNetMode() == NM_DedicatedServer || !IsValid(PresentationDefinition))
+	{
+		return;
+	}
+
+	const FDRWeaponPresentationData& Presentation =
+		PresentationDefinition->FirePresentation;
+	if (IsValid(Presentation.VFX))
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			this,
+			Presentation.VFX,
+			FireLocation,
+			FireRotation);
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = FireLocation;
+	Parameters.Instigator = this;
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject = PresentationDefinition;
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		this,
+		Presentation.SoundCueTag,
+		Parameters);
+}
+
+bool ADRTurret::ResolveProjectileLaunchVelocity(
+	const FVector& SpawnLocation,
+	const FVector& AimPoint,
+	FVector& OutLaunchVelocity) const
+{
+	OutLaunchVelocity = FVector::ZeroVector;
+	if (!WeaponSettings.ProjectileClass)
+	{
+		return false;
+	}
+
+	const ADRProjectile* ProjectileDefault =
+		WeaponSettings.ProjectileClass->GetDefaultObject<ADRProjectile>();
+	UWorld* World = GetWorld();
+	if (!IsValid(ProjectileDefault) || !IsValid(World))
+	{
+		return false;
+	}
+
+	const float LaunchSpeed = FMath::Max(
+		ProjectileDefault->GetConfiguredInitialSpeed(),
+		1.f);
+	const float GravityScale = FMath::Max(
+		ProjectileDefault->GetConfiguredGravityScale(),
+		0.f);
+	const FVector DirectDirection = (AimPoint - SpawnLocation).GetSafeNormal();
+	if (DirectDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	if (GravityScale <= KINDA_SMALL_NUMBER)
+	{
+		OutLaunchVelocity = DirectDirection * LaunchSpeed;
+		return true;
+	}
+
+	UGameplayStatics::FSuggestProjectileVelocityParameters Parameters(
+		this,
+		SpawnLocation,
+		AimPoint,
+		LaunchSpeed);
+	Parameters.bFavorHighArc = false;
+	Parameters.CollisionRadius = 0.f;
+	Parameters.OverrideGravityZ = World->GetGravityZ() * GravityScale;
+	Parameters.TraceOption = ESuggestProjVelocityTraceOption::DoNotTrace;
+	Parameters.bDrawDebug = false;
+	Parameters.bAcceptClosestOnNoSolutions = true;
+
+	if (UGameplayStatics::SuggestProjectileVelocity(Parameters, OutLaunchVelocity)
+		&& !OutLaunchVelocity.IsNearlyZero())
+	{
+		return true;
+	}
+
+	OutLaunchVelocity = DirectDirection * LaunchSpeed;
 	return true;
 }
 

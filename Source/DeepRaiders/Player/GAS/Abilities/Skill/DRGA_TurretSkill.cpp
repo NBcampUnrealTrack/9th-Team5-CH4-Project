@@ -3,8 +3,11 @@
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementPreviewActor.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementTargetActor.h"
+#include "DeepRaiders/Combat/Projectile/DRCannonProjectile.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Combat/Projectile/DRSnowProjectile.h"
+#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
@@ -13,6 +16,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "UObject/ConstructorHelpers.h"
 
 UDRGA_TurretSkill::UDRGA_TurretSkill()
 {
@@ -26,6 +30,27 @@ UDRGA_TurretSkill::UDRGA_TurretSkill()
 	TurretClass = ADRTurret::StaticClass();
 
 	TurretWeaponSettings.ProjectileClass = ADRSnowProjectile::StaticClass();
+	static ConstructorHelpers::FObjectFinder<UDRProjectileWeaponItemDefinition> SnowPresentationFinder(
+		TEXT("/Game/DeepRaiders/Item/Data/DataAssets/RangeWeapon/DA_DRSnowPistol.DA_DRSnowPistol"));
+	if (SnowPresentationFinder.Succeeded())
+	{
+		TurretWeaponSettings.ProjectilePresentationDefinition = SnowPresentationFinder.Object;
+	}
+
+	static ConstructorHelpers::FClassFinder<ADRProjectile> CannonProjectileFinder(
+		TEXT("/Game/DeepRaiders/Item/Weapons/Projectiles/BP_DRSnowProjectile_Cannon"));
+	CannonProjectileClass = ADRCannonProjectile::StaticClass();
+	if (CannonProjectileFinder.Succeeded())
+	{
+		CannonProjectileClass = CannonProjectileFinder.Class;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UDRProjectileWeaponItemDefinition> CannonPresentationFinder(
+		TEXT("/Game/DeepRaiders/Item/Data/DataAssets/RangeWeapon/DA_DRCannon.DA_DRCannon"));
+	if (CannonPresentationFinder.Succeeded())
+	{
+		CannonProjectilePresentationDefinition = CannonPresentationFinder.Object;
+	}
 }
 
 void UDRGA_TurretSkill::ResolveCooldownSettings(
@@ -70,6 +95,67 @@ bool UDRGA_TurretSkill::CanActivateAbility(const FGameplayAbilitySpecHandle Hand
 	}
 
 	return true;
+}
+
+FDRTurretWeaponSettings UDRGA_TurretSkill::ResolveWeaponSettings() const
+{
+	FDRTurretWeaponSettings WeaponSettings = TurretWeaponSettings;
+	const UDRSkillDefinition* SkillDefinition = GetCurrentSkillDefinition();
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const ADRPlayerState* PlayerState = ActorInfo != nullptr
+		? Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get())
+		: nullptr;
+	const UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	if (!IsValid(SkillDefinition) || !IsValid(PerkComponent))
+	{
+		return WeaponSettings;
+	}
+
+	const FGameplayTag SkillId = SkillDefinition->SkillId;
+	if (PerkComponent->HasSkillPerk(
+		SkillId,
+		DRGameplayTags::Perk_Skill_Turret_StatBoost))
+	{
+		const float DamageScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
+			SkillId,
+			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Perk_Turret_DamageBonusRatio);
+		const float FireRateScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
+			SkillId,
+			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Perk_Turret_FireRateBonusRatio);
+		const float RangeScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
+			SkillId,
+			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Perk_Turret_RangeBonusRatio);
+
+		WeaponSettings.BreakableDamage *= FMath::Max(0.f, DamageScale);
+		WeaponSettings.FireInterval /= FMath::Max(KINDA_SMALL_NUMBER, FireRateScale);
+		WeaponSettings.MaxAttackDistance *= FMath::Max(0.f, RangeScale);
+		for (FDRGameplayEffectData& ImpactEffect : WeaponSettings.ImpactEffects)
+		{
+			if (float* Damage = ImpactEffect.SetByCallerMagnitudes.Find(DRGameplayTags::Data_Damage))
+			{
+				*Damage *= FMath::Max(0.f, DamageScale);
+			}
+		}
+	}
+
+	if (CannonProjectileClass
+		&& PerkComponent->HasSkillPerk(
+			SkillId,
+			DRGameplayTags::Perk_Skill_Turret_CannonProjectile))
+	{
+		WeaponSettings.ProjectileClass = CannonProjectileClass;
+		WeaponSettings.ProjectilePresentationDefinition = CannonProjectilePresentationDefinition;
+	}
+
+	return WeaponSettings;
 }
 
 void UDRGA_TurretSkill::ApplyCooldown(const FGameplayAbilitySpecHandle Handle,
@@ -173,6 +259,7 @@ void UDRGA_TurretSkill::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 		FGameplayTag CooldownTag;
 		float CooldownDuration = 0.f;
 		ResolveCooldownSettings(CooldownTag, CooldownDuration);
+		const FDRTurretWeaponSettings WeaponSettings = ResolveWeaponSettings();
 		Turret->InitializeTurret(
 			PlayerState,
 			PlayerState->GetTeamId(),
@@ -180,7 +267,7 @@ void UDRGA_TurretSkill::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 			ActorInfo->AbilitySystemComponent.Get(),
 			CooldownTag,
 			CooldownDuration,
-			TurretWeaponSettings);
+			WeaponSettings);
 		Turret->FinishSpawning(TurretTransform);
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, false);
 		return;

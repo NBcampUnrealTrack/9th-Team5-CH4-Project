@@ -8,7 +8,9 @@
 
 class ADRPlacementPreviewActor;
 class ADRPlacementTargetActor;
+class ADRProjectile;
 class ADRTurret;
+class UDRProjectileWeaponItemDefinition;
 class UAbilityTask_WaitTargetData;
 
 /** 설치 영역을 조준한 뒤 공격키(Primary)로 포탑을 설치하는 스킬이다. */
@@ -54,6 +56,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Turret|Weapon")
 	FDRTurretWeaponSettings TurretWeaponSettings;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Skill|Turret|Weapon")
+	TSubclassOf<ADRProjectile> CannonProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Skill|Turret|Weapon")
+	TObjectPtr<UDRProjectileWeaponItemDefinition> CannonProjectilePresentationDefinition;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Skill|Turret")
 	TSubclassOf<ADRTurret> TurretClass;
 
@@ -80,6 +88,7 @@ private:
 	void ResolveCooldownSettings(
 		FGameplayTag& OutCooldownTag,
 		float& OutCooldownDuration) const;
+	FDRTurretWeaponSettings ResolveWeaponSettings() const;
 
 	UFUNCTION()
 	void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);
