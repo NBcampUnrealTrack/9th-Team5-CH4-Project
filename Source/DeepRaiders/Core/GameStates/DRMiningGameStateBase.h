@@ -51,6 +51,7 @@ struct FDRTeamRegisteredTeleportPoint
 };
 
 struct FDRSnowOperationBatcher;
+struct FDRSnowLoadTest;
 
 UCLASS()
 class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
@@ -58,6 +59,7 @@ class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
 	GENERATED_BODY()
 
 public:
+	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -156,6 +158,9 @@ public:
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
+	// Native, non-RPC diagnostic entry. Implementation is disabled in Shipping.
+	void StartSnowLoadTest(const TArray<FString>& Args);
+	void StopSnowLoadTest();
 
 	// 새 경기를 시작할 때 서버와 모든 클라이언트의 복셀/지형 데이터를 초기화합니다.
 	UFUNCTION(NetMulticast, Reliable)
@@ -184,6 +189,7 @@ private:
 	void TryApplyPendingSnowOperations();
 	void StartPendingSnowRetry();
 	void StopPendingSnowRetry();
+	void ScheduleSnowReplayContinuation();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
 
 	// 서버 전송 큐와 rate limit의 수명을 GameState에 묶는다.
@@ -203,6 +209,12 @@ private:
 	FTimerHandle PendingSnowRetryTimer;
 	int32 ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	int32 SnowApplicationGeneration = 0;
+	bool bSnowReplayContinuationScheduled = false;
+	bool bSnowReplayPumping = false;
+	uint64 SnowReplayBudgetFrame = MAX_uint64;
+	int32 SnowReplayStartsThisFrame = 0;
+	double SnowReplayDispatchMsThisFrame = 0.0;
+	TSharedPtr<FDRSnowLoadTest> SnowLoadTest;
 #pragma endregion
 	
 #pragma region Teleport

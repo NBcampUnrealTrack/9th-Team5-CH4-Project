@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
+#include "DeepRaiders/Snow/DRDirectionalSurfaceTool.h"
 #include "VoxelTools/Gen/VoxelToolsBase.h"
 #include "VoxelTools/VoxelSurfaceTools.h"
 
@@ -18,17 +19,22 @@ struct FDRSnowSurfaceEditResult
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	// DirectionalSurfaceTool처럼 Volume도 실제 변경 위치를 따라가야 하는 경로만 true다.
 	bool bUseModifiedValuesForVolume = false;
+	// Only the combined Directional path sets this; other tools still use FillAddedSnowMaterials.
+	bool bAddedMaterialsFinalized = false;
+	double FootprintMs = 0.0;
+	// Legacy async material dispatch -> its game-thread callback (includes waiting).
+	double LegacyMaterialMs = 0.0;
+	TSharedPtr<FDRDirectionalSurfaceEditTimings, ESPMode::ThreadSafe> DirectionalTimings;
 };
 
 // Voxel value/material 표현 편집만 담당한다. 점령 부피는 Pipeline이 관리한다.
 class DEEPRAIDERS_API FDRSnowSurfaceEditor
 {
 public:
+	static bool IsCombinedDirectionalEditEnabled();
+	static bool IsDirectionalPerfLoggingEnabled();
 	// Request에 TargetVoxelWorld가 없을 때 사용할 fallback World다.
-	void SetWorld(UWorld* InWorld)
-	{
-		World = InWorld;
-	}
+	void SetWorld(UWorld* InWorld);
 
 	FDRSnowSurfaceEditResult AddSnowAtArea(const FDRSnowSurfaceAddRequest& Request);
 	// 실제 새로 추가한 복셀 전체에 재질을 저장해 내부 색을 유지한다.

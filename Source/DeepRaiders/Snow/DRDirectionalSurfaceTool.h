@@ -8,9 +8,32 @@
 #include "DRDirectionalSurfaceTool.generated.h"
 
 class AVoxelWorld;
+class FVoxelData;
+// Written by the worker, then read only after its game-thread completion.
+// These timings stop at data completion; they do not measure mesh/collision readiness.
+struct FDRDirectionalSurfaceEditTimings
+{
+	double StampMs = 0.0;
+	double WorkerQueueMs = 0.0;
+	double LockWaitMs = 0.0;
+	double DensityMs = 0.0;
+	// Post-edit preparation + plugin material kernel, on the SAME density worker.
+	double WorkerMaterialMs = 0.0;
+	bool bFusedMaterial = false;
+	double CallbackMs = 0.0;
+	bool bTaskGraphCompletion = false;
+	int32 FootprintCount = 0;
+	int32 StampCount = 0;
+	int64 BoundsCount = 0;
+};
 
 using FDRDirectionalSurfaceEditComplete =
 	TFunction<void(TArray<FModifiedVoxelValue>&&, FVoxelIntBox)>;
+
+// Runs under the existing write lock for Bounds. No UObject access, render
+// updates, nested data locks, or game-thread callbacks are allowed here.
+using FDRDirectionalSurfaceWorkerPostEdit =
+	TFunction<void(FVoxelData&, const TArray<FModifiedVoxelValue>&, const FVoxelIntBox&)>;
 
 // SurfaceTool의 브러시 모양은 재사용하되, 밀어낼 surface shell을 실제 이동시키지 않고
 // 이번 이동이 지나갈 swept volume만 stamp처럼 add/remove 합성하는 Voxel Tool이다.
@@ -65,8 +88,8 @@ public:
 		float Strength,
 		bool bAdd);
 
-	// Processed surface 결과에서 0면을 가로지르는 swept volume만 실제 voxel 값에 반영한다.
-	// Add는 비어 있던 stamp 부피를 채우고, Remove는 해당 stamp 부피를 비운다.
+	// Apply all direction-compatible processed samples, including sub-voxel
+	// changes that do not cross zero. Preserve the stable v1.2 accumulation rule.
 	static float ApplySurfaceVolumeEdit(
 		AVoxelWorld* VoxelWorld,
 		const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
@@ -76,13 +99,16 @@ public:
 		FVoxelIntBox& EditedBounds,
 		bool bUpdateRender = true);
 
-	// density 쓰기를 VoxelWorld 작업 풀에서 실행하고 게임 스레드에서 완료 콜백을 호출한다.
+	// Optional post-edit reuses the plugin material kernel before releasing the
+	// density write lock. Completion is still delivered on the game thread.
 	static bool ApplySurfaceVolumeEditAsync(
 		AVoxelWorld* VoxelWorld,
 		const FVoxelSurfaceEditsProcessedVoxels& SurfaceFootprint,
 		float DistanceDivisor,
 		bool bAdd,
-		FDRDirectionalSurfaceEditComplete Completion);
+		FDRDirectionalSurfaceEditComplete Completion,
+		TSharedPtr<FDRDirectionalSurfaceEditTimings, ESPMode::ThreadSafe> Timings = nullptr,
+		FDRDirectionalSurfaceWorkerPostEdit WorkerPostEdit = nullptr);
 
 	// 실제로 값이 변한 voxel 위치만 material paint 입력으로 변환한다.
 	static FVoxelSurfaceEditsProcessedVoxels MakeModifiedValueVoxelGroup(
