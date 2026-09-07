@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/GameStates/DRGameFlowState.h"
 #include "GameFramework/GameModeBase.h"
 #include "TimerManager.h"
 #include "DRMiningGameModeBase.generated.h"
@@ -49,13 +50,21 @@ public:
 	bool StartGame();
 
 	UFUNCTION(BlueprintPure, Category = "Game")
-	bool IsGameStarted() const { return bIsGameStart; }
+	bool IsGameStarted() const { return GameFlowState == EDRGameFlowState::Playing; }
 
 	UFUNCTION(BlueprintPure, Category = "Game")
-	bool IsGameEnded() const { return bIsGameEnd; }
+	bool IsGameEnded() const { return GameFlowState == EDRGameFlowState::Results; }
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Game")
 	void EndGame();
+
+	UFUNCTION(BlueprintPure, Category = "Game|Flow")
+	EDRGameFlowState GetGameFlowState() const { return GameFlowState; }
+
+	// 준비 액터는 인원 판정만 하고 실제 게임 시작 흐름은 GameMode에 요청한다.
+	void RequestGameStart(class ADRGameStartActor* Source, int32 CountdownSeconds);
+	void CancelGameCountdown(class ADRGameStartActor* Source);
+	void NotifyGameStartCarversReady();
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
@@ -106,16 +115,28 @@ protected:
 		meta = (ClampMin = "0.1", Units = "s"))
 	float GameResultDisplayDuration = 5.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game|Flow")
+	FText GameLoadingMessage = NSLOCTEXT(
+		"DRGameFlow", "Loading", "지형을 준비하고 있습니다.");
+
 private:
 	void ResetGameState();
 	void TickGameTimer();
 	void AdvanceGamePhase();
 	void UpdateReplicatedGamePhase();
 	void RecalculateGameDuration();
-	void ClearGameResultText();
+	void ReturnToWaiting();
+	void SetGameFlowState(EDRGameFlowState NewState);
+	void SetGamePreparingBlocked(class ADRPlayerState* PlayerState, bool bBlocked) const;
+	void TickGameStartCountdown();
+	void BeginPlaying();
 	void RefreshGameStartPlayerRoster();
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
 	bool TryStartSnowJoinSnapshot(class ADRPlayerController* PlayerController);
+
+	FTimerHandle GameStartTimerHandle;
+	TWeakObjectPtr<class ADRGameStartActor> CountdownSource;
+	int32 CountdownRemainingSeconds = 0;
 
 	FTimerHandle TeamSwitchTimerHandle;
 	FTimerHandle GameTimerHandle;
@@ -129,19 +150,9 @@ private:
 	void RefreshActiveTeam();
 	void ApplyActiveTeam(bool bImmediate);
 
-	UPROPERTY(
-		VisibleAnywhere,
-		BlueprintReadOnly,
-		Category = "Game",
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Game|Flow",
 		meta = (AllowPrivateAccess = "true"))
-	bool bIsGameStart = false;
+	EDRGameFlowState GameFlowState = EDRGameFlowState::WaitingForPlayers;
 
-	UPROPERTY(
-		VisibleAnywhere,
-		BlueprintReadOnly,
-		Category = "Game",
-		meta = (AllowPrivateAccess = "true"))
-	bool bIsGameEnd = false;
-	
 	void EnsureDevelopmentPlayerName(ADRPlayerState* PlayerState) const;
 };

@@ -104,27 +104,6 @@ bool UDRGA_CharacterSkillBase::CanActivateAbility(
 		return false;
 	}
 
-	// CanActivate 시점에는 GetCurrentAbilitySpec()이 아직 현재 Handle을 가리키지
-	// 않을 수 있다. 전달된 Handle의 SourceObject에서 개별 쿨다운 태그를 직접
-	// 검사해 동일 스킬의 연속 사용을 막는다.
-	const UDRSkillDefinition* SkillDefinition = ActorInfo != nullptr
-		? Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo))
-		: nullptr;
-	const UAbilitySystemComponent* AbilitySystemComponent = ActorInfo != nullptr
-		? ActorInfo->AbilitySystemComponent.Get()
-		: nullptr;
-	if (IsValid(SkillDefinition)
-		&& SkillDefinition->CooldownTag.IsValid()
-		&& IsValid(AbilitySystemComponent)
-		&& AbilitySystemComponent->HasMatchingGameplayTag(SkillDefinition->CooldownTag))
-	{
-		if (OptionalRelevantTags != nullptr)
-		{
-			OptionalRelevantTags->AddTag(SkillDefinition->CooldownTag);
-		}
-		return false;
-	}
-
 	return IsValid(GetPlayerCharacter(ActorInfo))
 		&& ActorInfo != nullptr
 		&& IsValid(Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get()));
@@ -145,13 +124,35 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 		return;
 	}
 
+	ApplyCooldownTag(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		SkillDefinition->CooldownTag,
+		SkillDefinition->CooldownDuration);
+
+	NotifySkillCommitted(Handle, ActorInfo);
+	NotifySkillActivated(Handle, ActorInfo);
+}
+
+void UDRGA_CharacterSkillBase::ApplyCooldownTag(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	FGameplayTag CooldownTag,
+	float Duration) const
+{
+	if (ActorInfo == nullptr || !CooldownTag.IsValid() || Duration <= 0.f)
+	{
+		return;
+	}
+
 	FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(
 		Handle,
 		ActorInfo,
 		ActivationInfo,
 		GetCooldownGameplayEffect()->GetClass(),
 		GetAbilityLevel(Handle, ActorInfo));
-
 	if (!CooldownSpec.IsValid())
 	{
 		return;
@@ -159,18 +160,9 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 
 	CooldownSpec.Data->SetSetByCallerMagnitude(
 		DRGameplayTags::Data_Cooldown_Duration,
-		SkillDefinition->CooldownDuration);
-	CooldownSpec.Data->DynamicGrantedTags.AddTag(
-		SkillDefinition->CooldownTag);
-
-	ApplyGameplayEffectSpecToOwner(
-		Handle,
-		ActorInfo,
-		ActivationInfo,
-		CooldownSpec);
-
-	NotifySkillCommitted(Handle, ActorInfo);
-	NotifySkillActivated(Handle, ActorInfo);
+		Duration);
+	CooldownSpec.Data->DynamicGrantedTags.AddTag(CooldownTag);
+	ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
 }
 
 void UDRGA_CharacterSkillBase::EndAbility(
@@ -194,6 +186,11 @@ void UDRGA_CharacterSkillBase::EndAbility(
 		}
 	}
 	ActiveSkillEffectHandles.Reset();
+
+	if (!bWasCancelled)
+	{
+		NotifySkillCompleted(Handle, ActorInfo);
+	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
@@ -273,5 +270,27 @@ void UDRGA_CharacterSkillBase::NotifySkillActivated(
 		PerkComponent->HandleSkillActivated(
 			SkillDefinition,
 			ActiveSkillEffectHandles);
+	}
+}
+
+void UDRGA_CharacterSkillBase::NotifySkillCompleted(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	const UDRSkillDefinition* SkillDefinition =
+		Cast<UDRSkillDefinition>(GetSourceObject(Handle, ActorInfo));
+	ADRPlayerState* PlayerState =
+		Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+	UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+		? PlayerState->GetPerkComponent()
+		: nullptr;
+	if (IsValid(SkillDefinition) && IsValid(PerkComponent))
+	{
+		PerkComponent->HandleSkillCompleted(SkillDefinition);
 	}
 }

@@ -1,6 +1,5 @@
 #include "DRSnowSnapshotSerializer.h"
 
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "EngineUtils.h"
 #include "Serialization/BufferArchive.h"
@@ -65,16 +64,9 @@ FDRJoinSnapshotSizeReport FDRSnowSnapshotSerializer::MeasureCompressedSnapshotSi
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(TargetVoxelWorld);
 	Report.VoxelSave = MeasureVoxelSave(VoxelWorld);
 	Report.SnowVolume = MeasureSnowVolume();
-	TArray<uint8> OwnershipData;
-	if (SerializeOwnership(VoxelWorld, OwnershipData))
-	{
-		Report.OwnershipCompressedBytes = OwnershipData.Num();
-		Report.OwnershipCompressedMB = BytesToMB(Report.OwnershipCompressedBytes);
-	}
 	Report.TotalCompressedBytes =
 		Report.VoxelSave.CompressedSerializedBytes +
-		Report.SnowVolume.CompressedSparseBytes +
-		Report.OwnershipCompressedBytes;
+		Report.SnowVolume.CompressedSparseBytes;
 	Report.TotalCompressedMB = BytesToMB(Report.TotalCompressedBytes);
 	Report.bSuccess = Report.VoxelSave.bSuccess || Report.SnowVolume.bSuccess;
 
@@ -111,12 +103,6 @@ FDRJoinSnapshotSizeReport FDRSnowSnapshotSerializer::MeasureCompressedSnapshotSi
 			Report.SnowVolume.CompressedSparseMB,
 			Report.SnowVolume.CompressionRatio * 100.f);
 
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[JoinSnapshot][Ownership] Compressed=%lld bytes (%.3f MB)"),
-			Report.OwnershipCompressedBytes,
-			Report.OwnershipCompressedMB);
 	}
 
 	return Report;
@@ -151,19 +137,12 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 	{
 		return false;
 	}
-	TArray<uint8> OwnershipData;
-	if (!SerializeOwnership(VoxelWorld, OwnershipData))
-	{
-		return false;
-	}
-
 	FDRSnowJoinCheckpoint NewCheckpoint;
 	NewCheckpoint.SnapshotId = NextSnapshotId++;
 	NewCheckpoint.OperationSequence = OperationSequence;
 	NewCheckpoint.VoxelWorldName = VoxelWorld->GetFName();
 	NewCheckpoint.VoxelSaveData = MoveTemp(VoxelArchive);
 	NewCheckpoint.SnowVolumeData = MoveTemp(SnowVolumeData);
-	NewCheckpoint.OwnershipData = MoveTemp(OwnershipData);
 	LatestCheckpointId = NewCheckpoint.SnapshotId;
 	CheckpointsById.Add(NewCheckpoint.SnapshotId, MoveTemp(NewCheckpoint));
 	while (CheckpointsById.Num() > 4)
@@ -185,12 +164,11 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[JoinSnapshot] Created Id=%d Sequence=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=%d bytes"),
+		TEXT("[JoinSnapshot] Created Id=%d Sequence=%d Voxel=%d bytes SnowVolume=%d bytes"),
 		LatestCheckpoint->SnapshotId,
 		LatestCheckpoint->OperationSequence,
 		LatestCheckpoint->VoxelSaveData.Num(),
-		LatestCheckpoint->SnowVolumeData.Num(),
-		LatestCheckpoint->OwnershipData.Num());
+		LatestCheckpoint->SnowVolumeData.Num());
 	return true;
 }
 
@@ -240,8 +218,7 @@ void FDRSnowSnapshotSerializer::ResetCheckpoints()
 bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 	FName VoxelWorldName,
 	const TArray<uint8>& VoxelSaveData,
-	const TArray<uint8>& SnowVolumeData,
-	const TArray<uint8>& OwnershipData)
+	const TArray<uint8>& SnowVolumeData)
 {
 	AVoxelWorld* VoxelWorld = nullptr;
 	if (VoxelWorldName.IsNone())
@@ -269,7 +246,7 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 		return false;
 	}
 
-	// Voxel 표현을 먼저 복원한 뒤, 그 표현의 팀 재질 판단에 쓰는 Store를 같은 checkpoint로 맞춘다.
+	// Voxel 표현에는 MaterialIndex가 포함된다. 클라이언트에는 점령 UI용 Volume만 추가 복원한다.
 	FMemoryReader VoxelReader(VoxelSaveData);
 	FVoxelCompressedWorldSave CompressedSave;
 	CompressedSave.Serialize(VoxelReader);
@@ -278,7 +255,7 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 		return false;
 	}
 
-	return DeserializeSnowVolume(SnowVolumeData) && DeserializeOwnership(VoxelWorld, OwnershipData);
+	return DeserializeSnowVolume(SnowVolumeData);
 }
 
 AVoxelWorld* FDRSnowSnapshotSerializer::ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const
@@ -488,80 +465,5 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& Compr
 	VolumeSnapshot.ChunkSize = ChunkSize;
 	VolumeSnapshot.Chunks = MoveTemp(RestoredChunks);
 	VolumeStore.ReplaceSnapshotData(MoveTemp(VolumeSnapshot));
-	return true;
-}
-
-bool FDRSnowSnapshotSerializer::SerializeOwnership(
-	AVoxelWorld* VoxelWorld,
-	TArray<uint8>& OutCompressedData) const
-{
-	OutCompressedData.Reset();
-	if (!IsValid(VoxelWorld))
-	{
-		return false;
-	}
-
-	TMap<FIntVector, int32> TeamByVoxel;
-	OwnershipStore.CopySnapshotData(VoxelWorld, TeamByVoxel);
-	FBufferArchive Archive;
-	int32 Version = OwnershipSnapshotVersion;
-	int32 Count = TeamByVoxel.Num();
-	Archive << Version;
-	Archive << Count;
-	for (const TPair<FIntVector, int32>& Pair : TeamByVoxel)
-	{
-		FIntVector VoxelPosition = Pair.Key;
-		int32 TeamId = Pair.Value;
-		Archive << VoxelPosition;
-		Archive << TeamId;
-	}
-
-	FVoxelSerializationUtilities::CompressData(Archive.GetData(), Archive.Num(), OutCompressedData);
-	return !OutCompressedData.IsEmpty();
-}
-
-bool FDRSnowSnapshotSerializer::DeserializeOwnership(
-	AVoxelWorld* VoxelWorld,
-	const TArray<uint8>& CompressedData)
-{
-	if (!IsValid(VoxelWorld) || CompressedData.IsEmpty())
-	{
-		return false;
-	}
-
-	TArray64<uint8> UncompressedData;
-	if (!FVoxelSerializationUtilities::DecompressData(CompressedData, UncompressedData) ||
-		UncompressedData.Num() > MAX_int32)
-	{
-		return false;
-	}
-
-	TArray<uint8> ReaderData;
-	ReaderData.Append(UncompressedData.GetData(), static_cast<int32>(UncompressedData.Num()));
-	FMemoryReader Reader(ReaderData);
-	int32 Version = 0;
-	int32 Count = 0;
-	Reader << Version;
-	Reader << Count;
-	if (Reader.IsError() || Version != OwnershipSnapshotVersion || Count < 0)
-	{
-		return false;
-	}
-
-	TMap<FIntVector, int32> TeamByVoxel;
-	for (int32 Index = 0; Index < Count; ++Index)
-	{
-		FIntVector VoxelPosition;
-		int32 TeamId = INDEX_NONE;
-		Reader << VoxelPosition;
-		Reader << TeamId;
-		if (Reader.IsError())
-		{
-			return false;
-		}
-		TeamByVoxel.Add(VoxelPosition, TeamId);
-	}
-
-	OwnershipStore.ReplaceSnapshotData(VoxelWorld, MoveTemp(TeamByVoxel));
 	return true;
 }

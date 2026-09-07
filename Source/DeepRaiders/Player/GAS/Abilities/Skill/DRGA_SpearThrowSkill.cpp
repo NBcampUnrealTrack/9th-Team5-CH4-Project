@@ -84,7 +84,9 @@ bool UDRGA_SpearThrowSkill::SpawnProjectile(
 		AbilitySystem,
 		ImpactEffectSpecs,
 		DRCombatTeam::GetActorTeamId(Character),
-		KnockbackStrength);
+		KnockbackStrength,
+		ProjectileSpeed,
+		MaxAimDistance);
 
 	UGameplayStatics::FinishSpawningActor(
 		Projectile,

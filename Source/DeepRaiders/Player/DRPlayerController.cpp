@@ -260,6 +260,7 @@ void ADRPlayerController::Tick(float DeltaSeconds)
 		{
 			SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Complete;
 			LogSnowJoinControlState(TEXT("ClientControlReady"));
+
 		}
 	}
 
@@ -1167,7 +1168,6 @@ void ADRPlayerController::HandleGASInputStarted(int32 InputId)
 		return;
 	}
 
-
 	const bool bIsItemUseInput = InputId == static_cast<int32>(EDRAbilityInputId::Primary)
 		|| InputId == static_cast<int32>(EDRAbilityInputId::Secondary);
 
@@ -1398,8 +1398,7 @@ float ADRPlayerController::GetSnowJoinSnapshotProgress() const
 
 	const int64 TotalByteCount =
 		static_cast<int64>(PendingSnowVoxelSaveByteCount) +
-		PendingSnowVolumeByteCount +
-		PendingSnowOwnershipByteCount;
+		PendingSnowVolumeByteCount;
 	if (TotalByteCount <= 0)
 	{
 		return 0.f;
@@ -1407,8 +1406,7 @@ float ADRPlayerController::GetSnowJoinSnapshotProgress() const
 
 	const int64 ReceivedByteCount =
 		static_cast<int64>(PendingSnowVoxelSaveData.Num()) +
-		PendingSnowVolumeData.Num() +
-		PendingSnowOwnershipData.Num();
+		PendingSnowVolumeData.Num();
 	return static_cast<float>(FMath::Clamp(
 		static_cast<double>(ReceivedByteCount) / TotalByteCount,
 		0.0,
@@ -1420,10 +1418,9 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	int32 CheckpointSequence,
 	FName VoxelWorldName,
 	int32 VoxelSaveByteCount,
-	int32 SnowVolumeByteCount,
-	int32 OwnershipByteCount)
+	int32 SnowVolumeByteCount)
 {
-	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0 || OwnershipByteCount <= 0)
+	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0)
 	{
 		return;
 	}
@@ -1434,12 +1431,9 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowVoxelWorldName = VoxelWorldName;
 	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
-	PendingSnowOwnershipByteCount = OwnershipByteCount;
 	bPendingSnowSnapshotFinished = false;
-	bPendingSnowCheckpointApplied = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
-	PendingSnowOwnershipData.Reset();
 	BufferedSnowOperations.Reset();
 
 	ServerRequestSnowJoinSnapshotData(SnapshotId);
@@ -1472,7 +1466,6 @@ void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32
 	LastSnowSnapshotWindowChange = FPlatformTime::Seconds();
 	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
 	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
-	OutgoingSnowOwnershipData = MoveTemp(Checkpoint.OwnershipData);
 
 	// ACK가 없거나 연결이 포화된 동안에도 전송 재개 여부를 확인한다.
 	World->GetTimerManager().SetTimer(
@@ -1541,9 +1534,6 @@ void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
 			break;
 		case 1:
 			Payload = &OutgoingSnowVolumeData;
-			break;
-		case 2:
-			Payload = &OutgoingSnowOwnershipData;
 			break;
 		default:
 			if (PendingSnowChunkAcks.IsEmpty())
@@ -1644,7 +1634,6 @@ void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
 	PendingSnowChunkAcks.Reset();
 	OutgoingSnowVoxelSaveData.Reset();
 	OutgoingSnowVolumeData.Reset();
-	OutgoingSnowOwnershipData.Reset();
 }
 
 void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
@@ -1661,18 +1650,11 @@ void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int
 	ExpectedAppliedSnowSnapshotId = INDEX_NONE;
 	if (ADRMiningGameModeBase* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>() : nullptr)
 	{
-		const bool bRestarted = GameMode->HandleSnowJoinSnapshotApplied(this);
+		GameMode->HandleSnowJoinSnapshotApplied(this);
 		LogSnowJoinControlState(TEXT("ServerRestartPlayerReturned"));
-		if (bRestarted)
-		{
-			Client_ResumeSnowJoinOperations(SnapshotId);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[JoinControl] ResumeNotSent PC=%s SnapshotId=%d"),
-				*GetNameSafe(this), SnapshotId);
-		}
+
 	}
+
 }
 
 void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
@@ -1697,10 +1679,6 @@ void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
 	case 1:
 		TargetData = &PendingSnowVolumeData;
 		ExpectedByteCount = PendingSnowVolumeByteCount;
-		break;
-	case 2:
-		TargetData = &PendingSnowOwnershipData;
-		ExpectedByteCount = PendingSnowOwnershipByteCount;
 		break;
 	default:
 		return;
@@ -1751,26 +1729,21 @@ bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& R
 
 bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 {
-	if (bPendingSnowCheckpointApplied)
-	{
-		return true;
-	}
-
 	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
 		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
-		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount ||
-		PendingSnowOwnershipData.Num() != PendingSnowOwnershipByteCount)
+		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount)
 	{
 		return false;
 	}
 
 	UWorld* World = GetWorld();
 	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	if (!IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
+	ADRMiningGameStateBase* MiningGameState = IsValid(World)
+		? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (!IsValid(MiningGameState) || !IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
 		PendingSnowVoxelWorldName,
 		PendingSnowVoxelSaveData,
-		PendingSnowVolumeData,
-		PendingSnowOwnershipData))
+		PendingSnowVolumeData))
 	{
 		if (IsValid(World))
 		{
@@ -1784,27 +1757,17 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 		return false;
 	}
 
-	if (ADRMiningGameStateBase* MiningGameState = World->GetGameState<ADRMiningGameStateBase>())
-	{
-		MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
-	}
-
-	bPendingSnowCheckpointApplied = true;
+	MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
+	World->GetTimerManager().ClearTimer(SnowJoinSnapshotRetryTimer);
+	// 이벤트 콜백에서 재진입해도 같은 스냅샷을 다시 적용하지 않는다.
+	bPendingSnowSnapshotFinished = false;
 	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
 	LogSnowJoinControlState(TEXT("ClientSnapshotApplied"));
 	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
 	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
-	return true;
-}
 
-void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 SnapshotId)
-{
-	LogSnowJoinControlState(TEXT("ClientResumeReceived"));
-	if (!bPendingSnowCheckpointApplied || SnapshotId != PendingSnowSnapshotId)
-	{
-		return;
-	}
-
+	// Voxel 작업은 Pawn 스폰이나 서버의 추가 응답을 기다릴 필요가 없다.
+	LogSnowJoinControlState(TEXT("ClientOperationsResumed"));
 	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
 	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
 	{
@@ -1824,27 +1787,27 @@ void ADRPlayerController::Client_ResumeSnowJoinOperations_Implementation(int32 S
 	const int32 AppliedSnapshotId = PendingSnowSnapshotId;
 	const int32 AppliedVoxelSaveByteCount = PendingSnowVoxelSaveByteCount;
 	const int32 AppliedSnowVolumeByteCount = PendingSnowVolumeByteCount;
-	const int32 AppliedOwnershipByteCount = PendingSnowOwnershipByteCount;
 	PendingSnowSnapshotId = INDEX_NONE;
 	PendingSnowCheckpointSequence = 0;
-	bPendingSnowCheckpointApplied = false;
+	PendingSnowVoxelWorldName = NAME_None;
+	PendingSnowVoxelSaveByteCount = 0;
+	PendingSnowVolumeByteCount = 0;
+	bPendingSnowSnapshotFinished = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
-	PendingSnowOwnershipData.Reset();
 	BufferedSnowOperations.Reset();
+	// 조인 버퍼링을 해제한 뒤 전달해야 같은 작업을 다시 버퍼에 넣지 않는다.
 	ApplySnowJoinOperations(Operations);
 
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes Ownership=%d bytes RecentOperations=%d"),
+		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes RecentOperations=%d"),
 		AppliedSnapshotId,
 		AppliedVoxelSaveByteCount,
 		AppliedSnowVolumeByteCount,
-		AppliedOwnershipByteCount,
 		Operations.Num());
-
-	return;
+	return true;
 }
 
 void ADRPlayerController::LogSnowJoinControlState(const TCHAR* Stage) const
@@ -1900,7 +1863,6 @@ UInputAction* ADRPlayerController::GetSkillInputAction(
 		return nullptr;
 	}
 }
-
 
 #pragma region Debug
 

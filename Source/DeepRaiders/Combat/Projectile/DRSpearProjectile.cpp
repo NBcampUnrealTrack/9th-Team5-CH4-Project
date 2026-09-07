@@ -6,9 +6,12 @@ void ADRSpearProjectile::InitializeSpearProjectile(
 	UAbilitySystemComponent* InSourceAbilitySystem,
 	const TArray<FGameplayEffectSpecHandle>& InImpactEffectSpecs,
 	int32 InSourceTeamId,
-	float InKnockbackStrength)
+	float InKnockbackStrength,
+	float InInitialSpeed,
+	float InMaximumRange)
 {
 	KnockbackStrength = FMath::Max(InKnockbackStrength, 0.f);
+	ConfigureProjectileMovement(InInitialSpeed, 0.f);
 
 	InitializeProjectile(
 		InSourceAbilitySystem,
@@ -16,7 +19,8 @@ void ADRSpearProjectile::InitializeSpearProjectile(
 		0.f,
 		FDRProjectileWorldImpactData(),
 		InSourceTeamId,
-		nullptr);
+		nullptr,
+		InMaximumRange);
 }
 
 void ADRSpearProjectile::HandleImpact(const FHitResult& ImpactResult)

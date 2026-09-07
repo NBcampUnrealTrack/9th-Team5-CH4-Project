@@ -2,6 +2,11 @@
 
 namespace DRGameplayTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(Perk_Skill_Grab_Debuff, "Perk.Skill.Grab.Debuff");
+	UE_DEFINE_GAMEPLAY_TAG(Perk_Skill_Grab_Enhancement, "Perk.Skill.Grab.Enhancement");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_SnowReduction, "Data.Perk.Grab.SnowReduction");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_RangeBonus, "Data.Perk.Grab.RangeBonus");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_HitScaleBonus, "Data.Perk.Grab.HitScaleBonus");
 	UE_DEFINE_GAMEPLAY_TAG(
 		Character_Upgrade_MaxHealth, 
 		"Character.Upgrade.MaxHealth");
@@ -84,7 +89,17 @@ namespace DRGameplayTags
 		State_Aiming_Throw,
 		"State.Aiming.Throw",
 		"Player is aiming a throwable action.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_GamePreparing,
+		"State.GamePreparing",
+		"Player actions are blocked while the game is preparing.");
 	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Root,
+		"Ability",
+		"Root tag for all gameplay abilities.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
@@ -191,6 +206,11 @@ namespace DRGameplayTags
 		"Snow wall skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_IceWall,
+		"Ability.Skill.IceWall",
+		"Ice wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Skill_Grab,
 		"Ability.Skill.Grab",
 		"Grab skill.");
@@ -199,6 +219,11 @@ namespace DRGameplayTags
 		Ability_Skill_Grapple,
 		"Ability.Skill.Grapple",
 		"Grapple skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Skill_Barrier,
+		"Ability.Skill.Barrier",
+		"Deployable barrier skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Perk_Skill_Charges,
@@ -214,6 +239,16 @@ namespace DRGameplayTags
 		Perk_Skill_HotPack_InstantCare,
 		"Perk.Skill.HotPack.InstantCare",
 		"Changes Hot Pack into a throwable instant recovery skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_SlowProjectile_ExtremeSlow,
+		"Perk.Skill.SlowProjectile.ExtremeSlow",
+		"Strengthens the slow projectile movement speed reduction.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Perk_Skill_SlowProjectile_AllySpeed,
+		"Perk.Skill.SlowProjectile.AllySpeed",
+		"Grants movement speed to allies in the impact radius.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Weapon_Upgrade_Rifle,
@@ -411,14 +446,29 @@ namespace DRGameplayTags
 		"Cooldown for the snow wall skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_IceWall,
+		"Cooldown.Skill.IceWall",
+		"Cooldown for the ice wall skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SpearThrow,
 		"Cooldown.Skill.SpearThrow",
 		"Cooldown for the spear throw skill.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_SpearThrow_FireInterval,
+		"Cooldown.Interval.SpearThrow",
+		"Minimum interval between stacked spear throws.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Cooldown_Skill_SlowProjectile,
 		"Cooldown.Skill.SlowProjectile",
 		"Cooldown for the slow projectile skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Cooldown_Skill_Barrier,
+		"Cooldown.Skill.Barrier",
+		"Cooldown for the deployable barrier skill.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Effect_Policy_PersistThroughDeath,
@@ -479,6 +529,11 @@ namespace DRGameplayTags
 		Data_Effect_MoveSpeed,
 		"Data.Effect.MoveSpeed",
 		"Effect MoveSpeed passed through GAS.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Effect_Duration,
+		"Data.Effect.Duration",
+		"Effect duration passed through GAS.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_QuickSlot_ActivationInterval_Duration,

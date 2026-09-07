@@ -11,7 +11,6 @@
 #include "AbilitySystemComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/SceneComponent.h"
-#include "NiagaraFunctionLibrary.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DRPlayerState.h"
@@ -36,6 +35,8 @@
 #include "Animation/AnimInstance.h"
 #include "DeepRaiders/Item/Animation/DRHitReactionSet.h"
 #include "DeepRaiders/UI/Nameplate/DRPlayerNameplateComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "GameplayCueManager.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -81,6 +82,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	Movement->bOrientRotationToMovement = false;
 	Movement->bUseControllerDesiredRotation = true;
 	Movement->RotationRate = FRotator(0.f, 720.f, 0.f);
+
+	// 카메라 경로는 다른 캐릭터에 의해 당겨지지 않는다. 지형/설치물만 Camera 채널을 막는다.
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
@@ -688,11 +692,10 @@ bool ADRPlayerCharacter::CalculateSkillFireOrigin(FVector& OutFireOrigin) const
 	return !OutFireOrigin.ContainsNaN();
 }
 
-void ADRPlayerCharacter::PlayProjectileFireVFXFromNotify()
+void ADRPlayerCharacter::PlayProjectileFirePresentationFromNotify()
 {
 	if (GetNetMode() == NM_DedicatedServer
-		|| !IsValid(HeldItemComponent)
-		|| !IsValid(WorldHandEquipmentMesh))
+		|| !IsValid(HeldItemComponent))
 	{
 		return;
 	}
@@ -706,42 +709,57 @@ void ADRPlayerCharacter::PlayProjectileFireVFXFromNotify()
 		return;
 	}
 
-	const FDRWeaponPresentationData& Presentation =
-		WeaponDefinition->FirePresentation;
+	FVector PresentationLocation = GetActorLocation();
 
-	if (!IsValid(Presentation.VFX))
+	/*
+	 * Fire Cue BP가 SourceObject에서 WeaponDefinition을 꺼내
+	 * FirePresentation의 VFX / SoundCueTag / AttachSocketName을 사용한다.
+	 *
+	 * Location은 Sound fallback 등을 위해 실제 muzzle 위치를 우선 전달한다.
+	 */
+	if (IsValid(WorldHandEquipmentMesh))
+	{
+		const FDRWeaponPresentationData& Presentation =
+			WeaponDefinition->FirePresentation;
+
+		const FName SocketName =
+			Presentation.AttachSocketName.IsNone()
+				? TEXT("VFXPoint")
+				: Presentation.AttachSocketName;
+
+		if (WorldHandEquipmentMesh->DoesSocketExist(SocketName))
+		{
+			PresentationLocation =
+				WorldHandEquipmentMesh->GetSocketLocation(SocketName);
+		}
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = PresentationLocation;
+	Parameters.Instigator = this;
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject =
+		const_cast<UDRProjectileWeaponItemDefinition*>(
+			WeaponDefinition);
+
+	UGameplayCueManager* GameplayCueManager =
+		UAbilitySystemGlobals::Get().GetGameplayCueManager();
+
+	if (!IsValid(GameplayCueManager))
 	{
 		return;
 	}
 
-	const FName SocketName =
-		Presentation.AttachSocketName.IsNone()
-			? TEXT("VFXPoint")
-			: Presentation.AttachSocketName;
+	FGameplayTagContainer CueTags;
+	CueTags.AddTag(
+		DRGameplayTags::GameplayCue_Weapon_Projectile_Fire);
 
-	if (!WorldHandEquipmentMesh->DoesSocketExist(SocketName))
-	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[WeaponFireVFX] Socket missing. Weapon=%s Socket=%s"),
-			*GetNameSafe(WeaponDefinition),
-			*SocketName.ToString());
-
-		return;
-	}
-
-	UNiagaraFunctionLibrary::SpawnSystemAttached(
-		Presentation.VFX,
-		WorldHandEquipmentMesh,
-		SocketName,
-		FVector::ZeroVector,
-		FRotator::ZeroRotator,
-		EAttachLocation::SnapToTarget,
-		true,
-		true,
-		ENCPoolMethod::AutoRelease,
-		true);
+	GameplayCueManager->HandleGameplayCues(
+		this,
+		CueTags,
+		EGameplayCueEvent::Executed,
+		Parameters,
+		EGameplayCueExecutionOptions::Default);
 }
 
 void ADRPlayerCharacter::PlayHitReaction(

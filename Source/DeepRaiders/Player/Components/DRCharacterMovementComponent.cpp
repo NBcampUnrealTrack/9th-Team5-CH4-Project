@@ -1172,6 +1172,65 @@ void UDRCharacterMovementComponent::UpdateZiplineFacing(
         false);
 }
 
+void UDRCharacterMovementComponent::PhysGrabPull(
+    float DeltaTime, UDRMovementActionComponent* MovementAction)
+{
+    const FDRMovementActionState& State = MovementAction->GetSimulationActionState();
+    const FVector Destination = State.ReferenceLocation;
+    const FVector StartLocation = UpdatedComponent->GetComponentLocation();
+    const FVector ToDestination = Destination - StartLocation;
+    const FVector GroundDelta = ProjectToGravityFloor(ToDestination);
+    const float MaxDistance = FMath::Max(State.MaxSpeed, 0.f) * DeltaTime;
+    FindFloor(StartLocation, CurrentFloor, false);
+    const bool IsFollowingFloor = CurrentFloor.IsWalkableFloor()
+        && CurrentFloor.GetDistanceToFloor() <= MAX_FLOOR_DIST
+        && !GroundDelta.IsNearlyZero();
+    if (IsFollowingFloor)
+    {
+        Velocity = GroundDelta.GetClampedToMaxSize(MaxDistance) / DeltaTime;
+        MoveAlongFloor(Velocity, DeltaTime);
+        if (HasValidData())
+        {
+            FindFloor(UpdatedComponent->GetComponentLocation(), CurrentFloor, false);
+            if (CurrentFloor.IsWalkableFloor())
+            {
+                AdjustFloorHeight();
+            }
+        }
+    }
+    else
+    {
+        const FVector Delta = ToDestination.GetClampedToMaxSize(MaxDistance);
+        FHitResult Hit;
+        SafeMoveUpdatedComponent(Delta, UpdatedComponent->GetComponentQuat(), true, Hit);
+    }
+    if (!HasValidData())
+    {
+        return;
+    }
+
+    const FVector Remaining = Destination - UpdatedComponent->GetComponentLocation();
+    Velocity = (UpdatedComponent->GetComponentLocation() - StartLocation) / DeltaTime;
+    const bool IsArrived = Remaining.IsNearlyZero()
+        || (CurrentFloor.IsWalkableFloor()
+            && ProjectToGravityFloor(Remaining).IsNearlyZero()
+            && FMath::Abs(GetGravitySpaceZ(Remaining)) <= MAX_FLOOR_DIST);
+    if (IsArrived || State.MaxSpeed <= 0.f)
+    {
+        StopMovementImmediately();
+        if (CharacterOwner->HasAuthority())
+        {
+            MovementAction->EndMovementAction(IsArrived ? EDRMovementActionEndReason::Completed
+                : EDRMovementActionEndReason::Invalidated);
+        }
+        if (!MovementAction->IsMovementActionActive()
+            && IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction))
+        {
+            RestoreDefaultMovementMode();
+        }
+    }
+}
+
 void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 Iterations)
 {
     if (DeltaTime < MIN_TICK_TIME)
@@ -1207,6 +1266,12 @@ void UDRCharacterMovementComponent::PhysMovementAction(float DeltaTime, int32 It
         return;
     }
     
+    if (MovementAction->GetSimulationActionState().ActionType == EDRMovementActionType::Grab)
+    {
+        PhysGrabPull(DeltaTime, MovementAction);
+        return;
+    }
+
     float RemainingTime = DeltaTime;
     
     while (RemainingTime >= MIN_TICK_TIME

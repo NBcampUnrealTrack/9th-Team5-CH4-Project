@@ -28,6 +28,7 @@ ADRGameplayCueGrapple::ADRGameplayCueGrapple(const FObjectInitializer& ObjectIni
 	bAllowMultipleWhileActiveEvents = false;
 	
 	PresentationRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
+	SetRootComponent(PresentationRoot);
 	
 	HookRoot = CreateDefaultSubobject<USceneComponent>(TEXT("HookRoot"));
 	HookRoot->SetupAttachment(PresentationRoot);

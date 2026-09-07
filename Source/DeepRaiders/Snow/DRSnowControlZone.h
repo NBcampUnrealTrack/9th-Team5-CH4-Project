@@ -173,7 +173,6 @@ protected:
 
 private:
 	static int32 GetDominantMaterialIndex(const FVoxelMaterial& Material, EVoxelMaterialConfig MaterialConfig);
-	static int32 MaterialIndexToTeamId(int32 MaterialIndex);
 	static void ExpandVoxelBoundsForWorldPoint(
 		const AVoxelWorld* VoxelWorld,
 		const FVector& WorldPoint,

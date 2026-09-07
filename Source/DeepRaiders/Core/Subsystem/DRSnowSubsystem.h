@@ -1,27 +1,27 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Containers/Queue.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "TimerManager.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowOwnershipStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
 #include "DeepRaiders/Core/Subsystem/Snow/DRSnowSurfaceEditor.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowSnapshotSerializer.h"
 #include "DRSnowSubsystem.generated.h"
 
 class AVoxelWorld;
+class FDRSnowAddPipeline;
+class FDRSnowRemovalPipeline;
 
-struct FDRSnowPendingRenderUpdate
-{
-	TWeakObjectPtr<AVoxelWorld> VoxelWorld;
-	TArray<FVoxelIntBox> Bounds;
-};
-
-// Snow 도메인의 유일한 외부 진입점이다.
-// 내부 구현의 Volume/Surface/Ownership/Snapshot 모듈 분리는 이 클래스 뒤에 숨긴다.
+// UDRSnowSubsystem: 게임 내 눈 지형 및 점령 시스템의 메인 창구
+//
+// 외부(GameState, GAS 등)는 오직 이 서브시스템만 호출합니다.
+// 내부의 복셀 외형(Surface), 팀별 점령량(Volume), 난입 동기화(Snapshot)는
+// 서브시스템과 각 전용 파이프라인 내부에서 조율됩니다.
+//
+// 기본 동기화 흐름:
+//   서버: AddSnow, RemoveSnow 실행 -> GameState를 통해 Multicast 배치 전송
+//   클라이언트: 서버에서 확정된 작업을 수신한 뒤 지형, 점령량, 색상을 적용
 UCLASS()
 class DEEPRAIDERS_API UDRSnowSubsystem : public UWorldSubsystem
 {
@@ -29,24 +29,46 @@ class DEEPRAIDERS_API UDRSnowSubsystem : public UWorldSubsystem
 
 public:
 	UDRSnowSubsystem();
+	virtual ~UDRSnowSubsystem() override;
 
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
-	FDRSnowAddResult AddSnow(const FDRSnowSurfaceAddRequest& Request);
-	FDRSnowRemoveResult RemoveSnow(const FDRSnowSurfaceRemoveRequest& Request);
-	// 눈총 frustum 전용 제거 경로다.
-	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request);
-	// Multicast 수신용 제거 경로다. 일반 제거와 달리 서버가 확정한 양을 Volume에 반영한다.
-	bool ApplyReplicatedSnowRemoval(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
-	bool ApplyReplicatedSnowAbsorbTool(const FDRSnowSurfaceRemoveRequest& Request, float AppliedAmount);
-	bool RepaintSnowMaterialsAtArea(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult);
+	// 눈 추가
+	// 서버: 복셀 지형을 쌓고, 팀 점령 부피와 색상(Material)을 기록합니다.
+	FDRSnowAddResult AddSnow(
+		const FDRSnowSurfaceAddRequest& Request,
+		TFunction<void(float)> DirectionalCompletion = {});
 
+	// 클라이언트: 서버에서 확정된 눈 추가 작업을 수신하여 로컬 상태에 반영합니다.
+	FDRSnowAddResult ApplyReplicatedSnowAdd(
+		const FDRSnowSurfaceAddRequest& Request,
+		float AppliedAmount,
+		TFunction<void(float)> DirectionalCompletion = {});
+
+	// 일반 눈 파내기
+	// 서버: 지정 반경의 눈을 파내고 점령 부피를 삭감합니다.
+	FDRSnowRemoveResult RemoveSnow(
+		const FDRSnowSurfaceRemoveRequest& Request);
+
+	// 클라이언트 복제: 서버 확정 데이터를 받아 지형과 점령량을 적용합니다.
+	bool ApplyReplicatedSnowRemoval(
+		const FDRSnowSurfaceRemoveRequest& Request,
+		float AppliedAmount);
+
+	// 눈총 흡수 전용 파내기
+	// 서버: 원뿔 시야(Frustum) 형태로 눈을 흡수합니다.
+	FDRSnowRemoveResult RemoveSnowWithAbsorbTool(
+		const FDRSnowSurfaceRemoveRequest& Request);
+
+	// 점령 상태 조회
+	// 특정 위치에서 가장 많은 지분을 가진 팀 ID 반환
 	int32 GetDominantTeamAtLocation(FVector WorldLocation) const;
+	// 특정 영역 내 팀별 눈 점유 비율 조회 (UI 게이지 등에 사용)
 	FDRSnowControlRatio QuerySnowInBounds(const FBox& WorldBounds) const;
 
-	// 중도 난입 checkpoint 생성/전송에 사용하는 snapshot API다.
+	// 중도 난입 플레이어 동기화
 	FDRJoinSnapshotSizeReport MeasureCompressedSnapshotSize(AVoxelWorld* TargetVoxelWorld = nullptr, bool bLogResult = true);
 	bool CreateCheckpoint(int32 OperationSequence, AVoxelWorld* TargetVoxelWorld = nullptr);
 	bool GetLatestCheckpointOperationSequence(int32& OutOperationSequence);
@@ -56,43 +78,32 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow|Snapshot")
 	void ResetCheckpoints();
 
-	/** 새 경기용 눈 데이터와 체크포인트를 모두 비운다. */
+	// 새 게임 시작 시 눈 데이터와 체크포인트를 초기화합니다.
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Snow")
 	void ResetSnowState();
 
-	bool ApplyCheckpoint(FName VoxelWorldName, const TArray<uint8>& VoxelSaveData, const TArray<uint8>& SnowVolumeData, const TArray<uint8>& OwnershipData);
+	// 난입한 클라이언트가 서버의 복셀 지형과 점령 부피를 한 번에 복원합니다.
+	bool ApplyCheckpoint(
+		FName VoxelWorldName,
+		const TArray<uint8>& VoxelSaveData,
+		const TArray<uint8>& SnowVolumeData);
 
 private:
-	// 제거 brush는 실제로 변경된 voxel만 반환한다.
-	// 이 결과를 기준으로 해야 Volume 원본 데이터가 Voxel 표현과 같은 변화만 기록한다.
-	void ApplyAddedSurfaceEdit(
-		const FDRSnowSurfaceAddRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult);
-	void ApplyRemovedSurfaceEdit(
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const FDRSnowSurfaceEditResult& EditResult,
-		float VolumeAmount);
-	void AddVolumeFromModifiedValues(
-		AVoxelWorld& VoxelWorld,
-		const FDRSnowSurfaceAddRequest& Request,
-		const TArray<FModifiedVoxelValue>& ModifiedValues,
-		float MaxAddedAmount);
-	void RemoveVolumeFromModifiedValues(
-		AVoxelWorld& VoxelWorld,
-		const FDRSnowSurfaceRemoveRequest& Request,
-		const TArray<FModifiedVoxelValue>& ModifiedValues,
-		float MaxRemovedAmount);
-	void ProcessNextDirectionalAdd();
-	void QueueRenderUpdate(AVoxelWorld* VoxelWorld, const FVoxelIntBox& Bounds);
-	void FlushRenderUpdates();
 
-	FDRSnowOwnershipStore OwnershipStore;
+	// 팀별 눈 점유 부피 저장소 (UI 점령 비율 산출 및 승패 판정 기준)
 	FDRSnowVolumeStore VolumeStore;
+
+	// 복셀 플러그인을 직접 제어하여 실제 지형을 깎거나 쌓는 도구
 	FDRSnowSurfaceEditor SurfaceEditor;
+
+	// 난입 플레이어용 맵 상태 압축 및 복원 직렬화기
 	TUniquePtr<FDRSnowSnapshotSerializer> SnapshotSerializer;
-	TQueue<FDRSnowSurfaceAddRequest> DirectionalAddQueue;
-	bool bDirectionalAddInProgress = false;
+
+	// 눈 파내기 단계별 조율자 (지형 파기 -> 부피 삭감)
+	TSharedPtr<FDRSnowRemovalPipeline> RemovalPipeline;
+
+	// 눈 쌓기 단계별 조율자 (지형 생성 -> 부피 누적 -> 색상 적용)
+	TSharedPtr<FDRSnowAddPipeline> AddPipeline;
+
 	int32 SnowStateGeneration = 0;
-	TArray<FDRSnowPendingRenderUpdate> PendingRenderUpdates;
-	FTimerHandle RenderUpdateTimerHandle;
 };

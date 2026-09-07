@@ -1,78 +1,143 @@
 #include "DRGA_SlowProjectileSkill.h"
 
 #include "AbilitySystemComponent.h"
-#include "Kismet/GameplayStatics.h"
-
 #include "DeepRaiders/Combat/Projectile/DRSlowProjectile.h"
-#include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
-#include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Item/DRThrowableItemDefinition.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 
-void UDRGA_SlowProjectileSkill::ActivateAbility(
-	const FGameplayAbilitySpecHandle Handle,
-	const FGameplayAbilityActorInfo* ActorInfo,
-	const FGameplayAbilityActivationInfo ActivationInfo,
-	const FGameplayEventData* TriggerEventData)
+bool UDRGA_SlowProjectileSkill::SpawnServerProjectile(
+	const FVector& LaunchLocation,
+	const FVector& LaunchDirection)
 {
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const UDRThrowableItemDefinition* ThrowableDefinition = GetActiveDefinition();
+	const UDRSkillDefinition* SkillDefinition = GetCurrentSkillDefinition();
+	ADRPlayerState* PlayerState = ActorInfo != nullptr
+		? Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get())
+		: nullptr;
+	UAbilitySystemComponent* AbilitySystem = ActorInfo != nullptr
+		? ActorInfo->AbilitySystemComponent.Get()
+		: nullptr;
+	UWorld* World = GetWorld();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 
-	ADRPlayerCharacter* Character = GetPlayerCharacter(ActorInfo);
-	UAbilitySystemComponent* AbilitySystem =
-		ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
-	const FVector ProjectileDirection =
-		IsValid(Character) ? Character->GetBaseAimRotation().Vector().GetSafeNormal() : FVector::ZeroVector;
-
-	FVector SpawnLocation;
-	const bool IsSpawnLocationValid =
-		IsValid(Character)
-		&& Character->CalculateGameplayFireOrigin(ProjectileDirection, SpawnLocation);
-
-	if (!IsValid(Character)
+	if (ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority()
+		|| !IsValid(ThrowableDefinition)
+		|| !IsValid(SkillDefinition)
+		|| SkillDefinition->EffectDuration <= 0.f
+		|| !IsValid(PlayerState)
 		|| !IsValid(AbilitySystem)
+		|| !IsValid(World)
+		|| !IsValid(AvatarActor)
 		|| !ProjectileClass
-		|| !SlowEffectClass
-		|| EffectRadius <= 0.f
-		|| ProjectileDirection.IsNearlyZero()
-		|| !IsSpawnLocationValid
-		|| !CommitAbility(Handle, ActorInfo, ActivationInfo))
+		|| !SlowEffectClass)
 	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
+		return false;
 	}
 
-	if (ActorInfo->IsNetAuthority())
+	const UDRPerkComponent* PerkComponent = PlayerState->GetPerkComponent();
+	FGameplayEffectSpecHandle SlowSpec;
+	FGameplayEffectSpecHandle AllySpec;
+	if (!BuildEffectSpecs(SkillDefinition, PerkComponent, SlowSpec, AllySpec))
 	{
-		FGameplayEffectSpecHandle SlowEffectSpec =
-			MakeOutgoingGameplayEffectSpec(SlowEffectClass, GetAbilityLevel());
-		UWorld* World = Character->GetWorld();
-
-		if (SlowEffectSpec.IsValid()
-			&& IsValid(World))
-		{
-			const FTransform SpawnTransform(
-				ProjectileDirection.Rotation(),
-				SpawnLocation);
-			ADRSlowProjectile* Projectile =
-				World->SpawnActorDeferred<ADRSlowProjectile>(
-					ProjectileClass,
-					SpawnTransform,
-					Character,
-					Character,
-					ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-			if (IsValid(Projectile))
-			{
-				Projectile->InitializeSlowProjectile(
-					AbilitySystem,
-					SlowEffectSpec,
-					DRCombatTeam::GetActorTeamId(Character),
-					EffectRadius);
-
-				UGameplayStatics::FinishSpawningActor(
-					Projectile,
-					SpawnTransform);
-			}
-		}
+		return false;
 	}
 
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	const FTransform SpawnTransform(LaunchDirection.Rotation(), LaunchLocation);
+	ADRSlowProjectile* Projectile = World->SpawnActorDeferred<ADRSlowProjectile>(
+		ProjectileClass,
+		SpawnTransform,
+		AvatarActor,
+		Cast<APawn>(AvatarActor),
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!IsValid(Projectile))
+	{
+		return false;
+	}
+
+	if (!CommitAbility(
+		GetCurrentAbilitySpecHandle(),
+		ActorInfo,
+		GetCurrentActivationInfo()))
+	{
+		Projectile->Destroy();
+		return false;
+	}
+
+	FDRThrowableItemSettings ThrowSettings = ThrowableDefinition->ThrowSettings;
+	ThrowSettings.ExplosionRadius = EffectRadius;
+	Projectile->InitializeSlowProjectile(
+		AbilitySystem,
+		SlowSpec,
+		AllySpec,
+		ThrowSettings,
+		GetThrowActionSettings(),
+		GetSourceTeamId(),
+		ThrowableDefinition);
+	Projectile->FinishSpawning(SpawnTransform);
+	ExecuteThrowGameplayCue(LaunchLocation, LaunchDirection);
+	return true;
+}
+
+bool UDRGA_SlowProjectileSkill::BuildEffectSpecs(
+	const UDRSkillDefinition* SkillDefinition,
+	const UDRPerkComponent* PerkComponent,
+	FGameplayEffectSpecHandle& OutSlowSpec,
+	FGameplayEffectSpecHandle& OutAllySpec) const
+{
+	const FGameplayTag SkillId = SkillDefinition->SkillId;
+	const bool IsExtremeSlow = IsValid(PerkComponent)
+		&& PerkComponent->HasSkillPerk(
+			SkillId, DRGameplayTags::Perk_Skill_SlowProjectile_ExtremeSlow);
+	const bool IsAllySpeed = IsValid(PerkComponent)
+		&& PerkComponent->HasSkillPerk(
+			SkillId, DRGameplayTags::Perk_Skill_SlowProjectile_AllySpeed);
+	if ((IsExtremeSlow && !ExtremeSlowEffectClass)
+		|| (IsAllySpeed && !AllySpeedEffectClass))
+	{
+		return false;
+	}
+
+	OutSlowSpec = MakeOutgoingGameplayEffectSpec(
+		IsExtremeSlow ? ExtremeSlowEffectClass : SlowEffectClass,
+		GetAbilityLevel());
+	OutAllySpec = IsAllySpeed
+		? MakeOutgoingGameplayEffectSpec(AllySpeedEffectClass, GetAbilityLevel())
+		: FGameplayEffectSpecHandle();
+	if (!OutSlowSpec.IsValid() || (IsAllySpeed && !OutAllySpec.IsValid()))
+	{
+		return false;
+	}
+
+	const float SlowMagnitude = IsExtremeSlow
+		? PerkComponent->GetSkillPerkEffectValue(
+			SkillId,
+			DRGameplayTags::Perk_Skill_SlowProjectile_ExtremeSlow,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Effect_MoveSpeed)
+		: BaseSlowMagnitude;
+	OutSlowSpec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Effect_MoveSpeed, SlowMagnitude);
+	OutSlowSpec.Data->SetSetByCallerMagnitude(
+		DRGameplayTags::Data_Effect_Duration, SkillDefinition->EffectDuration);
+
+	if (OutAllySpec.IsValid())
+	{
+		const float AllySpeedMagnitude = PerkComponent->GetSkillPerkEffectValue(
+			SkillId,
+			DRGameplayTags::Perk_Skill_SlowProjectile_AllySpeed,
+			EDRSkillEffectTrigger::OnSkillCommitted,
+			DRGameplayTags::Data_Effect_MoveSpeed);
+		OutAllySpec.Data->SetSetByCallerMagnitude(
+			DRGameplayTags::Data_Effect_MoveSpeed, AllySpeedMagnitude);
+		OutAllySpec.Data->SetSetByCallerMagnitude(
+			DRGameplayTags::Data_Effect_Duration, SkillDefinition->EffectDuration);
+	}
+	return true;
 }

@@ -465,14 +465,6 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		OfferView.Request = Offer.MakeRequest();
 		OfferView.Section = ResolveOfferSection(Offer);
 		OfferView.DisplayName = Offer.ItemDefinition->DisplayName;
-
-		if (IsValid(PerkDefinition))
-		{
-			OfferView.DisplayName = FText::Format(
-				FText::FromString(TEXT("{0} 퍽")),
-				PerkDefinition->DisplayName);
-		}
-
 		OfferView.Description = Offer.ItemDefinition->Description;
 		OfferView.Icon = Offer.ItemDefinition->Icon;
 		OfferView.Price = Offer.ItemDefinition->Price;

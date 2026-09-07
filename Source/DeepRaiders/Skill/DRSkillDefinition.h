@@ -66,6 +66,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill")
 	TSubclassOf<UDRGA_CharacterSkillBase> SkillAbility;
 
+	/** GA에서 SetByCaller로 전달하는 효과 지속시간이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Effects", meta = (ClampMin = "0.01", Units = "s"))
+	float EffectDuration = 5.0f;
+
 	/** 이 스킬이 기본으로 가지는 추가 GameplayEffect 규칙이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Effects")
 	TArray<FDRSkillEffectRule> BaseEffectRules;

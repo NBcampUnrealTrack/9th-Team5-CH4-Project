@@ -116,9 +116,11 @@ private:
 	UFUNCTION()
 	void HandleInputReleased(float TimeHeld);
 
-	void ExecuteFireGameplayCue(const FVector& FireOrigin) const;
-
 	void PlayFireMontage();
 
 	float GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const;
+	
+	bool TryConsumeServerFireInterval();
+
+	double ServerNextAllowedShotTime = 0.0;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DRGameFlowState.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "GameFramework/GameStateBase.h"
@@ -38,6 +39,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	const TArray<FText>&,
 	PlayerMessages);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameFlowStateChanged, EDRGameFlowState, GameFlowState);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FDRGameFlowMessageChanged, const FText&, GameFlowMessage);
+
 USTRUCT()
 struct FDRTeamRegisteredTeleportPoint
 {
@@ -50,16 +57,35 @@ struct FDRTeamRegisteredTeleportPoint
 	TObjectPtr<ADRTeleportPoint> TeleportPoint;
 };
 
+struct FDRSnowOperationBatcher;
+struct FDRSnowLoadTest;
+
 UCLASS()
 class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
 {
 	GENERATED_BODY()
 
 public:
+	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void SetGameTimerState(int32 RemainingSeconds, bool bStarted, bool bEnded);
+	void SetGameTimerState(int32 RemainingSeconds);
+	void SetGameFlowState(
+		EDRGameFlowState NewState,
+		const FText& NewMessage = FText::GetEmpty());
+
+	UFUNCTION(BlueprintPure, Category = "Game|Flow")
+	EDRGameFlowState GetGameFlowState() const { return GameFlowState; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Flow")
+	FText GetGameFlowMessage() const { return GameFlowMessage; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Game|Flow")
+	FDRGameFlowStateChanged OnGameFlowStateChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Game|Flow")
+	FDRGameFlowMessageChanged OnGameFlowMessageChanged;
 	void SetGamePhaseState(
 		int32 PhaseIndex,
 		int32 RemainingSeconds,
@@ -68,8 +94,8 @@ public:
 	void SetGameResultText(const FText& ResultText);
 
 	int32 GetGameRemainingSeconds() const { return GameRemainingSeconds; }
-	bool IsGameStarted() const { return bGameStarted; }
-	bool IsGameEnded() const { return bGameEnded; }
+	bool IsGameStarted() const { return GameFlowState == EDRGameFlowState::Playing; }
+	bool IsGameEnded() const { return GameFlowState == EDRGameFlowState::Results; }
 	UFUNCTION(BlueprintPure, Category = "Game|Phase")
 	int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
 
@@ -112,11 +138,17 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
 	int32 GameRemainingSeconds = 0;
 
-	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
-	bool bGameStarted = false;
+	UFUNCTION()
+	void OnRep_GameFlowState();
 
-	UPROPERTY(ReplicatedUsing = OnRep_GameTimerState)
-	bool bGameEnded = false;
+	UFUNCTION()
+	void OnRep_GameFlowMessage();
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameFlowState)
+	EDRGameFlowState GameFlowState = EDRGameFlowState::WaitingForPlayers;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GameFlowMessage)
+	FText GameFlowMessage;
 
 	UPROPERTY(ReplicatedUsing = OnRep_GameEndDebugText)
 	FString GameEndDebugText;
@@ -147,24 +179,37 @@ private:
 #pragma region Snow
 public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
-	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation);
+	void RegisterSnowAdd(const FDRSnowAddOperation& Operation, float ServerAppliedAmount);
+	void RegisterSnowRemove(
+		const FDRSnowRemoveOperation& Operation);
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
 	bool ApplySnowOperationRecord(const FDRSnowOperationRecord& Record);
+	// Native, non-RPC diagnostic entry. Implementation is disabled in Shipping.
+	void StartSnowLoadTest(const TArray<FString>& Args);
+	void StopSnowLoadTest();
 
-	/** 새 경기를 위해 서버와 모든 클라이언트의 복셀 상태를 함께 초기화한다. */
+	// 새 경기를 시작할 때 서버와 모든 클라이언트의 복셀/지형 데이터를 초기화합니다.
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ResetVoxelState();
 
+	// 짧은 시간 동안 발생한 눈 변경 작업들을 배열로 묶어 한 번에 보내는 Reliable Multicast RPC
+	// 패킷 내 배열 순서는 서버의 발생 순서(Sequence)와 동일합니다.
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_ApplySnowOperations(const TArray<FDRSnowOperationRecord>& Records);
 
 private:
-	void QueueSnowOperationForBroadcast(const FDRSnowOperationRecord& Record);
-	void FlushSnowOperationBroadcasts();
-	bool ApplySnowAddOnce(const FDRSnowAddOperation& Operation);
-	bool ApplySnowRemoveOnce(const FDRSnowRemoveOperation& Operation);
+	// 서버 작업을 즉시 전송하거나 쿨타임 배치에 추가한다.
+	void QueueSnowOperationForBroadcast(FDRSnowOperationRecord&& Record);
+	void ClearSnowOperationBroadcasts();
+
+	bool ApplySnowAddOnce(const FDRSnowOperationRecord& Record);
+	bool ApplySnowRemoveOnce(const FDRSnowOperationRecord& Record);
+	void HandleDirectionalSnowAddCompleted(
+		int32 OperationSequence,
+		int32 ApplicationGeneration,
+		float AppliedAmount);
 	bool IsSnowOperationReady(const FDRSnowOperationRecord& Record) const;
 	bool IsSnowOperationApplied(int32 Sequence) const;
 	bool HasPendingSnowOperation(int32 Sequence) const;
@@ -172,15 +217,32 @@ private:
 	void TryApplyPendingSnowOperations();
 	void StartPendingSnowRetry();
 	void StopPendingSnowRetry();
+	void ScheduleSnowReplayContinuation();
 	AVoxelWorld* ResolveVoxelWorldByName(FName VoxelWorldName) const;
 
+	// 서버 전송 큐와 rate limit의 수명을 GameState에 묶는다.
+	TSharedPtr<FDRSnowOperationBatcher> SnowOperationBatcher;
+
+	// 공통: 눈 작업 고유 번호 (서버: 순차 발급, 클라이언트: 중복 처리 방지용)
 	int32 NextSnowOperationSequence = 0;
+
+	// 클라이언트: 체크포인트 스냅샷으로 이미 처리 완료된 작업 번호 기준선
 	int32 AppliedSnowCheckpointSequence = 0;
+
+	// 클라이언트: 이미 로컬에 반영 완료된 작업 번호 목록 (중복 실행 방지)
 	TSet<int32> AppliedSnowOperationSequences;
+
+	// 클라이언트: 복셀 월드가 아직 로드되지 않아 생성을 기다리는 작업 목록
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;
-	TArray<FDRSnowOperationRecord> PendingSnowBroadcastOperations;
 	FTimerHandle PendingSnowRetryTimer;
-	FTimerHandle SnowOperationBroadcastTimer;
+	int32 ActiveDirectionalSnowOperationSequence = INDEX_NONE;
+	int32 SnowApplicationGeneration = 0;
+	bool bSnowReplayContinuationScheduled = false;
+	bool bSnowReplayPumping = false;
+	uint64 SnowReplayBudgetFrame = MAX_uint64;
+	int32 SnowReplayStartsThisFrame = 0;
+	double SnowReplayDispatchMsThisFrame = 0.0;
+	TSharedPtr<FDRSnowLoadTest> SnowLoadTest;
 #pragma endregion
 	
 #pragma region Teleport

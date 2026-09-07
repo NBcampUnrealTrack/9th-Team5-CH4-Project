@@ -183,6 +183,9 @@ private:
 	void HandleGameTimerChanged(int32 RemainingSeconds, bool bGameStarted, bool bGameEnded);
 
 	UFUNCTION()
+	void HandleGameFlowMessageChanged(const FText& GameFlowMessage);
+
+	UFUNCTION()
 	void HandleGamePhaseChanged(
 		int32 PhaseIndex,
 		int32 PhaseRemainingSeconds,
@@ -204,6 +207,7 @@ private:
 	int32 GameStartCountdown = 0;
 	int32 GameRemainingSeconds = 0;
 	FText CurrentPhaseMessageText;
+	FText CurrentGameFlowMessage;
 	FText CurrentGameResultText;
 	bool bGameStarted = false;
 	bool bGameEnded = false;

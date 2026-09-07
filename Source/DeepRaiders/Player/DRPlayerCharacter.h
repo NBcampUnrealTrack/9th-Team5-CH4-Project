@@ -201,7 +201,7 @@ public:
 	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
 	bool CalculateSkillFireOrigin(FVector& OutFireOrigin) const;
 	
-	void PlayProjectileFireVFXFromNotify();
+	void PlayProjectileFirePresentationFromNotify();
 	
 	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
 	void PlayHitReaction(const FVector& ImpactLocation);

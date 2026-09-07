@@ -104,6 +104,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		MiningGameState->OnGameTimerChanged.AddDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGameFlowMessageChanged.AddDynamic(
+			this,
+			&ThisClass::HandleGameFlowMessageChanged);
 		MiningGameState->OnGamePhaseChanged.AddDynamic(
 			this,
 			&ThisClass::HandleGamePhaseChanged);
@@ -116,6 +119,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		GameRemainingSeconds = MiningGameState->GetGameRemainingSeconds();
 		bGameStarted = MiningGameState->IsGameStarted();
 		bGameEnded = MiningGameState->IsGameEnded();
+		HandleGameFlowMessageChanged(MiningGameState->GetGameFlowMessage());
 		HandleGamePhaseChanged(
 			MiningGameState->GetCurrentPhaseIndex(),
 			MiningGameState->GetPhaseRemainingSeconds(),
@@ -174,6 +178,9 @@ void UDRHUDViewModel::Deinitialize()
 		MiningGameState->OnGameTimerChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
+		MiningGameState->OnGameFlowMessageChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleGameFlowMessageChanged);
 		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGamePhaseChanged);

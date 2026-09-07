@@ -1,11 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DRProjectile.h"
+#include "DRThrowableProjectile.h"
 #include "DRSlowProjectile.generated.h"
 
 UCLASS(Blueprintable)
-class DEEPRAIDERS_API ADRSlowProjectile : public ADRProjectile
+class DEEPRAIDERS_API ADRSlowProjectile : public ADRThrowableProjectile
 {
 	GENERATED_BODY()
 
@@ -13,20 +13,31 @@ public:
 	void InitializeSlowProjectile(
 		UAbilitySystemComponent* InSourceAbilitySystem,
 		const FGameplayEffectSpecHandle& InSlowEffectSpec,
+		const FGameplayEffectSpecHandle& InAllySpeedEffectSpec,
+		const FDRThrowableItemSettings& InItemSettings,
+		const FDRThrowActionSettings& InActionSettings,
 		int32 InSourceTeamId,
-		float InEffectRadius);
+		const UObject* InPresentationSourceObject);
 
 protected:
-	virtual void HandleImpact(const FHitResult& ImpactResult) override;
+	virtual bool ShouldAffectInstigator() const override
+	{
+		return AllySpeedEffectSpec.IsValid();
+	}
+
+	virtual bool IsValidEffectTarget(const AActor* TargetActor) const override;
+	virtual void ApplyEffectToTarget(AActor* TargetActor,
+		UAbilitySystemComponent* TargetAbilitySystem, const FHitResult& ImpactResult) override;
+	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override
+	{
+	}
 
 private:
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastDisplayEffectRadius(
-		const FVector& EffectLocation,
-		float InEffectRadius);
+	bool ApplySpeedEffectToTarget(
+		UAbilitySystemComponent* TargetAbilitySystem,
+		const FGameplayEffectSpecHandle& EffectSpec,
+		const FHitResult& ImpactResult);
 
-	float EffectRadius = 0.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|Slow", meta = (AllowPrivateAccess = true, ClampMin = "0.0", Units = "s"))
-	float EffectRadiusDisplayDuration = 5.f;
+	FGameplayEffectSpecHandle SlowEffectSpec;
+	FGameplayEffectSpecHandle AllySpeedEffectSpec;
 };

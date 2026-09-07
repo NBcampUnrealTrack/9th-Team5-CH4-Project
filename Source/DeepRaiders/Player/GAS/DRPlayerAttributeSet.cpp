@@ -12,7 +12,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitFreezeGauge(0.f);
 
 	InitMaxSnowGauge(10000000.f); // 일단 Max Snow 1000만으로 설정
-	InitSnowGauge(0.0f);
+	InitSnowGauge(200.0f);
 
 	InitMaxHeatGauge(100.f);
 	InitHeatGauge(0.f);

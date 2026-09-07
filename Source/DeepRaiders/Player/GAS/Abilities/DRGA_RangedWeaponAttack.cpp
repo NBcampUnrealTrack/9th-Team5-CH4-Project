@@ -479,16 +479,34 @@ bool UDRGA_RangedWeaponAttack::TryCommitServerShot()
 		return false;
 	}
 	
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo, nullptr))
+	// Resource 검사는 그대로 서버 authoritative
+	if (!CheckCost(
+		Handle,
+		ActorInfo,
+		nullptr))
 	{
-		if (!CheckCost(Handle, ActorInfo, nullptr))
-		{
-			// 연발 도중 Commit 실패 시 실패 사유 확인을 위한 코드
-			EndAbility(Handle, ActorInfo, ActivationInfo,true, false);
-		}
+		EndAbility(
+			Handle,
+			ActorInfo,
+			ActivationInfo,
+			true,
+			false);
 
 		return false;
 	}
+
+	// Weapon fire cadence도 서버 authoritative.
+	// 단 GAS Cooldown GE가 아니라 별도 cadence clock으로 검사.
+	if (!TryConsumeServerFireInterval())
+	{
+		return false;
+	}
+
+	// 실제 accepted shot에 대해서만 Cost 적용
+	ApplyCost(
+		Handle,
+		ActorInfo,
+		ActivationInfo);
 
 	return true;
 }
@@ -539,18 +557,41 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 	
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
-	
-	const bool bBlockingHit = World->LineTraceSingleByChannel(OutHitResult, ViewLocation, TraceEnd,
-		DRCollisionChannels::Projectile, QueryParams);
-	
-	// 충돌하지 않은 경우 시선의 끝을 반환
-	if (!bBlockingHit)
+
+	// 아군 배리어처럼 팀을 가진 비 Pawn Actor도 조준점을 가로막지 않게 한다.
+	// 내부에서 배리어 출구 면이 발사 원점보다 가까운 조준점으로 선택되면
+	// Projectile 발사 방향이 뒤집힐 수 있으므로 실제 발사 전에 제외해야 한다.
+	constexpr int32 MaxFriendlyPassThroughIterations = 16;
+	for (int32 Iteration = 0; Iteration < MaxFriendlyPassThroughIterations; ++Iteration)
 	{
-		OutHitResult = FHitResult(ViewLocation, TraceEnd);
-		OutHitResult.Location = TraceEnd;
-		OutHitResult.ImpactPoint = TraceEnd;
+		const bool bBlockingHit = World->LineTraceSingleByChannel(
+			OutHitResult,
+			ViewLocation,
+			TraceEnd,
+			DRCollisionChannels::Projectile,
+			QueryParams);
+
+		if (!bBlockingHit)
+		{
+			OutHitResult = FHitResult(ViewLocation, TraceEnd);
+			OutHitResult.Location = TraceEnd;
+			OutHitResult.ImpactPoint = TraceEnd;
+			return true;
+		}
+
+		AActor* HitActor = OutHitResult.GetActor();
+		if (!IsValid(HitActor) || !IsFriendlyTarget(HitActor))
+		{
+			return true;
+		}
+
+		QueryParams.AddIgnoredActor(HitActor);
 	}
-	
+
+	// 비정상적으로 많은 아군 Actor가 겹친 경우에도 역방향 조준점은 만들지 않는다.
+	OutHitResult = FHitResult(ViewLocation, TraceEnd);
+	OutHitResult.Location = TraceEnd;
+	OutHitResult.ImpactPoint = TraceEnd;
 	return true;
 }
 
@@ -853,8 +894,14 @@ void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
 		return;
 	}
 
+	UE_LOG(
+	LogTemp,
+	Warning,
+	TEXT("[FIRE] LOCAL_MONTAGE_START T=%.6f Frame=%llu"),
+	FPlatformTime::Seconds(),
+	GFrameCounter);
+
 	PlayFireMontage();
-	ExecuteFireGameplayCue(FireOrigin);
 }
 
 void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
@@ -870,8 +917,10 @@ void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
 		return;
 	}
 
+	// Montage replication만 사용한다.
+	// 실제 SFX / Muzzle VFX는 각 클라이언트가
+	// AnimNotify(FireMoment)에서 재생한다.
 	PlayFireMontage();
-	ExecuteFireGameplayCue(FireOrigin);
 }
 
 bool UDRGA_RangedWeaponAttack::ResolveSelectedWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo,
@@ -932,35 +981,6 @@ void UDRGA_RangedWeaponAttack::HandleInputReleased(float TimeHeld)
 		true, false);
 }
 
-void UDRGA_RangedWeaponAttack::ExecuteFireGameplayCue(const FVector& FireOrigin) const
-{
-	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-
-	if (ActorInfo == nullptr)
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	UObject* PresentationSourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
-	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(PresentationSourceObject))
-	{
-		return;
-	}
-
-	FGameplayCueParameters Parameters;
-
-	Parameters.Location = FireOrigin;
-	Parameters.Instigator = AvatarActor;
-	Parameters.EffectCauser = AvatarActor;
-
-	// DA_Rifle / DA_Shotgun / DA_Cannon
-	Parameters.SourceObject = PresentationSourceObject;
-
-	ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Weapon_Projectile_Fire, Parameters);
-}
-
 void UDRGA_RangedWeaponAttack::PlayFireMontage()
 {
 	const FGameplayAbilityActorInfo* ActorInfo =
@@ -1015,6 +1035,83 @@ float UDRGA_RangedWeaponAttack::GetWeaponStatMultiplier(const FGameplayAttribute
 	return IsValid(ASC) && Attribute.IsValid()
 		? FMath::Max(0.0f, ASC->GetNumericAttribute(Attribute))
 		: 1.0f;
+}
+
+bool UDRGA_RangedWeaponAttack::TryConsumeServerFireInterval()
+{
+	const FGameplayAbilityActorInfo* ActorInfo =
+		GetCurrentActorInfo();
+
+	if (ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority())
+	{
+		return false;
+	}
+
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	UWorld* World = IsValid(AvatarActor)
+		? AvatarActor->GetWorld()
+		: nullptr;
+
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const double Now =
+		static_cast<double>(World->GetTimeSeconds());
+
+	const double FireInterval =
+		static_cast<double>(GetWeaponFireInterval());
+
+	if (FireInterval <= 0.0)
+	{
+		return false;
+	}
+
+	/*
+	 * Client는 정확한 FireInterval cadence로 요청하지만,
+	 * Dedicated Server는 별도 tick에서 packet을 처리하므로
+	 * 같은 요청도 최대 약 1 server frame 일찍 관측될 수 있다.
+	 *
+	 * 단, 다음 cadence 기준 자체는 ServerNextAllowedShotTime에서
+	 * 계속 전진시키므로 이 tolerance로 연사속도를 올릴 수는 없다.
+	 */
+	const double ServerFrameTolerance =
+		FMath::Min(
+			FireInterval * 0.5,
+			static_cast<double>(World->GetDeltaSeconds()) + 0.002);
+
+	// 첫 발
+	if (ServerNextAllowedShotTime <= 0.0)
+	{
+		ServerNextAllowedShotTime = Now + FireInterval;
+		return true;
+	}
+
+	// 서버가 오래 stall된 경우 이전 cadence backlog를 따라잡지 않는다.
+	if (Now > ServerNextAllowedShotTime + FireInterval)
+	{
+		ServerNextAllowedShotTime = Now + FireInterval;
+		return true;
+	}
+
+	// 정상적인 client request보다 너무 이른 요청
+	if (Now + ServerFrameTolerance < ServerNextAllowedShotTime)
+	{
+		return false;
+	}
+
+	/*
+	 * 핵심:
+	 * Now + Interval이 아니라 기존 cadence에서 전진한다.
+	 *
+	 * 그래야 packet arrival jitter가 실제 weapon cadence를
+	 * 계속 흔들지 않는다.
+	 */
+	ServerNextAllowedShotTime += FireInterval;
+
+	return true;
 }
 
 float UDRGA_RangedWeaponAttack::GetMaxAttackDistance() const

@@ -29,6 +29,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw", meta = (ClampMin = "1.0", Units = "cm"))
 	float MaxAimDistance = 15000.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw", meta = (ClampMin = "1.0", Units = "cm/s"))
+	float ProjectileSpeed = 3000.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Spear Throw|Effect")
 	TArray<FDRGameplayEffectData> ImpactEffects;
 

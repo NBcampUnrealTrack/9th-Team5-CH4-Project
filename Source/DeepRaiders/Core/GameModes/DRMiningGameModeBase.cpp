@@ -1,5 +1,6 @@
 #include "DRMiningGameModeBase.h"
 
+#include "AbilitySystemComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
@@ -8,6 +9,8 @@
 #include "DeepRaiders/Player/DRTeamPlayerStart.h"
 #include "DeepRaiders/Gameplay/Team/DRTeamMovingActor.h"
 #include "DeepRaiders/Gameplay/DRGameStartActor.h"
+#include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Snow/DRSnowControlZone.h"
 #include "GameFramework/PawnMovementComponent.h"
@@ -26,8 +29,7 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 void ADRMiningGameModeBase::BeginPlay()
 {
 	Super::BeginPlay();
-	bIsGameStart = false;
-	bIsGameEnd = false;
+
 	RecalculateGameDuration();
 }
 
@@ -48,7 +50,7 @@ bool ADRMiningGameModeBase::ShouldSpawnAtStartSpot(AController*)
 
 bool ADRMiningGameModeBase::StartGame()
 {
-	if (!HasAuthority() || bIsGameStart)
+	if (!HasAuthority() || GameFlowState != EDRGameFlowState::WaitingForPlayers)
 	{
 		return false;
 	}
@@ -61,31 +63,80 @@ bool ADRMiningGameModeBase::StartGame()
 	}
 
 	ResetGameState();
-	bIsGameStart = true;
-	bIsGameEnd = false;
-	StartTeamSwitchTimer();
-	GameRemainingSeconds = FMath::CeilToInt(GameDuration);
 	CurrentPhaseArrayIndex = 0;
 	PhaseRemainingSeconds = FMath::Max(1, GamePhases[CurrentPhaseArrayIndex].DurationSeconds);
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString());
 		MiningGameState->SetGameResultText(FText::GetEmpty());
-		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
+		MiningGameState->SetGameTimerState(0);
 	}
+	SetGameFlowState(EDRGameFlowState::Loading);
 	UpdateReplicatedGamePhase();
+
+	bool bHasInitialCarver = false;
+	for (TActorIterator<ADRMeshVoxelCarver> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		bHasInitialCarver |= Iterator->ShouldCarveOnGameStart(
+			GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
+	}
+	if (!bHasInitialCarver)
+	{
+		NotifyGameStartCarversReady();
+	}
+	return true;
+}
+
+void ADRMiningGameModeBase::BeginPlaying()
+{
+	if (!HasAuthority() || GameFlowState != EDRGameFlowState::Countdown)
+	{
+		return;
+	}
+
+	SetGameFlowState(EDRGameFlowState::Playing);
+	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->NotifyGameStarted();
+	}
+	StartTeamSwitchTimer();
+	GameRemainingSeconds = FMath::CeilToInt(GameDuration);
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameTimerState(GameRemainingSeconds);
+	}
 	GetWorldTimerManager().SetTimer(
 		GameTimerHandle,
 		this,
 		&ThisClass::TickGameTimer,
 		1.f,
 		true);
-	return true;
+}
+
+void ADRMiningGameModeBase::NotifyGameStartCarversReady()
+{
+	if (!HasAuthority() || GameFlowState != EDRGameFlowState::Loading)
+	{
+		return;
+	}
+
+	ADRGameStartActor* Source = CountdownSource.Get();
+	if (!IsValid(Source))
+	{
+		SetGameFlowState(EDRGameFlowState::Countdown);
+		BeginPlaying();
+		return;
+	}
+
+	SetGameFlowState(EDRGameFlowState::Countdown);
+	Source->SetCountdownSecondsRemaining(CountdownRemainingSeconds);
+	GetWorldTimerManager().SetTimer(
+		GameStartTimerHandle, this, &ThisClass::TickGameStartCountdown, 1.f, true);
 }
 
 void ADRMiningGameModeBase::TickGameTimer()
 {
-	if (!bIsGameStart || bIsGameEnd)
+	if (!IsGameStarted())
 	{
 		return;
 	}
@@ -104,7 +155,7 @@ void ADRMiningGameModeBase::TickGameTimer()
 
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
-		MiningGameState->SetGameTimerState(GameRemainingSeconds, true, false);
+		MiningGameState->SetGameTimerState(GameRemainingSeconds);
 	}
 	UpdateReplicatedGamePhase();
 }
@@ -152,21 +203,18 @@ void ADRMiningGameModeBase::RecalculateGameDuration()
 
 void ADRMiningGameModeBase::EndGame()
 {
-	if (!HasAuthority() || !bIsGameStart || bIsGameEnd)
+	if (!HasAuthority() || !IsGameStarted())
 	{
 		return;
 	}
 
-	bIsGameStart = false;
-	bIsGameEnd = true;
-	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
-	GetWorldTimerManager().ClearTimer(GameTimerHandle);
+	SetGameFlowState(EDRGameFlowState::Results);
 	GameRemainingSeconds = 0;
 	CurrentPhaseArrayIndex = INDEX_NONE;
 	PhaseRemainingSeconds = 0;
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
-		MiningGameState->SetGameTimerState(0, false, true);
+		MiningGameState->SetGameTimerState(0);
 	}
 	UpdateReplicatedGamePhase();
 
@@ -225,12 +273,7 @@ void ADRMiningGameModeBase::EndGame()
 			TEXT("[Red] %d : %d [Blue]"),
 			Team0Percent,
 			Team1Percent)));
-		GetWorldTimerManager().SetTimer(
-			GameResultTimerHandle,
-			this,
-			&ThisClass::ClearGameResultText,
-			GameResultDisplayDuration,
-			false);
+
 	}
 
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
@@ -243,18 +286,169 @@ void ADRMiningGameModeBase::EndGame()
 		}
 	}
 
+	GetWorldTimerManager().SetTimer(
+		GameResultTimerHandle,
+		this,
+		&ThisClass::ReturnToWaiting,
+		FMath::Max(0.1f, GameResultDisplayDuration),
+		false);
+}
+
+// 결과 표시가 끝난 뒤에만 다음 경기의 준비를 허용한다.
+void ADRMiningGameModeBase::ReturnToWaiting()
+{
+	if (!HasAuthority() || !IsGameEnded())
+	{
+		return;
+	}
+
+	SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetGameTimerState(0);
+	}
 	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
 		Iterator->ResetForNextGame();
 	}
 }
 
-void ADRMiningGameModeBase::ClearGameResultText()
+// 이전 상태가 소유한 타이머를 정리한 후 클라이언트에 새 상태를 전달한다.
+void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 {
+	if (!HasAuthority() || GameFlowState == NewState)
+	{
+		return;
+	}
+
+	if (GameFlowState == EDRGameFlowState::Countdown)
+	{
+		GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
+		if (CountdownSource.IsValid())
+		{
+			CountdownSource->SetCountdownSecondsRemaining(0);
+		}
+		CountdownSource.Reset();
+		CountdownRemainingSeconds = 0;
+	}
+	else if (GameFlowState == EDRGameFlowState::Playing)
+	{
+		GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
+		GetWorldTimerManager().ClearTimer(GameTimerHandle);
+	}
+	else if (GameFlowState == EDRGameFlowState::Results)
+	{
+		GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
+	}
+
+	const bool bWasPreparing = GameFlowState == EDRGameFlowState::Loading
+		|| GameFlowState == EDRGameFlowState::Countdown;
+	const bool bIsPreparing = NewState == EDRGameFlowState::Loading
+		|| NewState == EDRGameFlowState::Countdown;
+	GameFlowState = NewState;
+	if (bWasPreparing != bIsPreparing)
+	{
+		for (APlayerState* PlayerState : GameState->PlayerArray)
+		{
+			SetGamePreparingBlocked(Cast<ADRPlayerState>(PlayerState), bIsPreparing);
+		}
+	}
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
-		MiningGameState->SetGameResultText(FText::GetEmpty());
-		MiningGameState->SetGameTimerState(0, false, false);
+		const FText FlowMessage = NewState == EDRGameFlowState::Loading
+			? GameLoadingMessage
+			: FText::GetEmpty();
+		MiningGameState->SetGameFlowState(NewState, FlowMessage);
+	}
+}
+
+void ADRMiningGameModeBase::RequestGameStart(ADRGameStartActor* Source, int32 CountdownSeconds)
+{
+	if (!HasAuthority() || !IsValid(Source)
+		|| GameFlowState != EDRGameFlowState::WaitingForPlayers)
+	{
+		return;
+	}
+	if (Source->GetTotalPlayerCount() <= 0
+		|| Source->GetReadyPlayerCount() < Source->GetTotalPlayerCount())
+	{
+		return;
+	}
+
+	CountdownSource = Source;
+	CountdownRemainingSeconds = FMath::Max(1, CountdownSeconds);
+	if (!StartGame())
+	{
+		CountdownSource.Reset();
+		CountdownRemainingSeconds = 0;
+	}
+}
+
+void ADRMiningGameModeBase::CancelGameCountdown(ADRGameStartActor* Source)
+{
+	if (HasAuthority() && GameFlowState == EDRGameFlowState::Countdown
+		&& CountdownSource.Get() == Source)
+	{
+		SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+	}
+}
+
+void ADRMiningGameModeBase::TickGameStartCountdown()
+{
+	if (GameFlowState != EDRGameFlowState::Countdown)
+	{
+		return;
+	}
+
+	ADRGameStartActor* Source = CountdownSource.Get();
+	if (!IsValid(Source))
+	{
+		SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+		return;
+	}
+
+	--CountdownRemainingSeconds;
+	Source->SetCountdownSecondsRemaining(CountdownRemainingSeconds);
+	if (CountdownRemainingSeconds <= 0)
+	{
+		BeginPlaying();
+	}
+}
+
+void ADRMiningGameModeBase::SetGamePreparingBlocked(
+	ADRPlayerState* PlayerState,
+	bool bBlocked) const
+{
+	UAbilitySystemComponent* AbilitySystem = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+	if (!IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	FGameplayTagContainer AllAbilityTags;
+	AllAbilityTags.AddTag(DRGameplayTags::Ability_Root);
+	const bool bHasPreparingTag = AbilitySystem->HasMatchingGameplayTag(
+		DRGameplayTags::State_GamePreparing);
+	if (bBlocked && !bHasPreparingTag)
+	{
+		// 준비가 시작되면 진행 중 행동까지 종료하고 새 행동을 막는다.
+		AbilitySystem->AddLooseGameplayTag(
+			DRGameplayTags::State_GamePreparing,
+			1,
+			EGameplayTagReplicationState::TagAndCountToAll);
+		AbilitySystem->BlockAbilitiesWithTags(AllAbilityTags);
+		AbilitySystem->CancelAbilities(&AllAbilityTags);
+	}
+	else if (!bBlocked && bHasPreparingTag)
+	{
+		AbilitySystem->RemoveLooseGameplayTag(
+			DRGameplayTags::State_GamePreparing,
+			1,
+			EGameplayTagReplicationState::TagAndCountToAll);
+		AbilitySystem->UnBlockAbilitiesWithTags(AllAbilityTags);
 	}
 }
 
@@ -323,6 +517,7 @@ void ADRMiningGameModeBase::ResetGameState()
 
 void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(GameStartTimerHandle);
 	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
@@ -510,8 +705,7 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 		Checkpoint.OperationSequence,
 		Checkpoint.VoxelWorldName,
 		Checkpoint.VoxelSaveData.Num(),
-		Checkpoint.SnowVolumeData.Num(),
-		Checkpoint.OwnershipData.Num());
+		Checkpoint.SnowVolumeData.Num());
 	return true;
 }
 
@@ -519,20 +713,29 @@ bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 	APlayerController* PlayerController,
 	bool bNotifySnapshotFinished)
 {
+	bool bPlayerRestarted = false;
+	if (IsValid(PlayerController) && !IsValid(PlayerController->GetPawn()))
+	{
+		PlayerController->ChangeState(NAME_Playing);
+		PlayerController->ClientGotoState(NAME_Playing);
+		RestartPlayer(PlayerController);
+
+		if (APawn* SpawnedPawn = PlayerController->GetPawn(); IsValid(SpawnedPawn))
+		{
+			// Prioritize the initial Pawn and possession state before deposits are
+			// allowed to resume and generate more replicated snow operations.
+			SpawnedPawn->ForceNetUpdate();
+			PlayerController->ForceNetUpdate();
+			bPlayerRestarted = true;
+		}
+	}
+
 	if (bNotifySnapshotFinished)
 	{
 		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::Applied);
 	}
 
-	if (!IsValid(PlayerController) || IsValid(PlayerController->GetPawn()))
-	{
-		return false;
-	}
-
-	PlayerController->ChangeState(NAME_Playing);
-	PlayerController->ClientGotoState(NAME_Playing);
-	RestartPlayer(PlayerController);
-	return IsValid(PlayerController->GetPawn());
+	return bPlayerRestarted;
 }
 
 void ADRMiningGameModeBase::Logout(AController* Exiting)
