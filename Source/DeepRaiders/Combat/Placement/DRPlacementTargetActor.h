@@ -42,4 +42,5 @@ private:
 
 	TSubclassOf<ADRPlacementPreviewActor> PreviewActorClass;
 	bool bHasValidAimData = false;
+	bool IsConfirmationSubmitted = false;
 };

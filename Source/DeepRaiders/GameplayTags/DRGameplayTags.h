@@ -54,6 +54,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grab);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grapple);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Barrier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Turret);
 
 	// Perk
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
@@ -116,6 +117,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Barrier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Turret);
 	
 	// Data
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);

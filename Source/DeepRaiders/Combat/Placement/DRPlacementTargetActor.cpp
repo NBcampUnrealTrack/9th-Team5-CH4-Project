@@ -34,6 +34,7 @@ void ADRPlacementTargetActor::Configure(const FDRPlacementSettings& InSettings,
 void ADRPlacementTargetActor::StartTargeting(UGameplayAbility* Ability)
 {
 	Super::StartTargeting(Ability);
+	IsConfirmationSubmitted = false;
 	const FGameplayAbilityActorInfo* ActorInfo = IsValid(Ability) ? Ability->GetCurrentActorInfo() : nullptr;
 	SourceActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 	if (UWorld* World = GetWorld(); IsValid(PrimaryPC) && PrimaryPC->IsLocalController() && PreviewActorClass)
@@ -94,10 +95,14 @@ bool ADRPlacementTargetActor::IsConfirmTargetingAllowed()
 
 void ADRPlacementTargetActor::ConfirmTargetingAndContinue()
 {
-	if (!ShouldProduceTargetData() || !IsConfirmTargetingAllowed())
+	if (IsConfirmationSubmitted || !ShouldProduceTargetData() || !IsConfirmTargetingAllowed())
 	{
 		return;
 	}
+
+	IsConfirmationSubmitted = true;
+	SetActorTickEnabled(false);
+	HidePreview();
 
 	// VoxelProceduralMeshComponent는 NetGUID 대상이 아니다. 서버는 HitComponent를
 	// 신뢰하지 않고 TraceStart/TraceEnd로 재검증하므로, 컴포넌트 참조는 전송하지 않는다.
