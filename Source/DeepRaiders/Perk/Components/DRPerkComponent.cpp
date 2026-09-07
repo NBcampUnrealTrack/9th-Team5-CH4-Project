@@ -214,14 +214,6 @@ FActiveGameplayEffectHandle UDRPerkComponent::ApplyPerkEffect(
 		EffectSpec.Data->AddDynamicAssetTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);
 	}
 	
-	for (const TPair<FGameplayTag, float>& EffectValue
-		: PerkDefinition->EffectValues)
-	{
-		EffectSpec.Data->SetSetByCallerMagnitude(
-			EffectValue.Key,
-			EffectValue.Value);
-	}
-
 	return AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(
 		*EffectSpec.Data.Get());
 }

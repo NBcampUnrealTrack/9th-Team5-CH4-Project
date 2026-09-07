@@ -51,10 +51,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	TObjectPtr<UDRSkillDefinition> ReplacementSkillDefinition;
 
-	/** GameplayEffect의 SetByCaller에 전달할 시트 기반 퍽 값이다. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Balance")
-	TMap<FGameplayTag, float> EffectValues;
-
 	/** 퍽 획득 시 직접 적용할 GameplayEffect다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
 	TSubclassOf<UGameplayEffect> PerkEffectClass;
