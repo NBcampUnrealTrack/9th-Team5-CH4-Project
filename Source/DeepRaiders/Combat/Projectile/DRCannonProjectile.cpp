@@ -8,6 +8,7 @@
 #include "GameFramework/Pawn.h"
 #include "DeepRaiders/Snow/Components/DRSnowAddComponent.h"
 #include "DrawDebugHelpers.h"
+#include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 
 ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UBoxComponent>(CollisionComponentName))
@@ -36,7 +37,8 @@ void ADRCannonProjectile::BeginPlay()
 	Super::BeginPlay();
 }
 
-void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
+void ADRCannonProjectile::HandleImpact(
+	const FHitResult& ImpactResult)
 {
 	if (!HasAuthority())
 	{
@@ -50,23 +52,63 @@ void ADRCannonProjectile::HandleImpact(const FHitResult& ImpactResult)
 		Destroy();
 		return;
 	}
-	
-	const FDRProjectileWorldImpactData& ImpactData = GetWorldImpactData();
-	if (ImpactData.bAddSnow && IsValid(SnowAddComponent))
-	{
-		SnowAddComponent->SetTeamIdOverride(GetSourceTeamId());
-		SnowAddComponent->SetAddSettings(ImpactData.SnowRadius, ImpactData.SnowAmount);
-		SnowAddComponent->SetAddEditTool(ImpactData.SnowEditTool);
-		SnowAddComponent->SetAllowVirtualSurfaceFallback(ImpactData.bAllowVirtualSurfaceFallback);
 
-		SnowAddComponent->TryAddSnowFromHit(ImpactResult);
+	AActor* DirectHitActor =
+		ImpactResult.GetActor();
+
+	UAbilitySystemComponent* DirectHitASC =
+		IsValid(DirectHitActor)
+			? UAbilitySystemBlueprintLibrary::
+				GetAbilitySystemComponent(
+					DirectHitActor)
+			: nullptr;
+
+	const bool bHitGameplayActor =
+		IsValid(DirectHitASC);
+
+	const bool bHitBreakable =
+		IsValid(Cast<ADRBreakableActor>(
+			DirectHitActor));
+
+	/*
+	 * 캐논의 Snow Add는 실제 World Surface에
+	 * 직접 충돌한 경우에만 수행한다.
+	 *
+	 * Player / GAS Actor / Breakable의 외형이나
+	 * Capsule을 눈 생성 Surface로 사용하지 않는다.
+	 */
+	if (!bHitGameplayActor
+		&& !bHitBreakable)
+	{
+		const FDRProjectileWorldImpactData& ImpactData =
+			GetWorldImpactData();
+
+		if (ImpactData.bAddSnow
+			&& IsValid(SnowAddComponent))
+		{
+			SnowAddComponent->SetTeamIdOverride(
+				GetSourceTeamId());
+
+			SnowAddComponent->SetAddSettings(
+				ImpactData.SnowRadius,
+				ImpactData.SnowAmount);
+
+			SnowAddComponent->SetAddEditTool(
+				ImpactData.SnowEditTool);
+
+			SnowAddComponent->
+				SetAllowVirtualSurfaceFallback(
+					ImpactData.bAllowVirtualSurfaceFallback);
+
+			SnowAddComponent->TryAddSnowFromHit(
+				ImpactResult);
+		}
 	}
-	
-	// 직접 충돌한 Breakable에는 기존 Projectile과 동일하게 충돌 데미지를 적용한다.
-	// 폭발 반경 내 Breakable AoE 처리는 별도 정책으로 둔다.
+
 	ApplyBreakableDamage(ImpactResult);
-	
-	const FVector ExplosionLocation = ImpactResult.ImpactPoint;
+
+	const FVector ExplosionLocation =
+		ImpactResult.ImpactPoint;
 
 	TArray<FOverlapResult> OverlapResults;
 
