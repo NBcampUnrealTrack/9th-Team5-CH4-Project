@@ -858,7 +858,7 @@ bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float 
 		MakeShared<FRootMotionSource_MoveToDynamicForce>();
 	KnockbackSource->InstanceName = KnockbackRootMotionSourceName;
 	KnockbackSource->Priority = 1000;
-	KnockbackSource->AccumulateMode = ERootMotionAccumulateMode::Override;
+	KnockbackSource->AccumulateMode = ERootMotionAccumulateMode::Additive;
 	KnockbackSource->Duration = FMath::Max(KnockbackDuration, 0.01f);
 	KnockbackSource->StartLocation = StartLocation;
 	KnockbackSource->InitialTargetLocation = StartLocation + KnockbackDirection * Distance;
@@ -867,8 +867,7 @@ bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float 
 	KnockbackSource->TimeMappingCurve = IsValid(KnockBackCurve) ?
         KnockBackCurve.Get() : UCurveFloat::StaticClass()->GetDefaultObject<UCurveFloat>();
 	KnockbackSource->Settings.SetFlag(ERootMotionSourceSettingsFlags::UseSensitiveLiftoffCheck);
-	KnockbackSource->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
-	KnockbackSource->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+	KnockbackSource->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::MaintainLastRootMotionVelocity;
 
 	ApplyRootMotionSource(KnockbackSource);
 	CharacterOwner->ForceNetUpdate();
