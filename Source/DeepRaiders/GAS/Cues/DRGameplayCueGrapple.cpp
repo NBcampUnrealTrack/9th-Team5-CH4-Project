@@ -255,6 +255,8 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	const bool bHasHookMesh = IsValid(HookMeshComponent->GetStaticMesh());
 	HookMeshComponent->SetVisibility(bHasHookMesh, true);
+	FVector LaunchDirection = (TargetLocation - LaunchLocation).GetSafeNormal();
+	HookMeshComponent->SetRelativeRotation(LaunchDirection.Rotation());
 	
 	const bool bHasHookNiagara = IsValid(HookNiagaraComponent->GetAsset());
 	HookNiagaraComponent->SetVisibility(bHasHookNiagara, true);
