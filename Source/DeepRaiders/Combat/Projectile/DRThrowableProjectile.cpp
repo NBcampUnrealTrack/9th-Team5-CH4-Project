@@ -195,7 +195,7 @@ void ADRThrowableProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 		FDRSnowRemovalSpec RemovalSpec;
 		RemovalSpec.SnowAbsorbRadius = ImpactData.SnowRadius;
 		RemovalSpec.SnowAbsorbPower = ImpactData.SnowAmount;
-		RemovalSpec.RemovalMode = EDRSnowRemovalMode::ContactBrush;
+		RemovalSpec.RemovalMode = ImpactData.SnowRemovalMode;
 		
 		SnowRemoveComponent->SetTeamIdOverride(GetSourceTeamId());
 		SnowRemoveComponent->TryRemoveSnowFromHit(ImpactResult, RemovalSpec);

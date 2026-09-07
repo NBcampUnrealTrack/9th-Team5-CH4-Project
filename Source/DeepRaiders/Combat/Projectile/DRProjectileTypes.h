@@ -55,4 +55,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
 	bool bAllowVirtualSurfaceFallback = true;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|World")
+	EDRSnowRemovalMode SnowRemovalMode = EDRSnowRemovalMode::ContactBrush;
+	
 };
