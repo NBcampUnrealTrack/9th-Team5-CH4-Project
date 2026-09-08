@@ -21,7 +21,7 @@ namespace DRLocalProjectilePrediction
 {
 	TAutoConsoleVariable<int32> CVarShowLocalPredicted(
 		TEXT("dr.Projectile.ShowLocalPredicted"),
-		1,
+		0,
 		TEXT("Show owning-client local predicted projectile. 0=off, 1=on."));
 
 	TAutoConsoleVariable<float> CVarLifetimeSeconds(
