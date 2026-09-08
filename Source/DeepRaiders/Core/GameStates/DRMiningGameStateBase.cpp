@@ -519,6 +519,13 @@ void ADRMiningGameStateBase::RegisterSnowAdd(
 void ADRMiningGameStateBase::RegisterSnowRemove(
 	const FDRSnowRemoveOperation& Operation)
 {
+	RegisterSnowRemove(Operation, FBox(ForceInit));
+}
+
+void ADRMiningGameStateBase::RegisterSnowRemove(
+	const FDRSnowRemoveOperation& Operation,
+	const FBox& EditedWorldBounds)
+{
 	if (!HasAuthority())
 	{
 		return;
@@ -528,6 +535,17 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 	Record.Sequence = ++NextSnowOperationSequence;
 	Record.bIsAddOperation = false;
 	Record.RemoveOperation = Operation;
+	if (Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool && EditedWorldBounds.IsValid)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UDRSnowPresentationSubsystem* PresentationSubsystem =
+				World->GetSubsystem<UDRSnowPresentationSubsystem>())
+			{
+				PresentationSubsystem->PresentSnowRemove(Operation, EditedWorldBounds);
+			}
+		}
+	}
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
 
@@ -1063,9 +1081,20 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 
 	// 표면 처리의 재현 결과가 한 voxel 정도 달라도, 원본 점령 데이터는
 	// 서버가 확정한 실제 제거량으로 동일하게 유지한다.
-	return SnowSubsystem->ApplyReplicatedSnowRemoval(
+	FBox EditedWorldBounds(ForceInit);
+	const bool bApplied = SnowSubsystem->ApplyReplicatedSnowRemoval(
 		Request,
-		Operation.AppliedAmount);
+		Operation.AppliedAmount,
+		&EditedWorldBounds);
+	if (bApplied && Operation.RemovalMode == EDRSnowRemovalMode::AbsorbTool && EditedWorldBounds.IsValid)
+	{
+		if (UDRSnowPresentationSubsystem* PresentationSubsystem =
+			World->GetSubsystem<UDRSnowPresentationSubsystem>())
+		{
+			PresentationSubsystem->PresentSnowRemove(Operation, EditedWorldBounds);
+		}
+	}
+	return bApplied;
 }
 
 void ADRMiningGameStateBase::HandleDirectionalSnowAddCompleted(

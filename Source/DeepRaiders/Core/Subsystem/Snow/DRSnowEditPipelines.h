@@ -129,7 +129,8 @@ public:
 		UWorld* World,
 		const FDRSnowSurfaceRemoveRequest& Request,
 		float AuthoritativeAmount,
-		EDRSnowRemovalPath RemovalPath);
+		EDRSnowRemovalPath RemovalPath,
+		FBox* OutEditedWorldBounds = nullptr);
 
 private:
 	FDRSnowSurfaceEditResult RemoveSurface(

@@ -55,7 +55,8 @@ public:
 	// 클라이언트 복제: 서버 확정 데이터를 받아 지형과 점령량을 적용합니다.
 	bool ApplyReplicatedSnowRemoval(
 		const FDRSnowSurfaceRemoveRequest& Request,
-		float AppliedAmount);
+		float AppliedAmount,
+		FBox* OutEditedWorldBounds = nullptr);
 
 	// 눈총 흡수 전용 파내기
 	// 서버: 원뿔 시야(Frustum) 형태로 눈을 흡수합니다.

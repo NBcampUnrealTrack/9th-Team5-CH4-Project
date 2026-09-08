@@ -184,7 +184,7 @@ float UDRSnowRemoveComponent::ExecuteRemoveRequest(
 						IsValid(Request.TargetVoxelWorld.Get())
 							? Request.TargetVoxelWorld->GetFName()
 							: NAME_None;
-					MiningGameState->RegisterSnowRemove(Operation);
+					MiningGameState->RegisterSnowRemove(Operation, RemoveResult.EditedWorldBounds);
 				}
 			}
 		}

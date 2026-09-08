@@ -9,6 +9,7 @@ class UMaterialParameterCollectionInstance;
 class UVoxelProceduralMeshComponent;
 class AVoxelWorld;
 struct FDRSnowAddOperation;
+struct FDRSnowRemoveOperation;
 
 USTRUCT()
 struct FDRSnowPreviousSurfaceSnapshot
@@ -18,7 +19,9 @@ struct FDRSnowPreviousSurfaceSnapshot
 	UPROPERTY(Transient)
 	TObjectPtr<UVoxelProceduralMeshComponent> Component;
 
+	TWeakObjectPtr<UVoxelProceduralMeshComponent> SourceComponent;
 	double EndTime = 0.0;
+	bool bReusableForSnowRemove = false;
 };
 
 UCLASS()
@@ -38,6 +41,7 @@ public:
 	virtual void Deinitialize() override;
 
 	void PresentSnowAdd(const FDRSnowAddOperation& Operation);
+	void PresentSnowRemove(const FDRSnowRemoveOperation& Operation, const FBox& EditedWorldBounds);
 	void ResetPresentation();
 
 private:
@@ -56,6 +60,9 @@ private:
 		const UVoxelProceduralMeshComponent& SourceComponent,
 		int32 MaximumSnapshotComponents);
 	bool ConfigureSnapshotMaterials(UVoxelProceduralMeshComponent& SnapshotComponent);
+	bool RefreshSnapshotComponent(
+		UVoxelProceduralMeshComponent& SnapshotComponent,
+		const UVoxelProceduralMeshComponent& SourceComponent);
 	void RecycleSnapshotComponent(UVoxelProceduralMeshComponent* SnapshotComponent);
 	void CleanupExpiredSnapshots();
 	void ScheduleSnapshotCleanup();

@@ -74,14 +74,16 @@ FDRSnowRemoveResult UDRSnowSubsystem::RemoveSnowWithAbsorbTool(
 
 bool UDRSnowSubsystem::ApplyReplicatedSnowRemoval(
 	const FDRSnowSurfaceRemoveRequest& Request,
-	const float AppliedAmount)
+	const float AppliedAmount,
+	FBox* OutEditedWorldBounds)
 {
 	return RemovalPipeline->Replay(
 		GetWorld(),
 		Request,
 		AppliedAmount,
 		Request.RemovalMode == EDRSnowRemovalMode::AbsorbTool
-			? EDRSnowRemovalPath::Absorb : EDRSnowRemovalPath::Standard);
+			? EDRSnowRemovalPath::Absorb : EDRSnowRemovalPath::Standard,
+			OutEditedWorldBounds);
 }
 
 

@@ -52,4 +52,7 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category = "Previous Surface", meta = (ClampMin = "0.0", Units = "s"))
 	float SnapshotLifetimePadding = 0.15f;
+
+	UPROPERTY(Config, EditAnywhere, Category = "Previous Surface|Remove", meta = (ClampMin = "0.0", Units = "s"))
+	float RemoveSnapshotLifetime = 0.15f;
 };

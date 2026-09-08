@@ -163,6 +163,109 @@ void UDRSnowPresentationSubsystem::PresentSnowAdd(const FDRSnowAddOperation& Ope
 	SlotEndTimes[SlotIndex] = EndTime;
 }
 
+void UDRSnowPresentationSubsystem::PresentSnowRemove(
+	const FDRSnowRemoveOperation& Operation,
+	const FBox& EditedWorldBounds)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(DRSnowPresentation_PresentSnowRemove);
+
+	if (Operation.RemovalMode != EDRSnowRemovalMode::AbsorbTool ||
+		Operation.AppliedAmount <= 0.f || !EditedWorldBounds.IsValid)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	const UDRSnowPresentationSettings* Settings = GetDefault<UDRSnowPresentationSettings>();
+	if (!IsValid(World) || !IsValid(Settings) ||
+		!Settings->bEnablePreviousSurfaceSnapshots || Settings->RemoveSnapshotLifetime <= 0.f)
+	{
+		return;
+	}
+
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Operation.VoxelWorldName);
+	if (!IsValid(VoxelWorld))
+	{
+		return;
+	}
+
+	CleanupExpiredSnapshots();
+	const FBox CaptureBounds = EditedWorldBounds.ExpandBy(VoxelWorld->VoxelSize * 2.f);
+	const double EndTime = World->GetTimeSeconds() + Settings->RemoveSnapshotLifetime;
+	const int32 MaximumSnapshotComponents = FMath::Max(1, Settings->MaximumSnapshotComponents);
+	TInlineComponentArray<UVoxelProceduralMeshComponent*> SourceComponents(VoxelWorld);
+	int32 UpdatedComponentCount = 0;
+
+	for (UVoxelProceduralMeshComponent* SourceComponent : SourceComponents)
+	{
+		if (!IsValid(SourceComponent) ||
+			SourceComponent->ComponentHasTag(SnowPreviousSurfaceComponentTag) ||
+			!SourceComponent->IsRegistered() ||
+			!SourceComponent->IsVisible() ||
+			!SourceComponent->Bounds.GetBox().Intersect(CaptureBounds))
+		{
+			continue;
+		}
+
+		const int32 ExistingSnapshotIndex = ActivePreviousSurfaceSnapshots.IndexOfByPredicate(
+			[SourceComponent](const FDRSnowPreviousSurfaceSnapshot& Snapshot)
+		{
+			return Snapshot.bReusableForSnowRemove && Snapshot.SourceComponent.Get() == SourceComponent;
+		});
+		if (ExistingSnapshotIndex != INDEX_NONE)
+		{
+			FDRSnowPreviousSurfaceSnapshot& ExistingSnapshot =
+				ActivePreviousSurfaceSnapshots[ExistingSnapshotIndex];
+			if (!IsValid(ExistingSnapshot.Component) ||
+				!RefreshSnapshotComponent(*ExistingSnapshot.Component, *SourceComponent))
+			{
+				ReleaseSnapshot(ExistingSnapshotIndex);
+				continue;
+			}
+
+			ExistingSnapshot.EndTime = EndTime;
+			UpdatedComponentCount++;
+			continue;
+		}
+
+		UVoxelProceduralMeshComponent* SnapshotComponent = AcquireSnapshotComponent(
+			*VoxelWorld,
+			*SourceComponent,
+			MaximumSnapshotComponents);
+		if (!IsValid(SnapshotComponent))
+		{
+			UE_LOG(
+				LogDRSnowPresentation,
+				VeryVerbose,
+				TEXT("Snow remove snapshot skipped because the component limit (%d) was reached."),
+				MaximumSnapshotComponents);
+			continue;
+		}
+		if (!RefreshSnapshotComponent(*SnapshotComponent, *SourceComponent))
+		{
+			RecycleSnapshotComponent(SnapshotComponent);
+			continue;
+		}
+
+		FDRSnowPreviousSurfaceSnapshot& Snapshot = ActivePreviousSurfaceSnapshots.Emplace_GetRef();
+		Snapshot.Component = SnapshotComponent;
+		Snapshot.SourceComponent = SourceComponent;
+		Snapshot.EndTime = EndTime;
+		Snapshot.bReusableForSnowRemove = true;
+		UpdatedComponentCount++;
+	}
+
+	if (UpdatedComponentCount > 0)
+	{
+		UE_LOG(
+			LogDRSnowPresentation,
+			VeryVerbose,
+			TEXT("Updated %d previous-surface voxel components for snow remove presentation."),
+			UpdatedComponentCount);
+		ScheduleSnapshotCleanup();
+	}
+}
+
 void UDRSnowPresentationSubsystem::ResetPresentation()
 {
 	if (!bParameterContractValid)
@@ -491,6 +594,24 @@ bool UDRSnowPresentationSubsystem::ConfigureSnapshotMaterials(
 		}
 	}
 	return bMaterialsValid;
+}
+
+bool UDRSnowPresentationSubsystem::RefreshSnapshotComponent(
+	UVoxelProceduralMeshComponent& SnapshotComponent,
+	const UVoxelProceduralMeshComponent& SourceComponent)
+{
+	SnapshotComponent.SetWorldTransform(SourceComponent.GetComponentTransform());
+	if (!SnapshotComponent.CopyRenderSectionsFrom(
+		SourceComponent,
+		EVoxelProcMeshSectionUpdate::DelayUpdate) ||
+		!ConfigureSnapshotMaterials(SnapshotComponent))
+	{
+		return false;
+	}
+
+	SnapshotComponent.FinishSectionsUpdates();
+	SnapshotComponent.SetVisibility(true, true);
+	return true;
 }
 
 void UDRSnowPresentationSubsystem::RecycleSnapshotComponent(

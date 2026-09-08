@@ -94,6 +94,9 @@ struct DEEPRAIDERS_API FDRSnowRemoveResult
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Volume")
 	int32 TouchedCellCount = 0;
+
+	// 로컬 Remove 표현에만 사용
+	FBox EditedWorldBounds = FBox(ForceInit);
 };
 
 USTRUCT(BlueprintType)
