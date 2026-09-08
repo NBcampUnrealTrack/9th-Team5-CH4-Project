@@ -13,7 +13,7 @@ class UPrimitiveComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 
-/** 적의 공격을 체력으로 흡수하는 구형 배리어 생성기다. */
+/** 적의 공격을 체력으로 흡수하는 배리어 생성기다. */
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRBarrierGenerator : public ADRBreakableActor, public IDRCombatTeamInterface
 {
@@ -25,7 +25,7 @@ public:
 	void Initialize(ADRPlayerCharacter* SourceCharacter, float InBarrierRadius, float InBarrierDuration,
 		float InBarrierMaxHealth, const TArray<FGameplayEffectSpecHandle>& InAreaEffectSpecs);
 	virtual int32 GetCombatTeamId() const override { return OwnerTeamId; }
-	USphereComponent* GetBarrierCollisionComponent() const;
+	virtual UPrimitiveComponent* GetBarrierCollisionComponent() const;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent,
 		AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -56,18 +56,19 @@ protected:
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Barrier")
 	int32 OwnerTeamId = INDEX_NONE;
 
+	UFUNCTION() void HandleBarrierBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool IsFromSweep,
+		const FHitResult& SweepResult);
+	/** GA 반경을 Collision과 BarrierVisual에 동일하게 반영한다. */
+	virtual void RefreshBarrierGeometry();
+
 private:
 	UFUNCTION() void OnRep_BarrierRadius();
-	UFUNCTION() void HandleBarrierBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-		UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep,
-		const FHitResult& SweepResult);
 	UFUNCTION() void HandleAreaEffectBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep,
 		const FHitResult& SweepResult);
 	UFUNCTION() void HandleAreaEffectEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex);
-	/** GA 반경을 Collision과 BarrierVisual에 동일하게 반영한다. */
-	void RefreshBarrierGeometry();
 	void ApplyAreaEffects(AActor* TargetActor);
 	void RemoveAreaEffects(AActor* TargetActor);
 	void RemoveAllAreaEffects();

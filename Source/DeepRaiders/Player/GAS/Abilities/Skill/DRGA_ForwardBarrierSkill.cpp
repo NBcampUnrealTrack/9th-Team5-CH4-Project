@@ -2,6 +2,12 @@
 
 #include "Components/CapsuleComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Skill/Barrier/DRForwardBarrierGenerator.h"
+
+UDRGA_ForwardBarrierSkill::UDRGA_ForwardBarrierSkill()
+{
+	BarrierGeneratorClass = ADRForwardBarrierGenerator::StaticClass();
+}
 
 bool UDRGA_ForwardBarrierSkill::ResolveBarrierSpawnTransform(
 	ADRPlayerCharacter* Character,

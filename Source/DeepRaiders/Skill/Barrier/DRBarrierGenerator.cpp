@@ -56,9 +56,10 @@ ADRBarrierGenerator::ADRBarrierGenerator()
 	BarrierVisual->SetAbsolute(false, false, true);
 	BarrierVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	BarrierVisual->SetCanEverAffectNavigation(false);
+
 }
 
-USphereComponent* ADRBarrierGenerator::GetBarrierCollisionComponent() const
+UPrimitiveComponent* ADRBarrierGenerator::GetBarrierCollisionComponent() const
 {
 	return BarrierCollision.Get();
 }
