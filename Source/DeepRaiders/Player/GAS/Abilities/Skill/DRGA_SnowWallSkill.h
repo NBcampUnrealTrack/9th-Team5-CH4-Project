@@ -48,8 +48,11 @@ private:
 	void StartTargeting();
 	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FTransform& OutWallTransform,
 		FHitResult& OutSurfaceHit) const;
-	FTransform MakeWallTransform(const FVector& ImpactPoint, const FRotator& ViewRotation) const;
-	void LiftActorsOntoWall(UWorld* World, const FTransform& WallTransform, const FHitResult& SurfaceHit) const;
+	/** 프리뷰와 같은 조준 벡터로 벽의 가로 방향을 만든다. */
+	FTransform MakeWallTransform(const FVector& ImpactPoint, const FVector& AimDirection,
+		float RotationOffsetDegrees) const;
+	/** 눈이 채워질 발판 위의 Character만 충돌을 검사하며 윗면으로 올린다. */
+	void LiftCharactersOntoWall(UWorld* World, const FTransform& WallTransform, const FHitResult& SurfaceHit) const;
 	AVoxelWorld* ResolveVoxelWorld(const FHitResult& SurfaceHit) const;
 
 	UFUNCTION()

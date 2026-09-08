@@ -18,6 +18,7 @@ public:
 
 	void Configure(const FDRPlacementSettings& InSettings, TSubclassOf<ADRPlacementPreviewActor> InPreviewActorClass,
 		const FVector& InPreviewDimensions);
+	void AddRotationInput(float Value);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void StartTargeting(UGameplayAbility* Ability) override;
@@ -43,4 +44,5 @@ private:
 	TSubclassOf<ADRPlacementPreviewActor> PreviewActorClass;
 	bool bHasValidAimData = false;
 	bool IsConfirmationSubmitted = false;
+	float RotationOffsetDegrees = 0.f;
 };

@@ -4,6 +4,7 @@
 
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
+#include "DeepRaiders/Snow/DRSnowControlZone.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/Components/DRSnowJoinComponent.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
@@ -303,6 +304,7 @@ static FAutoConsoleCommandWithWorldAndArgs GDRSnowLoadStop(TEXT("dr.Snow.LoadTes
 
 void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(ZoneCleanupRetryTimer);
 	StopSnowLoadTest();
 	++SnowApplicationGeneration;
 	bSnowReplayContinuationScheduled = false;
@@ -327,6 +329,13 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseIndex);
 	DOREPLIFETIME(ADRMiningGameStateBase, PhaseRemainingSeconds);
 	DOREPLIFETIME(ADRMiningGameStateBase, CurrentPhaseMessages);
+	DOREPLIFETIME(ADRMiningGameStateBase, PhaseCountdown);
+	DOREPLIFETIME(ADRMiningGameStateBase, ControlZoneResult);
+	DOREPLIFETIME(ADRMiningGameStateBase, ZoneCleanupSequence);
+	DOREPLIFETIME(ADRMiningGameStateBase, Team0ControlZoneReward);
+	DOREPLIFETIME(ADRMiningGameStateBase, Team1ControlZoneReward);
+	DOREPLIFETIME(ADRMiningGameStateBase, ResultRemainingSeconds);
+	DOREPLIFETIME(ADRMiningGameStateBase, ResultCountdownText);
 }
 
 void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds)
@@ -405,6 +414,174 @@ void ADRMiningGameStateBase::OnRep_GamePhaseState()
 		CurrentPhaseMessages);
 }
 
+void ADRMiningGameStateBase::AddControlZoneReward(int32 TeamId, float Amount)
+{
+	if (!HasAuthority() || (TeamId != 0 && TeamId != 1) || !FMath::IsFinite(Amount) || Amount <= 0.f)
+	{
+		return;
+	}
+	float& Total = TeamId == 0 ? Team0ControlZoneReward : Team1ControlZoneReward;
+	Total += Amount;
+	OnRep_MatchHUDState();
+	ForceNetUpdate();
+}
+
+float ADRMiningGameStateBase::GetControlZoneRewardTotal(int32 TeamId) const
+{
+	return TeamId == 0 ? Team0ControlZoneReward : TeamId == 1 ? Team1ControlZoneReward : 0.f;
+}
+
+void ADRMiningGameStateBase::SetResultCountdown(int32 RemainingSeconds, const FText& CountdownText)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const int32 NewRemaining = FMath::Max(0, RemainingSeconds);
+	if (ResultRemainingSeconds == NewRemaining && ResultCountdownText.EqualTo(CountdownText))
+	{
+		return;
+	}
+	ResultRemainingSeconds = NewRemaining;
+	ResultCountdownText = CountdownText;
+	OnRep_MatchHUDState();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::ResetMatchHUDState()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Team0ControlZoneReward = 0.f;
+	Team1ControlZoneReward = 0.f;
+	ResultRemainingSeconds = 0;
+	ResultCountdownText = FText::GetEmpty();
+	OnRep_MatchHUDState();
+	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::OnRep_MatchHUDState()
+{
+	OnMatchHUDStateChanged.Broadcast();
+}
+
+void ADRMiningGameStateBase::SetPhaseCountdown(const FDRPhaseCountdownState& Countdown)
+{
+	if (HasAuthority())
+	{
+		PhaseCountdown = Countdown;
+		OnRep_GamePhaseState();
+		ForceNetUpdate();
+	}
+}
+
+void ADRMiningGameStateBase::SetControlZoneResult(const FDRControlZoneGameResult& Result)
+{
+	if (HasAuthority())
+	{
+		ControlZoneResult = Result;
+		OnRep_ControlZoneResult();
+		ForceNetUpdate();
+	}
+}
+
+void ADRMiningGameStateBase::OnRep_ControlZoneResult()
+{
+	if (!ControlZoneResult.bHasResult)
+	{
+		GameResultText = FText::GetEmpty();
+	}
+	else
+	{
+		const FText Winner = ControlZoneResult.WinningTeamId == INDEX_NONE
+			? NSLOCTEXT("DRGameResult", "Draw", "무승부")
+			: ControlZoneResult.WinningTeamId == 0
+				? NSLOCTEXT("DRGameResult", "RedWins", "Red 팀 승리")
+				: NSLOCTEXT("DRGameResult", "BlueWins", "Blue 팀 승리");
+		FNumberFormattingOptions Format;
+		Format.SetMinimumFractionalDigits(1);
+		Format.SetMaximumFractionalDigits(1);
+		GameResultText = FText::Format(NSLOCTEXT("DRGameResult", "ControlZoneResult",
+			"[Red] {0}% : {1}% [Blue]\n{2}"),
+			FText::AsNumber(ControlZoneResult.Team0Ratio * 100.f, &Format),
+			FText::AsNumber(ControlZoneResult.Team1Ratio * 100.f, &Format), Winner);
+	}
+	OnRep_GameResultText();
+}
+
+void ADRMiningGameStateBase::RequestControlZoneCleanup()
+{
+	if (HasAuthority())
+	{
+		ZoneCleanupSequence = NextSnowOperationSequence;
+		ForceNetUpdate();
+	}
+}
+
+void ADRMiningGameStateBase::OnRep_ZoneCleanupSequence()
+{
+	if (HasAuthority())
+	{
+		return;
+	}
+	GetWorldTimerManager().ClearTimer(ZoneCleanupRetryTimer);
+	if (ZoneCleanupSequence != INDEX_NONE && !bClientZoneCleanupStarted)
+	{
+		GetWorldTimerManager().SetTimer(ZoneCleanupRetryTimer, this,
+			&ThisClass::TryClientZoneCleanup, 0.1f, true);
+	}
+}
+
+void ADRMiningGameStateBase::TryClientZoneCleanup()
+{
+	const ADRPlayerController* Player = Cast<ADRPlayerController>(
+		GetWorld()->GetFirstPlayerController());
+	if (!IsValid(Player))
+	{
+		return;
+	}
+	const EDRSnowJoinLoadingPhase JoinPhase = Player->GetSnowJoinLoadingPhase();
+	if (JoinPhase == EDRSnowJoinLoadingPhase::ReceivingSnapshot
+		|| JoinPhase == EDRSnowJoinLoadingPhase::ApplyingSnapshot)
+	{
+		return;
+	}
+	for (TActorIterator<AVoxelWorld> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsCreated())
+		{
+			return;
+		}
+	}
+	// Reliable 눈 작업 또는 난입 스냅샷이 적용된 다음 기존 눈을 잘라낸다.
+	if (ActiveDirectionalSnowOperationSequence != INDEX_NONE || !PendingSnowOperations.IsEmpty()
+		|| (ZoneCleanupSequence > 0 && !IsSnowOperationApplied(ZoneCleanupSequence)))
+	{
+		return;
+	}
+	bClientZoneCleanupStarted = true;
+	GetWorldTimerManager().ClearTimer(ZoneCleanupRetryTimer);
+	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
+	{
+		It->RestartCarveBatch();
+	}
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		if (!It->StartEndCleanup([](bool bSucceeded)
+		{
+			if (!bSucceeded)
+			{
+				UE_LOG(LogTemp, Error, TEXT("Client control zone cleanup did not finish."));
+			}
+		}))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Client control zone cleanup failed: %s."), *It->GetName());
+		}
+	}
+}
+
 void ADRMiningGameStateBase::SetGameEndDebugText(const FString& DebugText)
 {
 	if (!HasAuthority())
@@ -420,7 +597,11 @@ void ADRMiningGameStateBase::SetGameEndDebugText(const FString& DebugText)
 void ADRMiningGameStateBase::OnRep_GameEndDebugText()
 {
 	OnGameEndDebugTextChanged.Broadcast(GameEndDebugText);
-	UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Replicated]\n%s"), *GameEndDebugText);
+	// 시작 시 빈 문자열로 초기화한 것은 경기 종료가 아니다.
+	if (!GameEndDebugText.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Replicated]\n%s"), *GameEndDebugText);
+	}
 }
 
 void ADRMiningGameStateBase::SetGameResultText(const FText& ResultText)
@@ -582,6 +763,8 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 
 void ADRMiningGameStateBase::ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence)
 {
+	bClientZoneCleanupStarted = false;
+	OnRep_ZoneCleanupSequence();
 	if (HasAuthority())
 	{
 		return;
@@ -614,6 +797,18 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	{
 		return;
 	}
+	GetWorldTimerManager().ClearTimer(ZoneCleanupRetryTimer);
+	ZoneCleanupSequence = INDEX_NONE;
+	bClientZoneCleanupStarted = false;
+	// 먼저 이전 비동기 편집을 취소한 뒤 복셀 데이터를 초기화한다.
+	for (TActorIterator<ADRMeshVoxelCarver> Iterator(World); Iterator; ++Iterator)
+	{
+		Iterator->RestartCarveBatch();
+	}
+	for (TActorIterator<ADRSnowControlZone> Iterator(World); Iterator; ++Iterator)
+	{
+		Iterator->ResetForGame();
+	}
 
 	if (UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>())
 	{
@@ -631,11 +826,6 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 		{
 			UVoxelBlueprintLibrary::ClearAllData(*Iterator, true);
 		}
-	}
-
-	for (TActorIterator<ADRMeshVoxelCarver> Iterator(World); Iterator; ++Iterator)
-	{
-		Iterator->RestartCarveBatch();
 	}
 
 	if (HasAuthority())

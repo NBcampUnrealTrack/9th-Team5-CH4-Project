@@ -104,6 +104,8 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	MiningGameState = InPlayerCharacter->GetWorld()->GetGameState<ADRMiningGameStateBase>();
 	if (MiningGameState.IsValid())
 	{
+		MiningGameState->OnMatchHUDStateChanged.AddDynamic(
+			this, &ThisClass::HandleMatchHUDStateChanged);
 		MiningGameState->OnGameTimerChanged.AddDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
@@ -142,7 +144,7 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 	RefreshFreezeGauge();
 	RefreshAmmoVisibility();
 	RefreshInteractionPrompt();
-	RefreshGameStartStatus();
+	HandleMatchHUDStateChanged();
 	bInterpolateGauges = true;
 }
 
@@ -179,6 +181,8 @@ void UDRHUDViewModel::Deinitialize()
 
 	if (MiningGameState.IsValid())
 	{
+		MiningGameState->OnMatchHUDStateChanged.RemoveDynamic(
+			this, &ThisClass::HandleMatchHUDStateChanged);
 		MiningGameState->OnGameTimerChanged.RemoveDynamic(
 			this,
 			&ThisClass::HandleGameTimerChanged);
@@ -235,12 +239,28 @@ void UDRHUDViewModel::Deinitialize()
 	OverheatedTagChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
 	InteractionFocusChangedHandle.Reset();
+	TeamRosterRefreshElapsed = 0.f;
 	ReadyPlayerCount = 0;
 	TotalPlayerCount = 0;
 	GameStartCountdown = 0;
 	GameRemainingSeconds = 0;
 	CurrentPhaseMessageText = FText::GetEmpty();
 	CurrentGameResultText = FText::GetEmpty();
+	CurrentGameFlowMessage = FText::GetEmpty();
+	UE_MVVM_SET_PROPERTY_VALUE(GameStateText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(GameStartStatusText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(bIsGameStateTextVisible, false);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsGameStartStatusVisible, false);
+	UE_MVVM_SET_PROPERTY_VALUE(TeamRedText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(TeamBlueText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownText, FText::GetEmpty());
+	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownSeconds, 0);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsPhaseCountdownVisible, false);
+	UE_MVVM_SET_PROPERTY_VALUE(bIsExitCountdown, false);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0Ratio, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1Ratio, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(WinningTeamId, INDEX_NONE);
+	UE_MVVM_SET_PROPERTY_VALUE(bHasFinalResult, false);
 	bGameStarted = false;
 	bGameEnded = false;
 	TargetHealthRatio = 0.f;

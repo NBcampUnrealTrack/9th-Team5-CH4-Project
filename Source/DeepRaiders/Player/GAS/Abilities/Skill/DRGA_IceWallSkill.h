@@ -60,7 +60,9 @@ protected:
 private:
 	void StartTargeting();
 	bool ValidateServerTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FTransform& OutWallTransform) const;
-	FTransform MakeWallTransform(const FVector& ImpactPoint, const FRotator& ViewRotation) const;
+	/** 프리뷰와 같은 조준 벡터로 벽의 가로 방향을 만든다. */
+	FTransform MakeWallTransform(const FVector& ImpactPoint, const FVector& AimDirection,
+		float RotationOffsetDegrees) const;
 
 	UFUNCTION()
 	void HandleTargetDataReady(const FGameplayAbilityTargetDataHandle& TargetData);

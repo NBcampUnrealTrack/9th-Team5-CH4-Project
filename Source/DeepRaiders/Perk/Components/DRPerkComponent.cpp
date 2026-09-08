@@ -346,6 +346,10 @@ bool UDRPerkComponent::AcquireGrantedAbilities(
 			AbilityClass,
 			FMath::Max(1, GrantedAbility.AbilityLevel));
 		AbilitySpec.SourceObject = const_cast<UDRPerkDefinition*>(PerkDefinition);
+		if (GrantedAbility.InputID != EDRAbilityInputId::Unbound)
+		{
+			AbilitySpec.InputID = static_cast<int32>(GrantedAbility.InputID);
+		}
 		const FGameplayAbilitySpecHandle AbilityHandle =
 			AbilitySystemComponent->GiveAbility(AbilitySpec);
 		if (!AbilityHandle.IsValid())

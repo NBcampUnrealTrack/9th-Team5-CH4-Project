@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "DeepRaiders/Input/DRInputTypes.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Skill/DRSkillTypes.h"
 #include "DRPerkDefinition.generated.h"
@@ -21,6 +22,10 @@ struct DEEPRAIDERS_API FDRPerkGrantedAbility
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk Ability", meta = (ClampMin = "1", UIMin = "1"))
 	int32 AbilityLevel = 1;
+
+	/** 이 Ability를 직접 발동할 플레이어 입력 슬롯이다. Unbound면 입력에 바인딩하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk Ability")
+	EDRAbilityInputId InputID = EDRAbilityInputId::Unbound;
 };
 
 UENUM(BlueprintType)

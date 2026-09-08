@@ -1,6 +1,7 @@
 #include "DRMiningGameModeBase.h"
 
 #include "AbilitySystemComponent.h"
+#include "GameplayEffect.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -18,11 +19,44 @@
 #include "VoxelWorld.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
+
+FDRPhaseCountdownState FDRGamePhaseConfig::MakeCountdownState(int32 RemainingSeconds) const
+{
+	FDRPhaseCountdownState Countdown;
+	if (RemainingSeconds <= 0)
+	{
+		return Countdown;
+	}
+	const int32 Elapsed = DurationSeconds - RemainingSeconds;
+	// 표시 구간이 겹치면 종료 카운트다운을 먼저 선택한다.
+	if (bShowExitCountdown && RemainingSeconds <= ExitCountdownSeconds)
+	{
+		Countdown.RemainingSeconds = RemainingSeconds;
+		Countdown.bIsExitCountdown = true;
+		Countdown.Text = ExitCountdownText;
+	}
+	else if (bShowEntryCountdown && Elapsed < EntryCountdownSeconds)
+	{
+		Countdown.RemainingSeconds = FMath::Min(EntryCountdownSeconds - Elapsed, RemainingSeconds);
+		Countdown.Text = EntryCountdownText;
+	}
+	return Countdown;
+}
+
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
 	bStartPlayersAsSpectators = true;
-	GamePhases.AddDefaulted();
+	// 기본 준비 페이즈는 20초씩 세 번, 60초 이후에는 거점전을 진행한다.
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		FDRGamePhaseConfig& Phase = GamePhases.AddDefaulted_GetRef();
+		Phase.PhaseIndex = Index;
+		Phase.DurationSeconds = Index < 3 ? 20 : 120;
+	}
 	RecalculateGameDuration();
 }
 
@@ -56,9 +90,29 @@ bool ADRMiningGameModeBase::StartGame()
 	}
 
 	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
+	GetWorldTimerManager().ClearTimer(GameResultCountdownTimerHandle);
 	RecalculateGameDuration();
 	if (GameDuration <= 0.f || GamePhases.IsEmpty())
 	{
+		return false;
+	}
+	int32 Elapsed = 0;
+	int32 PreviousPhase = INDEX_NONE;
+	bool bHasCentralOpeningBoundary = false;
+	for (const FDRGamePhaseConfig& Phase : GamePhases)
+	{
+		if (Phase.PhaseIndex <= PreviousPhase || Phase.DurationSeconds <= 0)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Game phases need increasing indices and positive durations."));
+			return false;
+		}
+		bHasCentralOpeningBoundary |= Elapsed == 60;
+		Elapsed += Phase.DurationSeconds;
+		PreviousPhase = Phase.PhaseIndex;
+	}
+	if (!bHasCentralOpeningBoundary)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Game phases must start a control phase at elapsed 60 seconds."));
 		return false;
 	}
 
@@ -68,19 +122,16 @@ bool ADRMiningGameModeBase::StartGame()
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString());
+		MiningGameState->ResetMatchHUDState();
 		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetControlZoneResult(FDRControlZoneGameResult());
 		MiningGameState->SetGameTimerState(0);
 	}
 	SetGameFlowState(EDRGameFlowState::Loading);
+	bPhaseCarversReady = !HasPhaseCarvers(GamePhases[0].PhaseIndex);
 	UpdateReplicatedGamePhase();
 
-	bool bHasInitialCarver = false;
-	for (TActorIterator<ADRMeshVoxelCarver> Iterator(GetWorld()); Iterator; ++Iterator)
-	{
-		bHasInitialCarver |= Iterator->ShouldCarveOnGameStart(
-			GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
-	}
-	if (!bHasInitialCarver)
+	if (bPhaseCarversReady)
 	{
 		NotifyGameStartCarversReady();
 	}
@@ -101,6 +152,7 @@ void ADRMiningGameModeBase::BeginPlaying()
 	}
 	StartTeamSwitchTimer();
 	GameRemainingSeconds = FMath::CeilToInt(GameDuration);
+	UpdateReplicatedGamePhase();
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameTimerState(GameRemainingSeconds);
@@ -118,6 +170,16 @@ void ADRMiningGameModeBase::NotifyGameStartCarversReady()
 	if (!HasAuthority() || GameFlowState != EDRGameFlowState::Loading)
 	{
 		return;
+	}
+	// 메쉬 판정 비용은 준비 중 한 번 지불하고 플레이 중에는 마스크를 재사용한다.
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		if (!It->PrepareForGame())
+		{
+			bPhaseCarveFailed = true;
+			SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+			return;
+		}
 	}
 
 	ADRGameStartActor* Source = CountdownSource.Get();
@@ -158,6 +220,7 @@ void ADRMiningGameModeBase::TickGameTimer()
 		MiningGameState->SetGameTimerState(GameRemainingSeconds);
 	}
 	UpdateReplicatedGamePhase();
+	UpdateControlZoneActivation();
 }
 
 void ADRMiningGameModeBase::AdvanceGamePhase()
@@ -171,6 +234,9 @@ void ADRMiningGameModeBase::AdvanceGamePhase()
 	}
 
 	PhaseRemainingSeconds = FMath::Max(1, GamePhases[CurrentPhaseArrayIndex].DurationSeconds);
+	bPhaseCarversReady = !HasPhaseCarvers(GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
+	UE_LOG(LogTemp, Log, TEXT("[GameFlow] Phase=%d Remaining=%d GameRemaining=%d"),
+		GamePhases[CurrentPhaseArrayIndex].PhaseIndex, PhaseRemainingSeconds, GameRemainingSeconds);
 }
 
 void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
@@ -181,6 +247,7 @@ void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
 		if (IsValid(MiningGameState))
 		{
 			MiningGameState->SetGamePhaseState(INDEX_NONE, 0, TArray<FText>());
+			MiningGameState->SetPhaseCountdown(FDRPhaseCountdownState());
 		}
 		return;
 	}
@@ -190,6 +257,132 @@ void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
 		Phase.PhaseIndex,
 		PhaseRemainingSeconds,
 		Phase.PlayerMessages);
+	MiningGameState->SetPhaseCountdown(IsGameStarted()
+		? Phase.MakeCountdownState(PhaseRemainingSeconds) : FDRPhaseCountdownState());
+}
+
+bool ADRMiningGameModeBase::HasPhaseCarvers(int32 PhaseIndex) const
+{
+	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
+	{
+		if (It->ShouldCarveOnGameStart(PhaseIndex))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ADRMiningGameModeBase::NotifyPhaseCarversReady(int32 PhaseIndex, bool bSucceeded)
+{
+	if (!HasAuthority() || !GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
+	{
+		return;
+	}
+	if (!bSucceeded)
+	{
+		bPhaseCarveFailed = true;
+		UE_LOG(LogTemp, Error, TEXT("Phase %d carve failed; control zones stay locked."), PhaseIndex);
+		if (GameFlowState == EDRGameFlowState::Loading)
+		{
+			SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+		}
+		return;
+	}
+	if (GamePhases[CurrentPhaseArrayIndex].PhaseIndex != PhaseIndex)
+	{
+		return;
+	}
+	bPhaseCarversReady = true;
+	if (GameFlowState == EDRGameFlowState::Loading)
+	{
+		NotifyGameStartCarversReady();
+	}
+	else
+	{
+		UpdateControlZoneActivation();
+	}
+}
+
+void ADRMiningGameModeBase::UpdateControlZoneActivation()
+{
+	if (!IsGameStarted() || !bPhaseCarversReady || bPhaseCarveFailed
+		|| !GamePhases.IsValidIndex(CurrentPhaseArrayIndex)
+		|| FMath::CeilToInt(GameDuration) - GameRemainingSeconds < 60)
+	{
+		return;
+	}
+	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
+	{
+		if (It->IsCarving())
+		{
+			return;
+		}
+	}
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		It->ActivateForPhase(GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
+	}
+}
+
+void ADRMiningGameModeBase::HandleControlZoneCompleted(ADRSnowControlZone* Zone)
+{
+	if (!HasAuthority() || !IsGameStarted() || !IsValid(Zone) || !IsValid(GameState)
+		|| !Zone->TryClaimCompletionReward())
+	{
+		return;
+	}
+	const int32 WinningTeam = Zone->GetLeadingTeamId();
+	float TotalReceived = 0.f;
+	for (APlayerState* Player : GameState->PlayerArray)
+	{
+		ADRPlayerState* Recipient = Cast<ADRPlayerState>(Player);
+		if (!IsValid(Recipient) || Recipient->IsOnlyASpectator() || Recipient->GetTeamId() != WinningTeam)
+		{
+			continue;
+		}
+		// 팀원별 실제 지급량을 합산하고, 이후 개인 소비와는 분리한다.
+		const float PreviousGauge = Recipient->GetSnowGauge();
+		Recipient->AddSnowGauge(FMath::Max(0.f, Zone->GetRewardSnowGauge()));
+		TotalReceived += FMath::Max(0.f, Recipient->GetSnowGauge() - PreviousGauge);
+		UAbilitySystemComponent* ASC = Recipient->GetAbilitySystemComponent();
+		if (!IsValid(ASC))
+		{
+			continue;
+		}
+		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		Context.AddSourceObject(Zone);
+		for (const TSubclassOf<UGameplayEffect>& Effect : Zone->GetRewardEffects())
+		{
+			if (Effect)
+			{
+				const int32 PreviousStacks = ASC->GetGameplayEffectCount(Effect, nullptr, false);
+				const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectToSelf(
+					Effect->GetDefaultObject<UGameplayEffect>(), 1.f, Context);
+				if (Handle.IsValid() && ASC->GetGameplayEffectCount(Effect, nullptr, false) > PreviousStacks)
+				{
+					ControlZoneRewardEffects.Add(Handle);
+				}
+			}
+		}
+	}
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->AddControlZoneReward(WinningTeam, TotalReceived);
+	}
+}
+
+void ADRMiningGameModeBase::ClearControlZoneRewardEffects()
+{
+	for (const FActiveGameplayEffectHandle& Handle : ControlZoneRewardEffects)
+	{
+		if (UAbilitySystemComponent* ASC = Handle.GetOwningAbilitySystemComponent())
+		{
+			// 거점 보상이 추가한 스택만 회수한다.
+			ASC->RemoveActiveGameplayEffect(Handle, 1);
+		}
+	}
+	ControlZoneRewardEffects.Reset();
 }
 
 void ADRMiningGameModeBase::RecalculateGameDuration()
@@ -209,6 +402,10 @@ void ADRMiningGameModeBase::EndGame()
 	}
 
 	SetGameFlowState(EDRGameFlowState::Results);
+	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
+	{
+		It->RestartCarveBatch();
+	}
 	GameRemainingSeconds = 0;
 	CurrentPhaseArrayIndex = INDEX_NONE;
 	PhaseRemainingSeconds = 0;
@@ -222,6 +419,7 @@ void ADRMiningGameModeBase::EndGame()
 	TArray<FString> ZoneDebugTexts;
 	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
+		Iterator->FreezeForGameEnd();
 		const FDRSnowVoxelMaterialScanResult MaterialScan = Iterator->ScanVoxelMaterials();
 		const FString ZoneDebugText = Iterator->BuildSnowCountDebugTextFromScan(MaterialScan);
 		ZoneDebugTexts.Add(FString::Printf(TEXT("[%s]\n%s"), *Iterator->GetName(), *ZoneDebugText));
@@ -269,10 +467,14 @@ void ADRMiningGameModeBase::EndGame()
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString::Join(ZoneDebugTexts, TEXT("\n\n")));
-		MiningGameState->SetGameResultText(FText::FromString(FString::Printf(
-			TEXT("[Red] %d : %d [Blue]"),
-			Team0Percent,
-			Team1Percent)));
+		FDRControlZoneGameResult Result;
+		Result.bHasResult = true;
+		Result.Team0Ratio = WeightedScoreTotal > 0.0 ? WeightedTeamScores[0] / WeightedScoreTotal : 0.f;
+		Result.Team1Ratio = WeightedScoreTotal > 0.0 ? WeightedTeamScores[1] / WeightedScoreTotal : 0.f;
+		Result.WinningTeamId = FMath::IsNearlyEqual(WeightedTeamScores[0], WeightedTeamScores[1], 0.0001)
+			? INDEX_NONE : WeightedTeamScores[0] > WeightedTeamScores[1] ? 0 : 1;
+		MiningGameState->SetControlZoneResult(Result);
+		MiningGameState->RequestControlZoneCleanup();
 
 	}
 
@@ -286,12 +488,64 @@ void ADRMiningGameModeBase::EndGame()
 		}
 	}
 
+	TArray<ADRSnowControlZone*> Zones;
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		Zones.Add(*It);
+	}
+	PendingZoneCleanups = Zones.Num() + 1;
+	for (ADRSnowControlZone* Zone : Zones)
+	{
+		const TWeakObjectPtr<ADRMiningGameModeBase> WeakThis(this);
+		if (!Zone->StartEndCleanup([WeakThis](bool bSucceeded)
+		{
+			if (!bSucceeded)
+			{
+				UE_LOG(LogTemp, Error, TEXT("Control zone cleanup did not finish."));
+			}
+			if (ADRMiningGameModeBase* Mode = WeakThis.Get())
+			{
+				Mode->FinishControlZoneCleanup();
+			}
+		}))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Control zone cleanup failed: %s."), *Zone->GetName());
+			FinishControlZoneCleanup();
+		}
+	}
+	FinishControlZoneCleanup();
+}
+
+void ADRMiningGameModeBase::FinishControlZoneCleanup()
+{
+	if (!IsGameEnded() || PendingZoneCleanups <= 0 || --PendingZoneCleanups > 0)
+	{
+		return;
+	}
+	// 조형물 정리가 끝난 뒤 결과 표시 시간을 보장한다.
 	GetWorldTimerManager().SetTimer(
 		GameResultTimerHandle,
 		this,
 		&ThisClass::ReturnToWaiting,
 		FMath::Max(0.1f, GameResultDisplayDuration),
 		false);
+	TickGameResultCountdown();
+	GetWorldTimerManager().SetTimer(GameResultCountdownTimerHandle,
+		this, &ThisClass::TickGameResultCountdown, 1.f, true);
+}
+
+void ADRMiningGameModeBase::TickGameResultCountdown()
+{
+	if (!HasAuthority() || !IsGameEnded())
+	{
+		return;
+	}
+	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+	{
+		const float Remaining = GetWorldTimerManager().GetTimerRemaining(GameResultTimerHandle);
+		MiningGameState->SetResultCountdown(
+			FMath::Max(0, FMath::CeilToInt(Remaining)), GameResultCountdownText);
+	}
 }
 
 // 결과 표시가 끝난 뒤에만 다음 경기의 준비를 허용한다.
@@ -303,9 +557,12 @@ void ADRMiningGameModeBase::ReturnToWaiting()
 	}
 
 	SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
+	ClearControlZoneRewardEffects();
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
+		MiningGameState->ResetMatchHUDState();
 		MiningGameState->SetGameResultText(FText::GetEmpty());
+		MiningGameState->SetControlZoneResult(FDRControlZoneGameResult());
 		MiningGameState->SetGameTimerState(0);
 	}
 	for (TActorIterator<ADRGameStartActor> Iterator(GetWorld()); Iterator; ++Iterator)
@@ -340,12 +597,17 @@ void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 	else if (GameFlowState == EDRGameFlowState::Results)
 	{
 		GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
+		GetWorldTimerManager().ClearTimer(GameResultCountdownTimerHandle);
 	}
 
 	const bool bWasPreparing = GameFlowState == EDRGameFlowState::Loading
-		|| GameFlowState == EDRGameFlowState::Countdown;
+		|| GameFlowState == EDRGameFlowState::Countdown || GameFlowState == EDRGameFlowState::Results;
 	const bool bIsPreparing = NewState == EDRGameFlowState::Loading
-		|| NewState == EDRGameFlowState::Countdown;
+		|| NewState == EDRGameFlowState::Countdown || NewState == EDRGameFlowState::Results;
+	UE_LOG(LogTemp, Log, TEXT("[GameFlow] %s -> %s PhaseArray=%d PhaseRemaining=%d GameRemaining=%d"),
+		*StaticEnum<EDRGameFlowState>()->GetNameStringByValue(static_cast<int64>(GameFlowState)),
+		*StaticEnum<EDRGameFlowState>()->GetNameStringByValue(static_cast<int64>(NewState)),
+		CurrentPhaseArrayIndex, PhaseRemainingSeconds, GameRemainingSeconds);
 	GameFlowState = NewState;
 	if (bWasPreparing != bIsPreparing)
 	{
@@ -356,9 +618,19 @@ void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 	}
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
-		const FText FlowMessage = NewState == EDRGameFlowState::Loading
-			? GameLoadingMessage
-			: FText::GetEmpty();
+		FText FlowMessage;
+		if (NewState == EDRGameFlowState::Loading)
+		{
+			FlowMessage = GameLoadingMessage;
+		}
+		else if (NewState == EDRGameFlowState::Countdown)
+		{
+			FlowMessage = GameStartCountdownText;
+		}
+		else if (NewState == EDRGameFlowState::WaitingForPlayers && bPhaseCarveFailed)
+		{
+			FlowMessage = GamePreparationFailedMessage;
+		}
 		MiningGameState->SetGameFlowState(NewState, FlowMessage);
 	}
 }
@@ -454,6 +726,9 @@ void ADRMiningGameModeBase::SetGamePreparingBlocked(
 
 void ADRMiningGameModeBase::ResetGameState()
 {
+	ClearControlZoneRewardEffects();
+	PendingZoneCleanups = 0;
+	bPhaseCarveFailed = false;
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
 	{
@@ -521,6 +796,7 @@ void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
+	GetWorldTimerManager().ClearTimer(GameResultCountdownTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -720,6 +996,9 @@ bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 		PlayerController->ChangeState(NAME_Playing);
 		PlayerController->ClientGotoState(NAME_Playing);
 		RestartPlayer(PlayerController);
+		SetGamePreparingBlocked(PlayerController->GetPlayerState<ADRPlayerState>(),
+			GameFlowState == EDRGameFlowState::Loading || GameFlowState == EDRGameFlowState::Countdown
+				|| GameFlowState == EDRGameFlowState::Results);
 
 		if (APawn* SpawnedPawn = PlayerController->GetPawn(); IsValid(SpawnedPawn))
 		{
@@ -842,3 +1121,31 @@ AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Pla
 
 	return TeamStarts[0];
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDRPhaseCountdownTest, "DeepRaiders.GameFlow.PhaseCountdown",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDRPhaseCountdownTest::RunTest(const FString&)
+{
+	FDRGamePhaseConfig Phase;
+	Phase.DurationSeconds = 5;
+	Phase.EntryCountdownSeconds = 4;
+	Phase.ExitCountdownSeconds = 3;
+	Phase.EntryCountdownText = FText::FromString(TEXT("Entry {Seconds}"));
+	Phase.ExitCountdownText = FText::FromString(TEXT("Exit {Seconds}"));
+	TestEqual(TEXT("Both disabled"), Phase.MakeCountdownState(5).RemainingSeconds, 0);
+	Phase.bShowEntryCountdown = true;
+	TestEqual(TEXT("Entry starts at four"), Phase.MakeCountdownState(5).RemainingSeconds, 4);
+	TestEqual(TEXT("Entry expires"), Phase.MakeCountdownState(1).RemainingSeconds, 0);
+	Phase.bShowExitCountdown = true;
+	const FDRPhaseCountdownState Overlap = Phase.MakeCountdownState(3);
+	TestTrue(TEXT("Exit wins overlap"), Overlap.bIsExitCountdown);
+	TestEqual(TEXT("Exit uses phase remainder"), Overlap.RemainingSeconds, 3);
+	TestTrue(TEXT("Exit keeps its own text"), Overlap.Text.EqualTo(Phase.ExitCountdownText));
+	Phase.bShowEntryCountdown = false;
+	TestEqual(TEXT("Exit not shown early"), Phase.MakeCountdownState(5).RemainingSeconds, 0);
+	TestEqual(TEXT("No countdown after phase"), Phase.MakeCountdownState(0).RemainingSeconds, 0);
+	return true;
+}
+#endif

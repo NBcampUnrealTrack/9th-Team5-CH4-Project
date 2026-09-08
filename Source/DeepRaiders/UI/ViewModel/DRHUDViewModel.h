@@ -173,8 +173,39 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game State")
 	FText GameStateText;
 
+	// 준비 중에는 팀 인원, 경기 중에는 거점 보상 누계, 결과에서는 최종 점유율이다.
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Team")
+	FText TeamRedText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Team")
+	FText TeamBlueText;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Game State")
 	bool bIsGameStateTextVisible = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Phase")
+	FText PhaseCountdownText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Phase")
+	int32 PhaseCountdownSeconds = 0;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Phase")
+	bool bIsPhaseCountdownVisible = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Phase")
+	bool bIsExitCountdown = false;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
+	float FinalTeam0Ratio = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
+	float FinalTeam1Ratio = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
+	int32 WinningTeamId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
+	bool bHasFinalResult = false;
 
 private:
 	UFUNCTION()
@@ -207,11 +238,16 @@ private:
 	UFUNCTION()
 	void HandleGameResultTextChanged(const FText& ResultText);
 
+	UFUNCTION()
+	void HandleMatchHUDStateChanged();
+
 	void RefreshGameStartStatus();
 	void RefreshGameStateText();
+	void RefreshTeamTexts();
 
 	TWeakObjectPtr<ADRGameStartActor> GameStartActor;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
+	float TeamRosterRefreshElapsed = 0.f;
 	int32 ReadyPlayerCount = 0;
 	int32 TotalPlayerCount = 0;
 	int32 GameStartCountdown = 0;

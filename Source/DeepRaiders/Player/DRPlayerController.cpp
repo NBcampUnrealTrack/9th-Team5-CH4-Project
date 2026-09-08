@@ -21,6 +21,7 @@
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
+#include "DeepRaiders/Combat/Placement/DRPlacementTargetActor.h"
 #include "DeepRaiders/Core/Subsystem/DRWorldItemSubsystem.h"
 #include "DeepRaiders/OrePooling/DROrePoolActor.h"
 #include "DeepRaiders/OrePooling/DROrePoolSubsystem.h"
@@ -296,6 +297,11 @@ void ADRPlayerController::BeginPlay()
 		InputSubsystem->RemoveMappingContext(MappingContext);
 		InputSubsystem->AddMappingContext(MappingContext, 0);
 	}
+	if (IsValid(InputSubsystem) && IsValid(PlacementMappingContext))
+	{
+		// 이전 Pawn/Controller의 설치 입력 상태가 남아 있지 않게 기본 상태에서 제거한다.
+		InputSubsystem->RemoveMappingContext(PlacementMappingContext);
+	}
 
 	if (IsValid(SkillUIComponent) && IsValid(HUDUIComponent))
 	{
@@ -361,6 +367,11 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(ScrollQuickSlotAction.Get()))
 	{
 		EnhancedInput->BindAction(ScrollQuickSlotAction.Get(), ETriggerEvent::Triggered, this, &ThisClass::HandleScrollQuickSlot);
+	}
+
+	if (IsValid(PlacementRotateAction))
+	{
+		EnhancedInput->BindAction(PlacementRotateAction, ETriggerEvent::Triggered, this, &ThisClass::HandleRotatePlacement);
 	}
 	
 	if (IsValid(ScoreboardAction))
@@ -617,6 +628,45 @@ void ADRPlayerController::HandleJumpCompleted(const FInputActionValue&)
 	if (IsValid(PlayerCharacter))
 	{
 		PlayerCharacter->HandleJumpReleased();
+	}
+}
+
+void ADRPlayerController::BeginPlacementInput(ADRPlacementTargetActor* TargetActor)
+{
+	if (!IsLocalController() || !IsValid(TargetActor))
+	{
+		return;
+	}
+
+	ActivePlacementTargetActor = TargetActor;
+	ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = IsValid(LocalPlayer)
+		? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer)
+		: nullptr;
+	if (!IsValid(InputSubsystem) || !IsValid(PlacementMappingContext))
+	{
+		return;
+	}
+
+	InputSubsystem->RemoveMappingContext(PlacementMappingContext);
+	InputSubsystem->AddMappingContext(PlacementMappingContext, PlacementMappingPriority);
+}
+
+void ADRPlayerController::EndPlacementInput(ADRPlacementTargetActor* TargetActor)
+{
+	if (ActivePlacementTargetActor.Get() != TargetActor)
+	{
+		return;
+	}
+
+	ActivePlacementTargetActor.Reset();
+	ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = IsValid(LocalPlayer)
+		? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer)
+		: nullptr;
+	if (IsValid(InputSubsystem) && IsValid(PlacementMappingContext))
+	{
+		InputSubsystem->RemoveMappingContext(PlacementMappingContext);
 	}
 }
 
@@ -1208,7 +1258,7 @@ void ADRPlayerController::HandleSelectQuickSlot(const FInputActionValue& Value)
 
 void ADRPlayerController::HandleScrollQuickSlot(const FInputActionValue& Value)
 {
-	if (!IsValid(QuickSlotComponent))
+	if (ActivePlacementTargetActor.IsValid() || !IsValid(QuickSlotComponent))
 	{
 		return;
 	}
@@ -1224,6 +1274,14 @@ void ADRPlayerController::HandleScrollQuickSlot(const FInputActionValue& Value)
 	const int32 Direction = WheelDelta > 0.f ? -1 : 1;
 	
 	QuickSlotComponent->RequestSelectAdjacentSlot(Direction);
+}
+
+void ADRPlayerController::HandleRotatePlacement(const FInputActionValue& Value)
+{
+	if (ADRPlacementTargetActor* TargetActor = ActivePlacementTargetActor.Get())
+	{
+		TargetActor->AddRotationInput(Value.Get<float>());
+	}
 }
 
 void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
