@@ -37,6 +37,7 @@
 #include "Components/DRInteractionComponent.h"
 
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
+#include "DeepRaiders/UI/Loading/DRLoadingUIComponent.h"
 #include "DeepRaiders/UI/Skill/DRSkillUIComponent.h"
 #include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
@@ -72,7 +73,6 @@ namespace DRSnowSnapshotTransfer
 	constexpr double ExpectedAckSeconds = 0.25;
 	constexpr double AdjustmentInterval = 0.5;
 	constexpr float SendCheckInterval = 0.05f;
-	constexpr uint64 ProgressMessageKey = 0x4452534E;
 
 	uint64 MakeChunkKey(uint8 PayloadType, int32 ByteOffset)
 	{
@@ -96,6 +96,7 @@ ADRPlayerController::ADRPlayerController()
 
 	// UI Component Initialize
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
+	LoadingUIComponent = CreateDefaultSubobject<UDRLoadingUIComponent>(TEXT("LoadingUIComponent"));
 	SkillUIComponent = CreateDefaultSubobject<UDRSkillUIComponent>(TEXT("SkillUIComponent"));
 	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
@@ -264,39 +265,6 @@ void ADRPlayerController::Tick(float DeltaSeconds)
 		}
 	}
 
-	if (GEngine == nullptr)
-	{
-		return;
-	}
-
-	FString LoadingStatus;
-	switch (SnowJoinLoadingPhase)
-	{
-	case EDRSnowJoinLoadingPhase::Idle:
-		LoadingStatus = TEXT("Network Sync: Idle");
-		break;
-	case EDRSnowJoinLoadingPhase::ReceivingSnapshot:
-		LoadingStatus = FString::Printf(
-			TEXT("Network Sync: Receiving Snapshot %.1f%%"),
-			GetSnowJoinSnapshotProgress() * 100.f);
-		break;
-	case EDRSnowJoinLoadingPhase::ApplyingSnapshot:
-		LoadingStatus = TEXT("Network Sync: Applying Snapshot");
-		break;
-	case EDRSnowJoinLoadingPhase::WaitingForControl:
-		LoadingStatus = TEXT("Network Sync: Waiting For Control");
-		break;
-	case EDRSnowJoinLoadingPhase::Complete:
-	default:
-		LoadingStatus = TEXT("Network Sync: Complete");
-		break;
-	}
-
-	GEngine->AddOnScreenDebugMessage(
-		DRSnowSnapshotTransfer::ProgressMessageKey,
-		0.1f,
-		FColor::Cyan,
-		LoadingStatus);
 }
 
 void ADRPlayerController::BeginPlay()
@@ -309,6 +277,10 @@ void ADRPlayerController::BeginPlay()
 			if (UDRUIManagerSubsystem* UIManager = LocalPlayer->GetSubsystem<UDRUIManagerSubsystem>())
 			{
 				UIManager->Configure(this, UIConfig);
+				if (IsValid(LoadingUIComponent))
+				{
+					LoadingUIComponent->RefreshLoadingScreen();
+				}
 			}
 		}
 	}
@@ -1418,9 +1390,12 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	int32 CheckpointSequence,
 	FName VoxelWorldName,
 	int32 VoxelSaveByteCount,
-	int32 SnowVolumeByteCount)
+	int32 OriginalVoxelSaveSize,
+	int32 SnowVolumeByteCount,
+	int32 OriginalSnowVolumeSize)
 {
-	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0)
+	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0
+		|| OriginalVoxelSaveSize <= 0 || OriginalSnowVolumeSize <= 0)
 	{
 		return;
 	}
@@ -1430,12 +1405,18 @@ void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
 	PendingSnowCheckpointSequence = CheckpointSequence;
 	PendingSnowVoxelWorldName = VoxelWorldName;
 	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
+	PendingSnowOriginalVoxelSaveSize = OriginalVoxelSaveSize;
 	PendingSnowVolumeByteCount = SnowVolumeByteCount;
+	PendingSnowOriginalSnowVolumeSize = OriginalSnowVolumeSize;
 	bPendingSnowSnapshotFinished = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();
 	BufferedSnowOperations.Reset();
 
+	if (IsValid(LoadingUIComponent))
+	{
+		LoadingUIComponent->RefreshLoadingScreen();
+	}
 	ServerRequestSnowJoinSnapshotData(SnapshotId);
 }
 
@@ -1683,7 +1664,7 @@ void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
 	default:
 		return;
 	}
-	if (ByteOffset + ChunkData.Num() > ExpectedByteCount)
+	if (ByteOffset > ExpectedByteCount || ChunkData.Num() > ExpectedByteCount - ByteOffset)
 	{
 		return;
 	}
@@ -1743,7 +1724,9 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	if (!IsValid(MiningGameState) || !IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
 		PendingSnowVoxelWorldName,
 		PendingSnowVoxelSaveData,
-		PendingSnowVolumeData))
+		PendingSnowOriginalVoxelSaveSize,
+		PendingSnowVolumeData,
+		PendingSnowOriginalSnowVolumeSize))
 	{
 		if (IsValid(World))
 		{
@@ -1791,7 +1774,9 @@ bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
 	PendingSnowCheckpointSequence = 0;
 	PendingSnowVoxelWorldName = NAME_None;
 	PendingSnowVoxelSaveByteCount = 0;
+	PendingSnowOriginalVoxelSaveSize = 0;
 	PendingSnowVolumeByteCount = 0;
+	PendingSnowOriginalSnowVolumeSize = 0;
 	bPendingSnowSnapshotFinished = false;
 	PendingSnowVoxelSaveData.Reset();
 	PendingSnowVolumeData.Reset();

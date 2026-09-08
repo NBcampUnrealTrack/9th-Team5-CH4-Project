@@ -144,10 +144,13 @@ bool UDRSnowSubsystem::GetCheckpoint(const int32 Id, FDRSnowJoinCheckpoint& Out)
 }
 
 bool UDRSnowSubsystem::ApplyCheckpoint(
-	FName Name,
-	const TArray<uint8>& Voxel,
-	const TArray<uint8>& Volume)
+	FName VoxelWorldName,
+	const TArray<uint8>& VoxelSaveData,
+	int32 OriginalVoxelSaveSize,
+	const TArray<uint8>& SnowVolumeData,
+	int32 OriginalSnowVolumeSize)
 {
 	SnapshotSerializer->SetWorld(GetWorld());
-	return SnapshotSerializer->ApplyCheckpoint(Name, Voxel, Volume);
+	const bool bApplied = SnapshotSerializer->ApplyCheckpoint(VoxelWorldName, VoxelSaveData, OriginalVoxelSaveSize, SnowVolumeData, OriginalSnowVolumeSize);
+	return bApplied;
 }

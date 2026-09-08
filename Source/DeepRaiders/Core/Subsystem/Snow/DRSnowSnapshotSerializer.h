@@ -7,6 +7,7 @@
 
 class AVoxelWorld;
 class FDRSnowVolumeStore;
+struct FDRSnowVolumeSnapshot;
 
 struct FDRSnowJoinCheckpoint
 {
@@ -16,10 +17,13 @@ struct FDRSnowJoinCheckpoint
 	FName VoxelWorldName = NAME_None;
 	TArray<uint8> VoxelSaveData;
 	TArray<uint8> SnowVolumeData;
+	int32 OriginalVoxelSaveSize = 0;
+	int32 OriginalSnowVolumeSize = 0;
 
 	bool IsValid() const
 	{
-		return SnapshotId > 0 && !VoxelSaveData.IsEmpty();
+		return SnapshotId > 0 && !VoxelSaveData.IsEmpty() && !SnowVolumeData.IsEmpty()
+			&& OriginalVoxelSaveSize > 0 && OriginalSnowVolumeSize > 0;
 	}
 };
 
@@ -119,7 +123,9 @@ public:
 	bool ApplyCheckpoint(
 		FName VoxelWorldName,
 		const TArray<uint8>& VoxelSaveData,
-		const TArray<uint8>& SnowVolumeData);
+		int32 OriginalVoxelSaveSize,
+		const TArray<uint8>& SnowVolumeData,
+		int32 OriginalSnowVolumeSize);
 
 	// serializer는 UObject가 아니므로 VoxelWorld 탐색에 쓸 World context를 호출 전에 받는다.
 	void SetWorld(UWorld* InWorld)
@@ -147,8 +153,9 @@ private:
 	void SerializeSnowVolumePayload(
 		FArchive& Archive,
 		FDRSnapshotSnowVolumeSizeReport* OutSizeReport) const;
-	bool SerializeSnowVolume(TArray<uint8>& OutCompressedData) const;
-	bool DeserializeSnowVolume(const TArray<uint8>& CompressedData);
+	bool SerializeSnowVolume(TArray<uint8>& OutCompressedData, int32& OutUncompressedSize) const;
+	bool DeserializeSnowVolume(const TArray<uint8>& CompressedData, int32 OriginalUncompressedSize,
+		FDRSnowVolumeSnapshot& OutSnapshot) const;
 
 	int32 NextSnapshotId = 1;
 	int32 LatestCheckpointId = INDEX_NONE;

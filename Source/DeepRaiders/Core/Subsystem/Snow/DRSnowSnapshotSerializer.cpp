@@ -1,11 +1,12 @@
 #include "DRSnowSnapshotSerializer.h"
 
-#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Serialization/BufferArchive.h"
 #include "Serialization/MemoryReader.h"
+#include "DeepRaiders/Core/Subsystem/Snow/DRSnowVolumeStore.h"
+#include "DeepRaiders/Snow/DRSnowNetworkUtils.h"
 #include "VoxelTools/VoxelDataTools.h"
-#include "VoxelUtilities/VoxelSerializationUtilities.h"
 #include "VoxelWorld.h"
 
 float FDRSnowSnapshotSerializer::BytesToMB(const int64 Bytes)
@@ -68,7 +69,7 @@ FDRJoinSnapshotSizeReport FDRSnowSnapshotSerializer::MeasureCompressedSnapshotSi
 		Report.VoxelSave.CompressedSerializedBytes +
 		Report.SnowVolume.CompressedSparseBytes;
 	Report.TotalCompressedMB = BytesToMB(Report.TotalCompressedBytes);
-	Report.bSuccess = Report.VoxelSave.bSuccess || Report.SnowVolume.bSuccess;
+	Report.bSuccess = Report.VoxelSave.bSuccess && Report.SnowVolume.bSuccess;
 
 	if (bLogResult)
 	{
@@ -122,29 +123,38 @@ bool FDRSnowSnapshotSerializer::CreateCheckpoint(int32 OperationSequence, AVoxel
 		return false;
 	}
 
-	FVoxelCompressedWorldSave CompressedSave;
-	UVoxelDataTools::GetCompressedSave(VoxelWorld, CompressedSave);
+	FVoxelUncompressedWorldSave UncompressedSave;
+	UVoxelDataTools::GetSave(VoxelWorld, UncompressedSave);
 
-	FBufferArchive VoxelArchive;
-	CompressedSave.Serialize(VoxelArchive);
-	if (VoxelArchive.Num() <= 0)
+	FBufferArchive UncompressedArchive;
+	if (!UncompressedSave.Serialize(UncompressedArchive) || UncompressedArchive.IsError())
 	{
 		return false;
 	}
 
-	TArray<uint8> SnowVolumeData;
-	if (!SerializeSnowVolume(SnowVolumeData))
+	TArray<uint8> OodleCompressedVoxelData;
+	if (!FDRSnowNetworkUtils::CompressSnapshotData(UncompressedArchive, OodleCompressedVoxelData))
 	{
 		return false;
 	}
-	FDRSnowJoinCheckpoint NewCheckpoint;
-	NewCheckpoint.SnapshotId = NextSnapshotId++;
-	NewCheckpoint.OperationSequence = OperationSequence;
-	NewCheckpoint.VoxelWorldName = VoxelWorld->GetFName();
-	NewCheckpoint.VoxelSaveData = MoveTemp(VoxelArchive);
-	NewCheckpoint.SnowVolumeData = MoveTemp(SnowVolumeData);
-	LatestCheckpointId = NewCheckpoint.SnapshotId;
-	CheckpointsById.Add(NewCheckpoint.SnapshotId, MoveTemp(NewCheckpoint));
+
+	TArray<uint8> CompressedSnowVolumeData;
+	int32 OriginalSnowVolumeSize = 0;
+	if (!SerializeSnowVolume(CompressedSnowVolumeData, OriginalSnowVolumeSize))
+	{
+		return false;
+	}
+
+	FDRSnowJoinCheckpoint Checkpoint;
+	Checkpoint.SnapshotId = NextSnapshotId++;
+	Checkpoint.OperationSequence = OperationSequence;
+	Checkpoint.VoxelWorldName = VoxelWorld->GetFName();
+	Checkpoint.VoxelSaveData = MoveTemp(OodleCompressedVoxelData);
+	Checkpoint.OriginalVoxelSaveSize = UncompressedArchive.Num();
+	Checkpoint.SnowVolumeData = MoveTemp(CompressedSnowVolumeData);
+	Checkpoint.OriginalSnowVolumeSize = OriginalSnowVolumeSize;
+	LatestCheckpointId = Checkpoint.SnapshotId;
+	CheckpointsById.Add(Checkpoint.SnapshotId, MoveTemp(Checkpoint));
 	while (CheckpointsById.Num() > 4)
 	{
 		int32 OldestSnapshotId = MAX_int32;
@@ -218,7 +228,9 @@ void FDRSnowSnapshotSerializer::ResetCheckpoints()
 bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 	FName VoxelWorldName,
 	const TArray<uint8>& VoxelSaveData,
-	const TArray<uint8>& SnowVolumeData)
+	int32 OriginalVoxelSaveSize,
+	const TArray<uint8>& SnowVolumeData,
+	int32 OriginalSnowVolumeSize)
 {
 	AVoxelWorld* VoxelWorld = nullptr;
 	if (VoxelWorldName.IsNone())
@@ -246,16 +258,28 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 		return false;
 	}
 
-	// Voxel 표현에는 MaterialIndex가 포함된다. 클라이언트에는 점령 UI용 Volume만 추가 복원한다.
-	FMemoryReader VoxelReader(VoxelSaveData);
-	FVoxelCompressedWorldSave CompressedSave;
-	CompressedSave.Serialize(VoxelReader);
-	if (VoxelReader.IsError() || !UVoxelDataTools::LoadFromCompressedSave(VoxelWorld, CompressedSave))
+	TArray<uint8> UncompressedVoxelData;
+	if (!FDRSnowNetworkUtils::DecompressSnapshotData(VoxelSaveData, OriginalVoxelSaveSize, UncompressedVoxelData))
 	{
 		return false;
 	}
 
-	return DeserializeSnowVolume(SnowVolumeData);
+	FMemoryReader VoxelReader(UncompressedVoxelData);
+	FVoxelUncompressedWorldSave UncompressedSave;
+	if (!UncompressedSave.Serialize(VoxelReader) || VoxelReader.IsError() || !VoxelReader.AtEnd())
+	{
+		return false;
+	}
+
+	// 두 payload를 모두 검증한 뒤 월드 상태를 변경한다.
+	FDRSnowVolumeSnapshot VolumeSnapshot;
+	if (!DeserializeSnowVolume(SnowVolumeData, OriginalSnowVolumeSize, VolumeSnapshot)
+		|| !UVoxelDataTools::LoadFromSave(VoxelWorld, UncompressedSave))
+	{
+		return false;
+	}
+	VolumeStore.ReplaceSnapshotData(MoveTemp(VolumeSnapshot));
+	return true;
 }
 
 AVoxelWorld* FDRSnowSnapshotSerializer::ResolveVoxelWorld(AVoxelWorld* TargetVoxelWorld) const
@@ -290,17 +314,26 @@ FDRSnapshotVoxelSaveSizeReport FDRSnowSnapshotSerializer::MeasureVoxelSave(AVoxe
 		return Report;
 	}
 
-	FVoxelCompressedWorldSave CompressedSave;
-	UVoxelDataTools::GetCompressedSave(TargetVoxelWorld, CompressedSave);
+	FVoxelUncompressedWorldSave UncompressedSave;
+	UVoxelDataTools::GetSave(TargetVoxelWorld, UncompressedSave);
 
 	FBufferArchive Archive;
-	CompressedSave.Serialize(Archive);
+	if (!UncompressedSave.Serialize(Archive) || Archive.IsError())
+	{
+		return Report;
+	}
+
+	TArray<uint8> OodleCompressedVoxelData;
+	if (!FDRSnowNetworkUtils::CompressSnapshotData(Archive, OodleCompressedVoxelData))
+	{
+		return Report;
+	}
 
 	Report.bSuccess = true;
 	Report.VoxelWorldName = TargetVoxelWorld->GetFName();
-	Report.CompressedSerializedBytes = Archive.Num();
+	Report.CompressedSerializedBytes = OodleCompressedVoxelData.Num();
 	Report.CompressedSerializedMB = BytesToMB(Report.CompressedSerializedBytes);
-	Report.ObjectCount = CompressedSave.Objects.Num();
+	Report.ObjectCount = UncompressedSave.Objects.Num();
 	return Report;
 }
 
@@ -312,7 +345,10 @@ FDRSnapshotSnowVolumeSizeReport FDRSnowSnapshotSerializer::MeasureSnowVolume() c
 	SerializeSnowVolumePayload(SparseArchive, &Report);
 
 	TArray<uint8> CompressedData;
-	FVoxelSerializationUtilities::CompressData(SparseArchive.GetData(), SparseArchive.Num(), CompressedData);
+	if (SparseArchive.IsError() || !FDRSnowNetworkUtils::CompressSnapshotData(SparseArchive, CompressedData))
+	{
+		return Report;
+	}
 
 	Report.bSuccess = true;
 	Report.SparseSerializedBytes = SparseArchive.Num();
@@ -386,37 +422,36 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 	}
 }
 
-bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressedData) const
+bool FDRSnowSnapshotSerializer::SerializeSnowVolume(TArray<uint8>& OutCompressedData, int32& OutUncompressedSize) const
 {
 	OutCompressedData.Reset();
+	OutUncompressedSize = 0;
 	FBufferArchive Archive;
 	SerializeSnowVolumePayload(Archive, nullptr);
 
-	FVoxelSerializationUtilities::CompressData(Archive.GetData(), Archive.Num(), OutCompressedData);
-	return !OutCompressedData.IsEmpty();
+	if (Archive.IsError() || !FDRSnowNetworkUtils::CompressSnapshotData(Archive, OutCompressedData))
+	{
+		return false;
+	}
+	OutUncompressedSize = Archive.Num();
+	return true;
 }
 
-bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& CompressedData)
+bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& CompressedData,
+	int32 OriginalUncompressedSize, FDRSnowVolumeSnapshot& OutSnapshot) const
 {
-	if (CompressedData.IsEmpty())
+	if (CompressedData.IsEmpty() || OriginalUncompressedSize <= 0)
 	{
 		return false;
 	}
 
-	TArray64<uint8> UncompressedData;
-	if (!FVoxelSerializationUtilities::DecompressData(CompressedData, UncompressedData))
+	TArray<uint8> UncompressedData;
+	if (!FDRSnowNetworkUtils::DecompressSnapshotData(CompressedData, OriginalUncompressedSize, UncompressedData))
 	{
 		return false;
 	}
 
-	if (UncompressedData.Num() > MAX_int32)
-	{
-		return false;
-	}
-
-	TArray<uint8> ReaderData;
-	ReaderData.Append(UncompressedData.GetData(), static_cast<int32>(UncompressedData.Num()));
-	FMemoryReader Reader(ReaderData);
+	FMemoryReader Reader(UncompressedData);
 	int32 Version = 0;
 	float CellSize = 0.f;
 	int32 ChunkSize = 0;
@@ -460,10 +495,12 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& Compr
 		RestoredChunks.Add(Origin, MoveTemp(Chunk));
 	}
 
-	FDRSnowVolumeSnapshot VolumeSnapshot;
-	VolumeSnapshot.CellSize = CellSize;
-	VolumeSnapshot.ChunkSize = ChunkSize;
-	VolumeSnapshot.Chunks = MoveTemp(RestoredChunks);
-	VolumeStore.ReplaceSnapshotData(MoveTemp(VolumeSnapshot));
+	if (Reader.IsError() || !Reader.AtEnd())
+	{
+		return false;
+	}
+	OutSnapshot.CellSize = CellSize;
+	OutSnapshot.ChunkSize = ChunkSize;
+	OutSnapshot.Chunks = MoveTemp(RestoredChunks);
 	return true;
 }

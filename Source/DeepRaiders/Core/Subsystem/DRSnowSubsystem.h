@@ -86,7 +86,9 @@ public:
 	bool ApplyCheckpoint(
 		FName VoxelWorldName,
 		const TArray<uint8>& VoxelSaveData,
-		const TArray<uint8>& SnowVolumeData);
+		int32 OriginalVoxelSaveSize,
+		const TArray<uint8>& SnowVolumeData,
+		int32 OriginalSnowVolumeSize);
 
 private:
 

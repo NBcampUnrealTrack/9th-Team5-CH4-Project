@@ -22,6 +22,7 @@ class UDRProjectileWeaponItemDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
+class UDRLoadingUIComponent;
 class UDRSkillUIComponent;
 class UDRQuickSlotUIComponent;
 class UDRInventoryUIComponent;
@@ -345,6 +346,9 @@ protected:
 	TObjectPtr<UDRHUDUIComponent> HUDUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
+	TObjectPtr<UDRLoadingUIComponent> LoadingUIComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRSkillUIComponent> SkillUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
@@ -378,6 +382,13 @@ private:
 
 #pragma region Snow Join Snapshot
 public:
+	UFUNCTION(BlueprintPure, Category = "Snow|Join Snapshot")
+	EDRSnowJoinLoadingPhase GetSnowJoinLoadingPhase() const { return SnowJoinLoadingPhase; }
+
+	/** 스냅샷 네트워크 수신 진행률. 지형 적용/조종 준비 완료 여부는 Phase로 확인한다. */
+	UFUNCTION(BlueprintPure, Category = "Snow|Join Snapshot")
+	float GetSnowJoinSnapshotProgress() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Snow|Join Snapshot")
 	FDRSnowJoinSnapshotApplied OnSnowJoinSnapshotApplied;
 
@@ -387,7 +398,9 @@ public:
 		int32 CheckpointSequence,
 		FName VoxelWorldName,
 		int32 VoxelSaveByteCount,
-		int32 SnowVolumeByteCount);
+		int32 OriginalVoxelSaveSize,
+		int32 SnowVolumeByteCount,
+		int32 OriginalSnowVolumeSize);
 
 	UFUNCTION(Client, Reliable)
 	void Client_ReceiveSnowJoinSnapshotChunk(
@@ -423,8 +436,6 @@ private:
 	void LogSnowJoinControlState(const TCHAR* Stage) const;
 	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
 
-	float GetSnowJoinSnapshotProgress() const; // 현재 중도 접속 스냅샷의 네트워크 수신 진행률을 0~1 범위로 반환
-
 	int32 OutgoingSnowSnapshotId = INDEX_NONE;
 	uint8 OutgoingSnowPayloadType = 0;
 	int32 OutgoingSnowByteOffset = 0;
@@ -442,13 +453,15 @@ private:
 
 	int32 PendingSnowSnapshotId = INDEX_NONE;
 	int32 PendingSnowCheckpointSequence = 0;
-	FName PendingSnowVoxelWorldName = NAME_None;
+	FName PendingSnowVoxelWorldName;
 	int32 PendingSnowVoxelSaveByteCount = 0;
+	int32 PendingSnowOriginalVoxelSaveSize = 0;
 	int32 PendingSnowVolumeByteCount = 0;
+	int32 PendingSnowOriginalSnowVolumeSize = 0;
 	bool bPendingSnowSnapshotFinished = false;
-	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<uint8> PendingSnowVoxelSaveData;
 	TArray<uint8> PendingSnowVolumeData;
+	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
 	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
 	FTimerHandle SnowJoinSnapshotRetryTimer;
 #pragma endregion

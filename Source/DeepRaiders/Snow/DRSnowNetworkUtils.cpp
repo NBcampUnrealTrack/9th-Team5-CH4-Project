@@ -1,6 +1,7 @@
 #include "DRSnowNetworkUtils.h"
 
 #include "Engine/World.h"
+#include "Misc/Compression.h"
 
 FDRSnowOperationBatcher::FDRSnowOperationBatcher(
 	UWorld& InWorld,
@@ -87,4 +88,75 @@ void FDRSnowOperationBatcher::Flush()
 			return;
 		}
 	}
+}
+
+bool FDRSnowNetworkUtils::CompressSnapshotData(const TArray<uint8>& UncompressedData, TArray<uint8>& OutCompressedData)
+{
+	OutCompressedData.Reset();
+	if (UncompressedData.IsEmpty())
+	{
+		return false;
+	}
+
+	const int32 UncompressedSize = UncompressedData.Num();
+	int64 BufferSize = 0;
+	// 압축 결과 최대 크기와 인코더가 요구하는 작업 버퍼 크기는 다르다.
+	if (!FCompression::CompressMemoryBound(NAME_Oodle, BufferSize, static_cast<int64>(UncompressedSize))
+		|| BufferSize <= 0 || BufferSize > MAX_int32)
+	{
+		return false;
+	}
+	OutCompressedData.SetNumUninitialized(static_cast<int32>(BufferSize));
+
+	int64 CompressedSize = BufferSize;
+	const bool bSuccess = FCompression::CompressMemory(
+		NAME_Oodle,
+		OutCompressedData.GetData(),
+		CompressedSize,
+		UncompressedData.GetData(),
+		static_cast<int64>(UncompressedSize),
+		COMPRESS_BiasSpeed
+	);
+
+	if (bSuccess && CompressedSize > 0 && CompressedSize <= BufferSize)
+	{
+		OutCompressedData.SetNum(static_cast<int32>(CompressedSize));
+		return true;
+	}
+
+	OutCompressedData.Empty();
+	return false;
+}
+
+bool FDRSnowNetworkUtils::DecompressSnapshotData(const TArray<uint8>& CompressedData, int32 ExpectedUncompressedSize, TArray<uint8>& OutUncompressedData)
+{
+	OutUncompressedData.Reset();
+	if (CompressedData.IsEmpty() || ExpectedUncompressedSize <= 0)
+	{
+		return false;
+	}
+
+	int64 MaxCompressedSize = 0;
+	if (!FCompression::GetMaximumCompressedSize(NAME_Oodle, MaxCompressedSize,
+		static_cast<int64>(ExpectedUncompressedSize)) || CompressedData.Num() > MaxCompressedSize)
+	{
+		return false;
+	}
+
+	OutUncompressedData.SetNumUninitialized(ExpectedUncompressedSize);
+
+	const bool bSuccess = FCompression::UncompressMemory(
+		NAME_Oodle,
+		OutUncompressedData.GetData(),
+		ExpectedUncompressedSize,
+		CompressedData.GetData(),
+		CompressedData.Num()
+	);
+
+	if (!bSuccess)
+	{
+		OutUncompressedData.Empty();
+	}
+
+	return bSuccess;
 }

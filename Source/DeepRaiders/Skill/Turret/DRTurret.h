@@ -12,6 +12,7 @@ class UDRProjectileWeaponItemDefinition;
 class ADRPlayerState;
 class ADRProjectile;
 class APawn;
+struct FGameplayEffectSpecHandle;
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRTurretWeaponSettings

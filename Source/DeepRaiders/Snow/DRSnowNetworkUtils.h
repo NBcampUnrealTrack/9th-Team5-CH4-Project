@@ -28,3 +28,12 @@ private:
 	FTimerHandle CooldownTimer;
 	uint32 Generation = 0;
 };
+
+class DEEPRAIDERS_API FDRSnowNetworkUtils
+{
+public:
+	// 송수신 모두 Oodle 포맷을 사용한다. 입력/출력은 서로 다른 배열이어야 한다.
+	// 실패하면 출력은 비운다. 원본 크기는 BeginSnapshot 메타데이터로 별도 전달한다.
+	static bool CompressSnapshotData(const TArray<uint8>& UncompressedData, TArray<uint8>& OutCompressedData);
+	static bool DecompressSnapshotData(const TArray<uint8>& CompressedData, int32 ExpectedUncompressedSize, TArray<uint8>& OutUncompressedData);
+};

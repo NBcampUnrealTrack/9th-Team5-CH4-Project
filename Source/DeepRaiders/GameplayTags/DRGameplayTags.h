@@ -169,6 +169,7 @@ namespace DRGameplayTags
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Loading);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_QuickSlot);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Inventory_Player);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Inventory_Storage);
