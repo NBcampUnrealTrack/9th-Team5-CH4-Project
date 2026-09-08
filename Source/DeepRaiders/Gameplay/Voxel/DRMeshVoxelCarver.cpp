@@ -740,13 +740,24 @@ void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 		return;
 	}
 
-	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	ADRMeshVoxelCarver* WaitingCarver = nullptr;
+	for (ADRMeshVoxelCarver* Carver : Carvers)
+	{
+		AVoxelWorld* VoxelWorld = IsValid(Carver) ? Carver->ResolveVoxelWorld() : nullptr;
+		if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+		{
+			WaitingCarver = Carver;
+			break;
+		}
+	}
+	if (WaitingCarver != nullptr)
 	{
 		if (++RetryCount >= DRMeshVoxelCarver::MaxRetryCount)
 		{
 			GetWorldTimerManager().ClearTimer(RetryTimerHandle);
-			UE_LOG(LogTemp, Error, TEXT("Game start carve batch failed: voxel world is not ready."));
+			UE_LOG(LogTemp, Error,
+				TEXT("[Carver] BatchFailed WaitingActor=%s Phase=%d Reason=WorldNotReady"),
+				*GetPathNameSafe(WaitingCarver), ActiveGamePhaseIndex);
 			if (ADRMiningGameModeBase* Mode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
 			{
 				Mode->NotifyPhaseCarversReady(ActiveGamePhaseIndex, false);
