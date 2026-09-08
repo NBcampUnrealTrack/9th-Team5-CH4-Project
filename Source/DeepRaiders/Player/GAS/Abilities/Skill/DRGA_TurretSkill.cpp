@@ -346,7 +346,7 @@ FTransform UDRGA_TurretSkill::MakeTurretTransform(const FVector& ImpactPoint,
 	}
 
 	return FTransform(FacingDirection.Rotation(),
-		ImpactPoint + FVector::UpVector * (TurretDimensions.Z * 0.5f));
+		ImpactPoint + FVector::UpVector * TurretGroundOffset);
 }
 
 void UDRGA_TurretSkill::EndAbility(const FGameplayAbilitySpecHandle Handle,

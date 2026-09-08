@@ -13,6 +13,7 @@ class UDRProjectileWeaponItemDefinition;
 class ADRPlayerState;
 class ADRProjectile;
 class APawn;
+class UStaticMeshComponent;
 struct FGameplayEffectSpecHandle;
 
 USTRUCT(BlueprintType)
@@ -37,7 +38,15 @@ struct DEEPRAIDERS_API FDRTurretWeaponSettings
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Detection",
 		meta = (ClampMin = "0.05", Units = "s"))
-	float DetectionInterval = 0.1f;
+	float DetectionInterval = 0.15f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Detection",
+		meta = (ClampMin = "0.0", Units = "deg"))
+	float AimToleranceDegrees = 8.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Detection",
+		meta = (ClampMin = "0.1"))
+	float RotationInterpSpeed = 4.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon")
 	float BreakableDamage = 1.f;
@@ -89,6 +98,26 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret")
 	TObjectPtr<USceneComponent> TurretRoot;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret|Mesh")
+	TObjectPtr<UStaticMeshComponent> TurretHolderMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret|Mesh")
+	TObjectPtr<USceneComponent> TurretAimPivot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret|Mesh")
+	TObjectPtr<UStaticMeshComponent> TurretMesh;
+
+	/** 실제 투사체가 생성되는 발사 기준점이다. BP에서 위치와 회전을 조정한다. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret|Mesh")
+	TObjectPtr<USceneComponent> TurretMuzzle;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret|Mesh")
+	TObjectPtr<UStaticMeshComponent> TurretTankMesh;
+
+	/** 포탑 상하 회전의 기준점이다. 메쉬 피벗에 맞춰 BP에서 조정한다. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Turret|Mesh")
+	FVector TurretAimPivotLocation = FVector(0.f, 0.f, 150.f);
+
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Turret")
 	int32 OwnerTeamId = INDEX_NONE;
 
@@ -126,4 +155,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APawn> CurrentTarget;
+
+	UPROPERTY(ReplicatedUsing = OnRep_AimPitch)
+	float AimPitch = 0.f;
+
+	UFUNCTION()
+	void OnRep_AimPitch();
 };

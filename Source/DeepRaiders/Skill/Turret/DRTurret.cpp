@@ -2,12 +2,14 @@
 
 #include "AbilitySystemComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 #include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Skill/Effects/DRGE_SkillCooldown.h"
 #include "EngineUtils.h"
@@ -16,6 +18,7 @@
 #include "Net/UnrealNetwork.h"
 #include "NiagaraFunctionLibrary.h"
 #include "DrawDebugHelpers.h"
+#include "UObject/ConstructorHelpers.h"
 
 ADRTurret::ADRTurret()
 {
@@ -26,6 +29,38 @@ ADRTurret::ADRTurret()
 
 	TurretRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretRoot"));
 	SetRootComponent(TurretRoot);
+
+	TurretHolderMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretHolderMesh"));
+	TurretHolderMesh->SetupAttachment(TurretRoot);
+	TurretAimPivot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretAimPivot"));
+	TurretAimPivot->SetupAttachment(TurretRoot);
+	TurretAimPivot->SetRelativeLocation(TurretAimPivotLocation);
+	TurretMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretMesh"));
+	TurretMesh->SetupAttachment(TurretAimPivot);
+	TurretMesh->SetRelativeLocation(-TurretAimPivotLocation);
+	TurretMuzzle = CreateDefaultSubobject<USceneComponent>(TEXT("TurretMuzzle"));
+	TurretMuzzle->SetupAttachment(TurretMesh);
+	TurretTankMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretTankMesh"));
+	TurretTankMesh->SetupAttachment(TurretRoot);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> HolderMesh(
+		TEXT("/Game/Fab/Cryo_Cannons_for_Tower_Defence_Game/snow_towers/StaticMeshes/Tier1_Turrent_Holder.Tier1_Turrent_Holder"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> TurretMeshAsset(
+		TEXT("/Game/Fab/Cryo_Cannons_for_Tower_Defence_Game/snow_towers/StaticMeshes/Tier1_Turrent.Tier1_Turrent"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> TankMesh(
+		TEXT("/Game/Fab/Cryo_Cannons_for_Tower_Defence_Game/snow_towers/StaticMeshes/Tier1_Tank1.Tier1_Tank1"));
+	if (HolderMesh.Succeeded())
+	{
+		TurretHolderMesh->SetStaticMesh(HolderMesh.Object);
+	}
+	if (TurretMeshAsset.Succeeded())
+	{
+		TurretMesh->SetStaticMesh(TurretMeshAsset.Object);
+	}
+	if (TankMesh.Succeeded())
+	{
+		TurretTankMesh->SetStaticMesh(TankMesh.Object);
+	}
 }
 
 void ADRTurret::InitializeTurret(ADRPlayerState* InInstallerPlayerState,
@@ -51,6 +86,19 @@ bool ADRTurret::IsInstalledBy(const ADRPlayerState* PlayerState) const
 void ADRTurret::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (IsValid(TurretAimPivot))
+	{
+		TurretAimPivot->SetRelativeLocation(TurretAimPivotLocation);
+		if (IsValid(TurretMesh))
+		{
+			TurretMesh->SetRelativeLocation(-TurretAimPivotLocation);
+		}
+		if (IsValid(TurretTankMesh))
+		{
+			TurretTankMesh->SetRelativeLocation(-TurretAimPivotLocation);
+		}
+	}
 
 	if (HasAuthority() && ConfiguredLifeSpan > 0.f)
 	{
@@ -104,6 +152,42 @@ void ADRTurret::UpdateTargetAndFire(const float DeltaSeconds)
 		DetectionTimer = FMath::Max(WeaponSettings.DetectionInterval, 0.05f);
 	}
 
+	if (IsValid(CurrentTarget))
+	{
+		const FVector AimOrigin = IsValid(TurretMuzzle)
+			? TurretMuzzle->GetComponentLocation()
+			: GetActorLocation() + FVector::UpVector * 40.f;
+		FVector LaunchVelocity;
+		if (ResolveProjectileLaunchVelocity(
+			AimOrigin,
+			CurrentTarget->GetActorLocation(),
+			LaunchVelocity)
+			&& !LaunchVelocity.IsNearlyZero())
+		{
+			const FRotator DesiredRotation(0.f, LaunchVelocity.Rotation().Yaw, 0.f);
+			SetActorRotation(FMath::RInterpTo(
+				GetActorRotation(),
+				DesiredRotation,
+				DeltaSeconds,
+				FMath::Max(WeaponSettings.RotationInterpSpeed, 0.1f)));
+
+			if (IsValid(TurretAimPivot))
+			{
+				const float HorizontalDistance = LaunchVelocity.Size2D();
+				const float DesiredPitch = FMath::RadiansToDegrees(
+					FMath::Atan2(LaunchVelocity.Z, FMath::Max(HorizontalDistance, 1.f)));
+				const FRotator DesiredPivotRotation(DesiredPitch, 0.f, 0.f);
+				const FRotator NewPivotRotation = FMath::RInterpTo(
+					TurretAimPivot->GetRelativeRotation(),
+					DesiredPivotRotation,
+					DeltaSeconds,
+					FMath::Max(WeaponSettings.RotationInterpSpeed, 0.1f));
+				TurretAimPivot->SetRelativeRotation(NewPivotRotation);
+				AimPitch = NewPivotRotation.Pitch;
+			}
+		}
+	}
+
 	if (FireTimer > 0.f)
 	{
 		return;
@@ -119,7 +203,7 @@ APawn* ADRTurret::FindNearestEnemy() const
 {
 	UWorld* World = GetWorld();
 	const int32 CurrentTeamId = GetCurrentOwnerTeamId();
-	if (!IsValid(World) || CurrentTeamId == INDEX_NONE || !WeaponSettings.ProjectileClass)
+	if (!IsValid(World) || !WeaponSettings.ProjectileClass)
 	{
 		return nullptr;
 	}
@@ -148,9 +232,10 @@ APawn* ADRTurret::FindNearestEnemy() const
 			}
 
 			FHitResult VisibilityHit;
+			const FVector TraceStart = GetActorLocation() + FVector::UpVector * 40.f;
 			const bool IsBlocked = World->LineTraceSingleByChannel(
 				VisibilityHit,
-				GetActorLocation(),
+				TraceStart,
 				Candidate->GetActorLocation(),
 				ECC_Visibility,
 				QueryParams);
@@ -175,7 +260,9 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		return false;
 	}
 
-	const FVector SpawnLocation = GetActorLocation() + FVector::UpVector * 40.f;
+	const FVector SpawnLocation = IsValid(TurretMuzzle)
+		? TurretMuzzle->GetComponentLocation()
+		: GetActorLocation() + FVector::UpVector * 40.f;
 	FVector LaunchVelocity;
 	if (!ResolveProjectileLaunchVelocity(
 		SpawnLocation,
@@ -186,7 +273,13 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 	}
 
 	const FVector LaunchDirection = LaunchVelocity.GetSafeNormal();
-	SetActorRotation(LaunchDirection.Rotation());
+	const float AimError = FMath::Abs(FMath::FindDeltaAngleDegrees(
+		GetActorRotation().Yaw,
+		LaunchDirection.Rotation().Yaw));
+	if (AimError > WeaponSettings.AimToleranceDegrees)
+	{
+		return false;
+	}
 
 	TArray<FGameplayEffectSpecHandle> ImpactEffectSpecs;
 	BuildImpactEffectSpecs(ImpactEffectSpecs);
@@ -222,6 +315,14 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		SpawnLocation,
 		LaunchDirection.Rotation());
 	return true;
+}
+
+void ADRTurret::OnRep_AimPitch()
+{
+	if (IsValid(TurretAimPivot))
+	{
+		TurretAimPivot->SetRelativeRotation(FRotator(AimPitch, 0.f, 0.f));
+	}
 }
 
 void ADRTurret::MulticastPlayFirePresentation_Implementation(
@@ -366,7 +467,6 @@ void ADRTurret::BuildImpactEffectSpecs(
 
 void ADRTurret::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 수명 만료와 전투 중 파괴는 Destroyed로 들어온다. 맵 전환/에디터 종료에는 쿨다운을 만들지 않는다.
 	if (HasAuthority() && EndPlayReason == EEndPlayReason::Destroyed)
 	{
 		ApplyOwnerCooldown();
@@ -402,4 +502,5 @@ void ADRTurret::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ThisClass, OwnerTeamId);
 	DOREPLIFETIME(ThisClass, InstallerPlayerState);
+	DOREPLIFETIME(ThisClass, AimPitch);
 }

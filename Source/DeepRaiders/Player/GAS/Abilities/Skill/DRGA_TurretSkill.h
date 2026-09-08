@@ -48,6 +48,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Turret", meta = (ClampMin = "1.0", Units = "cm"))
 	FVector TurretDimensions = FVector(180.f, 180.f, 220.f);
 
+	/** 메쉬 피벗과 설치 바닥의 차이를 보정하는 높이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Turret", meta = (Units = "cm"))
+	float TurretGroundOffset = 0.f;
+
 	/** 0이면 파괴되기 전까지 유지된다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Turret", meta = (ClampMin = "0.0", Units = "s"))
 	float TurretLifeSpan = 0.f;
