@@ -2,6 +2,7 @@
 
 #include "Abilities/GameplayAbility.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementPreviewActor.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 
@@ -31,15 +32,32 @@ void ADRPlacementTargetActor::Configure(const FDRPlacementSettings& InSettings,
 		FMath::Max(1.f, InPreviewDimensions.Z));
 }
 
+void ADRPlacementTargetActor::AddRotationInput(const float Value)
+{
+	if (FMath::IsNearlyZero(Value))
+	{
+		return;
+	}
+
+	RotationOffsetDegrees = FMath::UnwindDegrees(
+		RotationOffsetDegrees + FMath::Sign(Value) * Settings.RotationStepDegrees);
+	UpdateTargeting();
+}
+
 void ADRPlacementTargetActor::StartTargeting(UGameplayAbility* Ability)
 {
 	Super::StartTargeting(Ability);
 	IsConfirmationSubmitted = false;
+	RotationOffsetDegrees = 0.f;
 	const FGameplayAbilityActorInfo* ActorInfo = IsValid(Ability) ? Ability->GetCurrentActorInfo() : nullptr;
 	SourceActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 	if (UWorld* World = GetWorld(); IsValid(PrimaryPC) && PrimaryPC->IsLocalController() && PreviewActorClass)
 	{
 		PreviewActor = World->SpawnActor<ADRPlacementPreviewActor>(PreviewActorClass);
+	}
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(PrimaryPC))
+	{
+		PlayerController->BeginPlacementInput(this);
 	}
 	SetActorTickEnabled(true);
 	UpdateTargeting();
@@ -84,7 +102,10 @@ bool ADRPlacementTargetActor::UpdateTargeting()
 	CachedAimHit = AimHit;
 	bHasValidAimData = true;
 
-	UpdatePreview(AimHit, ViewRotation, true);
+	const FVector PreviewAimDirection = FQuat(
+		FVector::UpVector,
+		FMath::DegreesToRadians(RotationOffsetDegrees)).RotateVector(ViewRotation.Vector());
+	UpdatePreview(AimHit, PreviewAimDirection.Rotation(), true);
 	return true;
 }
 
@@ -108,12 +129,18 @@ void ADRPlacementTargetActor::ConfirmTargetingAndContinue()
 	// 신뢰하지 않고 TraceStart/TraceEnd로 재검증하므로, 컴포넌트 참조는 전송하지 않는다.
 	FHitResult TargetHit = CachedAimHit;
 	TargetHit.Component = nullptr;
-	FGameplayAbilityTargetData_SingleTargetHit* TargetData = new FGameplayAbilityTargetData_SingleTargetHit(TargetHit);
+	FDRGameplayAbilityTargetData_Placement* TargetData =
+		new FDRGameplayAbilityTargetData_Placement(TargetHit, RotationOffsetDegrees);
 	TargetDataReadyDelegate.Broadcast(FGameplayAbilityTargetDataHandle(TargetData));
 }
 
 void ADRPlacementTargetActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(PrimaryPC))
+	{
+		PlayerController->EndPlacementInput(this);
+	}
+
 	if (IsValid(PreviewActor))
 	{
 		PreviewActor->Destroy();

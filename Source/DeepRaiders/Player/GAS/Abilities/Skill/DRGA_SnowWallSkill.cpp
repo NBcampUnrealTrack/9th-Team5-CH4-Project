@@ -7,9 +7,11 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Skill/SnowWall/DRSnowWall.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "VoxelWorld.h"
@@ -101,7 +103,7 @@ void UDRGA_SnowWallSkill::HandleTargetDataReady(const FGameplayAbilityTargetData
 		}
 
 		UWorld* World = GetWorld();
-		LiftActorsOntoWall(World, WallTransform, SurfaceHit);
+		LiftCharactersOntoWall(World, WallTransform, SurfaceHit);
 		ADRSnowWall* SnowWall = IsValid(World)
 			? World->SpawnActorDeferred<ADRSnowWall>(SnowWallClass, WallTransform, ActorInfo->AvatarActor.Get(), Cast<APawn>(ActorInfo->AvatarActor.Get()), ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn)
 			: nullptr;
@@ -191,11 +193,21 @@ bool UDRGA_SnowWallSkill::ValidateServerTargetData(const FGameplayAbilityTargetD
 	OutSurfaceHit = FHitResult();
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
+	const FDRGameplayAbilityTargetData_Placement* PlacementData = Data != nullptr
+		&& Data->GetScriptStruct() == FDRGameplayAbilityTargetData_Placement::StaticStruct()
+		? static_cast<const FDRGameplayAbilityTargetData_Placement*>(Data)
+		: nullptr;
+	const FHitResult* ClientHit = PlacementData != nullptr ? PlacementData->GetHitResult() : nullptr;
 	APlayerController* PlayerController = ActorInfo != nullptr ? ActorInfo->PlayerController.Get() : nullptr;
 	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 	UWorld* World = GetWorld();
-	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority() || ClientHit == nullptr || !IsValid(PlayerController) || !IsValid(AvatarActor) || !IsValid(World))
+	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority() || ClientHit == nullptr || !IsValid(PlayerController)
+		|| !IsValid(AvatarActor) || !IsValid(World))
+	{
+		return false;
+	}
+	if (!FMath::IsFinite(PlacementData->RotationOffsetDegrees)
+		|| FMath::Abs(PlacementData->RotationOffsetDegrees) > 180.f)
 	{
 		return false;
 	}
@@ -230,7 +242,12 @@ bool UDRGA_SnowWallSkill::ValidateServerTargetData(const FGameplayAbilityTargetD
 		return false;
 	}
 
-	OutWallTransform = MakeWallTransform(ServerHit.ImpactPoint, ServerViewRotation);
+	// 설치 위치 검증에 사용한 클라이언트 조준선으로 회전도 계산해야
+	// 고개를 거의 수직으로 숙였을 때 프리뷰와 실제 벽의 가로축이 달라지지 않는다.
+	OutWallTransform = MakeWallTransform(
+		ServerHit.ImpactPoint,
+		ClientAimDirection,
+		PlacementData->RotationOffsetDegrees);
 	OutSurfaceHit = ServerHit;
 	return true;
 }
@@ -259,19 +276,23 @@ AVoxelWorld* UDRGA_SnowWallSkill::ResolveVoxelWorld(const FHitResult& SurfaceHit
 	return nullptr;
 }
 
-FTransform UDRGA_SnowWallSkill::MakeWallTransform(const FVector& ImpactPoint, const FRotator& ViewRotation) const
+FTransform UDRGA_SnowWallSkill::MakeWallTransform(const FVector& ImpactPoint, const FVector& AimDirection,
+	const float RotationOffsetDegrees) const
 {
-	FVector AimDirection = ViewRotation.Vector().GetSafeNormal2D();
-	if (AimDirection.IsNearlyZero())
+	FVector HorizontalAimDirection = AimDirection.GetSafeNormal2D();
+	if (HorizontalAimDirection.IsNearlyZero())
 	{
-		AimDirection = FVector::ForwardVector;
+		HorizontalAimDirection = FVector::ForwardVector;
 	}
-	const FVector WallLengthDirection = FVector::CrossProduct(FVector::UpVector, AimDirection).GetSafeNormal();
+	HorizontalAimDirection = FQuat(
+		FVector::UpVector,
+		FMath::DegreesToRadians(RotationOffsetDegrees)).RotateVector(HorizontalAimDirection);
+	const FVector WallLengthDirection = FVector::CrossProduct(FVector::UpVector, HorizontalAimDirection).GetSafeNormal();
 	const FQuat WallRotation = FRotationMatrix::MakeFromXZ(WallLengthDirection, FVector::UpVector).ToQuat();
 	return FTransform(WallRotation, ImpactPoint + FVector::UpVector * (WallDimensions.Z * 0.5f));
 }
 
-void UDRGA_SnowWallSkill::LiftActorsOntoWall(
+void UDRGA_SnowWallSkill::LiftCharactersOntoWall(
 	UWorld* World, const FTransform& WallTransform, const FHitResult& SurfaceHit) const
 {
 	if (!IsValid(World))
@@ -280,17 +301,18 @@ void UDRGA_SnowWallSkill::LiftActorsOntoWall(
 	}
 
 	const FVector WallExtent = WallDimensions * 0.5f;
-	for (TActorIterator<AActor> It(World); It; ++It)
+	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
-		AActor* Actor = *It;
-		if (!IsValid(Actor) || Actor->IsA<AVoxelWorld>())
+		ACharacter* Character = *It;
+		const UCapsuleComponent* Capsule =
+			IsValid(Character) ? Character->GetCapsuleComponent() : nullptr;
+		if (!IsValid(Capsule))
 		{
 			continue;
 		}
 
-		FVector BoundsOrigin;
-		FVector BoundsExtent;
-		Actor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+		const FVector BoundsOrigin = Capsule->Bounds.Origin;
+		const FVector BoundsExtent = Capsule->Bounds.BoxExtent;
 		if (BoundsExtent.IsNearlyZero())
 		{
 			continue;
@@ -301,20 +323,22 @@ void UDRGA_SnowWallSkill::LiftActorsOntoWall(
 		const bool bOverlapsWallFootprint =
 			FMath::Abs(LocalBoundsOrigin.X) <= WallExtent.X + HorizontalRadius
 			&& FMath::Abs(LocalBoundsOrigin.Y) <= WallExtent.Y + HorizontalRadius;
-		const float ActorBaseHeight = BoundsOrigin.Z - BoundsExtent.Z;
+		const float CharacterBaseHeight = BoundsOrigin.Z - Capsule->GetScaledCapsuleHalfHeight();
 		const bool bStandingOnPlacementSurface =
-			FMath::Abs(ActorBaseHeight - SurfaceHit.ImpactPoint.Z) <= 20.f;
+			FMath::Abs(CharacterBaseHeight - SurfaceHit.ImpactPoint.Z) <= 20.f;
 		if (!bOverlapsWallFootprint || !bStandingOnPlacementSurface)
 		{
 			continue;
 		}
 
-		// 생성되는 벽의 바닥은 SurfaceHit 위치고, 윗면은 WallDimensions.Z 높이다.
-		// 먼저 범위 안의 모든 Actor를 윗면으로 올려야 충돌 해소가 옆으로 밀어내지 않는다.
-		Actor->SetActorLocation(
-			Actor->GetActorLocation() + FVector::UpVector * WallDimensions.Z,
-			false,
-			nullptr,
+		// Voxel 편집 직전에 Character를 눈벽 윗면으로 옮긴다. Sweep을 켜면
+		// InvisibleWall을 포함해 Pawn을 막는 모든 월드 충돌이 상승 경로를 막는다.
+		// 따라서 경계 벽에 막힌 Character는 벽을 관통하거나 월드 밖으로 나갈 수 없다.
+		FHitResult LiftHit;
+		Character->SetActorLocation(
+			Character->GetActorLocation() + FVector::UpVector * WallDimensions.Z,
+			true,
+			&LiftHit,
 			ETeleportType::TeleportPhysics);
 	}
 }
