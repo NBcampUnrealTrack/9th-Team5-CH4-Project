@@ -111,7 +111,8 @@ public:
 	void ReplaceProcMeshSection(FVoxelProcMeshSectionSettings Settings, TUniquePtr<FVoxelProcMeshBuffers> Buffers, EVoxelProcMeshSectionUpdate Update);
 	void ClearSections(EVoxelProcMeshSectionUpdate Update);
 	void FinishSectionsUpdates();
-	// Shares immutable render buffers with Source. Collision-only and navigation-only sections are not copied.
+	// Source의 불변 렌더 버퍼를 공유한다.
+	// 표시되지 않는 섹션은 복사하지 않으므로 충돌 및 내비게이션 전용 섹션은 제외된다.
 	bool CopyRenderSectionsFrom(const UVoxelProceduralMeshComponent& Source, EVoxelProcMeshSectionUpdate Update);
 
 	template<typename F>

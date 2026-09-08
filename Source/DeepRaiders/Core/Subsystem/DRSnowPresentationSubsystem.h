@@ -28,8 +28,9 @@ class DEEPRAIDERS_API UDRSnowPresentationSubsystem : public UWorldSubsystem
 
 public:
 	// MPC slot contract:
-	// CenterRadius=(WorldPosition.xyz, Radius), NormalStartTime=(SurfaceNormal.xyz, StartTime),
-	// Timing=(Duration, CollapseHeight, EdgeWidth, Strength).
+	// CenterRadius=(WorldPosition.xyz, Radius)
+	// NormalStartTime=(SurfaceNormal.xyz, StartTime)
+	// Timing=(Duration, CollapseHeight, EdgeWidth, Strength)
 	static constexpr int32 MaxTransitionSlots = 8;
 
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
@@ -44,7 +45,7 @@ private:
 	UMaterialParameterCollectionInstance* GetCollectionInstance() const;
 	int32 AcquireSlot(double CurrentTime);
 	AVoxelWorld* ResolveVoxelWorld(FName VoxelWorldName) const;
-	void CapturePreviousSurface(
+	bool CapturePreviousSurface(
 		AVoxelWorld& VoxelWorld,
 		const FDRSnowAddOperation& Operation,
 		float Radius,
@@ -54,6 +55,8 @@ private:
 		AVoxelWorld& VoxelWorld,
 		const UVoxelProceduralMeshComponent& SourceComponent,
 		int32 MaximumSnapshotComponents);
+	bool ConfigureSnapshotMaterials(UVoxelProceduralMeshComponent& SnapshotComponent);
+	void RecycleSnapshotComponent(UVoxelProceduralMeshComponent* SnapshotComponent);
 	void CleanupExpiredSnapshots();
 	void ScheduleSnapshotCleanup();
 	void ReleaseSnapshot(int32 SnapshotIndex);

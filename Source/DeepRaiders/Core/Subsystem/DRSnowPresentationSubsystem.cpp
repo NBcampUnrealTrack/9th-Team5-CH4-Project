@@ -42,7 +42,6 @@ bool UDRSnowPresentationSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 	return IsValid(World) && World->IsGameWorld() && World->GetNetMode() != NM_DedicatedServer;
 }
 
-PRAGMA_DISABLE_OPTIMIZATION
 void UDRSnowPresentationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -62,7 +61,7 @@ void UDRSnowPresentationSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 		ResetPresentation();
 	}
 }
-PRAGMA_ENABLE_OPTIMIZATION
+
 void UDRSnowPresentationSubsystem::Deinitialize()
 {
 	ResetPreviousSurfaceSnapshots(true);
@@ -120,9 +119,23 @@ void UDRSnowPresentationSubsystem::PresentSnowAdd(const FDRSnowAddOperation& Ope
 
 	if (Settings->bEnablePreviousSurfaceSnapshots)
 	{
-		if (AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Operation.VoxelWorldName))
+		AVoxelWorld* VoxelWorld = ResolveVoxelWorld(Operation.VoxelWorldName);
+		if (!IsValid(VoxelWorld) || !CapturePreviousSurface(
+			*VoxelWorld,
+			Operation,
+			Radius,
+			EdgeWidth,
+			EndTime))
 		{
-			CapturePreviousSurface(*VoxelWorld, Operation, Radius, EdgeWidth, EndTime);
+			Instance->SetVectorParameterValue(GetCenterRadiusParameterName(SlotIndex), FLinearColor::Transparent);
+			Instance->SetVectorParameterValue(GetNormalStartTimeParameterName(SlotIndex), FLinearColor::Transparent);
+			Instance->SetVectorParameterValue(GetTimingParameterName(SlotIndex), FLinearColor::Transparent);
+			SlotEndTimes[SlotIndex] = 0.0;
+			UE_LOG(
+				LogDRSnowPresentation,
+				Warning,
+				TEXT("Snow add presentation was skipped because its previous surface could not be captured completely."));
+			return;
 		}
 	}
 
@@ -265,7 +278,7 @@ AVoxelWorld* UDRSnowPresentationSubsystem::ResolveVoxelWorld(const FName VoxelWo
 	return nullptr;
 }
 
-void UDRSnowPresentationSubsystem::CapturePreviousSurface(
+bool UDRSnowPresentationSubsystem::CapturePreviousSurface(
 	AVoxelWorld& VoxelWorld,
 	const FDRSnowAddOperation& Operation,
 	const float Radius,
@@ -278,8 +291,17 @@ void UDRSnowPresentationSubsystem::CapturePreviousSurface(
 	const UDRSnowPresentationSettings* Settings = GetDefault<UDRSnowPresentationSettings>();
 	if (!IsValid(Settings))
 	{
-		return;
+		return false;
 	}
+
+	const int32 FirstCapturedSnapshotIndex = ActivePreviousSurfaceSnapshots.Num();
+	const auto RollbackCapture = [this, FirstCapturedSnapshotIndex]()
+	{
+		while (ActivePreviousSurfaceSnapshots.Num() > FirstCapturedSnapshotIndex)
+		{
+			ReleaseSnapshot(ActivePreviousSurfaceSnapshots.Num() - 1);
+		}
+	};
 
 	const float BoundsPadding = EdgeWidth + VoxelWorld.VoxelSize * 2.f;
 	FBox CaptureBounds;
@@ -307,31 +329,6 @@ void UDRSnowPresentationSubsystem::CapturePreviousSurface(
 			continue;
 		}
 
-		bool bHasPreviousSurfaceParameter = false;
-		SourceComponent->IterateSectionsSettings(
-			[&bHasPreviousSurfaceParameter](FVoxelProcMeshSectionSettings& SectionSettings)
-		{
-			UMaterialInterface* Material = SectionSettings.Material.IsValid()
-				? SectionSettings.Material->GetMaterial()
-				: nullptr;
-			float ParameterValue = 0.f;
-			bHasPreviousSurfaceParameter |= IsValid(Material) && Material->GetScalarParameterValue(
-				FMaterialParameterInfo(SnowPreviousSurfaceParameterName), ParameterValue);
-		});
-		if (!bHasPreviousSurfaceParameter)
-		{
-			if (!bLoggedMissingPreviousSurfaceParameter)
-			{
-				UE_LOG(
-					LogDRSnowPresentation,
-					Warning,
-					TEXT("Previous-surface snapshots require scalar parameter '%s' in the voxel material."),
-					*SnowPreviousSurfaceParameterName.ToString());
-				bLoggedMissingPreviousSurfaceParameter = true;
-			}
-			return;
-		}
-
 		UVoxelProceduralMeshComponent* SnapshotComponent = AcquireSnapshotComponent(
 			VoxelWorld,
 			*SourceComponent,
@@ -341,9 +338,10 @@ void UDRSnowPresentationSubsystem::CapturePreviousSurface(
 			UE_LOG(
 				LogDRSnowPresentation,
 				Warning,
-				TEXT("Previous-surface snapshot component limit reached (%d). Remaining chunks were skipped."),
+				TEXT("Previous-surface snapshot capture exceeded the component limit (%d) and was aborted."),
 				Settings->MaximumSnapshotComponents);
-			break;
+			RollbackCapture();
+			return false;
 		}
 
 		SnapshotComponent->SetWorldTransform(SourceComponent->GetComponentTransform());
@@ -351,40 +349,15 @@ void UDRSnowPresentationSubsystem::CapturePreviousSurface(
 			*SourceComponent,
 			EVoxelProcMeshSectionUpdate::DelayUpdate))
 		{
-			AvailablePreviousSurfaceComponents.Add(SnapshotComponent);
+			RecycleSnapshotComponent(SnapshotComponent);
 			continue;
 		}
-		SnapshotComponent->IterateSectionsSettings([SnapshotComponent](FVoxelProcMeshSectionSettings& SectionSettings)
+		if (!ConfigureSnapshotMaterials(*SnapshotComponent))
 		{
-			UMaterialInterface* SourceMaterial = SectionSettings.Material.IsValid()
-				? SectionSettings.Material->GetMaterial()
-				: nullptr;
-			if (!IsValid(SourceMaterial))
-			{
-				return;
-			}
-
-			UMaterialInterface* ParentMaterial = SourceMaterial;
-			UMaterialInstanceDynamic* SourceDynamicMaterial = Cast<UMaterialInstanceDynamic>(SourceMaterial);
-			if (IsValid(SourceDynamicMaterial) && IsValid(SourceDynamicMaterial->Parent))
-			{
-				ParentMaterial = SourceDynamicMaterial->Parent;
-			}
-
-			UMaterialInstanceDynamic* SnapshotMaterial = UMaterialInstanceDynamic::Create(
-				ParentMaterial,
-				SnapshotComponent);
-			if (!IsValid(SnapshotMaterial))
-			{
-				return;
-			}
-			if (IsValid(SourceDynamicMaterial))
-			{
-				SnapshotMaterial->CopyParameterOverrides(SourceDynamicMaterial);
-			}
-			SnapshotMaterial->SetScalarParameterValue(SnowPreviousSurfaceParameterName, 1.f);
-			SectionSettings.Material = FVoxelMaterialInterfaceManager::Get().CreateMaterial(SnapshotMaterial);
-		});
+			RecycleSnapshotComponent(SnapshotComponent);
+			RollbackCapture();
+			return false;
+		}
 		SnapshotComponent->FinishSectionsUpdates();
 		SnapshotComponent->SetVisibility(true, true);
 
@@ -403,6 +376,7 @@ void UDRSnowPresentationSubsystem::CapturePreviousSurface(
 			CapturedComponentCount);
 		ScheduleSnapshotCleanup();
 	}
+	return CapturedComponentCount > 0;
 }
 
 UVoxelProceduralMeshComponent* UDRSnowPresentationSubsystem::AcquireSnapshotComponent(
@@ -449,6 +423,87 @@ UVoxelProceduralMeshComponent* UDRSnowPresentationSubsystem::AcquireSnapshotComp
 	Component->bUseAsOccluder = false;
 	Component->RegisterComponent();
 	return Component;
+}
+
+bool UDRSnowPresentationSubsystem::ConfigureSnapshotMaterials(
+	UVoxelProceduralMeshComponent& SnapshotComponent)
+{
+	bool bMaterialsValid = true;
+	bool bMissingPreviousSurfaceParameter = false;
+	SnapshotComponent.IterateSectionsSettings(
+		[this, &SnapshotComponent, &bMaterialsValid, &bMissingPreviousSurfaceParameter](
+			FVoxelProcMeshSectionSettings& SectionSettings)
+	{
+		if (!bMaterialsValid)
+		{
+			return;
+		}
+
+		UMaterialInterface* SourceMaterial = SectionSettings.Material.IsValid()
+			? SectionSettings.Material->GetMaterial()
+			: nullptr;
+		float PreviousSurfaceValue = 0.f;
+		if (!IsValid(SourceMaterial) || !SourceMaterial->GetScalarParameterValue(
+			FMaterialParameterInfo(SnowPreviousSurfaceParameterName), PreviousSurfaceValue))
+		{
+			bMaterialsValid = false;
+			bMissingPreviousSurfaceParameter = true;
+			return;
+		}
+
+		UMaterialInterface* ParentMaterial = SourceMaterial;
+		UMaterialInstanceDynamic* SourceDynamicMaterial = Cast<UMaterialInstanceDynamic>(SourceMaterial);
+		if (IsValid(SourceDynamicMaterial) && IsValid(SourceDynamicMaterial->Parent))
+		{
+			ParentMaterial = SourceDynamicMaterial->Parent;
+		}
+
+		UMaterialInstanceDynamic* SnapshotMaterial = UMaterialInstanceDynamic::Create(
+			ParentMaterial,
+			&SnapshotComponent);
+		if (!IsValid(SnapshotMaterial))
+		{
+			bMaterialsValid = false;
+			return;
+		}
+		if (IsValid(SourceDynamicMaterial))
+		{
+			SnapshotMaterial->CopyParameterOverrides(SourceDynamicMaterial);
+		}
+		SnapshotMaterial->SetScalarParameterValue(SnowPreviousSurfaceParameterName, 1.f);
+		SectionSettings.Material = FVoxelMaterialInterfaceManager::Get().CreateMaterial(SnapshotMaterial);
+	});
+
+	if (!bMaterialsValid)
+	{
+		if (bMissingPreviousSurfaceParameter && !bLoggedMissingPreviousSurfaceParameter)
+		{
+			UE_LOG(
+				LogDRSnowPresentation,
+				Warning,
+				TEXT("Previous-surface snapshots require scalar parameter '%s' in every voxel material section."),
+				*SnowPreviousSurfaceParameterName.ToString());
+			bLoggedMissingPreviousSurfaceParameter = true;
+		}
+		else if (!bMissingPreviousSurfaceParameter)
+		{
+			UE_LOG(LogDRSnowPresentation, Warning, TEXT("Failed to create a previous-surface snapshot material."));
+		}
+	}
+	return bMaterialsValid;
+}
+
+void UDRSnowPresentationSubsystem::RecycleSnapshotComponent(
+	UVoxelProceduralMeshComponent* SnapshotComponent)
+{
+	if (!IsValid(SnapshotComponent))
+	{
+		return;
+	}
+
+	SnapshotComponent->SetVisibility(false, true);
+	SnapshotComponent->ClearSections(EVoxelProcMeshSectionUpdate::UpdateNow);
+	AvailablePreviousSurfaceComponents.AddUnique(SnapshotComponent);
 }
 
 void UDRSnowPresentationSubsystem::CleanupExpiredSnapshots()
@@ -506,12 +561,7 @@ void UDRSnowPresentationSubsystem::ReleaseSnapshot(const int32 SnapshotIndex)
 	}
 
 	UVoxelProceduralMeshComponent* Component = ActivePreviousSurfaceSnapshots[SnapshotIndex].Component;
-	if (IsValid(Component))
-	{
-		Component->SetVisibility(false, true);
-		Component->ClearSections(EVoxelProcMeshSectionUpdate::UpdateNow);
-		AvailablePreviousSurfaceComponents.Add(Component);
-	}
+	RecycleSnapshotComponent(Component);
 	ActivePreviousSurfaceSnapshots.RemoveAtSwap(SnapshotIndex, 1, EAllowShrinking::No);
 }
 
@@ -524,12 +574,7 @@ void UDRSnowPresentationSubsystem::ResetPreviousSurfaceSnapshots(const bool bDes
 
 	for (const FDRSnowPreviousSurfaceSnapshot& Snapshot : ActivePreviousSurfaceSnapshots)
 	{
-		if (IsValid(Snapshot.Component))
-		{
-			Snapshot.Component->SetVisibility(false, true);
-			Snapshot.Component->ClearSections(EVoxelProcMeshSectionUpdate::UpdateNow);
-			AvailablePreviousSurfaceComponents.AddUnique(Snapshot.Component);
-		}
+		RecycleSnapshotComponent(Snapshot.Component);
 	}
 	ActivePreviousSurfaceSnapshots.Reset();
 
