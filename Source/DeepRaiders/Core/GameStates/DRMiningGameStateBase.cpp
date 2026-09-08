@@ -542,7 +542,10 @@ void ADRMiningGameStateBase::TryClientZoneCleanup()
 	{
 		return;
 	}
-	const EDRSnowJoinLoadingPhase JoinPhase = Player->GetSnowJoinLoadingPhase();
+	const UDRSnowJoinComponent* SnowJoin = Player->GetSnowJoinComponent();
+	const EDRSnowJoinLoadingPhase JoinPhase = IsValid(SnowJoin)
+		? SnowJoin->GetSnowJoinLoadingPhase()
+		: EDRSnowJoinLoadingPhase::Idle;
 	if (JoinPhase == EDRSnowJoinLoadingPhase::ReceivingSnapshot
 		|| JoinPhase == EDRSnowJoinLoadingPhase::ApplyingSnapshot)
 	{
