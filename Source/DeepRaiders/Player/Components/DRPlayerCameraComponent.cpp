@@ -463,9 +463,16 @@ FTransform UDRPlayerCameraComponent::GetDesiredThirdPersonCameraTransform(
 	const FVector DesiredWorldSocketOffset = ViewQuaternion.RotateVector(SocketOffset);
 	const FVector CurrentSocketLocation =
 		CameraBoom->GetSocketLocation(USpringArmComponent::SocketName);
-	const FVector ArmOrigin = CurrentSocketLocation
+	const FVector LaggedArmOrigin = CurrentSocketLocation
 		+ ViewQuaternion.GetForwardVector() * CameraBoom->TargetArmLength
 		- CurrentWorldSocketOffset;
+
+	// Spring Arm은 이 컴포넌트가 데드존 보정을 적용하기 전에 Tick된다.
+	// 따라서 위치 랙으로 역산한 Arm 원점의 Z를 그대로 쓰면, 작은 지형 높이
+	// 변화가 다음 프레임의 카메라 위치로 다시 유입되어 데드존을 우회한다.
+	// 수평 위치 랙은 유지하되, 수직 기준점은 보정이 끝난 Boom 피벗으로 고정한다.
+	FVector ArmOrigin = LaggedArmOrigin;
+	ArmOrigin.Z = CameraBoom->GetComponentLocation().Z;
 	const FVector CameraLocation =
 		ArmOrigin - ViewQuaternion.GetForwardVector() * FMath::Max(0.f, ArmLength)
 		+ DesiredWorldSocketOffset;

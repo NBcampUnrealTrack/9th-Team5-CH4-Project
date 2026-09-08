@@ -8,6 +8,21 @@ namespace DRGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_RangeBonus, "Data.Perk.Grab.RangeBonus");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Perk_Grab_HitScaleBonus, "Data.Perk.Grab.HitScaleBonus");
 	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_Barrier_PortableGenerator,
+		"Perk.Skill.Barrier.PortableGenerator");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_Barrier_TeslaField,
+		"Perk.Skill.Barrier.TeslaField");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_SuperJump_RocketBoots,
+		"Perk.Skill.SuperJump.RocketBoots");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Perk_Skill_SuperJump_HeroLanding,
+		"Perk.Skill.SuperJump.HeroLanding");
+	UE_DEFINE_GAMEPLAY_TAG(
+		Data_Perk_SuperJump_RocketBoots_MoveSpeed,
+		"Data.Perk.SuperJump.RocketBoots.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(
 		Character_Upgrade_MaxHealth, 
 		"Character.Upgrade.MaxHealth");
 	UE_DEFINE_GAMEPLAY_TAG(
@@ -179,6 +194,11 @@ namespace DRGameplayTags
 		Ability_Skill_SuperJump,
 		"Ability.Skill.SuperJump",
 		"Super jump skill.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Perk_SuperJump_RocketBoots,
+		"Ability.Perk.SuperJump.RocketBoots",
+		"Horizontal air dash granted by the Super Jump rocket boots perk.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Skill_CombatRoll,
@@ -609,6 +629,11 @@ namespace DRGameplayTags
 		Data_Perk_Turret_RangeBonusRatio,
 		"Data.Perk.Turret.RangeBonusRatio",
 		"Turret attack range bonus ratio granted by an equipped perk.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Perk_Barrier_MaxHealthMultiplier,
+		"Data.Perk.Barrier.MaxHealthMultiplier",
+		"Additional maximum-health multiplier granted to a barrier by an equipped perk.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Weapon_DamageModifier,

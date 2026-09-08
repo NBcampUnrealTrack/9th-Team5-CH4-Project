@@ -15,6 +15,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Player/Components//DRCombatStatsComponent.h"
+#include "DeepRaiders/Player/Components/DRShieldComponent.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
 #include "DRPlayerController.h"
 #include "HAL/PlatformProcess.h"
@@ -32,6 +33,7 @@ ADRPlayerState::ADRPlayerState()
 	PerkComponent = CreateDefaultSubobject<UDRPerkComponent>(TEXT("PerkComponent"));
 	SkillComponent = CreateDefaultSubobject<UDRSkillComponent>(TEXT("SkillComponent"));
 	CombatStatsComponent = CreateDefaultSubobject<UDRCombatStatsComponent>(TEXT("CombatStatsComponent"));
+	ShieldComponent = CreateDefaultSubobject<UDRShieldComponent>(TEXT("ShieldComponent"));
 }
 
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
@@ -242,6 +244,10 @@ void ADRPlayerState::ResetForGameStart()
 	}
 
 	ResetHeatState();
+	if (IsValid(ShieldComponent))
+	{
+		ShieldComponent->ClearShieldLayers();
+	}
 	if (IsValid(AbilitySystemComponent))
 	{
 		FGameplayTagContainer ShieldTags;
@@ -274,6 +280,10 @@ void ADRPlayerState::ResetForRespawn()
 
 	ClearFrozenState();
 	ResetHeatState();
+	if (IsValid(ShieldComponent))
+	{
+		ShieldComponent->ClearShieldLayers();
+	}
 	
 	FGameplayTagContainer PersistThroughDeathTags;
 	PersistThroughDeathTags.AddTag(DRGameplayTags::Effect_Policy_PersistThroughDeath);

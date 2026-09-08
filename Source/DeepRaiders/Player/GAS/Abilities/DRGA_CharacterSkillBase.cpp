@@ -9,6 +9,8 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 #if WITH_EDITOR
 #include "Misc/DataValidation.h"
 #endif
@@ -226,11 +228,46 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 	CooldownSpec.Data->DynamicGrantedTags.AddTag(
 		SkillDefinition->CooldownTag);
 
-	ApplyGameplayEffectSpecToOwner(
+	UAbilitySystemComponent* AbilitySystemComponent = ActorInfo->AbilitySystemComponent.Get();
+	const FString ActivationPredictionKey = ActivationInfo.GetActivationPredictionKey().ToString();
+	const FString ScopedPredictionKey = IsValid(AbilitySystemComponent)
+		? AbilitySystemComponent->GetPredictionKeyForNewAction().ToString()
+		: TEXT("None");
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[SkillCooldown][Apply] Skill=%s Tag=%s Authority=%d Local=%d Duration=%.2f ActivationKey=%s ScopedKey=%s"),
+		*SkillDefinition->SkillId.ToString(),
+		*SkillDefinition->CooldownTag.ToString(),
+		ActorInfo->IsNetAuthority(),
+		ActorInfo->IsLocallyControlled(),
+		EffectiveCooldownDuration,
+		*ActivationPredictionKey,
+		*ScopedPredictionKey);
+
+	const FActiveGameplayEffectHandle AppliedCooldownHandle =
+		ApplyGameplayEffectSpecToOwner(
 		Handle,
 		ActorInfo,
 		ActivationInfo,
 		CooldownSpec);
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[SkillCooldown][Applied] Skill=%s Tag=%s Authority=%d Handle=%s Applied=%d"),
+		*SkillDefinition->SkillId.ToString(),
+		*SkillDefinition->CooldownTag.ToString(),
+		ActorInfo->IsNetAuthority(),
+		*AppliedCooldownHandle.ToString(),
+		AppliedCooldownHandle.WasSuccessfullyApplied());
+	if (AppliedCooldownHandle.WasSuccessfullyApplied())
+	{
+		ScheduleCooldownSafetyCleanup(
+			ActorInfo,
+			AppliedCooldownHandle,
+			SkillDefinition->CooldownTag,
+			EffectiveCooldownDuration);
+	}
 
 	NotifySkillCommitted(Handle, ActorInfo);
 	NotifySkillActivated(Handle, ActorInfo);
@@ -391,6 +428,69 @@ float UDRGA_CharacterSkillBase::GetChargeQueueTailRemaining(
 	}
 
 	return QueueTailRemaining;
+}
+
+void UDRGA_CharacterSkillBase::ScheduleCooldownSafetyCleanup(
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FActiveGameplayEffectHandle CooldownEffectHandle,
+	const FGameplayTag CooldownTag,
+	const float CooldownDuration) const
+{
+	if (ActorInfo == nullptr
+		|| !ActorInfo->IsNetAuthority()
+		|| !CooldownEffectHandle.IsValid()
+		|| !CooldownTag.IsValid()
+		|| CooldownDuration <= 0.f)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystemComponent =
+		ActorInfo->AbilitySystemComponent.Get();
+	UWorld* World = ActorInfo->AvatarActor.IsValid()
+		? ActorInfo->AvatarActor->GetWorld()
+		: nullptr;
+	if (!IsValid(AbilitySystemComponent) || !IsValid(World))
+	{
+		return;
+	}
+
+	// 정상적으로는 GE의 Duration이 태그를 회수한다. 서버 지연이나 취소 경로로
+	// GE가 남은 경우를 대비해, 쿨다운 종료 시점보다 조금 뒤에 해당 Handle만
+	// 강제로 회수한다. 다른 스킬/차지의 쿨다운은 건드리지 않는다.
+	constexpr float CleanupGraceSeconds = 0.25f;
+	const TWeakObjectPtr<UAbilitySystemComponent> WeakAbilitySystem =
+		AbilitySystemComponent;
+	FTimerDelegate CleanupDelegate;
+	CleanupDelegate.BindLambda([
+		WeakAbilitySystem,
+		CooldownEffectHandle,
+		CooldownTag]()
+	{
+		if (UAbilitySystemComponent* ASC = WeakAbilitySystem.Get())
+		{
+			const bool bEffectStillActive = ASC->GetActiveGameplayEffect(CooldownEffectHandle) != nullptr;
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("[SkillCooldown][SafetyCleanup] Tag=%s Handle=%s Active=%d TagPresent=%d"),
+				*CooldownTag.ToString(),
+				*CooldownEffectHandle.ToString(),
+				bEffectStillActive,
+				ASC->HasMatchingGameplayTag(CooldownTag));
+			if (bEffectStillActive)
+			{
+				ASC->RemoveActiveGameplayEffect(CooldownEffectHandle);
+			}
+		}
+	});
+
+	FTimerHandle CleanupTimer;
+	World->GetTimerManager().SetTimer(
+		CleanupTimer,
+		CleanupDelegate,
+		CooldownDuration + CleanupGraceSeconds,
+		false);
 }
 
 void UDRGA_CharacterSkillBase::NotifySkillCommitted(

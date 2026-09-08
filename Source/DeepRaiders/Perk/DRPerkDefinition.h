@@ -7,7 +7,21 @@
 #include "DRPerkDefinition.generated.h"
 
 class UGameplayEffect;
+class UGameplayAbility;
 class UDRSkillDefinition;
+
+/** 퍽이 보유자에게 부여할 능동 GameplayAbility 설정이다. */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRPerkGrantedAbility
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk Ability")
+	TSubclassOf<UGameplayAbility> AbilityClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk Ability", meta = (ClampMin = "1", UIMin = "1"))
+	int32 AbilityLevel = 1;
+};
 
 UENUM(BlueprintType)
 enum class EDRPerkTrigger : uint8
@@ -39,7 +53,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	EDRPerkTrigger Trigger = EDRPerkTrigger::WhileEquipped;
 
-	/** 효과가 캐릭터 ASC에 적용되는지, 스킬이 설정을 읽어 변경되는지 결정한다. */
+	/**
+	 * 이 퍽 EffectRule의 기본 적용 대상이다.
+	 * Rule의 TargetOverride가 UsePerkDefault인 기존 에셋은 이 값을 그대로 사용한다.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Skill")
 	EDRPerkEffectTarget EffectTarget = EDRPerkEffectTarget::OwnerCharacter;
 
@@ -54,6 +71,13 @@ public:
 	/** 퍽 획득 시 직접 적용할 GameplayEffect다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
 	TSubclassOf<UGameplayEffect> PerkEffectClass;
+
+	/**
+	 * 퍽 보유 기간에만 ASC에 부여할 능동 Ability 목록이다.
+	 * 같은 AbilityClass를 여러 퍽이 요구하면 하나만 부여하고 마지막 퍽 제거 시 회수한다.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|GAS")
+	TArray<FDRPerkGrantedAbility> GrantedAbilities;
 
 	/**
 	 * 이 퍽이 장착된 스킬의 발동 흐름에 추가할 효과들이다.

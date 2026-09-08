@@ -1,5 +1,7 @@
 #include "DRBarrierGenerator.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
@@ -39,14 +41,25 @@ ADRBarrierGenerator::ADRBarrierGenerator()
 	BarrierTraceCollision->SetCollisionResponseToChannel(DRCollisionChannels::Projectile, ECR_Block);
 	BarrierTraceCollision->SetGenerateOverlapEvents(false);
 
+	AreaEffectCollision = CreateDefaultSubobject<USphereComponent>(TEXT("AreaEffectCollision"));
+	AreaEffectCollision->SetupAttachment(BreakableMeshComponent);
+	AreaEffectCollision->SetAbsolute(false, false, true);
+	AreaEffectCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AreaEffectCollision->SetCollisionResponseToAllChannels(ECR_Ignore);
+	AreaEffectCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	AreaEffectCollision->SetGenerateOverlapEvents(true);
+	AreaEffectCollision->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleAreaEffectBeginOverlap);
+	AreaEffectCollision->OnComponentEndOverlap.AddDynamic(this, &ThisClass::HandleAreaEffectEndOverlap);
+
 	BarrierVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BarrierVisual"));
 	BarrierVisual->SetupAttachment(BreakableMeshComponent);
 	BarrierVisual->SetAbsolute(false, false, true);
 	BarrierVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	BarrierVisual->SetCanEverAffectNavigation(false);
+
 }
 
-USphereComponent* ADRBarrierGenerator::GetBarrierCollisionComponent() const
+UPrimitiveComponent* ADRBarrierGenerator::GetBarrierCollisionComponent() const
 {
 	return BarrierCollision.Get();
 }
@@ -60,7 +73,8 @@ void ADRBarrierGenerator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 }
 
 void ADRBarrierGenerator::Initialize(ADRPlayerCharacter* SourceCharacter, const float InBarrierRadius,
-	const float InBarrierDuration, const float InBarrierMaxHealth)
+	const float InBarrierDuration, const float InBarrierMaxHealth,
+	const TArray<FGameplayEffectSpecHandle>& InAreaEffectSpecs)
 {
 	if (!HasAuthority() || !IsValid(SourceCharacter))
 	{
@@ -68,9 +82,11 @@ void ADRBarrierGenerator::Initialize(ADRPlayerCharacter* SourceCharacter, const 
 	}
 
 	OwnerTeamId = DRCombatTeam::GetActorTeamId(SourceCharacter);
+	SourceAbilitySystem = SourceCharacter->GetAbilitySystemComponent();
 	BarrierRadius = FMath::Max(1.f, InBarrierRadius);
 	BarrierDuration = FMath::Max(0.1f, InBarrierDuration);
 	MaxHealth = FMath::Max(1.f, InBarrierMaxHealth);
+	AreaEffectSpecs = InAreaEffectSpecs;
 	SetLifeSpan(BarrierDuration);
 }
 
@@ -96,6 +112,9 @@ void ADRBarrierGenerator::BeginPlay()
 	BarrierTraceCollision->SetCollisionResponseToAllChannels(ECR_Ignore);
 	BarrierTraceCollision->SetCollisionResponseToChannel(DRCollisionChannels::Projectile, ECR_Block);
 	BarrierTraceCollision->SetGenerateOverlapEvents(false);
+	AreaEffectCollision->SetCollisionResponseToAllChannels(ECR_Ignore);
+	AreaEffectCollision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	AreaEffectCollision->SetGenerateOverlapEvents(true);
 
 	RefreshBarrierGeometry();
 
@@ -103,10 +122,22 @@ void ADRBarrierGenerator::BeginPlay()
 	if (HasAuthority())
 	{
 		BarrierCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		AreaEffectCollision->SetCollisionEnabled(
+			AreaEffectSpecs.IsEmpty() ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
+		if (!AreaEffectSpecs.IsEmpty())
+		{
+			TArray<AActor*> OverlappingActors;
+			AreaEffectCollision->GetOverlappingActors(OverlappingActors, ADRPlayerCharacter::StaticClass());
+			for (AActor* OverlappingActor : OverlappingActors)
+			{
+				ApplyAreaEffects(OverlappingActor);
+			}
+		}
 	}
 	else
 	{
 		BarrierCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		AreaEffectCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	if (HasAuthority() && OwnerTeamId == INDEX_NONE)
@@ -124,6 +155,7 @@ void ADRBarrierGenerator::RefreshBarrierGeometry()
 {
 	BarrierCollision->SetSphereRadius(BarrierRadius);
 	BarrierTraceCollision->SetSphereRadius(BarrierRadius);
+	AreaEffectCollision->SetSphereRadius(BarrierRadius);
 
 	if (const UStaticMesh* VisualMesh = BarrierVisual->GetStaticMesh())
 	{
@@ -134,6 +166,12 @@ void ADRBarrierGenerator::RefreshBarrierGeometry()
 			BarrierVisual->SetRelativeScale3D(FVector(UniformScale));
 		}
 	}
+}
+
+void ADRBarrierGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	RemoveAllAreaEffects();
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRBarrierGenerator::HandleBarrierBeginOverlap(
@@ -153,6 +191,113 @@ void ADRBarrierGenerator::HandleBarrierBeginOverlap(
 	{
 		Projectile->HandleBarrierOverlap(this);
 	}
+}
+
+void ADRBarrierGenerator::HandleAreaEffectBeginOverlap(
+	UPrimitiveComponent* /*OverlappedComponent*/, AActor* OtherActor,
+	UPrimitiveComponent* /*OtherComponent*/, int32 /*OtherBodyIndex*/, bool /*bFromSweep*/,
+	const FHitResult& /*SweepResult*/)
+{
+	ApplyAreaEffects(OtherActor);
+}
+
+void ADRBarrierGenerator::HandleAreaEffectEndOverlap(
+	UPrimitiveComponent* /*OverlappedComponent*/, AActor* OtherActor,
+	UPrimitiveComponent* /*OtherComponent*/, int32 /*OtherBodyIndex*/)
+{
+	if (!AreaEffectCollision->IsOverlappingActor(OtherActor))
+	{
+		RemoveAreaEffects(OtherActor);
+	}
+}
+
+void ADRBarrierGenerator::ApplyAreaEffects(AActor* TargetActor)
+{
+	if (!HasAuthority() || !IsValid(TargetActor) || !SourceAbilitySystem.IsValid()
+		|| OwnerTeamId == INDEX_NONE || AreaEffectSpecs.IsEmpty()
+		|| DRCombatTeam::IsFriendlyTarget(OwnerTeamId, TargetActor))
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* TargetAbilitySystem = GetTargetAbilitySystem(TargetActor);
+	if (!IsValid(TargetAbilitySystem) || ActiveAreaEffects.Contains(TargetAbilitySystem))
+	{
+		return;
+	}
+
+	TArray<FActiveGameplayEffectHandle> EffectHandles;
+	for (const FGameplayEffectSpecHandle& EffectSpec : AreaEffectSpecs)
+	{
+		if (!EffectSpec.IsValid())
+		{
+			continue;
+		}
+
+		const FActiveGameplayEffectHandle EffectHandle =
+			SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(
+				*EffectSpec.Data.Get(), TargetAbilitySystem);
+		if (EffectHandle.IsValid())
+		{
+			EffectHandles.Add(EffectHandle);
+		}
+	}
+
+	if (!EffectHandles.IsEmpty())
+	{
+		ActiveAreaEffects.Add(TargetAbilitySystem, MoveTemp(EffectHandles));
+	}
+}
+
+void ADRBarrierGenerator::RemoveAreaEffects(AActor* TargetActor)
+{
+	UAbilitySystemComponent* TargetAbilitySystem = GetTargetAbilitySystem(TargetActor);
+	if (!IsValid(TargetAbilitySystem))
+	{
+		return;
+	}
+
+	if (const TArray<FActiveGameplayEffectHandle>* EffectHandles = ActiveAreaEffects.Find(TargetAbilitySystem))
+	{
+		for (const FActiveGameplayEffectHandle EffectHandle : *EffectHandles)
+		{
+			if (EffectHandle.IsValid())
+			{
+				TargetAbilitySystem->RemoveActiveGameplayEffect(EffectHandle);
+			}
+		}
+	}
+	ActiveAreaEffects.Remove(TargetAbilitySystem);
+}
+
+void ADRBarrierGenerator::RemoveAllAreaEffects()
+{
+	for (const TPair<TWeakObjectPtr<UAbilitySystemComponent>, TArray<FActiveGameplayEffectHandle>>& ActiveEffect
+		: ActiveAreaEffects)
+	{
+		UAbilitySystemComponent* TargetAbilitySystem = ActiveEffect.Key.Get();
+		if (!IsValid(TargetAbilitySystem))
+		{
+			continue;
+		}
+
+		for (const FActiveGameplayEffectHandle EffectHandle : ActiveEffect.Value)
+		{
+			if (EffectHandle.IsValid())
+			{
+				TargetAbilitySystem->RemoveActiveGameplayEffect(EffectHandle);
+			}
+		}
+	}
+	ActiveAreaEffects.Reset();
+}
+
+UAbilitySystemComponent* ADRBarrierGenerator::GetTargetAbilitySystem(AActor* TargetActor) const
+{
+	const IAbilitySystemInterface* AbilitySystemInterface = Cast<IAbilitySystemInterface>(TargetActor);
+	return AbilitySystemInterface != nullptr
+		? AbilitySystemInterface->GetAbilitySystemComponent()
+		: nullptr;
 }
 
 float ADRBarrierGenerator::TakeDamage(const float DamageAmount, const FDamageEvent& DamageEvent,

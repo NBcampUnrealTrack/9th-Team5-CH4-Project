@@ -3,8 +3,11 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Skill/Barrier/DRBarrierGenerator.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 
 UDRGA_BarrierSkill::UDRGA_BarrierSkill()
 {
@@ -33,6 +36,30 @@ void UDRGA_BarrierSkill::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	if (ActorInfo->IsNetAuthority())
 	{
+		const ADRPlayerState* PlayerState = Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get());
+		const UDRPerkComponent* PerkComponent = IsValid(PlayerState)
+			? PlayerState->GetPerkComponent()
+			: nullptr;
+		const UDRSkillDefinition* SkillDefinition = GetCurrentSkillDefinition();
+		const FGameplayTag SkillId = IsValid(SkillDefinition)
+			? SkillDefinition->SkillId
+			: FGameplayTag();
+		const float MaxHealthMultiplierBonus = IsValid(PerkComponent)
+			? PerkComponent->GetSkillEffectValue(
+				SkillId,
+				EDRSkillEffectTrigger::OnSkillCommitted,
+				DRGameplayTags::Data_Perk_Barrier_MaxHealthMultiplier)
+			: 0.f;
+		TArray<FGameplayEffectSpecHandle> AreaEffectSpecs;
+		if (IsValid(PerkComponent))
+		{
+			PerkComponent->BuildEquippedSkillEffectSpecs(
+				ActorInfo->AbilitySystemComponent.Get(),
+				SkillId,
+				EDRSkillEffectTrigger::OnSkillCommitted,
+				AreaEffectSpecs);
+		}
+
 		UWorld* World = Character->GetWorld();
 		ADRBarrierGenerator* BarrierGenerator = IsValid(World)
 			? World->SpawnActorDeferred<ADRBarrierGenerator>(
@@ -52,7 +79,8 @@ void UDRGA_BarrierSkill::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 			Character,
 			BarrierRadius,
 			BarrierDuration,
-			BarrierMaxHealth);
+			BarrierMaxHealth * FMath::Max(0.f, 1.f + MaxHealthMultiplierBonus),
+			AreaEffectSpecs);
 		BarrierGenerator->FinishSpawning(SpawnTransform);
 	}
 

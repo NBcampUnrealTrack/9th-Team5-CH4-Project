@@ -10,6 +10,9 @@ class DEEPRAIDERS_API UDRGA_ForwardBarrierSkill : public UDRGA_BarrierSkill
 {
 	GENERATED_BODY()
 
+public:
+	UDRGA_ForwardBarrierSkill();
+
 protected:
 	virtual bool ResolveBarrierSpawnTransform(
 		ADRPlayerCharacter* Character,

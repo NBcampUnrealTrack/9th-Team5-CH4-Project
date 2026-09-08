@@ -4,6 +4,7 @@
 #include "GameplayEffectExtension.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Player/Components/DRShieldComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 
 UDRPlayerAttributeSet::UDRPlayerAttributeSet()
@@ -280,19 +281,33 @@ bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackD
 		return true;
 	}
 
-	const float AbsorbedFreeze = FMath::Min(
-		ShieldBefore,
-		Data.EvaluatedData.Magnitude);
-	const float ShieldAfter = ShieldBefore - AbsorbedFreeze;
-	Data.EvaluatedData.Magnitude -= AbsorbedFreeze;
-	SetShield(ShieldAfter);
-
 	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
-	if (ShieldAfter <= KINDA_SMALL_NUMBER && IsValid(TargetASC))
+	ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
+		? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
+		: nullptr;
+	UDRShieldComponent* ShieldComponent = IsValid(TargetPlayerState)
+		? TargetPlayerState->GetShieldComponent()
+		: nullptr;
+	if (IsValid(ShieldComponent) && ShieldComponent->HasShieldLayers())
 	{
-		FGameplayTagContainer ShieldTags;
-		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
-		TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+		Data.EvaluatedData.Magnitude = ShieldComponent->AbsorbDamage(
+			Data.EvaluatedData.Magnitude);
+	}
+	else
+	{
+		const float AbsorbedFreeze = FMath::Min(
+			ShieldBefore,
+			Data.EvaluatedData.Magnitude);
+		const float ShieldAfter = ShieldBefore - AbsorbedFreeze;
+		Data.EvaluatedData.Magnitude -= AbsorbedFreeze;
+		SetShield(ShieldAfter);
+
+		if (ShieldAfter <= KINDA_SMALL_NUMBER && IsValid(TargetASC))
+		{
+			FGameplayTagContainer ShieldTags;
+			ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
+			TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+		}
 	}
 
 	if (Data.EvaluatedData.Magnitude > KINDA_SMALL_NUMBER)
@@ -304,9 +319,6 @@ bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackD
 	// PostGameplayEffectExecute가 호출되지 않으므로 유효 피격 기록은 여기서 처리한다.
 	UAbilitySystemComponent* SourceASC =
 		Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
-	ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
-		? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
-		: nullptr;
 	ADRPlayerState* SourcePlayerState = IsValid(SourceASC)
 		? Cast<ADRPlayerState>(SourceASC->GetOwnerActor())
 		: nullptr;
@@ -349,16 +361,23 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 	{
 		const float GrantedShield = GetIncomingShield();
 		SetIncomingShield(0.f);
-		const UAbilitySystemComponent* TargetASC =
-			GetOwningAbilitySystemComponent();
-		if (GrantedShield > KINDA_SMALL_NUMBER
-			&& IsValid(TargetASC)
-			&& TargetASC->HasMatchingGameplayTag(
-				DRGameplayTags::State_PersonalShield))
+		UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+		ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
+			? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
+			: nullptr;
+		UDRShieldComponent* ShieldComponent = IsValid(TargetPlayerState)
+			? TargetPlayerState->GetShieldComponent()
+			: nullptr;
+		const UObject* SourceObject = Data.EffectSpec.GetContext().GetSourceObject();
+		if (IsValid(ShieldComponent)
+			&& ShieldComponent->RegisterPersonalShieldGrant(GrantedShield, SourceObject))
 		{
-			// 쉴드 지속 GE가 먼저 적용된 경우에만 잔량을 갱신한다.
-			SetShield(FMath::Max(GetShield(), GrantedShield));
+			return;
 		}
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ShieldLayer] IncomingShield was not registered. Owner=%s Source=%s Amount=%.1f"),
+			*GetNameSafe(TargetPlayerState), *GetNameSafe(SourceObject), GrantedShield);
 		return;
 	}
 
@@ -429,9 +448,20 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 	const float FinalDamageReduction = GetDamageReduction();
 	const float FinalDamage = RawDamage * (1.f - FinalDamageReduction);
 	const float ShieldBefore = GetShield();
-	const float ShieldDamage = FMath::Min(ShieldBefore, FinalDamage);
+	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
+		? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
+		: nullptr;
+	UDRShieldComponent* ShieldComponent = IsValid(TargetPlayerState)
+		? TargetPlayerState->GetShieldComponent()
+		: nullptr;
+	const bool bUsesShieldLayers = IsValid(ShieldComponent)
+		&& ShieldComponent->HasShieldLayers();
+	const float HealthDamage = bUsesShieldLayers
+		? ShieldComponent->AbsorbDamage(FinalDamage)
+		: FMath::Max(0.f, FinalDamage - ShieldBefore);
+	const float ShieldDamage = FinalDamage - HealthDamage;
 	const float ShieldAfter = ShieldBefore - ShieldDamage;
-	const float HealthDamage = FinalDamage - ShieldDamage;
 	const float HealthAfter = FMath::Clamp(
 		HealthBefore - HealthDamage,
 		0.f,
@@ -444,19 +474,20 @@ void UDRPlayerAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCa
 		return;
 	}
 
-	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
-	SetShield(ShieldAfter);
-	if (ShieldBefore > KINDA_SMALL_NUMBER
-		&& ShieldAfter <= KINDA_SMALL_NUMBER
-		&& IsValid(TargetASC))
+	if (!bUsesShieldLayers)
 	{
-		FGameplayTagContainer ShieldTags;
-		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
-		TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+		SetShield(ShieldAfter);
+		if (ShieldBefore > KINDA_SMALL_NUMBER
+			&& ShieldAfter <= KINDA_SMALL_NUMBER
+			&& IsValid(TargetASC))
+		{
+			FGameplayTagContainer ShieldTags;
+			ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
+			TargetASC->RemoveActiveEffectsWithGrantedTags(ShieldTags);
+		}
 	}
 	UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
 
-	ADRPlayerState* TargetPlayerState = IsValid(TargetASC) ? Cast<ADRPlayerState>(TargetASC->GetOwnerActor()) : nullptr;
 	ADRPlayerState* SourcePlayerState = IsValid(SourceASC) ? Cast<ADRPlayerState>(SourceASC->GetOwnerActor()) : nullptr;
 
 	const bool bFatal = HealthBefore > KINDA_SMALL_NUMBER && HealthAfter <= KINDA_SMALL_NUMBER;
