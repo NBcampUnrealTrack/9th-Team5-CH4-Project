@@ -125,7 +125,8 @@ public:
 		const TArray<uint8>& VoxelSaveData,
 		int32 OriginalVoxelSaveSize,
 		const TArray<uint8>& SnowVolumeData,
-		int32 OriginalSnowVolumeSize);
+		int32 OriginalSnowVolumeSize,
+		bool* bOutWaitingForWorld = nullptr);
 
 	// serializer는 UObject가 아니므로 VoxelWorld 탐색에 쓸 World context를 호출 전에 받는다.
 	void SetWorld(UWorld* InWorld)

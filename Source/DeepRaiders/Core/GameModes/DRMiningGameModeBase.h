@@ -12,6 +12,7 @@ enum class EDRSnowJoinSnapshotResult : uint8
 {
 	Applied,
 	InvalidCheckpoint,
+	Disconnected,
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnJoinSnapshotStarted);
@@ -77,6 +78,7 @@ public:
 	bool HandleSnowJoinSnapshotApplied(
 		APlayerController* PlayerController,
 		bool bNotifySnapshotFinished = true);
+	void HandleSnowJoinSnapshotFailed(APlayerController* PlayerController);
 
 protected:
 	virtual void BeginPlay() override;
@@ -133,6 +135,9 @@ private:
 	void RefreshGameStartPlayerRoster();
 	int32 AssignBalancedTeam(class ADRPlayerState* PlayerState) const;
 	bool TryStartSnowJoinSnapshot(class ADRPlayerController* PlayerController);
+	void FinishPendingSnowJoin(APlayerController* PlayerController, EDRSnowJoinSnapshotResult Result);
+	TSet<TWeakObjectPtr<APlayerController>> PendingSnowJoinPlayers;
+	friend class FDRSnowJoinLifecycleTest;
 
 	FTimerHandle GameStartTimerHandle;
 	TWeakObjectPtr<class ADRGameStartActor> CountdownSource;

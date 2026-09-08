@@ -88,7 +88,8 @@ public:
 		const TArray<uint8>& VoxelSaveData,
 		int32 OriginalVoxelSaveSize,
 		const TArray<uint8>& SnowVolumeData,
-		int32 OriginalSnowVolumeSize);
+		int32 OriginalSnowVolumeSize,
+		bool* bOutWaitingForWorld = nullptr);
 
 private:
 

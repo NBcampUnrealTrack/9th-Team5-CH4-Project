@@ -3,8 +3,8 @@
 #include "AbilitySystemComponent.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
-#include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRSnowJoinComponent.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/DRTeamPlayerStart.h"
 #include "DeepRaiders/Gameplay/Team/DRTeamMovingActor.h"
@@ -648,28 +648,18 @@ void ADRMiningGameModeBase::PostLogin(APlayerController* NewPlayer)
 		return;
 	}
 
-	if (!TryStartSnowJoinSnapshot(PlayerController))
+	if (PlayerController->IsLocalController())
 	{
-		// 저장된 눈 상태가 없으면 대기하지 않고 바로 플레이를 시작한다.
+		// 호스트는 이미 권위 월드에 있으므로 직렬화/전송/재적용이 필요 없다.
 		HandleSnowJoinSnapshotApplied(PlayerController, false);
 	}
-
-	UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>();
-
-	if (!IsValid(TerrainSubsystem))
+	else if (!TryStartSnowJoinSnapshot(PlayerController))
 	{
+		// 복원할 상태를 만들지 못한 접속자를 불완전한 월드로 입장시키지 않는다.
+		PlayerController->GetSnowJoinComponent()->FailSnowJoin(TEXT("CheckpointCreationFailed"));
 		return;
 	}
 
-	const TArray<FDRTerrainDigOperation>& DigHistory = TerrainSubsystem->GetDigHistory();
-
-	if (DigHistory.Num() == 0)
-	{
-		return;
-	}
-
-	// DRPlayerController 리팩토링으로 인해 사용이 불가능합니다.
-	//PlayerController->Client_ApplyTerrainDigHistory(DigHistory);
 }
 
 bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* PlayerController)
@@ -686,36 +676,45 @@ bool ADRMiningGameModeBase::TryStartSnowJoinSnapshot(ADRPlayerController* Player
 
 	// 퇴적 요청을 먼저 막은 뒤 현재 VoxelWorld 상태로 중도 난입용 checkpoint를 새로 만든다.
 	// 기존 checkpoint를 재사용하면 그 이후 DepositArea가 만든 복셀이 포함되지 않는다.
+	PendingSnowJoinPlayers.Add(PlayerController);
 	OnJoinSnapshotStarted.Broadcast();
 	if (!SnowSubsystem->CreateCheckpoint(MiningGameState->GetSnowOperationSequence()))
 	{
-		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::InvalidCheckpoint);
+		FinishPendingSnowJoin(PlayerController, EDRSnowJoinSnapshotResult::InvalidCheckpoint);
 		return false;
 	}
 
 	FDRSnowJoinCheckpoint Checkpoint;
 	if (!SnowSubsystem->GetLatestCheckpoint(Checkpoint))
 	{
-		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::InvalidCheckpoint);
+		FinishPendingSnowJoin(PlayerController, EDRSnowJoinSnapshotResult::InvalidCheckpoint);
 		return false;
 	}
 
-	PlayerController->Client_BeginSnowJoinSnapshot(
-		Checkpoint.SnapshotId,
-		Checkpoint.OperationSequence,
-		Checkpoint.VoxelWorldName,
-		Checkpoint.VoxelSaveData.Num(),
-		Checkpoint.OriginalVoxelSaveSize,
-		Checkpoint.SnowVolumeData.Num(),
-		Checkpoint.OriginalSnowVolumeSize);
+	PlayerController->GetSnowJoinComponent()->BeginSnowJoinSnapshot(MoveTemp(Checkpoint));
 	return true;
+}
+
+void ADRMiningGameModeBase::FinishPendingSnowJoin(
+	APlayerController* PlayerController, EDRSnowJoinSnapshotResult Result)
+{
+	// 실패 통지와 실제 Logout이 연달아 와도 시작 이벤트 하나당 한 번만 해제한다.
+	if (PendingSnowJoinPlayers.Remove(PlayerController) > 0)
+	{
+		OnJoinSnapshotFinished.Broadcast(Result);
+	}
+}
+
+void ADRMiningGameModeBase::HandleSnowJoinSnapshotFailed(APlayerController* PlayerController)
+{
+	FinishPendingSnowJoin(PlayerController, EDRSnowJoinSnapshotResult::Disconnected);
 }
 
 bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 	APlayerController* PlayerController,
 	bool bNotifySnapshotFinished)
 {
-	bool bPlayerRestarted = false;
+	bool bPlayerRestarted = IsValid(PlayerController) && IsValid(PlayerController->GetPawn());
 	if (IsValid(PlayerController) && !IsValid(PlayerController->GetPawn()))
 	{
 		PlayerController->ChangeState(NAME_Playing);
@@ -734,7 +733,8 @@ bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 
 	if (bNotifySnapshotFinished)
 	{
-		OnJoinSnapshotFinished.Broadcast(EDRSnowJoinSnapshotResult::Applied);
+		FinishPendingSnowJoin(PlayerController, bPlayerRestarted
+			? EDRSnowJoinSnapshotResult::Applied : EDRSnowJoinSnapshotResult::Disconnected);
 	}
 
 	return bPlayerRestarted;
@@ -742,6 +742,7 @@ bool ADRMiningGameModeBase::HandleSnowJoinSnapshotApplied(
 
 void ADRMiningGameModeBase::Logout(AController* Exiting)
 {
+	HandleSnowJoinSnapshotFailed(Cast<APlayerController>(Exiting));
 	const ADRPlayerState* PlayerState =
 		IsValid(Exiting) ? Exiting->GetPlayerState<ADRPlayerState>() : nullptr;
 
@@ -753,9 +754,10 @@ void ADRMiningGameModeBase::Logout(AController* Exiting)
 		IsValid(PlayerState) ? PlayerState->GetPlayerId() : INDEX_NONE,
 		IsValid(PlayerState) ? PlayerState->GetTeamId() : INDEX_NONE);
 
-	// 기본 Logout이 Pawn, Controller, PlayerState와 GameState PlayerArray를 정리한다.
+	// Controller::Destroyed는 Logout 이후 PlayerState를 제거한다.
 	Super::Logout(Exiting);
-	RefreshGameStartPlayerRoster();
+	GetWorldTimerManager().SetTimerForNextTick(
+		this, &ThisClass::RefreshGameStartPlayerRoster);
 }
 
 void ADRMiningGameModeBase::RefreshGameStartPlayerRoster()

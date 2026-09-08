@@ -1,11 +1,11 @@
 #include "DRPlayerController.h"
 
 #include "DRPlayerCharacter.h"
+#include "Components/DRSnowJoinComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
-#include "Engine/NetConnection.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "InputMappingContext.h"
@@ -15,10 +15,7 @@
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
-#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
-#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
-#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
@@ -62,27 +59,13 @@
 #include "DrawDebugHelpers.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "HAL/IConsoleManager.h"
-#include "HAL/PlatformTime.h"
 
-namespace DRSnowSnapshotTransfer
-{
-	constexpr int32 ChunkByteSize = 8 * 1024;
-	constexpr int32 InitialWindow = 8;
-	constexpr int32 MinWindow = 2;
-	constexpr int32 MaxWindow = 16;
-	constexpr double ExpectedAckSeconds = 0.25;
-	constexpr double AdjustmentInterval = 0.5;
-	constexpr float SendCheckInterval = 0.05f;
-
-	uint64 MakeChunkKey(uint8 PayloadType, int32 ByteOffset)
-	{
-		return static_cast<uint64>(PayloadType) << 32 | static_cast<uint32>(ByteOffset);
-	}
-}
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
 {
+	SnowJoinComponent = CreateDefaultSubobject<UDRSnowJoinComponent>(TEXT("SnowJoinComponent"));
+
 	// QuickSlot Initialize
 	InventoryComponent = CreateDefaultSubobject<UDRInventoryComponent>(TEXT("QuickSlotInventoryComponent"));
 	QuickSlotComponent = CreateDefaultSubobject<UDRQuickSlotComponent>(TEXT("QuickSlotComponent"));
@@ -241,30 +224,6 @@ bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerSt
 	const double* ExpireTime = EnemyNameRevealExpireTimes.Find(TargetPlayerState);
 
 	return ExpireTime != nullptr && *ExpireTime > World->GetTimeSeconds();
-}
-
-void ADRPlayerController::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (!IsLocalController())
-	{
-		return;
-	}
-
-	if (SnowJoinLoadingPhase != EDRSnowJoinLoadingPhase::Complete &&
-		PendingSnowSnapshotId == INDEX_NONE &&
-		GetStateName() == NAME_Playing)
-	{
-		const APawn* ControlledPawn = GetPawn();
-		if (IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled())
-		{
-			SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Complete;
-			LogSnowJoinControlState(TEXT("ClientControlReady"));
-
-		}
-	}
-
 }
 
 void ADRPlayerController::BeginPlay()
@@ -515,7 +474,7 @@ void ADRPlayerController::SetupGASInputComponent()
 void ADRPlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
-	LogSnowJoinControlState(TEXT("ServerPossessed"));
+	SnowJoinComponent->LogSnowJoinControlState(TEXT("ServerPossessed"));
 
 	ApplyViewPitchLimits();
 
@@ -534,7 +493,7 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 void ADRPlayerController::OnRep_Pawn()
 {
-	LogSnowJoinControlState(TEXT("ClientPawnReplicated"));
+	SnowJoinComponent->LogSnowJoinControlState(TEXT("ClientPawnReplicated"));
 	Super::OnRep_Pawn();
 
 	ApplyViewPitchLimits();
@@ -547,19 +506,19 @@ void ADRPlayerController::ClientRestart_Implementation(APawn* NewPawn)
 	UE_LOG(LogTemp, Log, TEXT("[JoinControl] ClientRestart PC=%s IncomingPawn=%s"),
 		*GetNameSafe(this), *GetNameSafe(NewPawn));
 	Super::ClientRestart_Implementation(NewPawn);
-	LogSnowJoinControlState(TEXT("ClientRestartReturned"));
+	SnowJoinComponent->LogSnowJoinControlState(TEXT("ClientRestartReturned"));
 }
 
 void ADRPlayerController::AcknowledgePossession(APawn* InPawn)
 {
 	Super::AcknowledgePossession(InPawn);
-	LogSnowJoinControlState(TEXT("ClientAcknowledged"));
+	SnowJoinComponent->LogSnowJoinControlState(TEXT("ClientAcknowledged"));
 }
 
 void ADRPlayerController::ServerAcknowledgePossession_Implementation(APawn* InPawn)
 {
 	Super::ServerAcknowledgePossession_Implementation(InPawn);
-	LogSnowJoinControlState(TEXT("ServerReceivedAcknowledgement"));
+	SnowJoinComponent->LogSnowJoinControlState(TEXT("ServerReceivedAcknowledgement"));
 }
 
 void ADRPlayerController::OnRep_PlayerState()
@@ -1360,478 +1319,7 @@ void ADRPlayerController::ServerRequestInteractCurrentTeleport_Implementation()
 }
 #pragma endregion
 
-#pragma region Snow Join Snapshot
-float ADRPlayerController::GetSnowJoinSnapshotProgress() const
-{
-	if (PendingSnowSnapshotId == INDEX_NONE)
-	{
-		return 1.f;
-	}
 
-	const int64 TotalByteCount =
-		static_cast<int64>(PendingSnowVoxelSaveByteCount) +
-		PendingSnowVolumeByteCount;
-	if (TotalByteCount <= 0)
-	{
-		return 0.f;
-	}
-
-	const int64 ReceivedByteCount =
-		static_cast<int64>(PendingSnowVoxelSaveData.Num()) +
-		PendingSnowVolumeData.Num();
-	return static_cast<float>(FMath::Clamp(
-		static_cast<double>(ReceivedByteCount) / TotalByteCount,
-		0.0,
-		1.0));
-}
-
-void ADRPlayerController::Client_BeginSnowJoinSnapshot_Implementation(
-	int32 SnapshotId,
-	int32 CheckpointSequence,
-	FName VoxelWorldName,
-	int32 VoxelSaveByteCount,
-	int32 OriginalVoxelSaveSize,
-	int32 SnowVolumeByteCount,
-	int32 OriginalSnowVolumeSize)
-{
-	if (SnapshotId <= 0 || VoxelSaveByteCount <= 0 || SnowVolumeByteCount <= 0
-		|| OriginalVoxelSaveSize <= 0 || OriginalSnowVolumeSize <= 0)
-	{
-		return;
-	}
-
-	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::ReceivingSnapshot;
-	PendingSnowSnapshotId = SnapshotId;
-	PendingSnowCheckpointSequence = CheckpointSequence;
-	PendingSnowVoxelWorldName = VoxelWorldName;
-	PendingSnowVoxelSaveByteCount = VoxelSaveByteCount;
-	PendingSnowOriginalVoxelSaveSize = OriginalVoxelSaveSize;
-	PendingSnowVolumeByteCount = SnowVolumeByteCount;
-	PendingSnowOriginalSnowVolumeSize = OriginalSnowVolumeSize;
-	bPendingSnowSnapshotFinished = false;
-	PendingSnowVoxelSaveData.Reset();
-	PendingSnowVolumeData.Reset();
-	BufferedSnowOperations.Reset();
-
-	if (IsValid(LoadingUIComponent))
-	{
-		LoadingUIComponent->RefreshLoadingScreen();
-	}
-	ServerRequestSnowJoinSnapshotData(SnapshotId);
-}
-
-void ADRPlayerController::ServerRequestSnowJoinSnapshotData_Implementation(int32 SnapshotId)
-{
-	UWorld* World = GetWorld();
-	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	if (!IsValid(SnowSubsystem))
-	{
-		return;
-	}
-
-	FDRSnowJoinCheckpoint Checkpoint;
-	if (!SnowSubsystem->GetCheckpoint(SnapshotId, Checkpoint))
-	{
-		return;
-	}
-
-	OutgoingSnowSnapshotId = SnapshotId;
-	ExpectedAppliedSnowSnapshotId = SnapshotId;
-	bSnowSnapshotTransferFinished = false;
-	OutgoingSnowPayloadType = 0;
-	OutgoingSnowByteOffset = 0;
-	PendingSnowChunkAcks.Reset();
-	SnowSnapshotWindow = DRSnowSnapshotTransfer::InitialWindow;
-	FastSnowSnapshotAcks = 0;
-	SnowSnapshotSaturationStart = -1.0;
-	LastSnowSnapshotWindowChange = FPlatformTime::Seconds();
-	OutgoingSnowVoxelSaveData = MoveTemp(Checkpoint.VoxelSaveData);
-	OutgoingSnowVolumeData = MoveTemp(Checkpoint.SnowVolumeData);
-
-	// ACK가 없거나 연결이 포화된 동안에도 전송 재개 여부를 확인한다.
-	World->GetTimerManager().SetTimer(
-		SnowSnapshotSendTimer, this, &ThisClass::SendNextSnowJoinSnapshotChunk,
-		DRSnowSnapshotTransfer::SendCheckInterval, true);
-	SendNextSnowJoinSnapshotChunk();
-}
-
-void ADRPlayerController::AdjustSnowSnapshotWindow(bool bIncrease, const TCHAR* Reason)
-{
-	const double Now = FPlatformTime::Seconds();
-	if (Now - LastSnowSnapshotWindowChange < DRSnowSnapshotTransfer::AdjustmentInterval)
-	{
-		return;
-	}
-
-	const int32 NewWindow = FMath::Clamp(
-		bIncrease ? SnowSnapshotWindow * 2 : SnowSnapshotWindow / 2,
-		DRSnowSnapshotTransfer::MinWindow, DRSnowSnapshotTransfer::MaxWindow);
-	if (NewWindow == SnowSnapshotWindow)
-	{
-		return;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("[JoinSnapshot] Window Id=%d %d->%d Reason=%s Pending=%d"),
-		OutgoingSnowSnapshotId, SnowSnapshotWindow, NewWindow, Reason, PendingSnowChunkAcks.Num());
-	SnowSnapshotWindow = NewWindow;
-	FastSnowSnapshotAcks = 0;
-	LastSnowSnapshotWindowChange = Now;
-}
-
-void ADRPlayerController::SendNextSnowJoinSnapshotChunk()
-{
-	if (OutgoingSnowSnapshotId == INDEX_NONE)
-	{
-		return;
-	}
-
-	UNetConnection* Connection = GetNetConnection();
-	const double Now = FPlatformTime::Seconds();
-	if (Connection != nullptr && !Connection->IsNetReady())
-	{
-		FastSnowSnapshotAcks = 0;
-		if (SnowSnapshotSaturationStart < 0.0)
-		{
-			SnowSnapshotSaturationStart = Now;
-		}
-		if (Now - SnowSnapshotSaturationStart >= DRSnowSnapshotTransfer::AdjustmentInterval)
-		{
-			AdjustSnowSnapshotWindow(false, TEXT("Saturated"));
-		}
-	}
-	else
-	{
-		SnowSnapshotSaturationStart = -1.0;
-	}
-
-	while (OutgoingSnowSnapshotId != INDEX_NONE
-		&& PendingSnowChunkAcks.Num() < SnowSnapshotWindow)
-	{
-		const TArray<uint8>* Payload = nullptr;
-		switch (OutgoingSnowPayloadType)
-		{
-		case 0:
-			Payload = &OutgoingSnowVoxelSaveData;
-			break;
-		case 1:
-			Payload = &OutgoingSnowVolumeData;
-			break;
-		default:
-			if (PendingSnowChunkAcks.IsEmpty())
-			{
-				FinishSnowJoinSnapshotTransfer();
-			}
-			return;
-		}
-
-		if (OutgoingSnowByteOffset >= Payload->Num())
-		{
-			++OutgoingSnowPayloadType;
-			OutgoingSnowByteOffset = 0;
-			continue;
-		}
-
-		// Reliable RPC로 포화 상태를 더 악화시키지 않는다. 타이머가 다시 확인한다.
-		if (Connection != nullptr && !Connection->IsNetReady())
-		{
-			return;
-		}
-
-		const int32 ChunkSize = FMath::Min(
-			DRSnowSnapshotTransfer::ChunkByteSize,
-			Payload->Num() - OutgoingSnowByteOffset);
-		const uint8 SentPayloadType = OutgoingSnowPayloadType;
-		const int32 SentByteOffset = OutgoingSnowByteOffset;
-		TArray<uint8> ChunkData;
-		ChunkData.Append(Payload->GetData() + SentByteOffset, ChunkSize);
-		PendingSnowChunkAcks.Add(
-			DRSnowSnapshotTransfer::MakeChunkKey(SentPayloadType, SentByteOffset),
-			FPlatformTime::Seconds());
-		OutgoingSnowByteOffset += ChunkSize;
-		Client_ReceiveSnowJoinSnapshotChunk(
-			OutgoingSnowSnapshotId,
-			SentPayloadType,
-			SentByteOffset,
-			ChunkData);
-	}
-}
-
-void ADRPlayerController::ServerAckSnowJoinSnapshotChunk_Implementation(
-	int32 SnapshotId,
-	uint8 PayloadType,
-	int32 ByteOffset)
-{
-	if (SnapshotId != OutgoingSnowSnapshotId)
-	{
-		return;
-	}
-
-	const uint64 ChunkKey = DRSnowSnapshotTransfer::MakeChunkKey(PayloadType, ByteOffset);
-	double SentTime = 0.0;
-	if (!PendingSnowChunkAcks.RemoveAndCopyValue(ChunkKey, SentTime))
-	{
-		return;
-	}
-
-	const double AckSeconds = FPlatformTime::Seconds() - SentTime;
-	const UNetConnection* Connection = GetNetConnection();
-	if (AckSeconds >= DRSnowSnapshotTransfer::ExpectedAckSeconds)
-	{
-		FastSnowSnapshotAcks = 0;
-		AdjustSnowSnapshotWindow(false, TEXT("SlowAck"));
-	}
-	else if (Connection == nullptr || Connection->IsNetReady())
-	{
-		// 한 윈도우 분량의 빠른 ACK가 이어질 때만 늘려 순간적인 왕복 시간 변동을 무시한다.
-		FastSnowSnapshotAcks = FMath::Min(FastSnowSnapshotAcks + 1, SnowSnapshotWindow);
-		if (FastSnowSnapshotAcks >= SnowSnapshotWindow)
-		{
-			AdjustSnowSnapshotWindow(true, TEXT("FastAck"));
-		}
-	}
-	else
-	{
-		FastSnowSnapshotAcks = 0;
-	}
-
-	SendNextSnowJoinSnapshotChunk();
-}
-
-void ADRPlayerController::FinishSnowJoinSnapshotTransfer()
-{
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
-	{
-		return;
-	}
-
-	LogSnowJoinControlState(TEXT("ServerTransferFinished"));
-	World->GetTimerManager().ClearTimer(SnowSnapshotSendTimer);
-	Client_FinishSnowJoinSnapshot(OutgoingSnowSnapshotId);
-	bSnowSnapshotTransferFinished = true;
-	OutgoingSnowSnapshotId = INDEX_NONE;
-	OutgoingSnowPayloadType = 0;
-	OutgoingSnowByteOffset = 0;
-	PendingSnowChunkAcks.Reset();
-	OutgoingSnowVoxelSaveData.Reset();
-	OutgoingSnowVolumeData.Reset();
-}
-
-void ADRPlayerController::ServerNotifySnowJoinSnapshotApplied_Implementation(int32 SnapshotId)
-{
-	LogSnowJoinControlState(TEXT("ServerReceivedSnapshotApplied"));
-	if (!bSnowSnapshotTransferFinished || SnapshotId != ExpectedAppliedSnowSnapshotId)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[JoinControl] ApplyNotifyRejected PC=%s ReceivedId=%d"),
-			*GetNameSafe(this), SnapshotId);
-		return;
-	}
-
-	bSnowSnapshotTransferFinished = false;
-	ExpectedAppliedSnowSnapshotId = INDEX_NONE;
-	if (ADRMiningGameModeBase* GameMode = GetWorld() ? GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>() : nullptr)
-	{
-		GameMode->HandleSnowJoinSnapshotApplied(this);
-		LogSnowJoinControlState(TEXT("ServerRestartPlayerReturned"));
-
-	}
-
-}
-
-void ADRPlayerController::Client_ReceiveSnowJoinSnapshotChunk_Implementation(
-	int32 SnapshotId,
-	uint8 PayloadType,
-	int32 ByteOffset,
-	const TArray<uint8>& ChunkData)
-{
-	if (SnapshotId != PendingSnowSnapshotId || ByteOffset < 0 || ChunkData.IsEmpty())
-	{
-		return;
-	}
-
-	TArray<uint8>* TargetData = nullptr;
-	int32 ExpectedByteCount = 0;
-	switch (PayloadType)
-	{
-	case 0:
-		TargetData = &PendingSnowVoxelSaveData;
-		ExpectedByteCount = PendingSnowVoxelSaveByteCount;
-		break;
-	case 1:
-		TargetData = &PendingSnowVolumeData;
-		ExpectedByteCount = PendingSnowVolumeByteCount;
-		break;
-	default:
-		return;
-	}
-	if (ByteOffset > ExpectedByteCount || ChunkData.Num() > ExpectedByteCount - ByteOffset)
-	{
-		return;
-	}
-
-	if (TargetData->Num() < ByteOffset + ChunkData.Num())
-	{
-		TargetData->SetNumZeroed(ByteOffset + ChunkData.Num());
-	}
-
-	FMemory::Memcpy(TargetData->GetData() + ByteOffset, ChunkData.GetData(), ChunkData.Num());
-	ServerAckSnowJoinSnapshotChunk(SnapshotId, PayloadType, ByteOffset);
-	TryApplyPendingSnowJoinSnapshot();
-}
-
-void ADRPlayerController::Client_FinishSnowJoinSnapshot_Implementation(int32 SnapshotId)
-{
-	if (SnapshotId != PendingSnowSnapshotId)
-	{
-		return;
-	}
-
-	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::ApplyingSnapshot;
-	LogSnowJoinControlState(TEXT("ClientTransferFinished"));
-	bPendingSnowSnapshotFinished = true;
-	TryApplyPendingSnowJoinSnapshot();
-}
-
-bool ADRPlayerController::QueueSnowJoinOperation(const FDRSnowOperationRecord& Record)
-{
-	if (PendingSnowSnapshotId == INDEX_NONE)
-	{
-		return false;
-	}
-	if (Record.Sequence <= PendingSnowCheckpointSequence)
-	{
-		// 체크포인트에 포함된 작업은 스냅샷 위에 중복 적용하지 않는다.
-		return true;
-	}
-
-	BufferedSnowOperations.Add(Record);
-	return true;
-}
-
-bool ADRPlayerController::TryApplyPendingSnowJoinSnapshot()
-{
-	if (PendingSnowSnapshotId == INDEX_NONE || !bPendingSnowSnapshotFinished ||
-		PendingSnowVoxelSaveData.Num() != PendingSnowVoxelSaveByteCount ||
-		PendingSnowVolumeData.Num() != PendingSnowVolumeByteCount)
-	{
-		return false;
-	}
-
-	UWorld* World = GetWorld();
-	UDRSnowSubsystem* SnowSubsystem = IsValid(World) ? World->GetSubsystem<UDRSnowSubsystem>() : nullptr;
-	ADRMiningGameStateBase* MiningGameState = IsValid(World)
-		? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
-	if (!IsValid(MiningGameState) || !IsValid(SnowSubsystem) || !SnowSubsystem->ApplyCheckpoint(
-		PendingSnowVoxelWorldName,
-		PendingSnowVoxelSaveData,
-		PendingSnowOriginalVoxelSaveSize,
-		PendingSnowVolumeData,
-		PendingSnowOriginalSnowVolumeSize))
-	{
-		if (IsValid(World))
-		{
-			World->GetTimerManager().SetTimer(
-				SnowJoinSnapshotRetryTimer,
-				this,
-				&ADRPlayerController::RetryPendingSnowJoinSnapshot,
-				0.25f,
-				false);
-		}
-		return false;
-	}
-
-	MiningGameState->ResetSnowApplicationStateForCheckpoint(PendingSnowCheckpointSequence);
-	World->GetTimerManager().ClearTimer(SnowJoinSnapshotRetryTimer);
-	// 이벤트 콜백에서 재진입해도 같은 스냅샷을 다시 적용하지 않는다.
-	bPendingSnowSnapshotFinished = false;
-	SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::WaitingForControl;
-	LogSnowJoinControlState(TEXT("ClientSnapshotApplied"));
-	OnSnowJoinSnapshotApplied.Broadcast(PendingSnowSnapshotId);
-	ServerNotifySnowJoinSnapshotApplied(PendingSnowSnapshotId);
-
-	// Voxel 작업은 Pawn 스폰이나 서버의 추가 응답을 기다릴 필요가 없다.
-	LogSnowJoinControlState(TEXT("ClientOperationsResumed"));
-	TMap<int32, FDRSnowOperationRecord> OperationsBySequence;
-	for (const FDRSnowOperationRecord& Record : BufferedSnowOperations)
-	{
-		if (Record.Sequence > PendingSnowCheckpointSequence)
-		{
-			OperationsBySequence.Add(Record.Sequence, Record);
-		}
-	}
-
-	TArray<FDRSnowOperationRecord> Operations;
-	OperationsBySequence.GenerateValueArray(Operations);
-	Operations.Sort([](const FDRSnowOperationRecord& A, const FDRSnowOperationRecord& B)
-	{
-		return A.Sequence < B.Sequence;
-	});
-
-	const int32 AppliedSnapshotId = PendingSnowSnapshotId;
-	const int32 AppliedVoxelSaveByteCount = PendingSnowVoxelSaveByteCount;
-	const int32 AppliedSnowVolumeByteCount = PendingSnowVolumeByteCount;
-	PendingSnowSnapshotId = INDEX_NONE;
-	PendingSnowCheckpointSequence = 0;
-	PendingSnowVoxelWorldName = NAME_None;
-	PendingSnowVoxelSaveByteCount = 0;
-	PendingSnowOriginalVoxelSaveSize = 0;
-	PendingSnowVolumeByteCount = 0;
-	PendingSnowOriginalSnowVolumeSize = 0;
-	bPendingSnowSnapshotFinished = false;
-	PendingSnowVoxelSaveData.Reset();
-	PendingSnowVolumeData.Reset();
-	BufferedSnowOperations.Reset();
-	// 조인 버퍼링을 해제한 뒤 전달해야 같은 작업을 다시 버퍼에 넣지 않는다.
-	ApplySnowJoinOperations(Operations);
-
-	UE_LOG(
-		LogTemp,
-		Log,
-		TEXT("[JoinSnapshot] Applied Id=%d Voxel=%d bytes SnowVolume=%d bytes RecentOperations=%d"),
-		AppliedSnapshotId,
-		AppliedVoxelSaveByteCount,
-		AppliedSnowVolumeByteCount,
-		Operations.Num());
-	return true;
-}
-
-void ADRPlayerController::LogSnowJoinControlState(const TCHAR* Stage) const
-{
-	// 서버/클라이언트 로그의 시각을 대조해 적용, Pawn 복제, 소유 확인 지연을 구분한다.
-	const APawn* ControlledPawn = GetPawn();
-	const UNetConnection* Connection = GetNetConnection();
-	UE_LOG(LogTemp, Log,
-		TEXT("[JoinControl] Stage=%s PC=%s Authority=%d State=%s PendingId=%d ExpectedId=%d ")
-		TEXT("Pawn=%s PawnController=%s AckPawn=%s LocalPawn=%d ")
-		TEXT("HasConnection=%d NetReady=%d QueuedBits=%d NetSpeed=%d"),
-		Stage, *GetNameSafe(this), HasAuthority(), *GetStateName().ToString(),
-		PendingSnowSnapshotId, ExpectedAppliedSnowSnapshotId, *GetNameSafe(ControlledPawn),
-		*GetNameSafe(IsValid(ControlledPawn) ? ControlledPawn->GetController() : nullptr),
-		*GetNameSafe(AcknowledgedPawn), IsValid(ControlledPawn) && ControlledPawn->IsLocallyControlled(),
-		Connection != nullptr, Connection != nullptr && Connection->IsNetReady(),
-		Connection != nullptr ? Connection->QueuedBits : 0,
-		Connection != nullptr ? Connection->CurrentNetSpeed : 0);
-}
-
-void ADRPlayerController::RetryPendingSnowJoinSnapshot()
-{
-	TryApplyPendingSnowJoinSnapshot();
-}
-
-void ADRPlayerController::ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations)
-{
-	ADRMiningGameStateBase* MiningGameState = GetWorld() ? GetWorld()->GetGameState<ADRMiningGameStateBase>() : nullptr;
-	if (!IsValid(MiningGameState))
-	{
-		return;
-	}
-
-	for (const FDRSnowOperationRecord& Record : Operations)
-	{
-		MiningGameState->ApplySnowOperationRecord(Record);
-	}
-}
-#pragma endregion
 
 UInputAction* ADRPlayerController::GetSkillInputAction(
 	EDRSkillSlot SkillSlot) const

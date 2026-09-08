@@ -5,7 +5,6 @@
 #include "InputActionValue.h"
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "AbilitySystemInterface.h"
-#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
@@ -38,10 +37,10 @@ struct FGameplayAbilitySpec;
 struct FPredictionKey;
 struct FGameplayTag;
 class ADRPlayerState;
+class UDRSnowJoinComponent;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRSnowJoinSnapshotApplied, int32, SnapshotId);
 
 UENUM(BlueprintType)
 enum class EDRStorageTransferDirection : uint8
@@ -50,15 +49,6 @@ enum class EDRStorageTransferDirection : uint8
 	StorageToPlayer
 };
 
-UENUM(BlueprintType)
-enum class EDRSnowJoinLoadingPhase : uint8
-{
-	Idle,
-	ReceivingSnapshot,
-	ApplyingSnapshot,
-	WaitingForControl,
-	Complete
-};
 
 UCLASS()
 class DEEPRAIDERS_API ADRPlayerController : public APlayerController, public IAbilitySystemInterface
@@ -89,7 +79,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
-	virtual void Tick(float DeltaSeconds) override;
 
 	void SetupGASInputComponent();
 	bool bGASInputBound = false;
@@ -383,87 +372,11 @@ private:
 #pragma region Snow Join Snapshot
 public:
 	UFUNCTION(BlueprintPure, Category = "Snow|Join Snapshot")
-	EDRSnowJoinLoadingPhase GetSnowJoinLoadingPhase() const { return SnowJoinLoadingPhase; }
+	UDRSnowJoinComponent* GetSnowJoinComponent() const { return SnowJoinComponent; }
 
-	/** 스냅샷 네트워크 수신 진행률. 지형 적용/조종 준비 완료 여부는 Phase로 확인한다. */
-	UFUNCTION(BlueprintPure, Category = "Snow|Join Snapshot")
-	float GetSnowJoinSnapshotProgress() const;
-
-	UPROPERTY(BlueprintAssignable, Category = "Snow|Join Snapshot")
-	FDRSnowJoinSnapshotApplied OnSnowJoinSnapshotApplied;
-
-	UFUNCTION(Client, Reliable)
-	void Client_BeginSnowJoinSnapshot(
-		int32 SnapshotId,
-		int32 CheckpointSequence,
-		FName VoxelWorldName,
-		int32 VoxelSaveByteCount,
-		int32 OriginalVoxelSaveSize,
-		int32 SnowVolumeByteCount,
-		int32 OriginalSnowVolumeSize);
-
-	UFUNCTION(Client, Reliable)
-	void Client_ReceiveSnowJoinSnapshotChunk(
-		int32 SnapshotId,
-		uint8 PayloadType,
-		int32 ByteOffset,
-		const TArray<uint8>& ChunkData);
-
-	UFUNCTION(Client, Reliable)
-	void Client_FinishSnowJoinSnapshot(int32 SnapshotId);
-
-	// GameState multicast가 snapshot 적용 전에 도착하면 여기서 보관한다.
-	bool QueueSnowJoinOperation(const FDRSnowOperationRecord& Record);
-
-private:
-	UFUNCTION(Server, Reliable)
-	void ServerRequestSnowJoinSnapshotData(int32 SnapshotId);
-
-	UFUNCTION(Server, Reliable)
-	void ServerAckSnowJoinSnapshotChunk(
-		int32 SnapshotId,
-		uint8 PayloadType,
-		int32 ByteOffset);
-
-	UFUNCTION(Server, Reliable)
-	void ServerNotifySnowJoinSnapshotApplied(int32 SnapshotId);
-
-	void SendNextSnowJoinSnapshotChunk();
-	void AdjustSnowSnapshotWindow(bool bIncrease, const TCHAR* Reason);
-	void FinishSnowJoinSnapshotTransfer();
-	bool TryApplyPendingSnowJoinSnapshot();
-	void RetryPendingSnowJoinSnapshot();
-	void LogSnowJoinControlState(const TCHAR* Stage) const;
-	void ApplySnowJoinOperations(const TArray<FDRSnowOperationRecord>& Operations);
-
-	int32 OutgoingSnowSnapshotId = INDEX_NONE;
-	uint8 OutgoingSnowPayloadType = 0;
-	int32 OutgoingSnowByteOffset = 0;
-	TArray<uint8> OutgoingSnowVoxelSaveData;
-	TArray<uint8> OutgoingSnowVolumeData;
-	// 전송 시각으로 ACK 왕복 시간을 측정하고 동시 전송 수를 2~16개로 조절한다.
-	TMap<uint64, double> PendingSnowChunkAcks;
-	int32 SnowSnapshotWindow = 8;
-	int32 FastSnowSnapshotAcks = 0;
-	double SnowSnapshotSaturationStart = -1.0;
-	double LastSnowSnapshotWindowChange = 0.0;
-	FTimerHandle SnowSnapshotSendTimer;
-	int32 ExpectedAppliedSnowSnapshotId = INDEX_NONE;
-	bool bSnowSnapshotTransferFinished = false;
-
-	int32 PendingSnowSnapshotId = INDEX_NONE;
-	int32 PendingSnowCheckpointSequence = 0;
-	FName PendingSnowVoxelWorldName;
-	int32 PendingSnowVoxelSaveByteCount = 0;
-	int32 PendingSnowOriginalVoxelSaveSize = 0;
-	int32 PendingSnowVolumeByteCount = 0;
-	int32 PendingSnowOriginalSnowVolumeSize = 0;
-	bool bPendingSnowSnapshotFinished = false;
-	TArray<uint8> PendingSnowVoxelSaveData;
-	TArray<uint8> PendingSnowVolumeData;
-	EDRSnowJoinLoadingPhase SnowJoinLoadingPhase = EDRSnowJoinLoadingPhase::Idle;
-	TArray<FDRSnowOperationRecord> BufferedSnowOperations;
-	FTimerHandle SnowJoinSnapshotRetryTimer;
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Join Snapshot")
+	TObjectPtr<UDRSnowJoinComponent> SnowJoinComponent;
 #pragma endregion
 
 #pragma region Interact

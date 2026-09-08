@@ -148,9 +148,10 @@ bool UDRSnowSubsystem::ApplyCheckpoint(
 	const TArray<uint8>& VoxelSaveData,
 	int32 OriginalVoxelSaveSize,
 	const TArray<uint8>& SnowVolumeData,
-	int32 OriginalSnowVolumeSize)
+	int32 OriginalSnowVolumeSize,
+	bool* bOutWaitingForWorld)
 {
 	SnapshotSerializer->SetWorld(GetWorld());
-	const bool bApplied = SnapshotSerializer->ApplyCheckpoint(VoxelWorldName, VoxelSaveData, OriginalVoxelSaveSize, SnowVolumeData, OriginalSnowVolumeSize);
+	const bool bApplied = SnapshotSerializer->ApplyCheckpoint(VoxelWorldName, VoxelSaveData, OriginalVoxelSaveSize, SnowVolumeData, OriginalSnowVolumeSize, bOutWaitingForWorld);
 	return bApplied;
 }

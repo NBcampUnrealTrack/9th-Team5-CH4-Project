@@ -5,6 +5,7 @@
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRSnowJoinComponent.h"
 #include "DeepRaiders/Teleport/DRTeleportPoint.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -671,7 +672,7 @@ void ADRMiningGameStateBase::Multicast_ApplySnowOperations_Implementation(
 	for (const FDRSnowOperationRecord& Record : Records)
 	{
 		LogSnowReplayPerf(TEXT("Received"), World, Record.Sequence, SnowApplicationGeneration, Records.Num());
-		if (IsValid(PlayerController) && PlayerController->QueueSnowJoinOperation(Record))
+		if (IsValid(PlayerController) && PlayerController->GetSnowJoinComponent()->QueueSnowJoinOperation(Record))
 		{
 			continue;
 		}
