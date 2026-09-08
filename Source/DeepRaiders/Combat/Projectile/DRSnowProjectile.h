@@ -28,7 +28,7 @@ private:
 	TObjectPtr<UDRSnowAddComponent> SnowAddComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow Projectile|Movement", meta = (AllowPrivateAccess = true, ClampMin = "1.0", Units = "cm/s"))
-	float InitialSpeed = 3000.f;
+	float InitialSpeed = 9000.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow Projectile|Movement", meta = (AllowPrivateAccess = true, ClampMin = "0.0"))
 	float GravityScale = 1.5f;

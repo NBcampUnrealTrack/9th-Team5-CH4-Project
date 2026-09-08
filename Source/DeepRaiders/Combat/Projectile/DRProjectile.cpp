@@ -146,8 +146,8 @@ ADRProjectile::ADRProjectile(const FObjectInitializer& ObjectInitializer)
 
 	ProjectileMovement->UpdatedComponent = CollisionComponent;
 
-	ProjectileMovement->InitialSpeed = 3000.f;
-	ProjectileMovement->MaxSpeed = 3000.f;
+	ProjectileMovement->InitialSpeed = 9000.f;
+	ProjectileMovement->MaxSpeed = 30000.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = false;
 	ProjectileMovement->ProjectileGravityScale = 0.f;
