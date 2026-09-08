@@ -21,9 +21,12 @@ void FDRSnowSnapshotSerializer::SerializeSnowCell(
 	const int32 LocalIndex)
 {
 	// Chunk palette를 먼저 저장한 뒤, 그 순서대로 cell의 team amount를 기록한다.
-	FIntVector MutableLocalCell = LocalCell;
+	check(Chunk.Size > 0 && Chunk.Size <= MaxPackedChunkSize);
+	uint32 PackedCell = (static_cast<uint32>(LocalCell.Z) << 20)
+		| (static_cast<uint32>(LocalCell.Y) << 10)
+		| static_cast<uint32>(LocalCell.X);
 	float NeutralAmount = Chunk.Cells[LocalIndex].NeutralAmount;
-	Archive << MutableLocalCell;
+	Archive << PackedCell;
 	Archive << NeutralAmount;
 	for (int32 TeamSlot = 0; TeamSlot < Chunk.TeamIds.Num(); ++TeamSlot)
 	{
@@ -38,7 +41,15 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowCell(
 	FDRSnowVolumeChunk& OutChunk)
 {
 	// 읽는 쪽도 Chunk.TeamIds 순서를 그대로 사용해야 team amount가 올바른 팀에 복원된다.
-	Archive << OutLocalCell;
+	uint32 PackedCell = 0;
+	Archive << PackedCell;
+	if (Archive.IsError() || (PackedCell >> 30) != 0)
+	{
+		return false;
+	}
+	OutLocalCell.X = PackedCell & 0x3FF;
+	OutLocalCell.Y = (PackedCell >> 10) & 0x3FF;
+	OutLocalCell.Z = (PackedCell >> 20) & 0x3FF;
 	int32 LocalIndex = INDEX_NONE;
 	if (!OutChunk.GetLocalIndex(OutLocalCell, LocalIndex))
 	{
@@ -376,7 +387,12 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 	float CellSize = VolumeSnapshot.CellSize;
 	int32 ChunkSize = VolumeSnapshot.ChunkSize;
 	int32 ChunkCount = VolumeSnapshot.Chunks.Num();
-	// v2부터 청크별 TeamIds palette를 포함한다. 이전 v1 Snapshot은 호환하지 않는다.
+	if (ChunkSize <= 0 || ChunkSize > MaxPackedChunkSize)
+	{
+		Archive.SetError();
+		return;
+	}
+	// v3는 좌표를 패킹하며 이전 Snapshot 포맷은 호환하지 않는다.
 	Archive << Version;
 	Archive << CellSize;
 	Archive << ChunkSize;
@@ -390,6 +406,11 @@ void FDRSnowSnapshotSerializer::SerializeSnowVolumePayload(
 	for (const TPair<FIntVector, FDRSnowVolumeChunk>& Pair : VolumeSnapshot.Chunks)
 	{
 		const FDRSnowVolumeChunk& Chunk = Pair.Value;
+		if (Chunk.Size != ChunkSize)
+		{
+			Archive.SetError();
+			return;
+		}
 		int32 NonEmptyCellCount = 0;
 		for (int32 LocalIndex = 0; LocalIndex < Chunk.Cells.Num(); ++LocalIndex)
 		{
@@ -460,7 +481,8 @@ bool FDRSnowSnapshotSerializer::DeserializeSnowVolume(const TArray<uint8>& Compr
 	Reader << CellSize;
 	Reader << ChunkSize;
 	Reader << ChunkCount;
-	if (Reader.IsError() || Version != SnowVolumeSnapshotVersion || CellSize <= 0.f || ChunkSize <= 0 || ChunkCount < 0)
+	if (Reader.IsError() || Version != SnowVolumeSnapshotVersion || CellSize <= 0.f
+		|| ChunkSize <= 0 || ChunkSize > MaxPackedChunkSize || ChunkCount < 0)
 	{
 		return false;
 	}

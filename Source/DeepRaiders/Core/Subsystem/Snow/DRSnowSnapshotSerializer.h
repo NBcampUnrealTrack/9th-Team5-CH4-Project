@@ -134,7 +134,9 @@ public:
 	}
 
 private:
-	static constexpr int32 SnowVolumeSnapshotVersion = 2;
+	// v3: 셀 좌표는 축당 10비트, amount는 기존 float를 유지한다.
+	static constexpr int32 SnowVolumeSnapshotVersion = 3;
+	static constexpr int32 MaxPackedChunkSize = 1024;
 	static float BytesToMB(int64 Bytes);
 	static void SerializeSnowCell(
 		FArchive& Archive,

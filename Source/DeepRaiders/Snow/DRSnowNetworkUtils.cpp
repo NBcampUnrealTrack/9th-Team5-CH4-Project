@@ -115,7 +115,7 @@ bool FDRSnowNetworkUtils::CompressSnapshotData(const TArray<uint8>& Uncompressed
 		CompressedSize,
 		UncompressedData.GetData(),
 		static_cast<int64>(UncompressedSize),
-		COMPRESS_BiasSpeed
+		COMPRESS_BiasSize
 	);
 
 	if (bSuccess && CompressedSize > 0 && CompressedSize <= BufferSize)
