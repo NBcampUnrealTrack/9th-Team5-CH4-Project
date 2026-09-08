@@ -270,6 +270,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
 	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
+
+	/** 1인칭일 때만 손 장비를 축소해 화면 중앙 시야를 확보한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Equipment|First Person", meta = (ClampMin = "0.1", UIMin = "0.1"))
+	float FirstPersonHandEquipmentScale = 0.55f;
+
+	/** 1인칭일 때 손 장비에 더할 로컬 오프셋. 오른쪽 아래로 옮겨 중앙 조준점을 비운다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Equipment|First Person")
+	FVector FirstPersonHandEquipmentOffset = FVector(0.f, 25.f, 0.f);
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat")
 	TObjectPtr<USceneComponent> GameplayFireAnchor;
@@ -308,6 +316,9 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
 
 	FVector LastLandedLocation = FVector::ZeroVector;
+
+	/** 로컬 플레이어가 현재 1인칭 본체 숨김 상태인지 기록한다. */
+	bool bLocalFirstPersonVisualsHidden = false;
 	
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
 	float AimPitchMinDegrees = -90.f;

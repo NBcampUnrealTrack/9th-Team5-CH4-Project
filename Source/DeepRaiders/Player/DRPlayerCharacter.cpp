@@ -31,6 +31,7 @@
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRMeleeWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
 #include "DeepRaiders/Player/Components/DRCharacterShadowComponent.h"
 #include "Animation/AnimInstance.h"
@@ -52,6 +53,9 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	GetMesh()->SetOnlyOwnerSee(false);
 	GetMesh()->SetHiddenInGame(false);
 	GetMesh()->SetVisibility(true);
+	// 1인칭에서 OwnerNoSee로 본체를 감춰도 몽타주와 손 소켓 본은 계속 갱신해야 한다.
+	// 그렇지 않으면 장착 무기와 근접 공격 애니메이션이 마지막 포즈에 멈춘다.
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
 	VoxelNoClippingComponent = CreateDefaultSubobject<UVoxelNoClippingComponent>(TEXT("VoxelNoClippingComponent"));
 	VoxelNoClippingComponent->SetupAttachment(GetCapsuleComponent());
@@ -434,6 +438,15 @@ void ADRPlayerCharacter::ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName 
 
 	WorldHandEquipmentMesh->SetStaticMesh(WorldMesh);
 	WorldHandEquipmentMesh->SetRelativeTransform(WorldItemOffset);
+	const bool bIsMeleeWeapon = IsValid(HeldItemComponent)
+		&& IsValid(Cast<UDRMeleeWeaponItemDefinition>(HeldItemComponent->GetHeldItemDefinition()));
+	if (IsLocallyControlled() && bLocalFirstPersonVisualsHidden && bIsMeleeWeapon)
+	{
+		WorldHandEquipmentMesh->SetRelativeLocation(
+			WorldItemOffset.GetLocation() + FirstPersonHandEquipmentOffset);
+		WorldHandEquipmentMesh->SetRelativeScale3D(
+			WorldItemOffset.GetScale3D() * FirstPersonHandEquipmentScale);
+	}
 	WorldHandEquipmentMesh->SetVisibility(IsValid(WorldMesh), true);
 
 	// 현재 아이템이 팀 Material을 지원하는 무기면 다시 적용
@@ -476,7 +489,11 @@ void ADRPlayerCharacter::SetLocalFirstPersonVisualsHidden(bool bHideForFirstPers
 	if (IsValid(GetMesh()))
 	{
 		GetMesh()->SetOwnerNoSee(bHideForFirstPerson);
+		// Blueprint 기본값이 별도로 저장되어 있어도 1인칭 전환 때 본 갱신 정책을 보장한다.
+		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	}
+
+	bLocalFirstPersonVisualsHidden = bHideForFirstPerson;
 
 	if (IsValid(WorldBackEquipmentMesh))
 	{
@@ -487,6 +504,25 @@ void ADRPlayerCharacter::SetLocalFirstPersonVisualsHidden(bool bHideForFirstPers
 	if (IsValid(WorldHandEquipmentMesh))
 	{
 		WorldHandEquipmentMesh->SetOwnerNoSee(false);
+
+		const FTransform CurrentItemTransform = WorldHandEquipmentMesh->GetRelativeTransform();
+		const bool bIsMeleeWeapon = IsValid(HeldItemComponent)
+			&& IsValid(Cast<UDRMeleeWeaponItemDefinition>(HeldItemComponent->GetHeldItemDefinition()));
+		if (bHideForFirstPerson && bIsMeleeWeapon)
+		{
+			WorldHandEquipmentMesh->SetRelativeLocation(
+				CurrentItemTransform.GetLocation() + FirstPersonHandEquipmentOffset);
+			WorldHandEquipmentMesh->SetRelativeScale3D(
+				CurrentItemTransform.GetScale3D() * FirstPersonHandEquipmentScale);
+		}
+		else if (UDRHeldItemComponent* CurrentHeldItem = HeldItemComponent)
+		{
+			if (UDRItemDefinition* ItemDefinition = CurrentHeldItem->GetHeldItemDefinition())
+			{
+				WorldHandEquipmentMesh->SetRelativeTransform(
+					ItemDefinition->WorldItemOffsetTransform);
+			}
+		}
 	}
 }
 
