@@ -53,6 +53,17 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 		return;
 	}
 
+	// PlayerArray와 TeamId의 복제 순서에 상관없이 준비 인원을 다시 확인한다.
+	if (!bGameStarted && !bGameEnded)
+	{
+		TeamRosterRefreshElapsed += DeltaSeconds;
+		if (TeamRosterRefreshElapsed >= 0.25f)
+		{
+			TeamRosterRefreshElapsed = 0.f;
+			RefreshTeamTexts();
+		}
+	}
+
 	const auto InterpolateRatio = [DeltaSeconds](float DisplayRatio, float TargetRatio)
 	{
 		constexpr float InterpolationSpeed = 8.f;
