@@ -25,6 +25,7 @@
 #include "DeepRaiders/Player/Components/DRHeldItemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Input/DRInputTypes.h"
 #include "DeepRaiders/Item/Animation/DRItemAnimationSet.h"
 #include "DeepRaiders/Player/Components/DRFreezeVisualComponent.h"
 #include "DeepRaiders/Player/Components/DRSilhouetteComponent.h"
@@ -315,11 +316,8 @@ void ADRPlayerCharacter::HandleJumpPressed()
 	{
 		if (UAbilitySystemComponent* AbilitySystemComponent = GetAbilitySystemComponent())
 		{
-			FGameplayTagContainer RocketBootsAbilityTags;
-			RocketBootsAbilityTags.AddTag(
-				DRGameplayTags::Ability_Perk_SuperJump_RocketBoots);
-			AbilitySystemComponent->TryActivateAbilitiesByTag(
-				RocketBootsAbilityTags);
+			AbilitySystemComponent->AbilityLocalInputPressed(
+				static_cast<int32>(EDRAbilityInputId::Jump));
 		}
 
 		// SuperJump 체공 중 점프 입력은 보조 Ability 요청으로 소비한다.
@@ -334,6 +332,12 @@ void ADRPlayerCharacter::HandleJumpReleased()
 	if (!IsLocallyControlled())
 	{
 		return;
+	}
+
+	if (UAbilitySystemComponent* AbilitySystemComponent = GetAbilitySystemComponent())
+	{
+		AbilitySystemComponent->AbilityLocalInputReleased(
+			static_cast<int32>(EDRAbilityInputId::Jump));
 	}
 
 	StopJumping();

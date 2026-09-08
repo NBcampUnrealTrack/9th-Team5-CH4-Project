@@ -9,6 +9,7 @@
 #include "DRPlayerController.generated.h"
 
 class ADRPlayerCharacter;
+class ADRPlacementTargetActor;
 class ADRShop;
 class UInputAction;
 class UInputMappingContext;
@@ -84,6 +85,12 @@ public:
 
 	/** 로컬 설정의 플레이어 이름을 현재 서버 세션에 반영한다. */
 	void RequestSetPlayerName(const FString& NewPlayerName);
+
+	/** 로컬 설치 조준이 시작될 때 휠 입력을 배치 회전 모드로 전환한다. */
+	void BeginPlacementInput(ADRPlacementTargetActor* TargetActor);
+
+	/** 자신이 활성화한 설치 조준이 끝났을 때 기본 퀵슬롯 휠 입력으로 복구한다. */
+	void EndPlacementInput(ADRPlacementTargetActor* TargetActor);
 	
 protected:
 	virtual void BeginPlay() override;
@@ -117,6 +124,7 @@ private:
 	void HandleSelectQuickSlot(const FInputActionValue& Value);
 	
 	void HandleScrollQuickSlot(const FInputActionValue& Value);	
+	void HandleRotatePlacement(const FInputActionValue& Value);
 	
 	// Interaction 입력은 Zipline 탑승 중이면 새 상호작용 대신 현재 Zipline 해제로 사용한다.
 	bool TryToggleZiplineInteraction(int32 InputId);
@@ -166,6 +174,7 @@ private:
 	 * -> 던지기 동작 중 계속 던지기를 시도하지 않도록
 	 */
 	TSet<int32> ConsumedStartedInputIds;
+	TWeakObjectPtr<ADRPlacementTargetActor> ActivePlacementTargetActor;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
@@ -212,6 +221,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input")
 	TObjectPtr<UInputAction> MenuAction;
+
+	/** 설치 조준 중에만 기본 입력보다 높은 우선순위로 활성화한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input|Placement")
+	TObjectPtr<UInputMappingContext> PlacementMappingContext;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input|Placement")
+	TObjectPtr<UInputAction> PlacementRotateAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input|Placement")
+	int32 PlacementMappingPriority = 100;
 	
 #pragma region QuickSlot
 

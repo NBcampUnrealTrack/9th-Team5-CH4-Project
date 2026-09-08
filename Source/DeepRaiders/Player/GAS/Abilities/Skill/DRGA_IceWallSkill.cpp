@@ -134,12 +134,21 @@ bool UDRGA_IceWallSkill::ValidateServerTargetData(const FGameplayAbilityTargetDa
 	OutWallTransform = FTransform::Identity;
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	const FGameplayAbilityTargetData* Data = TargetData.Get(0);
-	const FHitResult* ClientHit = Data != nullptr ? Data->GetHitResult() : nullptr;
+	const FDRGameplayAbilityTargetData_Placement* PlacementData = Data != nullptr
+		&& Data->GetScriptStruct() == FDRGameplayAbilityTargetData_Placement::StaticStruct()
+		? static_cast<const FDRGameplayAbilityTargetData_Placement*>(Data)
+		: nullptr;
+	const FHitResult* ClientHit = PlacementData != nullptr ? PlacementData->GetHitResult() : nullptr;
 	APlayerController* PlayerController = ActorInfo != nullptr ? ActorInfo->PlayerController.Get() : nullptr;
 	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
 	UWorld* World = GetWorld();
 	if (ActorInfo == nullptr || !ActorInfo->IsNetAuthority() || ClientHit == nullptr || !IsValid(PlayerController)
 		|| !IsValid(AvatarActor) || !IsValid(World))
+	{
+		return false;
+	}
+	if (!FMath::IsFinite(PlacementData->RotationOffsetDegrees)
+		|| FMath::Abs(PlacementData->RotationOffsetDegrees) > 180.f)
 	{
 		return false;
 	}
@@ -169,19 +178,28 @@ bool UDRGA_IceWallSkill::ValidateServerTargetData(const FGameplayAbilityTargetDa
 		return false;
 	}
 
-	OutWallTransform = MakeWallTransform(ServerHit.ImpactPoint, ServerViewRotation);
+	// 설치 위치 검증에 사용한 클라이언트 조준선으로 회전도 계산해야
+	// 고개를 거의 수직으로 숙였을 때 프리뷰와 실제 벽의 가로축이 달라지지 않는다.
+	OutWallTransform = MakeWallTransform(
+		ServerHit.ImpactPoint,
+		ClientAimDirection,
+		PlacementData->RotationOffsetDegrees);
 	return true;
 }
 
-FTransform UDRGA_IceWallSkill::MakeWallTransform(const FVector& ImpactPoint, const FRotator& ViewRotation) const
+FTransform UDRGA_IceWallSkill::MakeWallTransform(const FVector& ImpactPoint, const FVector& AimDirection,
+	const float RotationOffsetDegrees) const
 {
-	FVector AimDirection = ViewRotation.Vector().GetSafeNormal2D();
-	if (AimDirection.IsNearlyZero())
+	FVector HorizontalAimDirection = AimDirection.GetSafeNormal2D();
+	if (HorizontalAimDirection.IsNearlyZero())
 	{
-		AimDirection = FVector::ForwardVector;
+		HorizontalAimDirection = FVector::ForwardVector;
 	}
+	HorizontalAimDirection = FQuat(
+		FVector::UpVector,
+		FMath::DegreesToRadians(RotationOffsetDegrees)).RotateVector(HorizontalAimDirection);
 
-	const FVector WallLengthDirection = FVector::CrossProduct(FVector::UpVector, AimDirection).GetSafeNormal();
+	const FVector WallLengthDirection = FVector::CrossProduct(FVector::UpVector, HorizontalAimDirection).GetSafeNormal();
 	const FQuat WallRotation = FRotationMatrix::MakeFromXZ(WallLengthDirection, FVector::UpVector).ToQuat();
 	return FTransform(WallRotation, ImpactPoint + FVector::UpVector * (WallDimensions.Z * 0.5f));
 }
