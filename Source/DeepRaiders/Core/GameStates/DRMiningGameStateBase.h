@@ -215,6 +215,7 @@ private:
 	bool HasPendingSnowOperation(int32 Sequence) const;
 	void QueuePendingSnowOperation(const FDRSnowOperationRecord& Record);
 	void TryApplyPendingSnowOperations();
+	void PresentLiveSnowAddIfPending(const FDRSnowOperationRecord& Record);
 	void StartPendingSnowRetry();
 	void StopPendingSnowRetry();
 	void ScheduleSnowReplayContinuation();
@@ -234,6 +235,7 @@ private:
 
 	// 클라이언트: 복셀 월드가 아직 로드되지 않아 생성을 기다리는 작업 목록
 	TArray<FDRSnowOperationRecord> PendingSnowOperations;
+	TSet<int32> PendingLiveSnowAddPresentationSequences;
 	FTimerHandle PendingSnowRetryTimer;
 	int32 ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	int32 SnowApplicationGeneration = 0;

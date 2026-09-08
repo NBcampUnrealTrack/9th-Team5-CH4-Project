@@ -2,6 +2,7 @@
 
 #include "DeepRaiders/Snow/DRSnowNetworkUtils.h"
 
+#include "DeepRaiders/Core/Subsystem/DRSnowPresentationSubsystem.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
@@ -309,6 +310,7 @@ void ADRMiningGameStateBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	StopPendingSnowRetry();
 	PendingSnowOperations.Reset();
 	AppliedSnowOperationSequences.Reset();
+	PendingLiveSnowAddPresentationSequences.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -500,6 +502,17 @@ void ADRMiningGameStateBase::RegisterSnowAdd(
 	Record.bIsAddOperation = true;
 	Record.AddOperation = Operation;
 	Record.ServerAppliedAmount = ServerAppliedAmount;
+	if (ServerAppliedAmount > 0.f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UDRSnowPresentationSubsystem* PresentationSubsystem =
+				World->GetSubsystem<UDRSnowPresentationSubsystem>())
+			{
+				PresentationSubsystem->PresentSnowAdd(Operation);
+			}
+		}
+	}
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
 
@@ -573,6 +586,7 @@ void ADRMiningGameStateBase::ResetSnowOperationState()
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
+	PendingLiveSnowAddPresentationSequences.Reset();
 	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	++SnowApplicationGeneration;
 	bSnowReplayContinuationScheduled = false;
@@ -588,6 +602,7 @@ void ADRMiningGameStateBase::ResetSnowApplicationStateForCheckpoint(int32 Checkp
 
 	AppliedSnowCheckpointSequence = FMath::Max(0, CheckpointSequence);
 	AppliedSnowOperationSequences.Reset();
+	PendingLiveSnowAddPresentationSequences.Reset();
 	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	++SnowApplicationGeneration;
 	bSnowReplayContinuationScheduled = false;
@@ -618,6 +633,11 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	{
 		SnowSubsystem->ResetSnowState();
 	}
+	if (UDRSnowPresentationSubsystem* PresentationSubsystem =
+		World->GetSubsystem<UDRSnowPresentationSubsystem>())
+	{
+		PresentationSubsystem->ResetPresentation();
+	}
 
 	if (UDRVoxelTerrainSubsystem* TerrainSubsystem = World->GetSubsystem<UDRVoxelTerrainSubsystem>())
 	{
@@ -646,6 +666,7 @@ void ADRMiningGameStateBase::Multicast_ResetVoxelState_Implementation()
 	AppliedSnowCheckpointSequence = 0;
 	AppliedSnowOperationSequences.Reset();
 	PendingSnowOperations.Reset();
+	PendingLiveSnowAddPresentationSequences.Reset();
 	ActiveDirectionalSnowOperationSequence = INDEX_NONE;
 	++SnowApplicationGeneration;
 	bSnowReplayContinuationScheduled = false;
@@ -674,6 +695,11 @@ void ADRMiningGameStateBase::Multicast_ApplySnowOperations_Implementation(
 		if (IsValid(PlayerController) && PlayerController->QueueSnowJoinOperation(Record))
 		{
 			continue;
+		}
+		if (Record.bIsAddOperation && Record.Sequence > 0 && Record.ServerAppliedAmount > 0.f &&
+			!IsSnowOperationApplied(Record.Sequence))
+		{
+			PendingLiveSnowAddPresentationSequences.Add(Record.Sequence);
 		}
 
 		ApplySnowOperationRecord(Record);
@@ -764,6 +790,7 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 	while (!PendingSnowOperations.IsEmpty()
 		&& IsSnowOperationApplied(PendingSnowOperations[0].Sequence))
 	{
+		PendingLiveSnowAddPresentationSequences.Remove(PendingSnowOperations[0].Sequence);
 		PendingSnowOperations.RemoveAt(0);
 	}
 
@@ -815,6 +842,10 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 		bApplied = ApplySnowAddOnce(Record);
 		if (bDirectional)
 		{
+			if (bApplied)
+			{
+				PresentLiveSnowAddIfPending(Record);
+			}
 			if (!bApplied && ActiveDirectionalSnowOperationSequence == Record.Sequence)
 			{
 				ActiveDirectionalSnowOperationSequence = INDEX_NONE;
@@ -832,6 +863,7 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 		StartPendingSnowRetry();
 		return;
 	}
+	PresentLiveSnowAddIfPending(Record);
 	if (Record.Sequence > 0)
 	{
 		AppliedSnowOperationSequences.Add(Record.Sequence);
@@ -840,6 +872,27 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 	if (!PendingSnowOperations.IsEmpty())
 	{
 		StartPendingSnowRetry();
+	}
+}
+
+void ADRMiningGameStateBase::PresentLiveSnowAddIfPending(const FDRSnowOperationRecord& Record)
+{
+	if (!Record.bIsAddOperation ||
+		PendingLiveSnowAddPresentationSequences.Remove(Record.Sequence) == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	if (UDRSnowPresentationSubsystem* PresentationSubsystem =
+		World->GetSubsystem<UDRSnowPresentationSubsystem>())
+	{
+		PresentationSubsystem->PresentSnowAdd(Record.AddOperation);
 	}
 }
 
