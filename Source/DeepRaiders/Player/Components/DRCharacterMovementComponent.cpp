@@ -601,7 +601,9 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             DRGameplayTags::State_VoxelContained));
 }
 
-void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirControl)
+void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(
+    float NewAirControl,
+    float NewMaxAirSpeedMultiplier)
 {
 	++SuperJumpSequence;
 	if (SuperJumpSequence == 0)
@@ -615,30 +617,11 @@ void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(float NewAirCont
         bSuperJumpAirControlActive = true;
     }
 
-    AirControl = FMath::Max(AirControl, NewAirControl);
-}
-
-bool UDRCharacterMovementComponent::PerformHorizontalAirDash(
-    const FVector& WorldDirection,
-    float MoveSpeed)
-{
-    if (!IsFalling() || MoveSpeed <= 0.f)
-    {
-        return false;
-    }
-
-    const FVector HorizontalDirection =
-        FVector(WorldDirection.X, WorldDirection.Y, 0.f).GetSafeNormal();
-    if (HorizontalDirection.IsNearlyZero())
-    {
-        return false;
-    }
-
-    ClearAirborneMomentumPreservation();
-    Velocity.X = HorizontalDirection.X * MoveSpeed;
-    Velocity.Y = HorizontalDirection.Y * MoveSpeed;
-    UpdateComponentVelocity();
-    return true;
+    AirControl = FMath::Clamp(NewAirControl, 0.f, 1.f);
+    SuperJumpMaxAirSpeedMultiplier = FMath::Clamp(
+        NewMaxAirSpeedMultiplier,
+        0.f,
+        1.f);
 }
 
 void UDRCharacterMovementComponent::EndPlay(
@@ -777,6 +760,7 @@ void UDRCharacterMovementComponent::ProcessLanded(
     if (bSuperJumpAirControlActive)
     {
         AirControl = AirControlBeforeSuperJump;
+        SuperJumpMaxAirSpeedMultiplier = 1.f;
         bSuperJumpAirControlActive = false;
     }
     
@@ -805,7 +789,11 @@ FNetworkPredictionData_Client* UDRCharacterMovementComponent::GetPredictionData_
 
 float UDRCharacterMovementComponent::GetMaxSpeed() const
 {
-    const float ConfiguredMaxSpeed = Super::GetMaxSpeed();
+    float ConfiguredMaxSpeed = Super::GetMaxSpeed();
+    if (MovementMode == MOVE_Falling && bSuperJumpAirControlActive)
+    {
+        ConfiguredMaxSpeed *= SuperJumpMaxAirSpeedMultiplier;
+    }
     
     if (MovementMode != MOVE_Falling || !bAirborneMomentumPreservationActive)
     {

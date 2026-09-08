@@ -59,7 +59,9 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 	}
 
 	ClearPendingLandingEffects();
-	MovementComponent->ActivateSuperJumpAirControl(AirControl);
+	MovementComponent->ActivateSuperJumpAirControl(
+		AirControl,
+		MaxAirSpeedMultiplier);
 
 	TArray<FGameplayEffectSpecHandle> LandingEffectSpecs;
 	if (ActorInfo->IsNetAuthority())
@@ -91,6 +93,10 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 			this, &ThisClass::HandleCharacterLanded);
 	}
 
+	const float GravityMagnitude = FMath::Abs(MovementComponent->GetGravityZ());
+	const float JumpVelocity = GravityMagnitude > KINDA_SMALL_NUMBER
+		? FMath::Sqrt(2.0f * GravityMagnitude * FMath::Max(JumpHeight, 0.0f))
+		: 0.0f;
 	Character->LaunchCharacter(FVector::UpVector * JumpVelocity, false, true);
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }

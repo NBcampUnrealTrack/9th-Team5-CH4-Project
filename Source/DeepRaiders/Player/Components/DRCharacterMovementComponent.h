@@ -43,8 +43,10 @@ public:
 
 	void BindAbilitySystem(UAbilitySystemComponent* AbilitySystemComponent);
 
-	/** 슈퍼점프 체공 중에만 공중 조작력을 높이고, 착지 시 원래 값으로 복원한다. */
-	void ActivateSuperJumpAirControl(float NewAirControl);
+	/** 슈퍼점프 체공 중 공중 조작력과 수평 최대 속도를 설정하고, 착지 시 원래 값으로 복원한다. */
+	void ActivateSuperJumpAirControl(
+		float NewAirControl,
+		float NewMaxAirSpeedMultiplier);
 
 	bool IsSuperJumpActive() const
 	{
@@ -56,9 +58,6 @@ public:
 	{
 		return SuperJumpSequence;
 	}
-
-	/** 요청된 월드 수평 방향과 속도로 현재 공중 속도를 대체한다. */
-	bool PerformHorizontalAirDash(const FVector& WorldDirection, float MoveSpeed);
 
 	/** 소유 클라이언트 및 서버가 사용할 제트팩 입력 상태 */
 	void SetWantsJetpack(bool bNewWantsJetpack);
@@ -175,6 +174,7 @@ private:
 	FDelegateHandle VoxelContainedTagChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
+	float SuperJumpMaxAirSpeedMultiplier = 1.f;
 
 	bool bSuperJumpAirControlActive = false;
 	uint32 SuperJumpSequence = 0;

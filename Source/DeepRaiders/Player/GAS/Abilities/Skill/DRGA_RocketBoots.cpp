@@ -1,10 +1,8 @@
 #include "DRGA_RocketBoots.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
-#include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "DeepRaiders/Player/DRPlayerState.h"
 
 UDRGA_RocketBoots::UDRGA_RocketBoots()
 {
@@ -40,12 +38,11 @@ bool UDRGA_RocketBoots::CanActivateAbility(
 	const UDRCharacterMovementComponent* MovementComponent = IsValid(Character)
 		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
 		: nullptr;
-	float MoveSpeed = 0.f;
 	return IsValid(MovementComponent)
 		&& MovementComponent->IsFalling()
 		&& MovementComponent->IsSuperJumpActive()
 		&& MovementComponent->GetSuperJumpSequence() != ConsumedSuperJumpSequence
-		&& ResolvePerkValues(ActorInfo, MoveSpeed);
+		&& ImpulseStrength > KINDA_SMALL_NUMBER;
 }
 
 void UDRGA_RocketBoots::ActivateAbility(
@@ -62,12 +59,11 @@ void UDRGA_RocketBoots::ActivateAbility(
 	UDRCharacterMovementComponent* MovementComponent = IsValid(Character)
 		? Cast<UDRCharacterMovementComponent>(Character->GetCharacterMovement())
 		: nullptr;
-	float MoveSpeed = 0.f;
 	if (!IsValid(Character)
 		|| !IsValid(MovementComponent)
 		|| !MovementComponent->IsSuperJumpActive()
 		|| MovementComponent->GetSuperJumpSequence() == ConsumedSuperJumpSequence
-		|| !ResolvePerkValues(ActorInfo, MoveSpeed)
+		|| ImpulseStrength <= KINDA_SMALL_NUMBER
 		|| !CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
@@ -82,35 +78,16 @@ void UDRGA_RocketBoots::ActivateAbility(
 		DashDirection.Z = 0.f;
 	}
 
-	if (!MovementComponent->PerformHorizontalAirDash(DashDirection, MoveSpeed))
+	DashDirection = DashDirection.GetSafeNormal2D();
+	if (DashDirection.IsNearlyZero())
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+
+	// 목표 위치를 고정하지 않고, 입력 순간의 방향으로 한 번만 추진력을 더한다.
+	MovementComponent->ClearAirborneMomentumPreservation();
+	MovementComponent->AddImpulse(DashDirection * ImpulseStrength, true);
 	ConsumedSuperJumpSequence = MovementComponent->GetSuperJumpSequence();
-
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
-}
-
-bool UDRGA_RocketBoots::ResolvePerkValues(
-	const FGameplayAbilityActorInfo* ActorInfo,
-	float& OutMoveSpeed) const
-{
-	OutMoveSpeed = 0.f;
-	const ADRPlayerState* PlayerState = ActorInfo != nullptr
-		? Cast<ADRPlayerState>(ActorInfo->OwnerActor.Get())
-		: nullptr;
-	const UDRPerkComponent* PerkComponent = IsValid(PlayerState)
-		? PlayerState->GetPerkComponent()
-		: nullptr;
-	if (!IsValid(PerkComponent))
-	{
-		return false;
-	}
-
-	OutMoveSpeed = PerkComponent->GetSkillEffectValue(
-		DRGameplayTags::Ability_Skill_SuperJump,
-		EDRSkillEffectTrigger::OnSkillCommitted,
-		DRGameplayTags::Data_Perk_SuperJump_RocketBoots_MoveSpeed);
-	return OutMoveSpeed > 0.f;
 }

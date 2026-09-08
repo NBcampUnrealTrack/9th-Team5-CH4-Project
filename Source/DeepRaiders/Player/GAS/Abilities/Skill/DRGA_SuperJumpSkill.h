@@ -33,11 +33,17 @@ protected:
 	void ApplyLandingEffects();
 	void ClearPendingLandingEffects();
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm/s"))
-	float JumpVelocity = 1200.0f;
+	/** 현재 중력 기준으로 도달할 최고 높이. 초기 수직 속도는 런타임에 계산한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float JumpHeight = 735.0f;
 
+	/** 슈퍼점프 중의 공중 방향 전환력. 지상 이동과 분리해 조절한다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
-	float AirControl = 0.7f;
+	float AirControl = 0.25f;
+
+	/** 슈퍼점프 중 지상 최대 이동속도에 적용할 수평 속도 비율. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+	float MaxAirSpeedMultiplier = 0.5f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Super Jump")
 	bool bAllowInAir = false;

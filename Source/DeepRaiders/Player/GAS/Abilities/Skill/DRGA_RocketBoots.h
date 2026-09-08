@@ -27,11 +27,12 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
-private:
-	bool ResolvePerkValues(
-		const FGameplayAbilityActorInfo* ActorInfo,
-		float& OutMoveSpeed) const;
+	/** 점프 입력 순간의 수평 방향으로 더하는 속도 변화량. 체공 중 목표 위치를 고정하지 않는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Perk|Rocket Boots", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm/s"))
+	float ImpulseStrength = 300.0f;
 
+
+private:
 	/** 마지막으로 돌진을 소비한 SuperJump 실행 번호다. */
 	uint32 ConsumedSuperJumpSequence = 0;
 };

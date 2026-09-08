@@ -16,6 +16,14 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Forward Dash", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm/s"))
-	float DashVelocity = 1600.0f;
+	UFUNCTION()
+	void HandleDashFinished();
+
+	/** 대쉬의 목표 수평 거리. 공중/지상 상태와 무관하게 충돌 전까지 이 거리만 이동한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Forward Dash", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float DashDistance = 500.0f;
+
+	/** 대쉬가 목표 거리에 도달하는 데 걸리는 시간. 내부 속도는 Distance / Duration으로 계산된다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Forward Dash", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
+	float DashDuration = 0.2f;
 };
