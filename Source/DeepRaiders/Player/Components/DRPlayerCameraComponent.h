@@ -176,7 +176,7 @@ private:
 
 	/** 기본 3인칭 거리. ConfigureCamera 시 SpringArm의 기존 값으로 초기화한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
-	float DefaultThirdPersonArmLength = 450.f;
+	float DefaultThirdPersonArmLength = 200.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Player|Camera|Adaptive Third Person", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float CameraCollisionMargin = 8.f;
