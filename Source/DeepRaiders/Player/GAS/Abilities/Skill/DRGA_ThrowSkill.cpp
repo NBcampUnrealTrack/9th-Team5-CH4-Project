@@ -41,11 +41,7 @@ bool UDRGA_ThrowSkill::CanActivateAbility(
 		return false;
 	}
 
-	const UDRThrowSkillDefinition* SkillDefinition = 
-		Cast<UDRThrowSkillDefinition>(GetSourceObject(Handle, ActorInfo));
-	const UDRThrowableItemDefinition* ThrowableDefinition = IsValid(SkillDefinition)
-		? SkillDefinition->ThrowableDefinition
-		: nullptr;
+	const UDRThrowableItemDefinition* ThrowableDefinition = ResolveThrowableDefinition(Handle, ActorInfo);
 
 	return IsValid(ThrowableDefinition)
 		&& ThrowableDefinition->ProjectileClass
@@ -62,9 +58,7 @@ void UDRGA_ThrowSkill::ActivateAbility(
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 
-	const UDRThrowSkillDefinition* SkillDefinition =
-		Cast<UDRThrowSkillDefinition>(GetSourceObject(Handle, ActorInfo));
-	ActiveDefinition = IsValid(SkillDefinition) ? SkillDefinition->ThrowableDefinition : nullptr;
+	ActiveDefinition = ResolveThrowableDefinition(Handle, ActorInfo);
 	if (!IsValid(ActiveDefinition)
 		|| !ActiveDefinition->ProjectileClass
 		|| !TargetActorClass)
@@ -80,6 +74,15 @@ void UDRGA_ThrowSkill::ActivateAbility(
 	StartBlockingStateTasks();
 	SetThrowAimState(true);
 	StartTargeting();
+}
+
+UDRThrowableItemDefinition* UDRGA_ThrowSkill::ResolveThrowableDefinition(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	const UDRThrowSkillDefinition* SkillDefinition =
+		Cast<UDRThrowSkillDefinition>(GetSourceObject(Handle, ActorInfo));
+	return IsValid(SkillDefinition) ? SkillDefinition->ThrowableDefinition : nullptr;
 }
 
 void UDRGA_ThrowSkill::StartTargeting()
