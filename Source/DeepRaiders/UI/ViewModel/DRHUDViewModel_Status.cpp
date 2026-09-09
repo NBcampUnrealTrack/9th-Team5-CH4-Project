@@ -174,6 +174,9 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 	UE_MVVM_SET_PROPERTY_VALUE(
 		FreezeGaugeRatio,
 		InterpolateRatio(FreezeGaugeRatio, TargetFreezeGaugeRatio));
+	UE_MVVM_SET_PROPERTY_VALUE(
+		FreezeScreenEffectRatio,
+		InterpolateRatio(FreezeScreenEffectRatio, TargetScreenEffectRatio));
 }
 
 void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
@@ -244,6 +247,9 @@ void UDRHUDViewModel::RefreshHealth()
 		UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, TargetCurrentHealth);
 		UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, TargetHealthRatio);
 	}
+	
+	// 체력이 변경될 때 빙결 스크린 이펙트 비율(FreezeGauge / CurrentHealth)도 함께 재계산
+	RefreshFreezeGauge();
 }
 
 void UDRHUDViewModel::RefreshShield()
@@ -354,22 +360,43 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
 		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
 		: nullptr;
+	
 	const float NewFreezeGauge = IsValid(AttributeSet) ? AttributeSet->GetFreezeGauge() : 0.f;
 	const float NewFreezeGaugeRatio = MaxHealth > KINDA_SMALL_NUMBER
-		? FMath::Clamp(NewFreezeGauge / MaxHealth, 0.f, 1.f)
+		? FMath::Clamp(NewFreezeGauge / MaxHealth, 0.f, HealthRatio)
 		: 0.f;
-
+	const float NewScreenEffectRatio = CurrentHealth > KINDA_SMALL_NUMBER
+		? FMath::Clamp(NewFreezeGauge / CurrentHealth, 0.f, 1.f)
+		: 0.f;
+	
+	
 	TargetFreezeGauge = NewFreezeGauge;
+	
 	const bool bIsFrozen = AbilitySystemComponent.IsValid()
 		&& AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
-	TargetFreezeGaugeRatio = bIsFrozen ? 1.f : NewFreezeGaugeRatio;
+	
+	// 얼음 게이지
+	TargetFreezeGaugeRatio = bIsFrozen ? 
+		HealthRatio :	// 최대 보유 체력과 일치 
+		NewFreezeGaugeRatio;
+	
+	// 화면 효과 Opacity Ratio
+	TargetScreenEffectRatio = bIsFrozen ? 
+		1.f : // 얼면 1
+		NewScreenEffectRatio;	// 안얼었으면 Ratio
+	
+	
 	// 빙결 진입 시 보간을 기다리지 않고 최대 효과를 유지한다.
+	
 	if (bIsFrozen || !bInterpolateGauges)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, TargetFreezeGaugeRatio);
+		UE_MVVM_SET_PROPERTY_VALUE(FreezeScreenEffectRatio, TargetScreenEffectRatio);
 	}
 	if (!bInterpolateGauges)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, TargetFreezeGauge);
 	}
+	
+	
 }

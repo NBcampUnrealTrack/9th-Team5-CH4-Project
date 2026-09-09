@@ -81,9 +81,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGauge = 0.f;
 
-	/** 빙결 상태에서는 1, 그 외에는 최대 체력 대비 빙결 게이지 비율이다. */
+	/** 현재 빙결 게이지 / 최대 빙결 게이지의 표시 비율이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGaugeRatio = 0.f;
+
+	/** 화면 효과 전용 비율로, 빙결 상태에서는 즉시 1을 유지한다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
+	float FreezeScreenEffectRatio = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Ammo")
 	bool bIsAmmoVisible = false;
@@ -124,13 +128,16 @@ private:
 	FDelegateHandle MaxHeatGaugeChangedHandle;
 	FDelegateHandle OverheatedTagChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle MaxFreezeGaugeChangedHandle;
 	FDelegateHandle FrozenTagChangedHandle;
 	float TargetCurrentHealth = 0.f;
 	float TargetHeatGauge = 0.f;
 	float TargetFreezeGauge = 0.f;
+	float TargetScreenEffectRatio = 0.f;
 	float TargetHealthRatio = 0.f;
 	float TargetHeatGaugeRatio = 0.f;
 	float TargetFreezeGaugeRatio = 0.f;
+	float TargetFreezeScreenEffectRatio = 0.f;
 	float TargetSnowGauge = 0.f;
 	float DisplaySnowGauge = 0.f;
 	float SnowGaugeIdleDuration = 0.f;
