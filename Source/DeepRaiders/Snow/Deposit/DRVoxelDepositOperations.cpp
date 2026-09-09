@@ -10,9 +10,104 @@
 
 namespace
 {
+	FVoxelMaterial MakeDepositMaterial(uint8 MaterialIndex)
+	{
+		// 기본 생성자는 채널을 초기화하지 않습니다. 맵의 기본 눈과 색상/UV를 맞춥니다.
+		FVoxelMaterial Material = FVoxelMaterial::CreateFromColor(FLinearColor::Transparent);
+		Material.SetSingleIndex(MaterialIndex);
+		return Material;
+	}
+
+	template<typename ElementType>
+	void ShuffleArray(TArray<ElementType>& Values, FRandomStream& RandomStream)
+	{
+		for (int32 Index = Values.Num() - 1; Index > 0; --Index)
+		{
+			Values.Swap(Index, RandomStream.RandRange(0, Index));
+		}
+	}
+
+	/**
+	 * 전체 배열을 만들지 않고 중복 없는 무작위 인덱스를 선택합니다.
+	 * @param PopulationSize 선택 가능한 전체 인덱스 수입니다.
+	 * @param RequestedCount 선택할 인덱스 수입니다.
+	 * @param RandomStream 난수를 소비할 스트림입니다.
+	 * @param OutIndices 선택된 인덱스 배열입니다.
+	 */
+	void BuildRandomUniqueIndices(
+		int32 PopulationSize,
+		int32 RequestedCount,
+		FRandomStream& RandomStream,
+		TArray<int32>& OutIndices)
+	{
+		OutIndices.Reset();
+		if (PopulationSize <= 0 || RequestedCount <= 0)
+		{
+			return;
+		}
+
+		const int32 SampleCount = FMath::Clamp(RequestedCount, 0, PopulationSize);
+		TSet<int32> SelectedIndices;
+		SelectedIndices.Reserve(SampleCount);
+		OutIndices.Reserve(SampleCount);
+		for (int32 UpperBound = PopulationSize - SampleCount;
+			UpperBound < PopulationSize;
+			++UpperBound)
+		{
+			const int32 Candidate = RandomStream.RandRange(0, UpperBound);
+			const int32 SelectedIndex = SelectedIndices.Contains(Candidate)
+				? UpperBound
+				: Candidate;
+			SelectedIndices.Add(SelectedIndex);
+			OutIndices.Add(SelectedIndex);
+		}
+
+		ShuffleArray(OutIndices, RandomStream);
+	}
+
+	/**
+	 * 원형 풋프린트 포함 여부와 거리 기반 값을 계산합니다.
+	 * @param OffsetX 중심 기준 X 오프셋입니다.
+	 * @param OffsetY 중심 기준 Y 오프셋입니다.
+	 * @param Radius 풋프린트 반경입니다.
+	 * @param EdgeStrength 가장자리 퇴적량 배율입니다.
+	 * @param MaximumSlopeTangent 허용할 최대 경사의 탄젠트 값입니다.
+	 * @param OutAmountScale 계산된 퇴적량 배율입니다.
+	 * @param OutAllowedHeightDelta 계산된 허용 높이 차입니다.
+	 * @return 오프셋이 원형 풋프린트 안에 있으면 true입니다.
+	 */
+	bool EvaluateFootprintOffset(
+		int32 OffsetX,
+		int32 OffsetY,
+		int32 Radius,
+		float EdgeStrength,
+		float MaximumSlopeTangent,
+		float& OutAmountScale,
+		float& OutAllowedHeightDelta)
+	{
+		const float RadiusAsFloat = static_cast<float>(FMath::Max(1, Radius));
+		const float Distance = FMath::Sqrt(
+			static_cast<float>(OffsetX * OffsetX + OffsetY * OffsetY));
+		if (Radius > 0 && Distance > RadiusAsFloat + 0.5f)
+		{
+			return false;
+		}
+
+		const float DistanceAlpha = Radius > 0
+			? FMath::Clamp(Distance / RadiusAsFloat, 0.f, 1.f)
+			: 0.f;
+		OutAmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
+		OutAllowedHeightDelta = FMath::Max(
+			1.f,
+			Distance * MaximumSlopeTangent + 0.5f);
+		return true;
+	}
+}
+
+
+namespace
+{
 	constexpr float DRDepositFootprintEdgeStrength = 0.55f;
-	// 메시 경계 오차를 줄이기 위한 접촉면 보정값입니다.
-	constexpr float DRStaticMeshContactInsetVoxels = 0.1f;
 	constexpr float DRDepositMaximumFootprintSlopeDegrees = 55.f;
 	constexpr int32 DRMaximumRandomSurfaceSamples = 4096;
 	constexpr int64 DRMaximumDepositFootprintWorkItems = 4096;
@@ -189,7 +284,7 @@ namespace
 		}
 
 		TArray<int32> ColumnOrder;
-		DRVoxelDeposit::BuildRandomUniqueIndices(
+		BuildRandomUniqueIndices(
 			static_cast<int32>(ColumnCountX * ColumnCountY),
 			Context.Settings.RandomSurfaceSampleCount,
 			Context.RandomStream,
@@ -412,7 +507,7 @@ namespace
 		}
 	}
 
-	const FHitResult* FindTopWorldStaticHit(const TArray<FHitResult>& Hits)
+	const FHitResult* FindHighestHit(const TArray<FHitResult>& Hits)
 	{
 		const FHitResult* TopHit = nullptr;
 		for (const FHitResult& Hit : Hits)
@@ -434,7 +529,7 @@ namespace
 		const UStaticMeshComponent* StaticMeshComponent =
 			Cast<UStaticMeshComponent>(Hit.GetComponent());
 		if (!IsValid(StaticMeshComponent) ||
-			StaticMeshComponent->GetMobility() != EComponentMobility::Static ||
+			StaticMeshComponent->IsSimulatingPhysics() ||
 			Hit.ImpactPoint.ContainsNaN() || Hit.ImpactNormal.ContainsNaN() ||
 			Hit.ImpactNormal.Z < MinimumSurfaceNormalZ)
 		{
@@ -447,16 +542,21 @@ namespace
 			(IsValid(HitActor) && HitActor->ActorHasTag(RequiredSurfaceTag));
 	}
 
-	void MakeStaticTraceParameters(
+	void MakeMeshTraceParameters(
 		AActor* TraceOwner,
+		AVoxelWorld* VoxelWorld,
 		bool bTraceComplex,
 		FCollisionObjectQueryParams& OutObjectParams,
 		FCollisionQueryParams& OutQueryParams)
 	{
 		OutObjectParams.AddObjectTypesToQuery(ECC_WorldStatic);
+		// Blueprint map floors can be Movable/WorldDynamic despite remaining stationary.
+		OutObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 		OutQueryParams = FCollisionQueryParams(
 			SCENE_QUERY_STAT(DRStaticMeshDepositSurface),
 			bTraceComplex);
+		// 복셀 표면은 데이터에서 탐색하므로 갱신이 늦은 복셀 충돌은 제외합니다.
+		OutQueryParams.AddIgnoredActor(VoxelWorld);
 		if (TraceOwner != nullptr)
 		{
 			OutQueryParams.AddIgnoredActor(TraceOwner);
@@ -480,8 +580,9 @@ namespace
 
 		FCollisionObjectQueryParams ObjectParams;
 		FCollisionQueryParams QueryParams;
-		MakeStaticTraceParameters(
+		MakeMeshTraceParameters(
 			TraceOwner,
+			Context.VoxelWorld,
 			Command.bTraceComplexStaticMeshSurfaces,
 			ObjectParams,
 			QueryParams);
@@ -503,7 +604,7 @@ namespace
 				FVector(SampleWorldPosition.X, SampleWorldPosition.Y, TraceBottomZ),
 				ObjectParams,
 				QueryParams);
-			const FHitResult* TopHit = FindTopWorldStaticHit(Hits);
+			const FHitResult* TopHit = FindHighestHit(Hits);
 			if (TopHit == nullptr || !IsEligibleStaticMeshDepositHit(
 				*TopHit,
 				MinimumNormalZ,
@@ -700,7 +801,7 @@ namespace
 			{
 				float AmountScale = 1.f;
 				float AllowedHeightDelta = 1.f;
-				if (!DRVoxelDeposit::EvaluateFootprintOffset(
+				if (!EvaluateFootprintOffset(
 					OffsetX,
 					OffsetY,
 					Radius,
@@ -836,8 +937,9 @@ namespace
 
 		FCollisionObjectQueryParams ObjectParams;
 		FCollisionQueryParams QueryParams;
-		MakeStaticTraceParameters(
+		MakeMeshTraceParameters(
 			TraceOwner,
+			Context.VoxelWorld,
 			Command.bTraceComplexStaticMeshSurfaces,
 			ObjectParams,
 			QueryParams);
@@ -858,7 +960,7 @@ namespace
 				FVector(TargetWorld.X, TargetWorld.Y, TraceBottomZ),
 				ObjectParams,
 				QueryParams);
-			const FHitResult* TopHit = FindTopWorldStaticHit(Hits);
+			const FHitResult* TopHit = FindHighestHit(Hits);
 			if (TopHit == nullptr || !IsEligibleStaticMeshDepositHit(
 				*TopHit,
 				MinimumNormalZ,
@@ -877,9 +979,9 @@ namespace
 				continue;
 			}
 
-			// 경계 오차를 줄이도록 접촉 기준을 메시 표면보다 조금 낮춥니다.
-			const float ContactSurfaceZ = LocalSurfaceZ - DRStaticMeshContactInsetVoxels;
-			const int64 CandidateZ64 = FMath::FloorToInt64(ContactSurfaceZ) + 1;
+			// 후보 수집과 같은 실제 표면 높이를 씁니다. 여기서만 낮추면 격자 경계에서
+			// 계속 한 칸 아래의 고체를 선택해 눈이 메시 안쪽에서 성장을 멈춥니다.
+			const int64 CandidateZ64 = FMath::FloorToInt64(LocalSurfaceZ) + 1;
 			if (CandidateZ64 <= Context.WriteVoxelMin.Z ||
 				CandidateZ64 > Context.WriteVoxelMax.Z)
 			{
@@ -893,7 +995,7 @@ namespace
 					Target.VoxelXY.Y,
 					static_cast<int32>(CandidateZ64)),
 				Target.AmountScale,
-				&ContactSurfaceZ,
+				&LocalSurfaceZ,
 				TopHit->GetComponent());
 		}
 		return true;
@@ -920,7 +1022,7 @@ namespace
 			}
 			return A.Position.Z < B.Position.Z;
 		});
-		DRVoxelDeposit::ShuffleArray(OutPlan.Writes, Context.RandomStream);
+		ShuffleArray(OutPlan.Writes, Context.RandomStream);
 	}
 
 	// 값과 머터리얼을 기록하고 실제 변경 범위를 누적합니다.
@@ -1095,9 +1197,7 @@ bool FDRVoxelDepositOperations::ApplyDepositPlan(
 			Write.Position.Z - 1);
 	}
 
-	// 모든 쓰기에 같은 머터리얼을 사용합니다.
-	FVoxelMaterial Material;
-	Material.SetSingleIndex(Plan.Settings.DepositMaterialIndex);
+	const FVoxelMaterial Material = MakeDepositMaterial(Plan.Settings.DepositMaterialIndex);
 	OutResult.VoxelWorldName = VoxelWorld->GetFName();
 	OutResult.MaterialIndex = Plan.Settings.DepositMaterialIndex;
 	FVoxelIntBoxWithValidity ModifiedBounds;
@@ -1226,8 +1326,7 @@ bool FDRVoxelDepositOperations::ApplyDepositResult(AVoxelWorld* VoxelWorld, cons
 		}
 		Bounds += Cell.Position;
 	}
-	FVoxelMaterial Material;
-	Material.SetSingleIndex(Result.MaterialIndex);
+	const FVoxelMaterial Material = MakeDepositMaterial(Result.MaterialIndex);
 	FVoxelData& Data = VoxelWorld->GetData();
 	{
 		FVoxelWriteScopeLock Lock(Data, Bounds.GetBox(), FUNCTION_FNAME);
@@ -1242,4 +1341,29 @@ bool FDRVoxelDepositOperations::ApplyDepositResult(AVoxelWorld* VoxelWorld, cons
 	}
 	UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld, Bounds.GetBox().Extend(1));
 	return true;
+}
+
+bool FDRVoxelDepositCommand::ContainsWorldPosition(const FVector& Position) const
+{
+	const FVector Offset = Position - AreaCenter;
+	const FVector Extent = AreaExtent.GetAbs();
+	if (Offset.ContainsNaN() || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
+	{
+		return false;
+	}
+	if (FMath::Abs(Offset.Z) > Extent.Z)
+	{
+		return false;
+	}
+	switch (AreaShape)
+	{
+	case EDRVoxelDepositAreaShape::Box:
+		return FMath::Abs(Offset.X) <= Extent.X && FMath::Abs(Offset.Y) <= Extent.Y;
+	case EDRVoxelDepositAreaShape::Sphere:
+		return Offset.SizeSquared() <= FMath::Square(Extent.X);
+	case EDRVoxelDepositAreaShape::Cylinder:
+		return Offset.SizeSquared2D() <= FMath::Square(Extent.X);
+	default:
+		return false;
+	}
 }

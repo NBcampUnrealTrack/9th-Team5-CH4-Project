@@ -19,6 +19,7 @@ public:
 #if WITH_EDITOR
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
 protected:
@@ -62,6 +63,26 @@ protected:
 		meta = (ClampMin = "0"))
 	int32 StartPhaseIndex = 0;
 
+	/** 팀 ID 기반으로 머터리얼 인덱스를 자동 지정할지 여부입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Terrain|Deposit")
+	bool bUseTeamId = true;
+
+	/** 퇴적할 눈의 소유 팀입니다. INDEX_NONE(-1)이면 중립 눈(0번 머터리얼)입니다. */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Terrain|Deposit",
+		meta = (EditCondition = "bUseTeamId", EditConditionHides))
+	int32 TeamId = INDEX_NONE;
+
+	/** 수동으로 지정할 복셀 머터리얼 인덱스입니다. (bUseTeamId가 false일 때 사용) */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Terrain|Deposit",
+		meta = (EditCondition = "!bUseTeamId", EditConditionHides))
+	uint8 ManualMaterialIndex = 0;
+
 	UPROPERTY(EditAnywhere, Category="Voxel Terrain|Deposit")
 	FDRVoxelDepositInBoxSettings DepositSettings;
 
@@ -87,6 +108,9 @@ protected:
 
 private:
 	FVector GetAreaExtent() const;
+	AVoxelWorld* EnsureVoxelWorld();
+	uint8 GetDepositMaterialIndex() const;
+	void UpdateDepositMaterialIndex();
 
 	FTimerHandle DepositTimerHandle;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;

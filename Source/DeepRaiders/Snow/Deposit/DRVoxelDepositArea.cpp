@@ -6,7 +6,9 @@
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 #include "VoxelWorld.h"
 
@@ -77,6 +79,8 @@ ADRVoxelDepositArea::ADRVoxelDepositArea()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	NetDormancy = DORM_Never;
+
+	UpdateDepositMaterialIndex();
 }
 
 #if WITH_EDITOR
@@ -97,7 +101,35 @@ bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
 {
 	return true;
 }
+
+void ADRVoxelDepositArea::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
+		? PropertyChangedEvent.Property->GetFName()
+		: NAME_None;
+
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, bUseTeamId) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, TeamId) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, ManualMaterialIndex))
+	{
+		UpdateDepositMaterialIndex();
+	}
+}
 #endif
+
+uint8 ADRVoxelDepositArea::GetDepositMaterialIndex() const
+{
+	return bUseTeamId
+		? DRSnowMaterialMapping::TeamToMaterialIndex(TeamId)
+		: ManualMaterialIndex;
+}
+
+void ADRVoxelDepositArea::UpdateDepositMaterialIndex()
+{
+	DepositSettings.DepositMaterialIndex = GetDepositMaterialIndex();
+}
 
 FVector ADRVoxelDepositArea::GetAreaExtent() const
 {
@@ -110,6 +142,22 @@ FVector ADRVoxelDepositArea::GetAreaExtent() const
 	default:
 		return BoxExtent.GetAbs();
 	}
+}
+
+AVoxelWorld* ADRVoxelDepositArea::EnsureVoxelWorld()
+{
+	if (!IsValid(VoxelWorld) && IsValid(GetWorld()))
+	{
+		for (TActorIterator<AVoxelWorld> It(GetWorld()); It; ++It)
+		{
+			if (IsValid(*It))
+			{
+				VoxelWorld = *It;
+				break;
+			}
+		}
+	}
+	return VoxelWorld;
 }
 
 bool ADRVoxelDepositArea::MakeDepositCommand(
@@ -133,6 +181,7 @@ bool ADRVoxelDepositArea::MakeDepositCommand(
 	}
 
 	OutCommand.Settings = DepositSettings;
+	OutCommand.Settings.DepositMaterialIndex = GetDepositMaterialIndex();
 	OutCommand.Settings.RandomSeed = FMath::Rand();
 	// 검사 영역은 X/Y만 줄이고 Z는 관리 영역 전체를 사용합니다.
 	const float RequestedHalfSize = RandomScanWorldSize * 0.5f;
@@ -173,6 +222,8 @@ void ADRVoxelDepositArea::BeginPlay()
 #endif
 
 	SetActorTickEnabled(false);
+	EnsureVoxelWorld();
+	UpdateDepositMaterialIndex();
 
 	if (!HasAuthority())
 	{
@@ -251,6 +302,8 @@ void ADRVoxelDepositArea::RequestDepositArea()
 	{
 		return;
 	}
+
+	EnsureVoxelWorld();
 
 	const ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>();
 	const UDRSnowSubsystem* SnowSubsystem = GetWorld()->GetSubsystem<UDRSnowSubsystem>();

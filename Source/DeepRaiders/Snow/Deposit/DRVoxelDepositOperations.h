@@ -17,93 +17,6 @@ enum class EDRVoxelDepositAreaShape : uint8
 	Cylinder
 };
 
-namespace DRVoxelDeposit
-{
-	template<typename ElementType>
-	void ShuffleArray(TArray<ElementType>& Values, FRandomStream& RandomStream)
-	{
-		for (int32 Index = Values.Num() - 1; Index > 0; --Index)
-		{
-			Values.Swap(Index, RandomStream.RandRange(0, Index));
-		}
-	}
-
-	/**
-	 * 전체 배열을 만들지 않고 중복 없는 무작위 인덱스를 선택합니다.
-	 * @param PopulationSize 선택 가능한 전체 인덱스 수입니다.
-	 * @param RequestedCount 선택할 인덱스 수입니다.
-	 * @param RandomStream 난수를 소비할 스트림입니다.
-	 * @param OutIndices 선택된 인덱스 배열입니다.
-	 */
-	inline void BuildRandomUniqueIndices(
-		int32 PopulationSize,
-		int32 RequestedCount,
-		FRandomStream& RandomStream,
-		TArray<int32>& OutIndices)
-	{
-		OutIndices.Reset();
-		if (PopulationSize <= 0 || RequestedCount <= 0)
-		{
-			return;
-		}
-
-		const int32 SampleCount = FMath::Clamp(RequestedCount, 0, PopulationSize);
-		TSet<int32> SelectedIndices;
-		SelectedIndices.Reserve(SampleCount);
-		OutIndices.Reserve(SampleCount);
-		for (int32 UpperBound = PopulationSize - SampleCount;
-			UpperBound < PopulationSize;
-			++UpperBound)
-		{
-			const int32 Candidate = RandomStream.RandRange(0, UpperBound);
-			const int32 SelectedIndex = SelectedIndices.Contains(Candidate)
-				? UpperBound
-				: Candidate;
-			SelectedIndices.Add(SelectedIndex);
-			OutIndices.Add(SelectedIndex);
-		}
-
-		ShuffleArray(OutIndices, RandomStream);
-	}
-
-	/**
-	 * 원형 풋프린트 포함 여부와 거리 기반 값을 계산합니다.
-	 * @param OffsetX 중심 기준 X 오프셋입니다.
-	 * @param OffsetY 중심 기준 Y 오프셋입니다.
-	 * @param Radius 풋프린트 반경입니다.
-	 * @param EdgeStrength 가장자리 퇴적량 배율입니다.
-	 * @param MaximumSlopeTangent 허용할 최대 경사의 탄젠트 값입니다.
-	 * @param OutAmountScale 계산된 퇴적량 배율입니다.
-	 * @param OutAllowedHeightDelta 계산된 허용 높이 차입니다.
-	 * @return 오프셋이 원형 풋프린트 안에 있으면 true입니다.
-	 */
-	inline bool EvaluateFootprintOffset(
-		int32 OffsetX,
-		int32 OffsetY,
-		int32 Radius,
-		float EdgeStrength,
-		float MaximumSlopeTangent,
-		float& OutAmountScale,
-		float& OutAllowedHeightDelta)
-	{
-		const float RadiusAsFloat = static_cast<float>(FMath::Max(1, Radius));
-		const float Distance = FMath::Sqrt(
-			static_cast<float>(OffsetX * OffsetX + OffsetY * OffsetY));
-		if (Radius > 0 && Distance > RadiusAsFloat + 0.5f)
-		{
-			return false;
-		}
-
-		const float DistanceAlpha = Radius > 0
-			? FMath::Clamp(Distance / RadiusAsFloat, 0.f, 1.f)
-			: 0.f;
-		OutAmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
-		OutAllowedHeightDelta = FMath::Max(
-			1.f,
-			Distance * MaximumSlopeTangent + 0.5f);
-		return true;
-	}
-}
 
 USTRUCT()
 struct FDRVoxelDepositInBoxSettings
@@ -117,7 +30,8 @@ struct FDRVoxelDepositInBoxSettings
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
 	float DepositAmountPerPass = 0.05f;
 
-	UPROPERTY(EditAnywhere, Category="Voxel|Deposit")
+	/** 현재 퇴적에 적용될 복셀 머터리얼 인덱스입니다. (bUseTeamId에 따라 자동 설정되거나 수동 지정됩니다) */
+	UPROPERTY(VisibleAnywhere, Category="Voxel|Deposit")
 	uint8 DepositMaterialIndex = 0;
 
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="1"))
@@ -158,30 +72,7 @@ struct FDRVoxelDepositCommand
 	EDRVoxelDepositAreaShape AreaShape = EDRVoxelDepositAreaShape::Box;
 
 	/** Extent는 박스 반크기 또는 (반지름, 반지름, 절반 높이)입니다. */
-	bool ContainsWorldPosition(const FVector& Position) const
-	{
-		const FVector Offset = Position - AreaCenter;
-		const FVector Extent = AreaExtent.GetAbs();
-		if (Offset.ContainsNaN() || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
-		{
-			return false;
-		}
-		if (FMath::Abs(Offset.Z) > Extent.Z)
-		{
-			return false;
-		}
-		switch (AreaShape)
-		{
-		case EDRVoxelDepositAreaShape::Box:
-			return FMath::Abs(Offset.X) <= Extent.X && FMath::Abs(Offset.Y) <= Extent.Y;
-		case EDRVoxelDepositAreaShape::Sphere:
-			return Offset.SizeSquared() <= FMath::Square(Extent.X);
-		case EDRVoxelDepositAreaShape::Cylinder:
-			return Offset.SizeSquared2D() <= FMath::Square(Extent.X);
-		default:
-			return false;
-		}
-	}
+	bool ContainsWorldPosition(const FVector& Position) const;
 
 	UPROPERTY()
 	FDRVoxelDepositInBoxSettings Settings;
