@@ -2,6 +2,7 @@
 
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "AbilitySystemComponent.h"
@@ -15,6 +16,7 @@ namespace DRProjectileAim
 {
 	constexpr float MinAimDistance = 1.0f;
 	constexpr float MaxClientViewLocationError = 500.0f;
+	constexpr float MuzzleObstructionTraceDistance = 100.0f;
 }
 
 namespace DRLocalProjectilePrediction
@@ -70,6 +72,12 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	if (ActorInfo == nullptr
 		|| !ActorInfo->IsLocallyControlled())
+	{
+		return false;
+	}
+
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	if (!IsValid(AvatarActor))
 	{
 		return false;
 	}
@@ -134,10 +142,16 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 
 	/*
 	 * 실제 Projectile Spawn과 Presentation 모두 Character의 GameplayFireAnchor를
-	 * 동일한 기준으로 사용한다. Socket/Weapon mesh 위치는 Gameplay 판정 기준이 아니다.
+	 * 캐릭터 전방으로 이동한 고정 원점으로 사용한다.
 	 */
 	FVector GameplayFireOrigin;
-	if (!ResolveGameplayFireOrigin(ViewDirection, GameplayFireOrigin))
+	if (!ResolveGameplayFireOrigin(AvatarActor->GetActorForwardVector(), GameplayFireOrigin))
+	{
+		return false;
+	}
+
+	FVector ProjectileAimPoint;
+	if (!ResolveProjectileAimPoint(GameplayFireOrigin, AimPoint, ProjectileAimPoint))
 	{
 		return false;
 	}
@@ -152,10 +166,10 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 
 	if (!ActorInfo->IsNetAuthority())
 	{
-		PlayLocalFirePresentation(GameplayFireOrigin, AimPoint);
+		PlayLocalFirePresentation(GameplayFireOrigin, ProjectileAimPoint);
 		TrySpawnLocalVisualProjectile(
 			GameplayFireOrigin,
-			AimPoint,
+			ProjectileAimPoint,
 			ShotSequence);
 	}
 
@@ -461,12 +475,18 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 	}
 
 	/*
-	 * Projectile은 Character의 고정 GameplayFireAnchor에서 출발한다.
+	 * Projectile은 GameplayFireAnchor에서 Character 전방으로 이동한 고정 원점에서 출발한다.
 	 * AimDirection은 클라이언트 발사 순간의 Crosshair 방향이며,
-	 * 실제 발사 방향은 GameplayFireAnchor에서 AimPoint를 향하도록 계산한다.
+	 * 실제 발사 방향은 GameplayFireOrigin에서 보정된 AimPoint를 향하도록 계산한다.
 	 */
 	FVector GameplayFireOrigin;
-	if (!ResolveGameplayFireOrigin(AimDirection, GameplayFireOrigin))
+	if (!ResolveGameplayFireOrigin(AvatarActor->GetActorForwardVector(), GameplayFireOrigin))
+	{
+		return false;
+	}
+
+	FVector ProjectileAimPoint;
+	if (!ResolveProjectileAimPoint(GameplayFireOrigin, AimPoint, ProjectileAimPoint))
 	{
 		return false;
 	}
@@ -474,7 +494,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 	FVector BaseLaunchVelocity;
 	if (!ResolveProjectileLaunchVelocity(
 		GameplayFireOrigin,
-		AimPoint,
+		ProjectileAimPoint,
 		BaseLaunchVelocity))
 	{
 		return false;
@@ -543,7 +563,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 
 	PlayServerFirePresentation(
 		GameplayFireOrigin,
-		AimPoint);
+		ProjectileAimPoint);
 
 	return true;
 }
@@ -648,6 +668,46 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 
 	return true;
 #endif
+}
+
+bool UDRGA_FireProjectile::ResolveProjectileAimPoint(const FVector& FireOrigin, const FVector& CameraAimPoint,
+	FVector& OutAimPoint) const
+{
+	OutAimPoint = CameraAimPoint;
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	if (!IsValid(AvatarActor) || FireOrigin.ContainsNaN() || CameraAimPoint.ContainsNaN())
+	{
+		return false;
+	}
+
+	const FVector CharacterForward = AvatarActor->GetActorForwardVector().GetSafeNormal();
+	if (CharacterForward.IsNearlyZero())
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return false;
+	}
+
+	const FVector ObstructionTraceEnd =
+		FireOrigin + CharacterForward * DRProjectileAim::MuzzleObstructionTraceDistance;
+	FCollisionQueryParams QueryParams;
+	BuildWeaponTraceQueryParams(QueryParams);
+
+	FHitResult ObstructionHit;
+	const bool bBlockingHit = World->LineTraceSingleByChannel(
+		ObstructionHit, FireOrigin, ObstructionTraceEnd, DRCollisionChannels::Projectile, QueryParams);
+	if (bBlockingHit)
+	{
+		OutAimPoint = ObstructionHit.ImpactPoint;
+	}
+
+	return !OutAimPoint.ContainsNaN() && !OutAimPoint.Equals(FireOrigin, KINDA_SMALL_NUMBER);
 }
 
 void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(

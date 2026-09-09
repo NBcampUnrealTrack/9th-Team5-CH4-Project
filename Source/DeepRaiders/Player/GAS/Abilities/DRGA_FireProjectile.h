@@ -106,6 +106,9 @@ private:
 		const FVector& AimPoint,
 		FVector& OutLaunchVelocity) const;
 
+	bool ResolveProjectileAimPoint(const FVector& FireOrigin, const FVector& CameraAimPoint,
+		FVector& OutAimPoint) const;
+
 	/** Owning client 전용. 현재는 1발 + 무산포 무기만 local predicted visual을 생성한다. */
 	void TrySpawnLocalVisualProjectile(
 		const FVector& SpawnLocation,
