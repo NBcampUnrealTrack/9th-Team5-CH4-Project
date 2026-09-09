@@ -15,7 +15,7 @@ UDRQuickSlotUIComponent::UDRQuickSlotUIComponent()
 void UDRQuickSlotUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	return;
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
 
 	if (!IsValid(PlayerController))
