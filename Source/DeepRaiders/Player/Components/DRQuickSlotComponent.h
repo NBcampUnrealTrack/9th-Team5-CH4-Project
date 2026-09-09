@@ -92,7 +92,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Quick Slot|Activation Interval")
 	bool GetQuickSlotActivationIntervalState(int32 SlotIndex, float& OutProgress) const;
 	
-	void RefreshSelectedItem();
+	void RefreshSelectedItem(bool bForceReapplyItemGrants = false);
 	
 	// Character에게 SelectedItem 외형 반영
 	void ApplySelectedItemToCharacter();
@@ -126,7 +126,7 @@ private:
 	
 	void RefreshDerivedState();	
 	// 손에 든 장비에 따라 ASC의 Ability, Effect 또한 함께 새로고침
-	void RefreshHeldItem();
+	void RefreshHeldItem(bool bForceReapplyItemGrants = false);
 	void RefreshEquippedWeaponUpgrade(const FDRItemInstance* SelectedItem);
 	void RemoveEquippedWeaponUpgradeEffect();
 	void RequestReplicationUpdate() const;

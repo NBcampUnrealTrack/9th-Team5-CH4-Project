@@ -471,7 +471,7 @@ void UDRQuickSlotComponent::RefreshDerivedState()
 	RefreshSelectedItemState();
 }
 
-void UDRQuickSlotComponent::RefreshHeldItem()
+void UDRQuickSlotComponent::RefreshHeldItem(const bool bForceReapplyItemGrants)
 {
 	CacheAbilitySystemComponent();
 	
@@ -482,7 +482,8 @@ void UDRQuickSlotComponent::RefreshHeldItem()
 
 	RefreshEquippedWeaponUpgrade(SelectedItem);
 	
-	if (EquippedInstanceId == NewInstanceId
+	if (!bForceReapplyItemGrants
+		&& EquippedInstanceId == NewInstanceId
 		&& HeldItemDefinition == NewDefinition)
 	{
 		return;
@@ -600,11 +601,11 @@ void UDRQuickSlotComponent::RemoveEquippedWeaponUpgradeEffect()
 	EquippedWeaponUpgradeProfile.Reset();
 }
 
-void UDRQuickSlotComponent::RefreshSelectedItem()
+void UDRQuickSlotComponent::RefreshSelectedItem(const bool bForceReapplyItemGrants)
 {
 	CacheAbilitySystemComponent();
 
-	if (ShouldDeferHeldItemRefresh())
+	if (!bForceReapplyItemGrants && ShouldDeferHeldItemRefresh())
 	{
 		bHeldItemRefreshDeferred = true;
 		RefreshQuickSlotCollectionState();
@@ -613,7 +614,7 @@ void UDRQuickSlotComponent::RefreshSelectedItem()
 
 	ClearDeferredHeldItemRefresh();
 	
-	RefreshHeldItem();
+	RefreshHeldItem(bForceReapplyItemGrants);
 	ApplySelectedItemToCharacter();	
 }
 

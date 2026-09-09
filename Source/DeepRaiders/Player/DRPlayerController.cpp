@@ -494,7 +494,8 @@ void ADRPlayerController::OnPossess(APawn* InPawn)
 
 	if (IsValid(QuickSlotComponent))
 	{
-		QuickSlotComponent->RefreshSelectedItem();
+		// PlayerState ASC의 Avatar가 바뀌므로 선택 아이템이 같아도 AbilitySet을 다시 부여한다.
+		QuickSlotComponent->RefreshSelectedItem(true);
 	}
 
 	RefreshPlayerUI();
