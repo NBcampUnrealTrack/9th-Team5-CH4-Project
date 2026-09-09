@@ -1,6 +1,7 @@
 #include "DRGA_SearchSkill.h"
 
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "AbilitySystemComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -29,6 +30,12 @@ void UDRGA_SearchSkill::ActivateAbility(
 		return;
 	}
 
+	if ((IsVFXVisibleToAll && ActorInfo->IsNetAuthority())
+		|| (!IsVFXVisibleToAll && ActorInfo->IsLocallyControlled()))
+	{
+		PlaySearchVFX(Character);
+	}
+
 	if (ActorInfo->IsLocallyControlled())
 	{
 		LocalRevealId = FGuid::NewGuid();
@@ -50,6 +57,27 @@ void UDRGA_SearchSkill::ActivateAbility(
 
 	WaitTask->OnFinish.AddDynamic(this, &ThisClass::HandleSearchFinished);
 	WaitTask->ReadyForActivation();
+}
+
+void UDRGA_SearchSkill::PlaySearchVFX(ADRPlayerCharacter* Character) const
+{
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(Character)
+		|| !IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = Character->GetActorLocation();
+	Parameters.RawMagnitude = SearchRadius;
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+	Parameters.SourceObject = GetCurrentSkillDefinition();
+
+	AbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_Search,
+		Parameters);
 }
 
 void UDRGA_SearchSkill::EndAbility(

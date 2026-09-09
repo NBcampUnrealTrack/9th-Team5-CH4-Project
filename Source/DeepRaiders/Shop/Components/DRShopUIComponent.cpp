@@ -394,8 +394,12 @@ void UDRShopUIComponent::RefreshWeaponUpgrades()
 		{
 			continue;
 		}
+		if (!IsValid(Weapon->UpgradeProfile) || !Weapon->UpgradeProfile->IsUsable())
+		{
+			continue;
+		}
 
-		if (State == nullptr || !IsValid(Weapon->UpgradeProfile) || !Weapon->UpgradeProfile->IsUsable())
+		if (State == nullptr)
 		{
 			FDRShopOfferView& Offer = Offers.AddDefaulted_GetRef();
 			Offer.Request.OfferType = EDRShopOfferType::WeaponUpgrade;
@@ -457,6 +461,12 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 			: nullptr;
 		if (OfferType == EDRShopOfferType::Perk
 			&& !IsValid(PerkDefinition))
+		{
+			continue;
+		}
+		if (OfferType == EDRShopOfferType::Perk
+			&& (!IsValid(PerkComponent)
+				|| !PerkComponent->IsCompatibleWithEquippedSkills(PerkDefinition)))
 		{
 			continue;
 		}

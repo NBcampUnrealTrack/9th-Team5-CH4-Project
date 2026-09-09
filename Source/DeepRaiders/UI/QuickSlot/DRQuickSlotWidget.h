@@ -7,8 +7,6 @@
 #include "DRQuickSlotWidget.generated.h"
 
 class UDRQuickSlotComponent;
-class UDRQuickSlotEntryViewModel;
-class UDRQuickSlotSlotWidget;
 class UDRQuickSlotViewModel;
 class UHorizontalBox;
 
@@ -20,11 +18,8 @@ class DEEPRAIDERS_API UDRQuickSlotWidget : public UUserWidget
 public:
 	void InitializeQuickSlot(UDRQuickSlotComponent* NewQuickSlotComponent);
 
-	/** ViewModel의 슬롯 목록을 실제 엔트리 위젯으로 표시한다. */
-	UFUNCTION(BlueprintCallable, Category = "Quick Slot|MVVM")
-	void SetSlotEntries(const TArray<UDRQuickSlotEntryViewModel*>& NewSlotEntries);
-	
 protected:
+	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	
 private:
@@ -32,14 +27,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Quick Slot|MVVM")
 	FName QuickSlotViewModelName = TEXT("DRQuickSlotViewModel");
 
-	/** 슬롯 엔트리 Widget Blueprint에 등록한 Manual ViewModel 이름이다. */
-	UPROPERTY(EditDefaultsOnly, Category = "Quick Slot|MVVM")
-	FName EntryViewModelName = TEXT("QuickSlotEntryViewModel");
-
-	UPROPERTY(EditDefaultsOnly, Category = "Quick Slot|MVVM")
-	TSubclassOf<UDRQuickSlotSlotWidget> SlotWidgetClass;
-
-	UPROPERTY(meta = (BindWidget))
+	/** MVVM 패널 확장이 런타임에 슬롯 패널을 읽을 수 있도록 공개한다. */
+	UPROPERTY(BlueprintReadOnly, Category = "Quick Slot|MVVM",
+		meta = (BindWidget, AllowPrivateAccess = "true"))
 	TObjectPtr<UHorizontalBox> SlotPanel;
 
 	UPROPERTY(Transient)

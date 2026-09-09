@@ -29,19 +29,23 @@ ADRTurret::ADRTurret()
 
 	TurretRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretRoot"));
 	SetRootComponent(TurretRoot);
+	BreakableMeshComponent->SetupAttachment(TurretRoot);
 
 	TurretHolderMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretHolderMesh"));
 	TurretHolderMesh->SetupAttachment(TurretRoot);
+	TurretHolderMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 	TurretAimPivot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretAimPivot"));
 	TurretAimPivot->SetupAttachment(TurretRoot);
 	TurretAimPivot->SetRelativeLocation(TurretAimPivotLocation);
 	TurretMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretMesh"));
 	TurretMesh->SetupAttachment(TurretAimPivot);
+	TurretMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 	TurretMesh->SetRelativeLocation(-TurretAimPivotLocation);
 	TurretMuzzle = CreateDefaultSubobject<USceneComponent>(TEXT("TurretMuzzle"));
 	TurretMuzzle->SetupAttachment(TurretMesh);
 	TurretTankMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretTankMesh"));
 	TurretTankMesh->SetupAttachment(TurretRoot);
+	TurretTankMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> HolderMesh(
 		TEXT("/Game/Fab/Cryo_Cannons_for_Tower_Defence_Game/snow_towers/StaticMeshes/Tier1_Turrent_Holder.Tier1_Turrent_Holder"));
@@ -76,6 +80,7 @@ void ADRTurret::InitializeTurret(ADRPlayerState* InInstallerPlayerState,
 	CooldownTag = InCooldownTag;
 	CooldownDuration = FMath::Max(0.f, InCooldownDuration);
 	WeaponSettings = InWeaponSettings;
+	ApplyTeamMaterial();
 }
 
 bool ADRTurret::IsInstalledBy(const ADRPlayerState* PlayerState) const
@@ -83,9 +88,21 @@ bool ADRTurret::IsInstalledBy(const ADRPlayerState* PlayerState) const
 	return IsValid(PlayerState) && InstallerPlayerState == PlayerState;
 }
 
+float ADRTurret::TakeDamage(const float DamageAmount, const FDamageEvent& DamageEvent,
+	AController* EventInstigator, AActor* DamageCauser)
+{
+	if (!CanReceiveDamageFrom(EventInstigator))
+	{
+		return 0.f;
+	}
+
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+}
+
 void ADRTurret::BeginPlay()
 {
 	Super::BeginPlay();
+	ApplyTeamMaterial();
 
 	if (IsValid(TurretAimPivot))
 	{
@@ -145,6 +162,7 @@ void ADRTurret::UpdateTargetAndFire(const float DeltaSeconds)
 		if (CurrentTeamId != INDEX_NONE && CurrentTeamId != OwnerTeamId)
 		{
 			OwnerTeamId = CurrentTeamId;
+			ApplyTeamMaterial();
 			ForceNetUpdate();
 		}
 
@@ -479,6 +497,49 @@ void ADRTurret::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRTurret::ApplyBrokenPresentation()
+{
+	Super::ApplyBrokenPresentation();
+
+	SetActorTickEnabled(false);
+	CurrentTarget = nullptr;
+
+	TurretHolderMesh->SetVisibility(false, true);
+	TurretMesh->SetVisibility(false, true);
+	TurretTankMesh->SetVisibility(false, true);
+}
+
+void ADRTurret::ApplyTeamMaterial()
+{
+	UMaterialInterface* TeamMaterial = OwnerTeamId == 0 ? RedTeamMaterial.Get() : BlueTeamMaterial.Get();
+	if ((OwnerTeamId != 0 && OwnerTeamId != 1) || !IsValid(TeamMaterial))
+	{
+		return;
+	}
+
+	TurretHolderMesh->SetMaterial(0, TeamMaterial);
+	TurretMesh->SetMaterial(0, TeamMaterial);
+	TurretTankMesh->SetMaterial(0, TeamMaterial);
+}
+
+void ADRTurret::OnRep_OwnerTeamId()
+{
+	ApplyTeamMaterial();
+}
+
+bool ADRTurret::CanReceiveDamageFrom(const AController* EventInstigator) const
+{
+	const ADRPlayerState* AttackerPlayerState = IsValid(EventInstigator)
+		? EventInstigator->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+	if (!IsValid(AttackerPlayerState) || OwnerTeamId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	return AttackerPlayerState->GetTeamId() != OwnerTeamId;
 }
 
 void ADRTurret::ApplyOwnerCooldown() const

@@ -534,6 +534,11 @@ namespace DRGameplayTags
 		GameplayCue_VFX_Effect_SpeedSlow,
 		"GameplayCue.VFX.Effect.SpeedSlow",
 		"MoveSpeed slow effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_Search,
+		"GameplayCue.VFX.Skill.Search",
+		"Search skill visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,

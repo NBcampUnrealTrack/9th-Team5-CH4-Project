@@ -22,6 +22,9 @@ struct DEEPRAIDERS_API FDRVFXRequest
 	
 	UPROPERTY(BlueprintReadWrite, Category = "VFX", meta = (Categories = "GameplayCue.VFX"))
 	FGameplayTag VFXTag;
+
+	UPROPERTY(BlueprintReadWrite, Category = "VFX")
+	float RawMagnitude = 0.0f;
 };
 
 UCLASS()
@@ -65,7 +68,8 @@ private:
 	// 부착할 위치 탐색 후 반환
 	USceneComponent* ResolveAttachComponent(const FDRVFXDefinition& Definition, AActor* TargetActor) const;
 	
-	static void ApplyUserParameters(UNiagaraComponent* NiagaraComponent, const FDRVFXDefinition& Definition);
+	static void ApplyUserParameters(UNiagaraComponent* NiagaraComponent, const FDRVFXDefinition& Definition,
+		const FDRVFXRequest& Request);
 	
 	// VFX 정리
 	void CleanupInvalidPersistentVFX();

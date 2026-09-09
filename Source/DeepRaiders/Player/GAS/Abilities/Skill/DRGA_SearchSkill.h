@@ -35,7 +35,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Search", meta = (ClampMin = "0", ClampMax = "255", UIMin = "0", UIMax = "255"))
 	int32 StencilValue = 1;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Search|VFX")
+	bool IsVFXVisibleToAll = true;
+
 private:
+	void PlaySearchVFX(ADRPlayerCharacter* Character) const;
 	void RevealEnemies(const ADRPlayerCharacter* Character, bool IsSharedReveal);
 	void StopReveals(bool IsSharedReveal);
 	bool HasTeamSharePerk(const FGameplayAbilityActorInfo* ActorInfo) const;

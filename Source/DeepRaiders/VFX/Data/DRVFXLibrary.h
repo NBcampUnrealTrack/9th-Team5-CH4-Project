@@ -39,6 +39,9 @@ struct DEEPRAIDERS_API FDRVFXDefinition
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX|Parameters")
 	TMap<FName, float> FloatParameters;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX|Parameters")
+	FName RawMagnitudeFloatParameter = NAME_None;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX|Parameters")
 	TMap<FName, FLinearColor> ColorParameters;

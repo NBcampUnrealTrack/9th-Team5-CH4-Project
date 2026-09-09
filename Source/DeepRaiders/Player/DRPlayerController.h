@@ -24,7 +24,6 @@ class ADRStorage;
 class UDRHUDUIComponent;
 class UDRLoadingUIComponent;
 class UDRSkillUIComponent;
-class UDRQuickSlotUIComponent;
 class UDRInventoryUIComponent;
 class UDRTeleportUIComponent;
 class UDRUIConfig;
@@ -358,9 +357,6 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRSkillUIComponent> SkillUIComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
-	TObjectPtr<UDRQuickSlotUIComponent> QuickSlotUIComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRInventoryUIComponent> InventoryUIComponent;
