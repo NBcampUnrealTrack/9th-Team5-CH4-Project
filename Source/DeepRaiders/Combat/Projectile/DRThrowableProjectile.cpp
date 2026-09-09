@@ -51,20 +51,20 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	{
 		return;
 	}
-	
+
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
 	{
-		Destroy();		
+		Destroy();
 		return;
 	}
-	
+
 	const FVector ExplosionLocation = ImpactResult.ImpactPoint;
-	
+
 	FCollisionObjectQueryParams ObjectQuery;
 	ObjectQuery.AddObjectTypesToQuery(ECC_Pawn);
 	ObjectQuery.AddObjectTypesToQuery(DRCollisionChannels::Breakable);
-	
+
 	FCollisionQueryParams OverlapQuery(SCENE_QUERY_STAT(DRThrowableProjectile), false);
 	OverlapQuery.AddIgnoredActor(this);
 	if (!ShouldAffectInstigator())
@@ -72,18 +72,18 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		OverlapQuery.AddIgnoredActor(GetOwner());
 		OverlapQuery.AddIgnoredActor(GetInstigator());
 	}
-	
+
 	TArray<FOverlapResult> OverlapResults;
 	World->OverlapMultiByObjectType(OverlapResults, ExplosionLocation, FQuat::Identity, ObjectQuery,
 		FCollisionShape::MakeSphere(ItemSettings.ExplosionRadius), OverlapQuery);
 
 	TSet<AActor*> UniqueActors;
 	TArray<AActor*> CandidateActors;
-	
+
 	for (const FOverlapResult& Overlap : OverlapResults)
 	{
 		AActor* TargetActor = Overlap.GetActor();
-		
+
 		if (IsValid(TargetActor)
 			&& !UniqueActors.Contains(TargetActor))
 		{
@@ -110,7 +110,7 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 	OcclusionQuery.AddIgnoredActor(GetInstigator());
 	// Pawn에 의해서는 가려지지 않는다.
 	OcclusionQuery.AddIgnoredActors(CandidateActors);
-	
+
 	for (AActor* TargetActor : CandidateActors)
 	{
 		if (!IsValid(TargetActor))
@@ -123,21 +123,21 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::InvalidTeam);
 			continue;
 		}
-		
+
 		FHitResult OcclusionHit;
-		
+
 		// 벽으로 가려지진 않았는지 차폐여부 검사.
 		// 눈에 의해 쉽게 가려질 것 같지만 일단 LineTrace로 차폐
 		const bool IsOccluded = World->LineTraceSingleByChannel(OcclusionHit,
 			ExplosionLocation + ImpactResult.ImpactNormal * 2.f, TargetActor->GetActorLocation(),
 			OcclusionTraceChannel, OcclusionQuery);
-	
+
 		if (IsOccluded)
 		{
 			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::Occluded);
 			continue;
 		}
-		
+
 		// Breakable
 		if (ApplyBreakableDamage(TargetActor))
 		{
@@ -146,9 +146,9 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 			Destroy();
 			return;
 		}
-		
+
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
-		
+
 		if (!IsValid(TargetASC))
 		{
 			HandleTargetRejected(TargetActor, EDRThrowableTargetRejectReason::MissingAbilitySystem);
@@ -158,10 +158,10 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		FHitResult ExplosionHit = ImpactResult;
 		ExplosionHit.Location = ExplosionLocation;
 		ExplosionHit.ImpactPoint = ExplosionLocation;
-		
+
 		ApplyEffectToTarget(TargetActor, TargetASC, ExplosionHit);
 	}
-	
+
 	ExecuteImpactGameplayCue(ImpactResult);
 	HandleWorldImpact(ImpactResult);
 	Destroy();
@@ -207,7 +207,7 @@ void ADRThrowableProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 		RemovalSpec.SnowAbsorbRadius = ImpactData.SnowRadius;
 		RemovalSpec.SnowAbsorbPower = ImpactData.SnowAmount;
 		RemovalSpec.RemovalMode = ImpactData.SnowRemovalMode;
-		
+
 		SnowRemoveComponent->SetTeamIdOverride(GetSourceTeamId());
 		SnowRemoveComponent->TryRemoveSnowFromHit(ImpactResult, RemovalSpec);
 	}
@@ -224,7 +224,9 @@ void ADRThrowableProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactRe
 
 	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
 
-	EffectContext.AddHitResult(ImpactResult, true);
+	FHitResult SanitizedHit = ImpactResult;
+	SanitizedHit.Component = nullptr;
+	EffectContext.AddHitResult(SanitizedHit, true);
 
 	FGameplayCueParameters Parameters(EffectContext);
 	Parameters.Location = ImpactResult.Location;

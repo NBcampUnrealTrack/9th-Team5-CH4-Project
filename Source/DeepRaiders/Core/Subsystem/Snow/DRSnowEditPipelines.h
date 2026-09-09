@@ -48,6 +48,7 @@ public:
 
 	// 게임 상태 초기화 시 대기 중인 비동기 작업을 폐기하고 실행 중인 콜백을 무효화합니다.
 	void Reset(int32 NewStateGeneration);
+	bool IsBusy() const { return bDirectionalAddInProgress || PendingDirectionalAddCount > 0; }
 
 private:
 	struct FDirectionalPerfContext

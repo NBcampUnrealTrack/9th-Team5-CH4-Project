@@ -7,7 +7,6 @@
 
 class AVoxelWorld;
 class ADRMiningGameStateBase;
-enum class EDRSnowJoinSnapshotResult : uint8;
 
 UCLASS()
 class DEEPRAIDERS_API ADRVoxelDepositArea : public AActor
@@ -89,19 +88,8 @@ protected:
 private:
 	FVector GetAreaExtent() const;
 
-	/**
-	 * 퇴적 명령을 서버와 모든 현재 클라이언트에 전달합니다.
-	 * @param Command 모든 인스턴스에서 준비할 퇴적 명령입니다.
-	 */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPrepareDeposit(const FDRVoxelDepositCommand& Command);
-
 	FTimerHandle DepositTimerHandle;
-	FTimerHandle DepositPipelineTimerHandle;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
-	FDRVoxelDepositPlan PreparedDepositPlan;
-	TArray<FDRVoxelDepositCommand> QueuedDepositCommands;
-	int32 ActiveJoinSnapshotCount = 0;
 	bool bDepositStarted = false;
 
 	/**
@@ -110,8 +98,6 @@ private:
 	 * @return 유효한 명령을 만들면 true입니다.
 	 */
 	bool MakeDepositCommand(FDRVoxelDepositCommand& OutCommand) const;
-	void HandleJoinSnapshotStarted();
-	void HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult Result);
 
 	UFUNCTION()
 	void HandleGamePhaseChanged(
@@ -122,7 +108,4 @@ private:
 	void StartDepositing();
 	void StopDepositing();
 	void RequestDepositArea();
-	void PrepareNextQueuedDeposit();
-	void ApplyPreparedDeposit();
-	void CancelDepositPipeline();
 };

@@ -63,6 +63,35 @@ bool FDRSnowOperationRecord::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& 
 	};
 
 	SerializePackedInt(Ar, Sequence);
+	SerializeFlag(Ar, bIsDepositOperation);
+	if (bIsDepositOperation)
+	{
+		bIsAddOperation = false;
+		Ar << DepositOperation.VoxelWorldName;
+		Ar << DepositOperation.MaterialIndex;
+		uint32 Count = DepositOperation.Cells.Num();
+		Ar.SerializeIntPacked(Count);
+		if (Count > FDRVoxelDepositResult::MaxCellsPerRecord)
+		{
+			Ar.SetError();
+			bOutSuccess = false;
+			return false;
+		}
+		if (Ar.IsLoading())
+		{
+			DepositOperation.Cells.SetNum(Count);
+		}
+		for (FDRVoxelDepositCell& Cell : DepositOperation.Cells)
+		{
+			SerializePackedInt(Ar, Cell.Position.X);
+			SerializePackedInt(Ar, Cell.Position.Y);
+			SerializePackedInt(Ar, Cell.Position.Z);
+			Ar << Cell.Value;
+			SerializeFlag(Ar, Cell.bPaintMaterial);
+		}
+		bOutSuccess = !Ar.IsError();
+		return bOutSuccess;
+	}
 	SerializeFlag(Ar, bIsAddOperation);
 	if (bIsAddOperation)
 	{

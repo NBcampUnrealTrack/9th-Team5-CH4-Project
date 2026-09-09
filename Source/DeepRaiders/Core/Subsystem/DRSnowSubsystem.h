@@ -29,6 +29,8 @@ class DEEPRAIDERS_API UDRSnowSubsystem : public UWorldSubsystem
 
 public:
 	UDRSnowSubsystem();
+	// 비동기 플레이어 편집이 끝난 틱에만 환경 퇴적을 시작합니다.
+	bool IsSnowEditInProgress() const;
 	virtual ~UDRSnowSubsystem() override;
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;

@@ -277,6 +277,8 @@ public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation, float ServerAppliedAmount);
 	void RegisterSnowRemove(
 		const FDRSnowRemoveOperation& Operation);
+	void RegisterSnowDeposit(const FDRVoxelDepositResult& Result);
+	friend class FDRVoxelDepositTest;
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
