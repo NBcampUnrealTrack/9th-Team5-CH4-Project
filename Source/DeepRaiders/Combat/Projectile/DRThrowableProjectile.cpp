@@ -39,7 +39,7 @@ void ADRThrowableProjectile::InitializeThrowable(
 	InitializeProjectile(
 		InSourceAbilitySystem,
 		InImpactEffectSpecs,
-		ThrowableItemDefinition->BreakableDamage,
+		IsValid(ThrowableItemDefinition) ? ThrowableItemDefinition->BreakableDamage : 0.f,
 		ItemSettings.WorldImpactData,
 		InSourceTeamId,
 		InPresentationSourceObject);

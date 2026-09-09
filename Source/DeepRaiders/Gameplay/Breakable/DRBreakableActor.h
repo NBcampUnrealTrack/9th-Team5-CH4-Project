@@ -58,6 +58,8 @@ protected:
 	virtual void HandleBroken(const FDRBreakableDamageContext& DamageContext);
 	
 	// 서버와 클라이언트에서 각각 실행되는 외관 처리
+	virtual void ApplyBrokenPresentation();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Breakable", meta = (DisplayName = "On Broken Presentation"))
 	void BP_OnBrokenPresentation();
 	
@@ -78,7 +80,6 @@ private:
 	void OnRep_IsBroken();
 	
 	void BreakActor(const FDRBreakableDamageContext& DamageContext);
-	void ApplyBrokenPresentation();
 	
 	float CurrentHealth = 0.f;	
 	

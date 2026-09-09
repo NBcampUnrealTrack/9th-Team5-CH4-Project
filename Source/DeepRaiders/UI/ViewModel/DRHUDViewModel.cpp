@@ -58,6 +58,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		FreezeGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).AddUObject(
 				this, &ThisClass::HandleFreezeGaugeChanged);
+		FrozenTagChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).AddUObject(
+				this, &ThisClass::HandleFrozenTagChanged);
 	}
 
 	if (QuickSlotComponent.IsValid())
@@ -222,6 +225,12 @@ void UDRHUDViewModel::Deinitialize()
 		}
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			UDRPlayerAttributeSet::GetFreezeGaugeAttribute()).Remove(FreezeGaugeChangedHandle);
+		if (FrozenTagChangedHandle.IsValid())
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(
+				DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved)
+				.Remove(FrozenTagChangedHandle);
+		}
 	}
 
 	AbilitySystemComponent.Reset();
@@ -238,6 +247,7 @@ void UDRHUDViewModel::Deinitialize()
 	MaxHeatGaugeChangedHandle.Reset();
 	OverheatedTagChangedHandle.Reset();
 	FreezeGaugeChangedHandle.Reset();
+	FrozenTagChangedHandle.Reset();
 	InteractionFocusChangedHandle.Reset();
 	TeamRosterRefreshElapsed = 0.f;
 	ReadyPlayerCount = 0;
@@ -269,6 +279,8 @@ void UDRHUDViewModel::Deinitialize()
 	TargetCurrentHealth = 0.f;
 	TargetHeatGauge = 0.f;
 	TargetFreezeGauge = 0.f;
+	TargetSnowGauge = 0.f;
+	DisplaySnowGauge = 0.f;
 	SnowGaugeIdleDuration = 0.f;
 	HeatGaugeZeroDuration = 0.f;
 	HeatGaugeBlinkElapsed = 0.f;
@@ -278,6 +290,7 @@ void UDRHUDViewModel::Deinitialize()
 	bInterpolateGauges = false;
 
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(CurrentShield, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(ShieldRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(0));

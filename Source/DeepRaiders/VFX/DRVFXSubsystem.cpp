@@ -158,7 +158,7 @@ UNiagaraComponent* UDRVFXSubsystem::SpawnAttachedSystem(const FDRVFXDefinition& 
 		return nullptr;
 	}
 	
-	ApplyUserParameters(NiagaraComponent, Definition);
+	ApplyUserParameters(NiagaraComponent, Definition, Request);
 	NiagaraComponent->Activate(true);
 	
 	return NiagaraComponent;	
@@ -182,7 +182,8 @@ USceneComponent* UDRVFXSubsystem::ResolveAttachComponent(const FDRVFXDefinition&
 	return TargetActor->GetRootComponent();
 }
 
-void UDRVFXSubsystem::ApplyUserParameters(UNiagaraComponent* NiagaraComponent, const FDRVFXDefinition& Definition)
+void UDRVFXSubsystem::ApplyUserParameters(UNiagaraComponent* NiagaraComponent, const FDRVFXDefinition& Definition,
+	const FDRVFXRequest& Request)
 {
 	if (!IsValid(NiagaraComponent))
 	{
@@ -192,6 +193,11 @@ void UDRVFXSubsystem::ApplyUserParameters(UNiagaraComponent* NiagaraComponent, c
 	for (const TPair<FName, float>& Pair : Definition.FloatParameters)
 	{
 		NiagaraComponent->SetVariableFloat(Pair.Key, Pair.Value);
+	}
+
+	if (!Definition.RawMagnitudeFloatParameter.IsNone())
+	{
+		NiagaraComponent->SetVariableFloat(Definition.RawMagnitudeFloatParameter, Request.RawMagnitude);
 	}
 
 	for (const TPair<FName, FLinearColor>& Pair : Definition.ColorParameters)

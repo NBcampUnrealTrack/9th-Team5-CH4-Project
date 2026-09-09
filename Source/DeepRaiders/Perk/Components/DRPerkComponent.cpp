@@ -140,6 +140,44 @@ bool UDRPerkComponent::CanAddPerkAutomatically(
 		&& CanAddPerk(PerkDefinition, SkillDefinition->SkillId);
 }
 
+bool UDRPerkComponent::IsCompatibleWithEquippedSkills(
+	const UDRPerkDefinition* PerkDefinition) const
+{
+	if (!IsValid(PerkDefinition))
+	{
+		return false;
+	}
+
+	if (PerkDefinition->CompatibleSkillTags.IsEmpty())
+	{
+		return true;
+	}
+
+	const ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	const UDRSkillComponent* SkillComponent = IsValid(PlayerState)
+		? PlayerState->GetSkillComponent()
+		: nullptr;
+	if (!IsValid(SkillComponent))
+	{
+		return false;
+	}
+
+	for (int32 SlotIndex = 0;
+		SlotIndex < static_cast<int32>(EDRSkillSlot::Count);
+		++SlotIndex)
+	{
+		const UDRSkillDefinition* SkillDefinition = SkillComponent->GetCurrentSkill(
+			static_cast<EDRSkillSlot>(SlotIndex));
+		if (IsValid(SkillDefinition)
+			&& PerkDefinition->CompatibleSkillTags.HasTagExact(SkillDefinition->SkillId))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 const UDRSkillDefinition* UDRPerkComponent::FindUniqueCompatibleEquippedSkill(
 	const UDRPerkDefinition* PerkDefinition) const
 {

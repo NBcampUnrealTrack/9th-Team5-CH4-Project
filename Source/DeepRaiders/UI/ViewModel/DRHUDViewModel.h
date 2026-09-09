@@ -81,6 +81,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGauge = 0.f;
 
+	/** 빙결 상태에서는 1, 그 외에는 최대 체력 대비 빙결 게이지 비율이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Freeze")
 	float FreezeGaugeRatio = 0.f;
 
@@ -96,6 +97,7 @@ private:
 	void HandleMaxHeatGaugeChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleOverheatedTagChanged(FGameplayTag Tag, int32 NewCount);
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleFrozenTagChanged(FGameplayTag Tag, int32 NewCount);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& ChangeData);
 
 	UFUNCTION()
@@ -122,12 +124,15 @@ private:
 	FDelegateHandle MaxHeatGaugeChangedHandle;
 	FDelegateHandle OverheatedTagChangedHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle FrozenTagChangedHandle;
 	float TargetCurrentHealth = 0.f;
 	float TargetHeatGauge = 0.f;
 	float TargetFreezeGauge = 0.f;
 	float TargetHealthRatio = 0.f;
 	float TargetHeatGaugeRatio = 0.f;
 	float TargetFreezeGaugeRatio = 0.f;
+	float TargetSnowGauge = 0.f;
+	float DisplaySnowGauge = 0.f;
 	float SnowGaugeIdleDuration = 0.f;
 	float HeatGaugeZeroDuration = 0.f;
 	float HeatGaugeBlinkElapsed = 0.f;

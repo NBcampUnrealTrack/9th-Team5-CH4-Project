@@ -37,7 +37,6 @@
 #include "DeepRaiders/UI/HUD/DRHUDUIComponent.h"
 #include "DeepRaiders/UI/Loading/DRLoadingUIComponent.h"
 #include "DeepRaiders/UI/Skill/DRSkillUIComponent.h"
-#include "DeepRaiders/UI/QuickSlot/DRQuickSlotUIComponent.h"
 #include "DeepRaiders/UI/Teleport/DRTeleportUIComponent.h"
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
@@ -82,7 +81,6 @@ ADRPlayerController::ADRPlayerController()
 	HUDUIComponent = CreateDefaultSubobject<UDRHUDUIComponent>(TEXT("HUDUIComponent"));
 	LoadingUIComponent = CreateDefaultSubobject<UDRLoadingUIComponent>(TEXT("LoadingUIComponent"));
 	SkillUIComponent = CreateDefaultSubobject<UDRSkillUIComponent>(TEXT("SkillUIComponent"));
-	QuickSlotUIComponent = CreateDefaultSubobject<UDRQuickSlotUIComponent>(TEXT("QuickSlotUIComponent"));
 	TeleportUIComponent = CreateDefaultSubobject<UDRTeleportUIComponent>(TEXT("TeleportUIComponent"));
 	InventoryUIComponent = CreateDefaultSubobject<UDRInventoryUIComponent>(TEXT("InventoryUIComponent"));
 	ScoreboardUIComponent = CreateDefaultSubobject<UDRScoreboardUIComponent>(TEXT("ScoreboardUIComponent"));
