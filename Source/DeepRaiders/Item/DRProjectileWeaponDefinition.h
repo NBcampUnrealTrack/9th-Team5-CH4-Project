@@ -76,6 +76,12 @@ struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
 	float InitialSpeed = 9000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EDRProjectileFlightMode FlightMode = EDRProjectileFlightMode::CruiseThenFall;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float GravityScale = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float ProjectileScaleMultiplier = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -92,6 +98,9 @@ struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float FullStrengthRangeRatio = 0.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float MinimumStrengthRatio = 0.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MinSizeMultiplier = 0.2f;
@@ -179,6 +188,9 @@ public:
 		ClampMin = "1.0", UIMin = "1.0", Units = "cm/s"))
 	float InitialSpeed = 9000.f;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile|Flight")
+	FDRProjectileFlightSettings FlightSettings;
+
 	/** ProjectileClass의 기본 외형과 충돌 크기에 곱하는 균일 배율. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (
 		ClampMin = "0.01", UIMin = "0.01"))
@@ -192,7 +204,7 @@ public:
 		ClampMin = "0.0", UIMin = "0.0", Units = "deg"))
 	float SpreadHalfAngleDegrees = 0.f;
 
-	// 실제 MaxAttackDistance를 기준으로 Projectile의 크기와 충돌 위력을 감쇠한다.
+	// MaxAttackDistance까지 Projectile 크기와 충돌 위력을 감쇠하고, 이후에는 최소 위력을 유지한다.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile|Falloff")
 	FDRProjectileFalloffSettings FalloffSettings;
 	

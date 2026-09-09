@@ -391,11 +391,11 @@ bool UDRGA_FireProjectile::ValidateServerShotTargetData(
 	const float MaxAttackDistance =
 		FMath::Max(GetMaxAttackDistance(), DRProjectileAim::MinAimDistance);
 
-	if (AimDistance < DRProjectileAim::MinAimDistance
-		|| AimDistance > MaxAttackDistance + DRProjectileAim::MaxClientViewLocationError)
-	{
-		return false;
-	}
+	// if (AimDistance < DRProjectileAim::MinAimDistance
+	// 	|| AimDistance > MaxAttackDistance + DRProjectileAim::MaxClientViewLocationError)
+	// {
+	// 	return false;
+	// }
 
 	const FVector ClientAimDirection = ToAim / AimDistance;
 	const FVector ServerViewDirection =
@@ -717,8 +717,11 @@ void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
 		DRLocalProjectilePrediction::CVarLifetimeSeconds.GetValueOnGameThread();
 
 	const float ProjectileSpeed = FMath::Max(LaunchVelocity.Size(), 1.f);
+	const float FallDuration = WeaponDefinition->FlightSettings.Mode == EDRProjectileFlightMode::CruiseThenFall
+		? WeaponDefinition->FlightSettings.HorizontalDecelerationDuration
+		: 0.f;
 	const float AutoLifetime = FMath::Clamp(
-		GetMaxAttackDistance() / ProjectileSpeed + 0.25f,
+		GetMaxAttackDistance() / ProjectileSpeed + FallDuration + 1.f,
 		0.15f,
 		5.0f);
 
@@ -748,8 +751,9 @@ void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
 	 * InitializeProjectile()는 절대 호출하지 않는다.
 	 * 이 인스턴스에는 ASC / EffectSpec / Snow / Team gameplay data가 없다.
 	 */
-	VisualProjectile->ConfigureWeaponLaunch(LaunchVelocity, WeaponDefinition->InitialSpeed,
-		WeaponDefinition->ProjectileScaleMultiplier);
+	VisualProjectile->ConfigureWeaponLaunch(
+		LaunchVelocity, WeaponDefinition->InitialSpeed, WeaponDefinition->ProjectileScaleMultiplier,
+		GetMaxAttackDistance(), WeaponDefinition->FlightSettings, WeaponDefinition->FalloffSettings);
 	VisualProjectile->ConfigureAsLocalVisualProjectile(LaunchVelocity, LifetimeSeconds, ShotSequence);
 
 	UGameplayStatics::FinishSpawningActor(
@@ -839,8 +843,9 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	}
 
 	Projectile->SetShotSequence(ShotSequence);
-	Projectile->ConfigureWeaponLaunch(SafeLaunchVelocity, WeaponDefinition->InitialSpeed,
-		WeaponDefinition->ProjectileScaleMultiplier);
+	Projectile->ConfigureWeaponLaunch(
+		SafeLaunchVelocity, WeaponDefinition->InitialSpeed, WeaponDefinition->ProjectileScaleMultiplier,
+		GetMaxAttackDistance(), WeaponDefinition->FlightSettings, WeaponDefinition->FalloffSettings);
 
 	Projectile->InitializeProjectile(
 		AbilitySystem,

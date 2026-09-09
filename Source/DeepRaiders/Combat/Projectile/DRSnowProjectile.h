@@ -17,10 +17,8 @@ public:
 	ADRSnowProjectile(const FObjectInitializer& ObjectInitializer);
 
 	virtual float GetConfiguredInitialSpeed() const override;
-	virtual float GetConfiguredGravityScale() const override;
 
 protected:
-	virtual void BeginPlay() override;
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override;
 
 private:
@@ -30,6 +28,4 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow Projectile|Movement", meta = (AllowPrivateAccess = true, ClampMin = "1.0", Units = "cm/s"))
 	float InitialSpeed = 9000.f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow Projectile|Movement", meta = (AllowPrivateAccess = true, ClampMin = "0.0"))
-	float GravityScale = 1.5f;
 };

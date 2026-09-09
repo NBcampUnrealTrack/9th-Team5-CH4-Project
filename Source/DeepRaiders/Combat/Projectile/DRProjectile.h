@@ -31,8 +31,10 @@ public:
 	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
 	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
 
-	/** Item Definition의 탄속과 크기를 Deferred Spawn 중 적용한다. */
-	void ConfigureWeaponLaunch(const FVector& InLaunchVelocity, float InInitialSpeed, float InScaleMultiplier);
+	/** Item Definition의 탄속, 크기, 비행과 감쇠 설정을 Deferred Spawn 중 적용한다. */
+	void ConfigureWeaponLaunch(const FVector& InLaunchVelocity, float InInitialSpeed, float InScaleMultiplier,
+		float InEffectiveMaxRange, const FDRProjectileFlightSettings& InFlightSettings,
+		const FDRProjectileFalloffSettings& InFalloffSettings);
 
 	/** 서버 authoritative projectile과 owner local predicted projectile을 매칭하기 위한 sequence. */
 	void SetShotSequence(uint32 InShotSequence) { ShotSequence = InShotSequence; }
@@ -127,6 +129,10 @@ protected:
 	
 private:
 	void UpdateFalloffAtLocation(const FVector& Location);
+	void ApplyWeaponFlightSettings();
+	void RefreshWeaponLifeSpan();
+	void UpdateCruiseThenFall(float DeltaSeconds);
+	void BeginCruiseFall();
 	void RefreshConfiguredScale();
 	void ApplyFalloffScale(float Strength);
 	void ApplySizeMultiplier(float SizeMultiplier);
@@ -185,14 +191,29 @@ private:
 	UPROPERTY(Transient)
 	FDRProjectileFalloffSettings FalloffSettings;
 
+	UPROPERTY(Replicated)
+	FDRProjectileFlightSettings FlightSettings;
+
 	FVector LaunchLocation = FVector::ZeroVector;
 	FVector InitialLaunchVelocity = FVector::ZeroVector;
 	FVector InitialActorScale = FVector::OneVector;
+	FVector FallStartHorizontalVelocity = FVector::ZeroVector;
+	FVector LastMovementVelocity = FVector::ZeroVector;
+
+	UPROPERTY(Replicated)
 	float ConfiguredInitialSpeed = 1.f;
+
+	UPROPERTY(Replicated)
 	float EffectiveMaxRange = 0.f;
+
 	float CurrentFalloffStrength = 1.f;
 	float LastAppliedSizeMultiplier = INDEX_NONE;
+	float FallElapsedTime = 0.f;
+
+	UPROPERTY(Replicated)
 	bool bWeaponLaunchConfigured = false;
+
+	bool bCruiseFallStarted = false;
 	bool bActorScaleInitialized = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_ProjectileScaleMultiplier)

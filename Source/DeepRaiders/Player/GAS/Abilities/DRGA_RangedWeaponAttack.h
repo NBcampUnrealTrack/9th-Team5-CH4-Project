@@ -123,4 +123,8 @@ private:
 	bool TryConsumeServerFireInterval();
 
 	double ServerNextAllowedShotTime = 0.0;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Trace",
+		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", UIMin = "1.0"))
+	float CameraTraceDistance = 10000.f;
 };

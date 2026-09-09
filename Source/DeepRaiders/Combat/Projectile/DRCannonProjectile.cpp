@@ -21,18 +21,6 @@ ADRCannonProjectile::ADRCannonProjectile(const FObjectInitializer& ObjectInitial
 	SnowAddComponent = CreateDefaultSubobject<UDRSnowAddComponent>(TEXT("SnowAddComponent"));
 }
 
-float ADRCannonProjectile::GetConfiguredGravityScale() const
-{
-	return FMath::Max(GravityScale, 0.0f);
-}
-
-void ADRCannonProjectile::BeginPlay()
-{
-	ConfigureProjectileMovement(GetConfiguredInitialSpeed(), GravityScale);
-
-	Super::BeginPlay();
-}
-
 void ADRCannonProjectile::HandleImpact(
 	const FHitResult& ImpactResult)
 {

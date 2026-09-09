@@ -553,7 +553,7 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 		return false;
 	}
 	
-	const FVector TraceEnd = ViewLocation + SafeDirection * GetMaxAttackDistance();
+	const FVector TraceEnd = ViewLocation + SafeDirection * CameraTraceDistance;
 	
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);

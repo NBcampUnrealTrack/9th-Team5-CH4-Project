@@ -157,6 +157,10 @@ void ADRProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME_CONDITION(ThisClass, FlightSettings, COND_InitialOnly);
+	DOREPLIFETIME_CONDITION(ThisClass, ConfiguredInitialSpeed, COND_InitialOnly);
+	DOREPLIFETIME_CONDITION(ThisClass, EffectiveMaxRange, COND_InitialOnly);
+	DOREPLIFETIME_CONDITION(ThisClass, bWeaponLaunchConfigured, COND_InitialOnly);
 	DOREPLIFETIME_CONDITION(ThisClass, ProjectileScaleMultiplier, COND_InitialOnly);
 	DOREPLIFETIME(ThisClass, ReplicatedSizeMultiplier);
 	DOREPLIFETIME_CONDITION(ThisClass, ShotSequence, COND_OwnerOnly);
@@ -184,18 +188,27 @@ void ADRProjectile::SetInitialLaunchVelocity(const FVector& InLaunchVelocity)
 }
 
 void ADRProjectile::ConfigureWeaponLaunch(
-	const FVector& InLaunchVelocity, const float InInitialSpeed, const float InScaleMultiplier)
+	const FVector& InLaunchVelocity, const float InInitialSpeed, const float InScaleMultiplier,
+	const float InEffectiveMaxRange, const FDRProjectileFlightSettings& InFlightSettings,
+	const FDRProjectileFalloffSettings& InFalloffSettings)
 {
 	SetInitialLaunchVelocity(InLaunchVelocity);
 	ConfiguredInitialSpeed = FMath::Max(InInitialSpeed, 1.f);
 	ProjectileScaleMultiplier = FMath::Max(InScaleMultiplier, 0.01f);
+	EffectiveMaxRange = FMath::Max(InEffectiveMaxRange, 0.f);
+	FlightSettings = InFlightSettings;
+	FlightSettings.GravityScale = FMath::Max(FlightSettings.GravityScale, 0.01f);
+	FlightSettings.HorizontalDecelerationDuration =
+		FMath::Max(FlightSettings.HorizontalDecelerationDuration, KINDA_SMALL_NUMBER);
+	FalloffSettings = InFalloffSettings;
 	bWeaponLaunchConfigured = true;
+	bCruiseFallStarted = false;
+	FallElapsedTime = 0.f;
+	FallStartHorizontalVelocity = FVector::ZeroVector;
 
-	if (IsValid(ProjectileMovement))
-	{
-		ProjectileMovement->InitialSpeed = ConfiguredInitialSpeed;
-		ProjectileMovement->MaxSpeed = ConfiguredInitialSpeed;
-	}
+	ApplyWeaponFlightSettings();
+	RefreshWeaponLifeSpan();
+	SetActorTickEnabled(EffectiveMaxRange > KINDA_SMALL_NUMBER);
 
 	RefreshConfiguredScale();
 }
@@ -227,6 +240,7 @@ void ADRProjectile::PostInitializeComponents()
 void ADRProjectile::BeginPlay()
 {
 	Super::BeginPlay();
+	LaunchLocation = GetActorLocation();
 
 	// BP에 저장된 예전 Profile 값과 무관하게 히트스캔 전용 구체는 물리탄이 항상 무시한다.
 	CollisionComponent->SetCollisionResponseToChannel(
@@ -235,8 +249,12 @@ void ADRProjectile::BeginPlay()
 
 	if (bWeaponLaunchConfigured)
 	{
-		ProjectileMovement->InitialSpeed = ConfiguredInitialSpeed;
-		ProjectileMovement->MaxSpeed = ConfiguredInitialSpeed;
+		ApplyWeaponFlightSettings();
+		if (!bLocalVisualProjectile)
+		{
+			RefreshWeaponLifeSpan();
+		}
+		SetActorTickEnabled(EffectiveMaxRange > KINDA_SMALL_NUMBER);
 	}
 
 	if (bLocalVisualProjectile)
@@ -286,6 +304,7 @@ void ADRProjectile::BeginPlay()
 			this,
 			&ThisClass::HandleProjectileStop);
 		ProjectileMovement->Velocity = VisualLaunchVelocity;
+		LastMovementVelocity = VisualLaunchVelocity;
 		ProjectileMovement->Activate(true);
 		ProjectileMovement->UpdateComponentVelocity();
 
@@ -328,6 +347,7 @@ void ADRProjectile::BeginPlay()
 		CollisionComponent->SetCollisionEnabled(
 			ECollisionEnabled::NoCollision);
 		ProjectileMovement->Velocity = LaunchVelocity;
+		LastMovementVelocity = LaunchVelocity;
 
 		const APawn* OwnerPawn = Cast<APawn>(GetOwner());
 		if (IsValid(OwnerPawn) && OwnerPawn->IsLocallyControlled())
@@ -357,6 +377,7 @@ void ADRProjectile::BeginPlay()
 		this,
 		&ThisClass::HandleProjectileStop);
 	ProjectileMovement->Velocity = LaunchVelocity;
+	LastMovementVelocity = LaunchVelocity;
 }
 
 void ADRProjectile::EndPlay(
@@ -400,19 +421,34 @@ void ADRProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (!HasAuthority() || EffectiveMaxRange <= KINDA_SMALL_NUMBER)
+	if (!IsValid(ProjectileMovement) || EffectiveMaxRange <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
 	const FVector CurrentLocation = GetActorLocation();
-	if (FVector::DistSquared(LaunchLocation, CurrentLocation) >= FMath::Square(EffectiveMaxRange))
+	const bool bReachedEffectiveMaxRange =
+		FVector::DistSquared(LaunchLocation, CurrentLocation) >= FMath::Square(EffectiveMaxRange);
+	if (!bWeaponLaunchConfigured && HasAuthority() && bReachedEffectiveMaxRange)
 	{
 		Destroy();
 		return;
 	}
 
-	UpdateFalloffAtLocation(CurrentLocation);
+	if (bWeaponLaunchConfigured && FlightSettings.Mode == EDRProjectileFlightMode::CruiseThenFall)
+	{
+		UpdateCruiseThenFall(DeltaSeconds);
+	}
+
+	if (HasAuthority() || bLocalVisualProjectile)
+	{
+		UpdateFalloffAtLocation(CurrentLocation);
+	}
+
+	if (!ProjectileMovement->Velocity.IsNearlyZero())
+	{
+		LastMovementVelocity = ProjectileMovement->Velocity;
+	}
 }
 
 void ADRProjectile::InitializeProjectile(
@@ -450,7 +486,11 @@ void ADRProjectile::InitializeProjectile(
 	if (EffectiveMaxRange > KINDA_SMALL_NUMBER)
 	{
 		const float ProjectileSpeed = FMath::Max(ProjectileMovement->InitialSpeed, 1.f);
-		InitialLifeSpan = FMath::Max(InitialLifeSpan, EffectiveMaxRange / ProjectileSpeed + 1.f);
+		const float FallDuration = bWeaponLaunchConfigured
+			&& FlightSettings.Mode == EDRProjectileFlightMode::CruiseThenFall
+			? FlightSettings.HorizontalDecelerationDuration
+			: 0.f;
+		InitialLifeSpan = FMath::Max(InitialLifeSpan, EffectiveMaxRange / ProjectileSpeed + FallDuration + 1.f);
 	}
 
 	// Deferred Spawn 직후부터 발사자 캡슐과 겹칠 수 있으므로,
@@ -527,7 +567,7 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 		? FVector(ImpactResult.ImpactPoint)
 		: GetActorLocation();
 
-	if (EffectiveMaxRange > KINDA_SMALL_NUMBER
+	if (!bWeaponLaunchConfigured && EffectiveMaxRange > KINDA_SMALL_NUMBER
 		&& FVector::DistSquared(LaunchLocation, ImpactLocation) >= FMath::Square(EffectiveMaxRange))
 	{
 		Destroy();
@@ -542,7 +582,9 @@ void ADRProjectile::HandleProjectileStop(const FHitResult& ImpactResult)
 		&& IsFriendlyTarget(HitActor))
 	{
 		CollisionComponent->IgnoreActorWhenMoving(HitActor, true);
-		ProjectileMovement->Velocity = GetActorForwardVector() * ProjectileMovement->InitialSpeed;
+		ProjectileMovement->Velocity = !LastMovementVelocity.IsNearlyZero()
+			? LastMovementVelocity
+			: GetActorForwardVector() * ProjectileMovement->InitialSpeed;
 		ProjectileMovement->Activate(true);
 		ProjectileMovement->UpdateComponentVelocity();
 
@@ -830,6 +872,78 @@ void ADRProjectile::ConfigureProjectileMovement(float InitialSpeed, float Gravit
 	ProjectileMovement->Velocity = GetActorForwardVector() * SafeSpeed;
 }
 
+void ADRProjectile::ApplyWeaponFlightSettings()
+{
+	if (!IsValid(ProjectileMovement))
+	{
+		return;
+	}
+
+	ProjectileMovement->InitialSpeed = ConfiguredInitialSpeed;
+	ProjectileMovement->MaxSpeed = 0.f;
+	ProjectileMovement->ProjectileGravityScale = FlightSettings.Mode == EDRProjectileFlightMode::Ballistic
+		? FlightSettings.GravityScale
+		: 0.f;
+	ProjectileMovement->bInitialVelocityInLocalSpace = false;
+}
+
+void ADRProjectile::RefreshWeaponLifeSpan()
+{
+	if (!bWeaponLaunchConfigured || EffectiveMaxRange <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float FallDuration = FlightSettings.Mode == EDRProjectileFlightMode::CruiseThenFall
+		? FlightSettings.HorizontalDecelerationDuration
+		: 0.f;
+	const float RequiredLifeSpan = EffectiveMaxRange / ConfiguredInitialSpeed + FallDuration + 1.f;
+	InitialLifeSpan = FMath::Max(InitialLifeSpan, RequiredLifeSpan);
+
+	if (HasActorBegunPlay())
+	{
+		SetLifeSpan(InitialLifeSpan);
+	}
+}
+
+void ADRProjectile::UpdateCruiseThenFall(float DeltaSeconds)
+{
+	if (!bCruiseFallStarted)
+	{
+		if (FVector::DistSquared(LaunchLocation, GetActorLocation()) < FMath::Square(EffectiveMaxRange))
+		{
+			return;
+		}
+
+		BeginCruiseFall();
+	}
+
+	FallElapsedTime += FMath::Max(DeltaSeconds, 0.f);
+	const float Duration = FMath::Max(FlightSettings.HorizontalDecelerationDuration, KINDA_SMALL_NUMBER);
+	const float Alpha = FMath::Clamp(FallElapsedTime / Duration, 0.f, 1.f);
+	const float SmoothAlpha = Alpha * Alpha * (3.f - 2.f * Alpha);
+	const FVector HorizontalVelocity = FallStartHorizontalVelocity * (1.f - SmoothAlpha);
+
+	FVector NewVelocity = ProjectileMovement->Velocity;
+	NewVelocity.X = HorizontalVelocity.X;
+	NewVelocity.Y = HorizontalVelocity.Y;
+	ProjectileMovement->Velocity = NewVelocity;
+	ProjectileMovement->UpdateComponentVelocity();
+}
+
+void ADRProjectile::BeginCruiseFall()
+{
+	if (bCruiseFallStarted || !IsValid(ProjectileMovement))
+	{
+		return;
+	}
+
+	bCruiseFallStarted = true;
+	FallElapsedTime = 0.f;
+	FallStartHorizontalVelocity = FVector(ProjectileMovement->Velocity.X, ProjectileMovement->Velocity.Y, 0.f);
+	ProjectileMovement->ProjectileGravityScale = FlightSettings.GravityScale;
+}
+
 float ADRProjectile::EvaluateFalloffStrengthAtLocation(const FVector& Location) const
 {
 	if (!FalloffSettings.bEnabled || EffectiveMaxRange <= KINDA_SMALL_NUMBER)
@@ -841,17 +955,19 @@ float ADRProjectile::EvaluateFalloffStrengthAtLocation(const FVector& Location) 
 		FVector::Distance(LaunchLocation, Location) / EffectiveMaxRange,
 		0.f,
 		1.f);
+	const float MinimumStrength = FMath::Clamp(FalloffSettings.MinimumStrengthRatio, 0.f, 1.f);
 
 	if (IsValid(FalloffSettings.StrengthCurve))
 	{
-		return FMath::Clamp(FalloffSettings.StrengthCurve->GetFloatValue(NormalizedDistance), 0.f, 1.f);
+		return FMath::Clamp(FalloffSettings.StrengthCurve->GetFloatValue(NormalizedDistance), MinimumStrength, 1.f);
 	}
 
 	const float FullStrengthRatio = FMath::Clamp(FalloffSettings.FullStrengthRangeRatio, 0.f, 0.99f);
-	return 1.f - FMath::GetMappedRangeValueClamped(
+	const float FalloffAlpha = FMath::GetMappedRangeValueClamped(
 		FVector2D(FullStrengthRatio, 1.f),
 		FVector2D(0.f, 1.f),
 		NormalizedDistance);
+	return FMath::Lerp(1.f, MinimumStrength, FalloffAlpha);
 }
 
 void ADRProjectile::UpdateFalloffAtLocation(const FVector& Location)
@@ -873,10 +989,14 @@ void ADRProjectile::RefreshConfiguredScale()
 
 void ADRProjectile::ApplyFalloffScale(float Strength)
 {
+	const float MinimumStrength = FMath::Clamp(FalloffSettings.MinimumStrengthRatio, 0.f, 1.f);
+	const float VisualStrength = MinimumStrength < 1.f
+		? FMath::GetMappedRangeValueClamped(FVector2D(MinimumStrength, 1.f), FVector2D(0.f, 1.f), Strength)
+		: 1.f;
 	const float SizeMultiplier = FMath::Lerp(
 		FMath::Clamp(FalloffSettings.MinSizeMultiplier, 0.f, 1.f),
 		1.f,
-		FMath::Clamp(Strength, 0.f, 1.f));
+		VisualStrength);
 	ApplySizeMultiplier(SizeMultiplier);
 
 	const uint8 NewReplicatedSize = static_cast<uint8>(FMath::RoundToInt(SizeMultiplier * MAX_uint8));
