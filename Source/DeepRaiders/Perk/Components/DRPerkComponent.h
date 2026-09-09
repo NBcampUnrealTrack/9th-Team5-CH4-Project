@@ -85,6 +85,9 @@ public:
 	/** 공용 퍽 또는 유일하게 호환되는 장착 스킬 퍽을 추가할 수 있는지 확인한다. */
 	bool CanAddPerkAutomatically(const UDRPerkDefinition* PerkDefinition) const;
 
+	/** 현재 장착한 스킬 중 하나와 호환되거나 공용 퍽인지 확인한다. */
+	bool IsCompatibleWithEquippedSkills(const UDRPerkDefinition* PerkDefinition) const;
+
 	/** 공용 퍽 또는 유일하게 호환되는 장착 스킬 퍽을 자동으로 추가한다. */
 	bool AddPerkAutomatically(UDRPerkDefinition* PerkDefinition);
 

@@ -460,6 +460,12 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 		{
 			continue;
 		}
+		if (OfferType == EDRShopOfferType::Perk
+			&& (!IsValid(PerkComponent)
+				|| !PerkComponent->IsCompatibleWithEquippedSkills(PerkDefinition)))
+		{
+			continue;
+		}
 
 		FDRShopOfferView& OfferView = OfferViews.AddDefaulted_GetRef();
 		OfferView.Request = Offer.MakeRequest();
