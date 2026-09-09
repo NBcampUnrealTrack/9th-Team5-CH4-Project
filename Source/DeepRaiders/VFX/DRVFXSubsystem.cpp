@@ -7,6 +7,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Data/DRVFXLibrary.h"
+#include "TimerManager.h"
 
 void UDRVFXSubsystem::Deinitialize()
 {
@@ -20,6 +21,7 @@ void UDRVFXSubsystem::Deinitialize()
 	}
 	
 	ActivePersistentVFX.Reset();
+	PendingPersistentVFXRemovals.Reset();
 	
 	Super::Deinitialize();
 }
@@ -43,6 +45,7 @@ UNiagaraComponent* UDRVFXSubsystem::StartPersistentVFX(const UDRVFXLibrary* Libr
 	}
 	
 	const FPersistentVFXKey Key{Request.TargetActor, Request.VFXTag};
+	PendingPersistentVFXRemovals.Remove(Key);
 	
 	if (const TWeakObjectPtr<UNiagaraComponent>* ExistingComponent = ActivePersistentVFX.Find(Key))
 	{
@@ -79,6 +82,7 @@ bool UDRVFXSubsystem::StopPersistentVFX(const FDRVFXRequest& Request)
 	}
 
 	const FPersistentVFXKey Key{Request.TargetActor, Request.VFXTag};
+	PendingPersistentVFXRemovals.Remove(Key);
 	TWeakObjectPtr<UNiagaraComponent> NiagaraComponent;
 	
 	if (!ActivePersistentVFX.RemoveAndCopyValue(Key, NiagaraComponent)
@@ -91,6 +95,29 @@ bool UDRVFXSubsystem::StopPersistentVFX(const FDRVFXRequest& Request)
 	NiagaraComponent->DestroyComponent();
 	
 	return true;	
+}
+
+bool UDRVFXSubsystem::QueuePersistentVFXRemoval(const UDRVFXLibrary* Library, const FDRVFXRequest& Request)
+{
+	UWorld* World = GetWorld();
+	if (!IsValid(World) || !IsValid(Library) || !IsValid(Request.TargetActor) || !Request.VFXTag.IsValid())
+	{
+		return false;
+	}
+
+	const FPersistentVFXKey Key{Request.TargetActor, Request.VFXTag};
+	const bool bAlreadyPending = PendingPersistentVFXRemovals.Contains(Key);
+	FPendingPersistentVFXRemoval& PendingRemoval = PendingPersistentVFXRemovals.FindOrAdd(Key);
+	PendingRemoval.Library = const_cast<UDRVFXLibrary*>(Library);
+	PendingRemoval.Request = Request;
+
+	if (!bAlreadyPending)
+	{
+		World->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateUObject(this, &ThisClass::FinalizePersistentVFXRemoval, Key));
+	}
+
+	return true;
 }
 
 UNiagaraComponent* UDRVFXSubsystem::PlayRemovalVFX(const UDRVFXLibrary* Library, const FDRVFXRequest& Request)
@@ -226,5 +253,23 @@ void UDRVFXSubsystem::CleanupInvalidPersistentVFX()
 
 			Iterator.RemoveCurrent();
 		}
+	}
+}
+
+void UDRVFXSubsystem::FinalizePersistentVFXRemoval(FPersistentVFXKey Key)
+{
+	FPendingPersistentVFXRemoval PendingRemoval;
+	if (!PendingPersistentVFXRemovals.RemoveAndCopyValue(Key, PendingRemoval))
+	{
+		return;
+	}
+
+	const bool bStoppedPersistentVFX = StopPersistentVFX(PendingRemoval.Request);
+	const bool bPlayedRemovalVFX = IsValid(PlayRemovalVFX(PendingRemoval.Library.Get(), PendingRemoval.Request));
+
+	if (!bStoppedPersistentVFX && !bPlayedRemovalVFX)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[VFXSubsystem] No persistent or removal VFX found: %s"),
+			*PendingRemoval.Request.VFXTag.ToString());
 	}
 }

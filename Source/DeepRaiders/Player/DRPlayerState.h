@@ -11,6 +11,7 @@
 
 class FLifetimeProperty;
 class UAbilitySystemComponent;
+class UDRAbilitySystemComponent;
 class UDRPlayerAttributeSet;
 class UDRCharacterUpgradeComponent;
 class UDRPerkComponent;
@@ -49,6 +50,7 @@ public:
 	ADRPlayerState();
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	UDRAbilitySystemComponent* GetDRAbilitySystemComponent() const;
 
 	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
 	{
