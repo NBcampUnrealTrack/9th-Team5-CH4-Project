@@ -157,6 +157,7 @@ void ADRProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	DOREPLIFETIME_CONDITION(ThisClass, ProjectileScaleMultiplier, COND_InitialOnly);
 	DOREPLIFETIME(ThisClass, ReplicatedSizeMultiplier);
 	DOREPLIFETIME_CONDITION(ThisClass, ShotSequence, COND_OwnerOnly);
 }
@@ -182,6 +183,23 @@ void ADRProjectile::SetInitialLaunchVelocity(const FVector& InLaunchVelocity)
 		: InLaunchVelocity;
 }
 
+void ADRProjectile::ConfigureWeaponLaunch(
+	const FVector& InLaunchVelocity, const float InInitialSpeed, const float InScaleMultiplier)
+{
+	SetInitialLaunchVelocity(InLaunchVelocity);
+	ConfiguredInitialSpeed = FMath::Max(InInitialSpeed, 1.f);
+	ProjectileScaleMultiplier = FMath::Max(InScaleMultiplier, 0.01f);
+	bWeaponLaunchConfigured = true;
+
+	if (IsValid(ProjectileMovement))
+	{
+		ProjectileMovement->InitialSpeed = ConfiguredInitialSpeed;
+		ProjectileMovement->MaxSpeed = ConfiguredInitialSpeed;
+	}
+
+	RefreshConfiguredScale();
+}
+
 void ADRProjectile::ConfigureAsLocalVisualProjectile(
 	const FVector& InLaunchVelocity,
 	float LifetimeSeconds,
@@ -202,6 +220,8 @@ void ADRProjectile::PostInitializeComponents()
 	Super::PostInitializeComponents();
 
 	InitialActorScale = GetActorScale3D();
+	bActorScaleInitialized = true;
+	RefreshConfiguredScale();
 }
 
 void ADRProjectile::BeginPlay()
@@ -212,6 +232,12 @@ void ADRProjectile::BeginPlay()
 	CollisionComponent->SetCollisionResponseToChannel(
 		DRCollisionChannels::BarrierTrace,
 		ECR_Ignore);
+
+	if (bWeaponLaunchConfigured)
+	{
+		ProjectileMovement->InitialSpeed = ConfiguredInitialSpeed;
+		ProjectileMovement->MaxSpeed = ConfiguredInitialSpeed;
+	}
 
 	if (bLocalVisualProjectile)
 	{
@@ -834,6 +860,17 @@ void ADRProjectile::UpdateFalloffAtLocation(const FVector& Location)
 	ApplyFalloffScale(CurrentFalloffStrength);
 }
 
+void ADRProjectile::RefreshConfiguredScale()
+{
+	if (!bActorScaleInitialized)
+	{
+		return;
+	}
+
+	LastAppliedSizeMultiplier = INDEX_NONE;
+	ApplySizeMultiplier(static_cast<float>(ReplicatedSizeMultiplier) / MAX_uint8);
+}
+
 void ADRProjectile::ApplyFalloffScale(float Strength)
 {
 	const float SizeMultiplier = FMath::Lerp(
@@ -856,7 +893,7 @@ void ADRProjectile::ApplySizeMultiplier(float SizeMultiplier)
 		return;
 	}
 
-	SetActorScale3D(InitialActorScale * SizeMultiplier);
+	SetActorScale3D(InitialActorScale * ProjectileScaleMultiplier * SizeMultiplier);
 	LastAppliedSizeMultiplier = SizeMultiplier;
 }
 
@@ -876,6 +913,11 @@ void ADRProjectile::ScaleImpactSetByCallerMagnitude(
 void ADRProjectile::OnRep_SizeMultiplier()
 {
 	ApplySizeMultiplier(static_cast<float>(ReplicatedSizeMultiplier) / MAX_uint8);
+}
+
+void ADRProjectile::OnRep_ProjectileScaleMultiplier()
+{
+	RefreshConfiguredScale();
 }
 
 void ADRProjectile::OnRep_ShotSequence()

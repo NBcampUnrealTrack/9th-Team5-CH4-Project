@@ -22,14 +22,17 @@ public:
 	ADRProjectile(const FObjectInitializer& ObjectInitializer);
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** Ballistic Aim 계산에서 사용하는 이 Projectile의 실제 기본 발사 속도. */
+	/** Item Definition을 사용하지 않는 Projectile 호출 경로의 클래스 기본 발사 속도. */
 	virtual float GetConfiguredInitialSpeed() const;
 
-	/** Ballistic Aim 계산에서 사용하는 ProjectileGravityScale. */
+	/** Item Definition을 사용하지 않는 Projectile 호출 경로의 중력 배율. */
 	virtual float GetConfiguredGravityScale() const;
 
 	/** Deferred Spawn 중 계산된 초기 발사 속도를 BeginPlay 전에 전달한다. */
 	void SetInitialLaunchVelocity(const FVector& InLaunchVelocity);
+
+	/** Item Definition의 탄속과 크기를 Deferred Spawn 중 적용한다. */
+	void ConfigureWeaponLaunch(const FVector& InLaunchVelocity, float InInitialSpeed, float InScaleMultiplier);
 
 	/** 서버 authoritative projectile과 owner local predicted projectile을 매칭하기 위한 sequence. */
 	void SetShotSequence(uint32 InShotSequence) { ShotSequence = InShotSequence; }
@@ -124,12 +127,16 @@ protected:
 	
 private:
 	void UpdateFalloffAtLocation(const FVector& Location);
+	void RefreshConfiguredScale();
 	void ApplyFalloffScale(float Strength);
 	void ApplySizeMultiplier(float SizeMultiplier);
 	void ScaleImpactSetByCallerMagnitude(FGameplayEffectSpec& ImpactSpec, const FGameplayTag& DataTag) const;
 
 	UFUNCTION()
 	void OnRep_SizeMultiplier();
+
+	UFUNCTION()
+	void OnRep_ProjectileScaleMultiplier();
 
 	UFUNCTION()
 	void OnRep_ShotSequence();
@@ -181,9 +188,15 @@ private:
 	FVector LaunchLocation = FVector::ZeroVector;
 	FVector InitialLaunchVelocity = FVector::ZeroVector;
 	FVector InitialActorScale = FVector::OneVector;
+	float ConfiguredInitialSpeed = 1.f;
 	float EffectiveMaxRange = 0.f;
 	float CurrentFalloffStrength = 1.f;
 	float LastAppliedSizeMultiplier = INDEX_NONE;
+	bool bWeaponLaunchConfigured = false;
+	bool bActorScaleInitialized = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ProjectileScaleMultiplier)
+	float ProjectileScaleMultiplier = 1.f;
 
 	UPROPERTY(ReplicatedUsing = OnRep_SizeMultiplier)
 	uint8 ReplicatedSizeMultiplier = MAX_uint8;

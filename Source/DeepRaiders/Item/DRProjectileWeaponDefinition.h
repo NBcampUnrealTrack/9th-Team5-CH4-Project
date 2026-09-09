@@ -73,6 +73,12 @@ struct DEEPRAIDERS_API FDRProjectileWeaponDataTableRow : public FTableRowBase
 	float NoHitAimDistance = 3000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float InitialSpeed = 9000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ProjectileScaleMultiplier = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float BreakableDamage = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -168,6 +174,15 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess))
 	TSubclassOf<ADRProjectile> ProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (
+		ClampMin = "1.0", UIMin = "1.0", Units = "cm/s"))
+	float InitialSpeed = 9000.f;
+
+	/** ProjectileClass의 기본 외형과 충돌 크기에 곱하는 균일 배율. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (
+		ClampMin = "0.01", UIMin = "0.01"))
+	float ProjectileScaleMultiplier = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ranged Weapon|Projectile", meta = (AllowPrivateAccess,
 		ClampMin = "1", UIMin = "1"))

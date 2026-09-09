@@ -366,6 +366,9 @@ namespace ItemParser
 			Report, RowIndex, Row.RowName, TEXT("BaseFireInterval"), Row.BaseFireInterval, 0.f, false);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("MaxAttackDistance"), Row.MaxAttackDistance, 1.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("NoHitAimDistance"), Row.NoHitAimDistance, 1.f);
+		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("InitialSpeed"), Row.InitialSpeed, 1.f);
+		bValid &= ValidateMinimum(
+			Report, RowIndex, Row.RowName, TEXT("ProjectileScaleMultiplier"), Row.ProjectileScaleMultiplier, 0.f, false);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("BreakableDamage"), Row.BreakableDamage, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("ProjectileCount"), Row.ProjectileCount, 1);
 		bValid &= ValidateMinimum(
@@ -464,6 +467,8 @@ namespace ItemParser
 		Definition.bAutomaticFire = Row.bAutomaticFire;
 		Definition.MaxAttackDistance = Row.MaxAttackDistance;
 		Definition.NoHitAimDistance = Row.NoHitAimDistance;
+		Definition.InitialSpeed = Row.InitialSpeed;
+		Definition.ProjectileScaleMultiplier = Row.ProjectileScaleMultiplier;
 		Definition.BreakableDamage = Row.BreakableDamage;
 		Definition.ProjectileCount = Row.ProjectileCount;
 		Definition.SpreadHalfAngleDegrees = Row.SpreadHalfAngleDegrees;
