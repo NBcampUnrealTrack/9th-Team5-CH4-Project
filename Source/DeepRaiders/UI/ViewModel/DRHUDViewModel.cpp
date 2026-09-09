@@ -61,6 +61,9 @@ void UDRHUDViewModel::Initialize(ADRPlayerCharacter* InPlayerCharacter)
 		FrozenTagChangedHandle = AbilitySystemComponent->RegisterGameplayTagEvent(
 			DRGameplayTags::State_Frozen, EGameplayTagEventType::NewOrRemoved).AddUObject(
 				this, &ThisClass::HandleFrozenTagChanged);
+		MaxFreezeGaugeChangedHandle = AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			UDRPlayerAttributeSet::GetMaxFreezeGaugeAttribute()).AddUObject(
+				this, &ThisClass::HandleMaxFreezeGaugeChanged);
 	}
 
 	if (QuickSlotComponent.IsValid())
