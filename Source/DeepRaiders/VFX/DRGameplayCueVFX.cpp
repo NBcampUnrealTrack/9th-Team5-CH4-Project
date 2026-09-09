@@ -1,6 +1,8 @@
 ﻿
 #include "DRGameplayCueVFX.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Engine/World.h"
 #include "DRVFXSubsystem.h"
 #include "Data/DRVFXLibrary.h"
@@ -43,10 +45,15 @@ bool UDRGameplayCueVFX::OnRemove_Implementation(AActor* MyTarget, const FGamepla
 		return false;
 	}
 	
-	const bool bStoppedPersistentVFX = VFXSubsystem->StopPersistentVFX(Request);
-	const bool bPlayedRemovalVFX = IsValid(VFXSubsystem->PlayRemovalVFX(VFXLibrary, Request));
-	
-	return bStoppedPersistentVFX || bPlayedRemovalVFX;
+	const UAbilitySystemComponent* AbilitySystem =
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(MyTarget);
+	// 같은 Cue 태그를 사용하는 다른 지속 효과가 남아 있으면 공용 Persistent VFX를 제거하지 않는다.
+	if (IsValid(AbilitySystem) && AbilitySystem->GetGameplayTagCount(Request.VFXTag) > 0)
+	{
+		return true;
+	}
+
+	return VFXSubsystem->QueuePersistentVFXRemoval(VFXLibrary, Request);
 }
 
 bool UDRGameplayCueVFX::BuildRequest(AActor* Target, const FGameplayCueParameters& Parameters,

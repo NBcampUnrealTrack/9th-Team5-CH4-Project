@@ -9,6 +9,7 @@
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
@@ -120,9 +121,12 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	{
 		AvatarActor->GetActorEyesViewPoint(ViewLocation, ViewRotation);
 	}
-
-	// 흡수 프러스텀은 무기 투사체 스폰점이 아닌 캐릭터 원점에서 시작한다.
-	const FVector AbsorbOrigin = AvatarActor->GetActorLocation();
+	
+	FVector AbsorbOrigin = AvatarActor->GetActorLocation();
+	if (ADRPlayerCharacter* DRPlayerCharacter = Cast<ADRPlayerCharacter>(AvatarActor))
+	{
+		DRPlayerCharacter->CalculateGameplayFireOrigin(AvatarActor->GetActorForwardVector(), AbsorbOrigin);
+	}
 
 	const UDRRangedWeaponDefinition* WeaponDefinition = Cast<UDRRangedWeaponDefinition>(
 		GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo));

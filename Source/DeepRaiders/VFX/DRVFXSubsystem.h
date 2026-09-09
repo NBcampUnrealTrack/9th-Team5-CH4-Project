@@ -38,6 +38,7 @@ public:
 	UNiagaraComponent* PlayApplicationVFX(const UDRVFXLibrary* Library, const FDRVFXRequest& Request);
 	UNiagaraComponent* StartPersistentVFX(const UDRVFXLibrary* Library, const FDRVFXRequest& Request);
 	bool StopPersistentVFX(const FDRVFXRequest& Request);
+	bool QueuePersistentVFXRemoval(const UDRVFXLibrary* Library, const FDRVFXRequest& Request);
 	
 	UNiagaraComponent* PlayRemovalVFX(const UDRVFXLibrary* Library, const FDRVFXRequest& Request);
 	
@@ -57,6 +58,12 @@ private:
 			return HashCombine(GetTypeHash(Key.TargetActor), GetTypeHash(Key.VFXTag));
 		}
 	};
+
+	struct FPendingPersistentVFXRemoval
+	{
+		TWeakObjectPtr<UDRVFXLibrary> Library;
+		FDRVFXRequest Request;
+	};
 	
 	// VFXDefinition 탐색 후 반환
 	const FDRVFXDefinition* ResolveDefinition(const UDRVFXLibrary* Library, const FDRVFXRequest& Request) const;
@@ -73,6 +80,8 @@ private:
 	
 	// VFX 정리
 	void CleanupInvalidPersistentVFX();
+	void FinalizePersistentVFXRemoval(FPersistentVFXKey Key);
 	
 	TMap<FPersistentVFXKey, TWeakObjectPtr<UNiagaraComponent>> ActivePersistentVFX;
+	TMap<FPersistentVFXKey, FPendingPersistentVFXRemoval> PendingPersistentVFXRemovals;
 };

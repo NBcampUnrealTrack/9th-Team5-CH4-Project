@@ -9,6 +9,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameplayEffect.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Player/GAS/DRAbilitySystemComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/SceneComponent.h"
 
@@ -996,7 +997,7 @@ void ADRPlayerCharacter::InitializeAbilitySystem()
 		return;
 	}
 
-	UAbilitySystemComponent* ASC = DRPlayerState->GetAbilitySystemComponent();
+	UDRAbilitySystemComponent* ASC = DRPlayerState->GetDRAbilitySystemComponent();
 
 	if (!IsValid(ASC))
 	{

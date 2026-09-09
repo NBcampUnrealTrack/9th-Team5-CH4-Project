@@ -6,6 +6,7 @@
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/Player/GAS/DRAbilitySystemComponent.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Skill/Components/DRSkillComponent.h"
@@ -22,7 +23,7 @@
 
 ADRPlayerState::ADRPlayerState()
 {
-	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent = CreateDefaultSubobject<UDRAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 	AbilitySystemComponent->GenericConfirmInputID = static_cast<int32>(EDRAbilityInputId::Primary);
@@ -39,6 +40,11 @@ ADRPlayerState::ADRPlayerState()
 UAbilitySystemComponent* ADRPlayerState::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+UDRAbilitySystemComponent* ADRPlayerState::GetDRAbilitySystemComponent() const
+{
+	return Cast<UDRAbilitySystemComponent>(AbilitySystemComponent);
 }
 
 void ADRPlayerState::GetLifetimeReplicatedProps(

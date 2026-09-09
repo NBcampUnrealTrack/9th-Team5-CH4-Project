@@ -44,6 +44,9 @@ protected:
 	virtual bool SpawnServerProjectile(
 		const FVector& LaunchLocation,
 		const FVector& LaunchDirection);
+	virtual UDRThrowableItemDefinition* ResolveThrowableDefinition(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo) const;
 
 	const UDRThrowableItemDefinition* GetActiveDefinition() const
 	{
