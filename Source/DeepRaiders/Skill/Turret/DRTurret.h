@@ -4,7 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectileTypes.h"
 #include "DeepRaiders/GAS/DRGameplayEffectData.h"
-#include "GameFramework/Actor.h"
+#include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "DRTurret.generated.h"
 
 struct FGameplayEffectSpecHandle;
@@ -63,7 +63,7 @@ struct DEEPRAIDERS_API FDRTurretWeaponSettings
 
 /** 서버에서 생성되어 모든 클라이언트에 복제되는 설치형 포탑의 기반 Actor다. */
 UCLASS(Blueprintable)
-class DEEPRAIDERS_API ADRTurret : public AActor
+class DEEPRAIDERS_API ADRTurret : public ADRBreakableActor
 {
 	GENERATED_BODY()
 
@@ -82,6 +82,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Turret")
 	bool IsInstalledBy(const ADRPlayerState* PlayerState) const;
 
+	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent,
+		AController* EventInstigator, AActor* DamageCauser) override;
+
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayFirePresentation(
 		UDRProjectileWeaponItemDefinition* PresentationDefinition,
@@ -93,6 +96,7 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void ApplyBrokenPresentation() override;
 
 	/** 파생 Blueprint가 메시, 포신, 공격 컴포넌트를 붙일 기준점이다. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Turret")
@@ -130,6 +134,7 @@ protected:
 
 private:
 	void ApplyOwnerCooldown() const;
+	bool CanReceiveDamageFrom(const AController* EventInstigator) const;
 	void UpdateTargetAndFire(float DeltaSeconds);
 	APawn* FindNearestEnemy() const;
 	bool FireAtTarget(APawn* TargetPawn);

@@ -29,19 +29,23 @@ ADRTurret::ADRTurret()
 
 	TurretRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretRoot"));
 	SetRootComponent(TurretRoot);
+	BreakableMeshComponent->SetupAttachment(TurretRoot);
 
 	TurretHolderMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretHolderMesh"));
 	TurretHolderMesh->SetupAttachment(TurretRoot);
+	TurretHolderMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 	TurretAimPivot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretAimPivot"));
 	TurretAimPivot->SetupAttachment(TurretRoot);
 	TurretAimPivot->SetRelativeLocation(TurretAimPivotLocation);
 	TurretMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretMesh"));
 	TurretMesh->SetupAttachment(TurretAimPivot);
+	TurretMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 	TurretMesh->SetRelativeLocation(-TurretAimPivotLocation);
 	TurretMuzzle = CreateDefaultSubobject<USceneComponent>(TEXT("TurretMuzzle"));
 	TurretMuzzle->SetupAttachment(TurretMesh);
 	TurretTankMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretTankMesh"));
 	TurretTankMesh->SetupAttachment(TurretRoot);
+	TurretTankMesh->SetCollisionProfileName(TEXT("DRBreakable"));
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> HolderMesh(
 		TEXT("/Game/Fab/Cryo_Cannons_for_Tower_Defence_Game/snow_towers/StaticMeshes/Tier1_Turrent_Holder.Tier1_Turrent_Holder"));
@@ -81,6 +85,17 @@ void ADRTurret::InitializeTurret(ADRPlayerState* InInstallerPlayerState,
 bool ADRTurret::IsInstalledBy(const ADRPlayerState* PlayerState) const
 {
 	return IsValid(PlayerState) && InstallerPlayerState == PlayerState;
+}
+
+float ADRTurret::TakeDamage(const float DamageAmount, const FDamageEvent& DamageEvent,
+	AController* EventInstigator, AActor* DamageCauser)
+{
+	if (!CanReceiveDamageFrom(EventInstigator))
+	{
+		return 0.f;
+	}
+
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 }
 
 void ADRTurret::BeginPlay()
@@ -473,6 +488,31 @@ void ADRTurret::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRTurret::ApplyBrokenPresentation()
+{
+	Super::ApplyBrokenPresentation();
+
+	SetActorTickEnabled(false);
+	CurrentTarget = nullptr;
+
+	TurretHolderMesh->SetVisibility(false, true);
+	TurretMesh->SetVisibility(false, true);
+	TurretTankMesh->SetVisibility(false, true);
+}
+
+bool ADRTurret::CanReceiveDamageFrom(const AController* EventInstigator) const
+{
+	const ADRPlayerState* AttackerPlayerState = IsValid(EventInstigator)
+		? EventInstigator->GetPlayerState<ADRPlayerState>()
+		: nullptr;
+	if (!IsValid(AttackerPlayerState) || OwnerTeamId == INDEX_NONE)
+	{
+		return false;
+	}
+
+	return AttackerPlayerState->GetTeamId() != OwnerTeamId;
 }
 
 void ADRTurret::ApplyOwnerCooldown() const
