@@ -255,6 +255,7 @@ APawn* ADRTurret::FindNearestEnemy() const
 bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 {
 	if (!IsValid(TargetPawn) || !WeaponSettings.ProjectileClass
+		|| !IsValid(WeaponSettings.ProjectilePresentationDefinition)
 		|| !IsValid(OwnerAbilitySystemComponent))
 	{
 		return false;
@@ -299,6 +300,10 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		return false;
 	}
 
+	const UDRProjectileWeaponItemDefinition* ProjectileDefinition =
+		WeaponSettings.ProjectilePresentationDefinition;
+	Projectile->ConfigureWeaponLaunch(LaunchVelocity, ProjectileDefinition->InitialSpeed,
+		ProjectileDefinition->ProjectileScaleMultiplier);
 	Projectile->InitializeProjectile(
 		OwnerAbilitySystemComponent,
 		ImpactEffectSpecs,
@@ -308,7 +313,6 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		WeaponSettings.ProjectilePresentationDefinition,
 		WeaponSettings.MaxAttackDistance,
 		WeaponSettings.FalloffSettings);
-	Projectile->SetInitialLaunchVelocity(LaunchVelocity);
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 	MulticastPlayFirePresentation(
 		WeaponSettings.ProjectilePresentationDefinition,
@@ -370,15 +374,15 @@ bool ADRTurret::ResolveProjectileLaunchVelocity(
 
 	const ADRProjectile* ProjectileDefault =
 		WeaponSettings.ProjectileClass->GetDefaultObject<ADRProjectile>();
+	const UDRProjectileWeaponItemDefinition* ProjectileDefinition =
+		WeaponSettings.ProjectilePresentationDefinition;
 	UWorld* World = GetWorld();
-	if (!IsValid(ProjectileDefault) || !IsValid(World))
+	if (!IsValid(ProjectileDefault) || !IsValid(ProjectileDefinition) || !IsValid(World))
 	{
 		return false;
 	}
 
-	const float LaunchSpeed = FMath::Max(
-		ProjectileDefault->GetConfiguredInitialSpeed(),
-		1.f);
+	const float LaunchSpeed = FMath::Max(ProjectileDefinition->InitialSpeed, 1.f);
 	const float GravityScale = FMath::Max(
 		ProjectileDefault->GetConfiguredGravityScale(),
 		0.f);
