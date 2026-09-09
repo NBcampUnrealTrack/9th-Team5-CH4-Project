@@ -31,8 +31,10 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	virtual void HandleBroken(const FDRBreakableDamageContext& DamageContext) override;
+	virtual bool ShouldDeferBrokenDestruction() const override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
 	UFUNCTION()
@@ -63,6 +65,7 @@ protected:
 	TObjectPtr<UNiagaraComponent> IdleAuraVFXComponent;
 	
 private:
+	void HandleLootSpawnSequenceCompleted();
 	void RefreshPresentation();
 	void RefreshDynamicMaterialColor();
 	void RefreshNiagara();
@@ -73,4 +76,7 @@ private:
 	
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
+
+	FDelegateHandle LootSpawnSequenceCompletedHandle;
+	bool bWaitingForLootSpawnSequence = false;
 };

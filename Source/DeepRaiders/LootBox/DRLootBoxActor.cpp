@@ -10,6 +10,7 @@
 ADRLootBoxActor::ADRLootBoxActor()
 {
 	LootDropComponent = CreateDefaultSubobject<UDRLootDropComponent>(TEXT("LootDropComponent"));
+	LootDropComponent->SetSpawnMode(EDRLootSpawnMode::Sequential);
 	LootSpawnPointComponent = CreateDefaultSubobject<USceneComponent>(TEXT("LootSpawnPointComponent"));
 	
 	LootSpawnPointComponent->SetupAttachment(GetRootComponent());
@@ -24,6 +25,12 @@ ADRLootBoxActor::ADRLootBoxActor()
 void ADRLootBoxActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (HasAuthority() && IsValid(LootDropComponent))
+	{
+		LootSpawnSequenceCompletedHandle = LootDropComponent->OnSpawnSequenceCompleted.AddUObject(
+			this, &ThisClass::HandleLootSpawnSequenceCompleted);
+	}
 	
 	RefreshPresentation();
 	
@@ -31,6 +38,17 @@ void ADRLootBoxActor::BeginPlay()
 	{
 		BP_OnLootTierChanged(LootTier);
 	}
+}
+
+void ADRLootBoxActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (IsValid(LootDropComponent) && LootSpawnSequenceCompletedHandle.IsValid())
+	{
+		LootDropComponent->OnSpawnSequenceCompleted.Remove(LootSpawnSequenceCompletedHandle);
+		LootSpawnSequenceCompletedHandle.Reset();
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ADRLootBoxActor::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -76,6 +94,23 @@ void ADRLootBoxActor::HandleBroken(const FDRBreakableDamageContext& DamageContex
 	}
 	
 	LootDropComponent->GenerateAndSpawnLoot(LootTier, LootSpawnPointComponent->GetComponentTransform());
+	bWaitingForLootSpawnSequence = LootDropComponent->IsSpawnSequenceActive();
+}
+
+bool ADRLootBoxActor::ShouldDeferBrokenDestruction() const
+{
+	return bWaitingForLootSpawnSequence;
+}
+
+void ADRLootBoxActor::HandleLootSpawnSequenceCompleted()
+{
+	if (!HasAuthority() || !bWaitingForLootSpawnSequence)
+	{
+		return;
+	}
+
+	bWaitingForLootSpawnSequence = false;
+	StartBrokenDestructionCountdown();
 }
 
 void ADRLootBoxActor::OnConstruction(const FTransform& Transform)
