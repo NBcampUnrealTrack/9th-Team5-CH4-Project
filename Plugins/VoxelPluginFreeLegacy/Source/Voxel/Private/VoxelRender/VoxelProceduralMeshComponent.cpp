@@ -258,6 +258,34 @@ void UVoxelProceduralMeshComponent::ClearSections(EVoxelProcMeshSectionUpdate Up
 	}
 }
 
+bool UVoxelProceduralMeshComponent::CopyRenderSectionsFrom(
+	const UVoxelProceduralMeshComponent& Source,
+	EVoxelProcMeshSectionUpdate Update)
+{
+	VOXEL_FUNCTION_COUNTER();
+
+	ProcMeshSections.Reset(Source.ProcMeshSections.Num());
+	for (const FVoxelProcMeshSection& SourceSection : Source.ProcMeshSections)
+	{
+		if (!SourceSection.Settings.bSectionVisible)
+		{
+			continue;
+		}
+
+		FVoxelProcMeshSection& Section = ProcMeshSections.Emplace_GetRef();
+		Section.Settings = SourceSection.Settings;
+		Section.Settings.bEnableCollisions = false;
+		Section.Settings.bEnableNavmesh = false;
+		Section.Buffers = SourceSection.Buffers;
+	}
+
+	if (Update == EVoxelProcMeshSectionUpdate::UpdateNow)
+	{
+		FinishSectionsUpdates();
+	}
+	return !ProcMeshSections.IsEmpty();
+}
+
 void UVoxelProceduralMeshComponent::FinishSectionsUpdates()
 {
 	VOXEL_FUNCTION_COUNTER();

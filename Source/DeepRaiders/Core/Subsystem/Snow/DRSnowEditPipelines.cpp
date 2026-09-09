@@ -13,17 +13,17 @@
 
 namespace
 {
-void EvaluateCharactersInEditedBounds(
-	AVoxelWorld& VoxelWorld,
-	const FVoxelIntBox& EditedBounds)
+FBox MakeEditedWorldBounds(
+	const AVoxelWorld& VoxelWorld,
+	const FVoxelIntBox& EditedBounds,
+	const float Padding = 0.f)
 {
-	UWorld* World = VoxelWorld.GetWorld();
-	if (!IsValid(World) || World->GetNetMode() == NM_Client || !EditedBounds.IsValid())
+	FBox EditedWorldBounds(ForceInit);
+	if (!EditedBounds.IsValid())
 	{
-		return;
+		return EditedWorldBounds;
 	}
 
-	FBox EditedWorldBounds(ForceInit);
 	const FIntVector Min = EditedBounds.Min;
 	const FIntVector Max = EditedBounds.Max;
 	for (int32 X = 0; X < 2; ++X)
@@ -39,7 +39,20 @@ void EvaluateCharactersInEditedBounds(
 			}
 		}
 	}
-	EditedWorldBounds = EditedWorldBounds.ExpandBy(VoxelWorld.VoxelSize);
+	return EditedWorldBounds.ExpandBy(FMath::Max(0.f, Padding));
+}
+
+void EvaluateCharactersInEditedBounds(
+	AVoxelWorld& VoxelWorld,
+	const FVoxelIntBox& EditedBounds)
+{
+	UWorld* World = VoxelWorld.GetWorld();
+	if (!IsValid(World) || World->GetNetMode() == NM_Client || !EditedBounds.IsValid())
+	{
+		return;
+	}
+
+	const FBox EditedWorldBounds = MakeEditedWorldBounds(VoxelWorld, EditedBounds, VoxelWorld.VoxelSize);
 
 	if (!EditedWorldBounds.IsValid)
 	{
@@ -425,6 +438,10 @@ FDRSnowRemoveResult FDRSnowRemovalPipeline::Execute(
 		Request,
 		EditResult,
 		Result.RemovedAmount);
+	if (const AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get())
+	{
+		Result.EditedWorldBounds = MakeEditedWorldBounds(*VoxelWorld, EditResult.EditedBounds);
+	}
 
 	return Result;
 }
@@ -433,8 +450,14 @@ bool FDRSnowRemovalPipeline::Replay(
 	UWorld* World,
 	const FDRSnowSurfaceRemoveRequest& Request,
 	const float AuthoritativeAmount,
-	const EDRSnowRemovalPath RemovalPath)
+	const EDRSnowRemovalPath RemovalPath,
+	FBox* OutEditedWorldBounds)
 {
+	if (OutEditedWorldBounds != nullptr)
+	{
+		*OutEditedWorldBounds = FBox(ForceInit);
+	}
+
 	SurfaceEditor.SetWorld(World);
 	AVoxelWorld* VoxelWorld = Request.TargetVoxelWorld.Get();
 	if (!IsValid(World) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
@@ -447,6 +470,10 @@ bool FDRSnowRemovalPipeline::Replay(
 	if (EditResult.AppliedAmount > 0.f)
 	{
 		ApplyRemovedSurfaceEdit(Request, EditResult, AuthoritativeAmount);
+		if (OutEditedWorldBounds != nullptr)
+		{
+			*OutEditedWorldBounds = MakeEditedWorldBounds(*VoxelWorld, EditResult.EditedBounds);
+		}
 	}
 
 	// 로컬에서 이미 비어 있어도 다음 권위 작업으로 진행한다.
