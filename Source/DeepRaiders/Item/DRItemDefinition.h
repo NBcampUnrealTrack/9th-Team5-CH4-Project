@@ -140,6 +140,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
 	FTransform WorldItemOffsetTransform;
 	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item|Mesh", meta=(ShowOnlyInnerProperties))
+	FTransform PresentationOffsetTransform = FTransform::Identity;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
 	TSubclassOf<ADRWorldItemActor> ActorClass;
 	
