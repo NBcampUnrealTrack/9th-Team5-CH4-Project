@@ -131,6 +131,14 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 			1.f / HeatGaugeFadeDuration));
 
 	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, InterpolateValue(CurrentHealth, TargetCurrentHealth));
+	// 눈 수량은 표시값만 보간하고 정수가 바뀔 때 텍스트를 갱신한다.
+	const int32 PreviousSnowCount = FMath::RoundToInt(DisplaySnowGauge);
+	DisplaySnowGauge = InterpolateValue(DisplaySnowGauge, TargetSnowGauge);
+	const int32 NewSnowCount = FMath::RoundToInt(DisplaySnowGauge);
+	if (PreviousSnowCount != NewSnowCount)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(NewSnowCount));
+	}
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, InterpolateValue(HeatGauge, TargetHeatGauge));
 	UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, InterpolateValue(FreezeGauge, TargetFreezeGauge));
 	UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, InterpolateRatio(HealthRatio, TargetHealthRatio));
@@ -308,7 +316,12 @@ void UDRHUDViewModel::RefreshSnowGaugeText()
 		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
 		: nullptr;
 	const float NewSnowGauge = IsValid(AttributeSet) ? AttributeSet->GetSnowGauge() : 0.f;
-	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(FMath::RoundToInt(NewSnowGauge)));
+	TargetSnowGauge = NewSnowGauge;
+	if (!bInterpolateGauges)
+	{
+		DisplaySnowGauge = TargetSnowGauge;
+		UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(FMath::RoundToInt(DisplaySnowGauge)));
+	}
 }
 
 void UDRHUDViewModel::RefreshOverheatedState()
@@ -331,6 +344,11 @@ void UDRHUDViewModel::RefreshOverheatedState()
 	UE_MVVM_SET_PROPERTY_VALUE(HeatIconOpacity, bNewOverheated ? 1.f : HeatGaugeRatio);
 }
 
+void UDRHUDViewModel::HandleFrozenTagChanged(FGameplayTag, int32)
+{
+	RefreshFreezeGauge();
+}
+
 void UDRHUDViewModel::RefreshFreezeGauge()
 {
 	const UDRPlayerAttributeSet* AttributeSet = AbilitySystemComponent.IsValid()
@@ -342,10 +360,16 @@ void UDRHUDViewModel::RefreshFreezeGauge()
 		: 0.f;
 
 	TargetFreezeGauge = NewFreezeGauge;
-	TargetFreezeGaugeRatio = NewFreezeGaugeRatio;
+	const bool bIsFrozen = AbilitySystemComponent.IsValid()
+		&& AbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_Frozen);
+	TargetFreezeGaugeRatio = bIsFrozen ? 1.f : NewFreezeGaugeRatio;
+	// 빙결 진입 시 보간을 기다리지 않고 최대 효과를 유지한다.
+	if (bIsFrozen || !bInterpolateGauges)
+	{
+		UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, TargetFreezeGaugeRatio);
+	}
 	if (!bInterpolateGauges)
 	{
 		UE_MVVM_SET_PROPERTY_VALUE(FreezeGauge, TargetFreezeGauge);
-		UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, TargetFreezeGaugeRatio);
 	}
 }

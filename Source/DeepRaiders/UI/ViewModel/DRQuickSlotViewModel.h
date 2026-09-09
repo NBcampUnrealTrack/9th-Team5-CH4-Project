@@ -77,6 +77,7 @@ public:
 	void Deinitialize();
 
 protected:
+	/** WBP 패널의 Viewmodel Extension -> Set Items에 바인딩할 슬롯 목록이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Quick Slot")
 	TArray<TObjectPtr<UDRQuickSlotEntryViewModel>> SlotEntries;
 
