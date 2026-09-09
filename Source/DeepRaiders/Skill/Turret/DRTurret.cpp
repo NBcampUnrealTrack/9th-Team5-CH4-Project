@@ -80,6 +80,7 @@ void ADRTurret::InitializeTurret(ADRPlayerState* InInstallerPlayerState,
 	CooldownTag = InCooldownTag;
 	CooldownDuration = FMath::Max(0.f, InCooldownDuration);
 	WeaponSettings = InWeaponSettings;
+	ApplyTeamMaterial();
 }
 
 bool ADRTurret::IsInstalledBy(const ADRPlayerState* PlayerState) const
@@ -101,6 +102,7 @@ float ADRTurret::TakeDamage(const float DamageAmount, const FDamageEvent& Damage
 void ADRTurret::BeginPlay()
 {
 	Super::BeginPlay();
+	ApplyTeamMaterial();
 
 	if (IsValid(TurretAimPivot))
 	{
@@ -160,6 +162,7 @@ void ADRTurret::UpdateTargetAndFire(const float DeltaSeconds)
 		if (CurrentTeamId != INDEX_NONE && CurrentTeamId != OwnerTeamId)
 		{
 			OwnerTeamId = CurrentTeamId;
+			ApplyTeamMaterial();
 			ForceNetUpdate();
 		}
 
@@ -500,6 +503,24 @@ void ADRTurret::ApplyBrokenPresentation()
 	TurretHolderMesh->SetVisibility(false, true);
 	TurretMesh->SetVisibility(false, true);
 	TurretTankMesh->SetVisibility(false, true);
+}
+
+void ADRTurret::ApplyTeamMaterial()
+{
+	UMaterialInterface* TeamMaterial = OwnerTeamId == 0 ? RedTeamMaterial.Get() : BlueTeamMaterial.Get();
+	if ((OwnerTeamId != 0 && OwnerTeamId != 1) || !IsValid(TeamMaterial))
+	{
+		return;
+	}
+
+	TurretHolderMesh->SetMaterial(0, TeamMaterial);
+	TurretMesh->SetMaterial(0, TeamMaterial);
+	TurretTankMesh->SetMaterial(0, TeamMaterial);
+}
+
+void ADRTurret::OnRep_OwnerTeamId()
+{
+	ApplyTeamMaterial();
 }
 
 bool ADRTurret::CanReceiveDamageFrom(const AController* EventInstigator) const

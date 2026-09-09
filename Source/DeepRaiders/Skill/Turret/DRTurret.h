@@ -13,6 +13,7 @@ class UDRProjectileWeaponItemDefinition;
 class ADRPlayerState;
 class ADRProjectile;
 class APawn;
+class UMaterialInterface;
 class UStaticMeshComponent;
 struct FGameplayEffectSpecHandle;
 
@@ -122,7 +123,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Turret|Mesh")
 	FVector TurretAimPivotLocation = FVector(0.f, 0.f, 150.f);
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Turret")
+	UPROPERTY(ReplicatedUsing = OnRep_OwnerTeamId, VisibleInstanceOnly, BlueprintReadOnly, Category = "Turret")
 	int32 OwnerTeamId = INDEX_NONE;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Turret")
@@ -133,6 +134,7 @@ protected:
 	bool IsDrawDetectionRange = false;
 
 private:
+	void ApplyTeamMaterial();
 	void ApplyOwnerCooldown() const;
 	bool CanReceiveDamageFrom(const AController* EventInstigator) const;
 	void UpdateTargetAndFire(float DeltaSeconds);
@@ -160,6 +162,15 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<APawn> CurrentTarget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Turret|Mesh|Team")
+	TObjectPtr<UMaterialInterface> RedTeamMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Turret|Mesh|Team")
+	TObjectPtr<UMaterialInterface> BlueTeamMaterial;
+
+	UFUNCTION()
+	void OnRep_OwnerTeamId();
 
 	UPROPERTY(ReplicatedUsing = OnRep_AimPitch)
 	float AimPitch = 0.f;
