@@ -289,7 +289,7 @@ void ADRProjectile::BeginPlay()
 	}
 
 	/*
-	 * 서버는 GA에서 전달한 ballistic velocity를 사용한다.
+	 * 서버는 GA에서 전달한 launch velocity를 사용한다.
 	 * 클라이언트 replica는 server movement replication을 이어받는다.
 	 */
 	const FVector LaunchVelocity =

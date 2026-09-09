@@ -98,6 +98,8 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 		return false;
 	}
 
+	// 기존 탄도 조준용 허공 교차 거리 보정. 단순 직선 발사 정책에서는 카메라 Trace 끝점을 그대로 사용한다.
+#if 0
 	/*
 	 * Crosshair가 실제 Geometry를 맞춘 경우에는 그 ImpactPoint가 발사 의도다.
 	 *
@@ -113,6 +115,9 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	const FVector AimPoint = CameraHit.bBlockingHit
 		? FVector(CameraHit.ImpactPoint)
 		: ViewLocation + ViewDirection * NoHitAimDistance;
+#endif
+
+	const FVector AimPoint = CameraHit.bBlockingHit ? FVector(CameraHit.ImpactPoint) : FVector(CameraHit.TraceEnd);
 
 	if (AimPoint.ContainsNaN())
 	{
@@ -456,7 +461,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 	/*
 	 * Projectile은 Character의 고정 GameplayFireAnchor에서 출발한다.
 	 * AimDirection은 클라이언트 발사 순간의 Crosshair 방향이며,
-	 * 실제 중력 보정은 아래 ResolveProjectileLaunchVelocity()가 담당한다.
+	 * 실제 발사 방향은 GameplayFireAnchor에서 AimPoint를 향하도록 계산한다.
 	 */
 	FVector GameplayFireOrigin;
 	if (!ResolveGameplayFireOrigin(AimDirection, GameplayFireOrigin))
@@ -569,6 +574,17 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 		FMath::Max(
 			ProjectileDefault->GetConfiguredInitialSpeed(),
 			1.0f);
+	const FVector DirectDirection = (AimPoint - SpawnLocation).GetSafeNormal();
+	if (DirectDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	OutLaunchVelocity = DirectDirection * LaunchSpeed;
+	return true;
+
+	// 기존 중력 보정 탄도 계산. 단순 직선 발사 정책에서는 사용하지 않는다.
+#if 0
 	const float GravityScale =
 		FMath::Max(
 			ProjectileDefault->GetConfiguredGravityScale(),
@@ -628,6 +644,7 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 		DirectDirection * LaunchSpeed;
 
 	return true;
+#endif
 }
 
 void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
@@ -832,7 +849,7 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		WeaponDefinition->FalloffSettings);
 
 	/*
-	 * FinishSpawningActor -> BeginPlay 전에 ballistic velocity를 저장한다.
+	 * FinishSpawningActor -> BeginPlay 전에 직선 발사 속도를 저장한다.
 	 * Cannon처럼 BeginPlay에서 ProjectileMovement 설정을 바꾸는 자식도
 	 * Super::BeginPlay()에서 이 속도를 최종 발사 속도로 사용한다.
 	 */
