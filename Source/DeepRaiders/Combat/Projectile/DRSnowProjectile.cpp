@@ -13,18 +13,6 @@ float ADRSnowProjectile::GetConfiguredInitialSpeed() const
 	return FMath::Max(InitialSpeed, 1.0f);
 }
 
-float ADRSnowProjectile::GetConfiguredGravityScale() const
-{
-	return FMath::Max(GravityScale, 0.0f);
-}
-
-void ADRSnowProjectile::BeginPlay()
-{
-	ConfigureProjectileMovement(InitialSpeed, GravityScale);
-
-	Super::BeginPlay();
-}
-
 void ADRSnowProjectile::HandleWorldImpact(const FHitResult& ImpactResult)
 {
 	if (!HasAuthority() || !IsValid(SnowAddComponent))

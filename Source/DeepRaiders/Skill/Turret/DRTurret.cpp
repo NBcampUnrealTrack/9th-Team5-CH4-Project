@@ -273,6 +273,7 @@ APawn* ADRTurret::FindNearestEnemy() const
 bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 {
 	if (!IsValid(TargetPawn) || !WeaponSettings.ProjectileClass
+		|| !IsValid(WeaponSettings.ProjectilePresentationDefinition)
 		|| !IsValid(OwnerAbilitySystemComponent))
 	{
 		return false;
@@ -317,6 +318,11 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		return false;
 	}
 
+	const UDRProjectileWeaponItemDefinition* ProjectileDefinition =
+		WeaponSettings.ProjectilePresentationDefinition;
+	Projectile->ConfigureWeaponLaunch(
+		LaunchVelocity, ProjectileDefinition->InitialSpeed, ProjectileDefinition->ProjectileScaleMultiplier,
+		WeaponSettings.MaxAttackDistance, ProjectileDefinition->FlightSettings, WeaponSettings.FalloffSettings);
 	Projectile->InitializeProjectile(
 		OwnerAbilitySystemComponent,
 		ImpactEffectSpecs,
@@ -326,7 +332,6 @@ bool ADRTurret::FireAtTarget(APawn* TargetPawn)
 		WeaponSettings.ProjectilePresentationDefinition,
 		WeaponSettings.MaxAttackDistance,
 		WeaponSettings.FalloffSettings);
-	Projectile->SetInitialLaunchVelocity(LaunchVelocity);
 	UGameplayStatics::FinishSpawningActor(Projectile, SpawnTransform);
 	MulticastPlayFirePresentation(
 		WeaponSettings.ProjectilePresentationDefinition,
@@ -386,30 +391,31 @@ bool ADRTurret::ResolveProjectileLaunchVelocity(
 		return false;
 	}
 
-	const ADRProjectile* ProjectileDefault =
-		WeaponSettings.ProjectileClass->GetDefaultObject<ADRProjectile>();
-	UWorld* World = GetWorld();
-	if (!IsValid(ProjectileDefault) || !IsValid(World))
+	const UDRProjectileWeaponItemDefinition* ProjectileDefinition =
+		WeaponSettings.ProjectilePresentationDefinition;
+	if (!IsValid(ProjectileDefinition))
 	{
 		return false;
 	}
 
-	const float LaunchSpeed = FMath::Max(
-		ProjectileDefault->GetConfiguredInitialSpeed(),
-		1.f);
-	const float GravityScale = FMath::Max(
-		ProjectileDefault->GetConfiguredGravityScale(),
-		0.f);
+	const float LaunchSpeed = FMath::Max(ProjectileDefinition->InitialSpeed, 1.f);
+	const float GravityScale = FMath::Max(ProjectileDefinition->FlightSettings.GravityScale, 0.01f);
 	const FVector DirectDirection = (AimPoint - SpawnLocation).GetSafeNormal();
 	if (DirectDirection.IsNearlyZero())
 	{
 		return false;
 	}
 
-	if (GravityScale <= KINDA_SMALL_NUMBER)
+	if (ProjectileDefinition->FlightSettings.Mode != EDRProjectileFlightMode::Ballistic)
 	{
 		OutLaunchVelocity = DirectDirection * LaunchSpeed;
 		return true;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return false;
 	}
 
 	UGameplayStatics::FSuggestProjectileVelocityParameters Parameters(

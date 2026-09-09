@@ -366,12 +366,18 @@ namespace ItemParser
 			Report, RowIndex, Row.RowName, TEXT("BaseFireInterval"), Row.BaseFireInterval, 0.f, false);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("MaxAttackDistance"), Row.MaxAttackDistance, 1.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("NoHitAimDistance"), Row.NoHitAimDistance, 1.f);
+		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("InitialSpeed"), Row.InitialSpeed, 1.f);
+		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("GravityScale"), Row.GravityScale, 0.f, false);
+		bValid &= ValidateMinimum(
+			Report, RowIndex, Row.RowName, TEXT("ProjectileScaleMultiplier"), Row.ProjectileScaleMultiplier, 0.f, false);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("BreakableDamage"), Row.BreakableDamage, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("ProjectileCount"), Row.ProjectileCount, 1);
 		bValid &= ValidateMinimum(
 			Report, RowIndex, Row.RowName, TEXT("SpreadHalfAngleDegrees"), Row.SpreadHalfAngleDegrees, 0.f);
 		bValid &= ValidateRange(
 			Report, RowIndex, Row.RowName, TEXT("FullStrengthRangeRatio"), Row.FullStrengthRangeRatio, 0.f, 0.99f);
+		bValid &= ValidateRange(
+			Report, RowIndex, Row.RowName, TEXT("MinimumStrengthRatio"), Row.MinimumStrengthRatio, 0.f, 1.f);
 		bValid &= ValidateRange(
 			Report, RowIndex, Row.RowName, TEXT("MinSizeMultiplier"), Row.MinSizeMultiplier, 0.f, 1.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAddRadius"), Row.SnowAddRadius, 0.f);
@@ -464,11 +470,16 @@ namespace ItemParser
 		Definition.bAutomaticFire = Row.bAutomaticFire;
 		Definition.MaxAttackDistance = Row.MaxAttackDistance;
 		Definition.NoHitAimDistance = Row.NoHitAimDistance;
+		Definition.InitialSpeed = Row.InitialSpeed;
+		Definition.FlightSettings.Mode = Row.FlightMode;
+		Definition.FlightSettings.GravityScale = Row.GravityScale;
+		Definition.ProjectileScaleMultiplier = Row.ProjectileScaleMultiplier;
 		Definition.BreakableDamage = Row.BreakableDamage;
 		Definition.ProjectileCount = Row.ProjectileCount;
 		Definition.SpreadHalfAngleDegrees = Row.SpreadHalfAngleDegrees;
 		Definition.FalloffSettings.bEnabled = Row.bFalloffEnabled;
 		Definition.FalloffSettings.FullStrengthRangeRatio = Row.FullStrengthRangeRatio;
+		Definition.FalloffSettings.MinimumStrengthRatio = Row.MinimumStrengthRatio;
 		Definition.FalloffSettings.MinSizeMultiplier = Row.MinSizeMultiplier;
 		Definition.bCanPenetrateTargets = Row.bCanPenetrateTargets;
 		Definition.SnowAddSettings.bEnabled = Row.bSnowAddEnabled;

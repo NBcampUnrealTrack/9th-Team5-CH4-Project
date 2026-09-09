@@ -39,7 +39,9 @@ bool UDRGA_FireProjectile::IsAttackConfigurationValid(
 	const UDRProjectileWeaponItemDefinition* WeaponDefinition) const
 {
 	return Super::IsAttackConfigurationValid(WeaponDefinition)
-		&& WeaponDefinition->ProjectileClass != nullptr;
+		&& WeaponDefinition->ProjectileClass != nullptr
+		&& WeaponDefinition->InitialSpeed > 0.f
+		&& WeaponDefinition->ProjectileScaleMultiplier > 0.f;
 }
 
 void UDRGA_FireProjectile::OnRangedWeaponActivated()
@@ -98,6 +100,8 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 		return false;
 	}
 
+	// 기존 탄도 조준용 허공 교차 거리 보정. 단순 직선 발사 정책에서는 카메라 Trace 끝점을 그대로 사용한다.
+#if 0
 	/*
 	 * Crosshair가 실제 Geometry를 맞춘 경우에는 그 ImpactPoint가 발사 의도다.
 	 *
@@ -113,6 +117,9 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	const FVector AimPoint = CameraHit.bBlockingHit
 		? FVector(CameraHit.ImpactPoint)
 		: ViewLocation + ViewDirection * NoHitAimDistance;
+#endif
+
+	const FVector AimPoint = CameraHit.bBlockingHit ? FVector(CameraHit.ImpactPoint) : FVector(CameraHit.TraceEnd);
 
 	if (AimPoint.ContainsNaN())
 	{
@@ -385,11 +392,11 @@ bool UDRGA_FireProjectile::ValidateServerShotTargetData(
 	const float MaxAttackDistance =
 		FMath::Max(GetMaxAttackDistance(), DRProjectileAim::MinAimDistance);
 
-	if (AimDistance < DRProjectileAim::MinAimDistance
-		|| AimDistance > MaxAttackDistance + DRProjectileAim::MaxClientViewLocationError)
-	{
-		return false;
-	}
+	// if (AimDistance < DRProjectileAim::MinAimDistance
+	// 	|| AimDistance > MaxAttackDistance + DRProjectileAim::MaxClientViewLocationError)
+	// {
+	// 	return false;
+	// }
 
 	const FVector ClientAimDirection = ToAim / AimDistance;
 	const FVector ServerViewDirection =
@@ -457,7 +464,7 @@ bool UDRGA_FireProjectile::ExecuteServerProjectileShot(
 	/*
 	 * Projectile은 Character의 고정 GameplayFireAnchor에서 출발한다.
 	 * AimDirection은 클라이언트 발사 순간의 Crosshair 방향이며,
-	 * 실제 중력 보정은 아래 ResolveProjectileLaunchVelocity()가 담당한다.
+	 * 실제 발사 방향은 GameplayFireAnchor에서 AimPoint를 향하도록 계산한다.
 	 */
 	FVector GameplayFireOrigin;
 	if (!ResolveGameplayFireOrigin(AimDirection, GameplayFireOrigin))
@@ -558,6 +565,18 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 		return false;
 	}
 
+	const float LaunchSpeed = FMath::Max(WeaponDefinition->InitialSpeed, 1.f);
+	const FVector DirectDirection = (AimPoint - SpawnLocation).GetSafeNormal();
+	if (DirectDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	OutLaunchVelocity = DirectDirection * LaunchSpeed;
+	return true;
+
+	// 기존 ProjectileClass 속도와 중력 보정 탄도 계산. 단순 직선 발사 정책에서는 사용하지 않는다.
+#if 0
 	const ADRProjectile* ProjectileDefault =
 		WeaponDefinition->ProjectileClass->GetDefaultObject<ADRProjectile>();
 
@@ -629,6 +648,7 @@ bool UDRGA_FireProjectile::ResolveProjectileLaunchVelocity(
 		DirectDirection * LaunchSpeed;
 
 	return true;
+#endif
 }
 
 void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
@@ -698,8 +718,11 @@ void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
 		DRLocalProjectilePrediction::CVarLifetimeSeconds.GetValueOnGameThread();
 
 	const float ProjectileSpeed = FMath::Max(LaunchVelocity.Size(), 1.f);
+	const float FallDuration = WeaponDefinition->FlightSettings.Mode == EDRProjectileFlightMode::CruiseThenFall
+		? WeaponDefinition->FlightSettings.HorizontalDecelerationDuration
+		: 0.f;
 	const float AutoLifetime = FMath::Clamp(
-		GetMaxAttackDistance() / ProjectileSpeed + 0.25f,
+		GetMaxAttackDistance() / ProjectileSpeed + FallDuration + 1.f,
 		0.15f,
 		5.0f);
 
@@ -729,10 +752,10 @@ void UDRGA_FireProjectile::TrySpawnLocalVisualProjectile(
 	 * InitializeProjectile()는 절대 호출하지 않는다.
 	 * 이 인스턴스에는 ASC / EffectSpec / Snow / Team gameplay data가 없다.
 	 */
-	VisualProjectile->ConfigureAsLocalVisualProjectile(
-		LaunchVelocity,
-		LifetimeSeconds,
-		ShotSequence);
+	VisualProjectile->ConfigureWeaponLaunch(
+		LaunchVelocity, WeaponDefinition->InitialSpeed, WeaponDefinition->ProjectileScaleMultiplier,
+		GetMaxAttackDistance(), WeaponDefinition->FlightSettings, WeaponDefinition->FalloffSettings);
+	VisualProjectile->ConfigureAsLocalVisualProjectile(LaunchVelocity, LifetimeSeconds, ShotSequence);
 
 	UGameplayStatics::FinishSpawningActor(
 		VisualProjectile,
@@ -821,6 +844,9 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 	}
 
 	Projectile->SetShotSequence(ShotSequence);
+	Projectile->ConfigureWeaponLaunch(
+		SafeLaunchVelocity, WeaponDefinition->InitialSpeed, WeaponDefinition->ProjectileScaleMultiplier,
+		GetMaxAttackDistance(), WeaponDefinition->FlightSettings, WeaponDefinition->FalloffSettings);
 
 	Projectile->InitializeProjectile(
 		AbilitySystem,
@@ -831,14 +857,6 @@ bool UDRGA_FireProjectile::SpawnProjectile(
 		WeaponDefinition,
 		GetMaxAttackDistance(),
 		WeaponDefinition->FalloffSettings);
-
-	/*
-	 * FinishSpawningActor -> BeginPlay 전에 ballistic velocity를 저장한다.
-	 * Cannon처럼 BeginPlay에서 ProjectileMovement 설정을 바꾸는 자식도
-	 * Super::BeginPlay()에서 이 속도를 최종 발사 속도로 사용한다.
-	 */
-	Projectile->SetInitialLaunchVelocity(
-		SafeLaunchVelocity);
 
 	UGameplayStatics::FinishSpawningActor(
 		Projectile,

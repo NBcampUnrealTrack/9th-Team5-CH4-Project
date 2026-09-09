@@ -25,7 +25,7 @@ struct DEEPRAIDERS_API FDRTurretWeaponSettings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon")
 	TSubclassOf<ADRProjectile> ProjectileClass;
 
-	/** 피격 VFX와 사운드 조회에만 사용하는 무기 Definition이다. */
+	/** Projectile 발사 설정과 피격 Presentation 조회에 사용하는 무기 Definition이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Turret|Weapon")
 	TObjectPtr<UDRProjectileWeaponItemDefinition> ProjectilePresentationDefinition;
 
