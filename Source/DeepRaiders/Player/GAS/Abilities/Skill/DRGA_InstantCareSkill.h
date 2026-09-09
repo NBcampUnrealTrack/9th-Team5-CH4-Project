@@ -1,31 +1,34 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DeepRaiders/Combat/Throw/DRThrowActionTypes.h"
-#include "DeepRaiders/Item/DRThrowableItemTypes.h"
-#include "DeepRaiders/Player/GAS/Abilities/DRGA_CharacterSkillBase.h"
+#include "DeepRaiders/Player/GAS/Abilities/Skill/DRGA_ThrowSkill.h"
 #include "DRGA_InstantCareSkill.generated.h"
 
 class ADRInstantCareProjectile;
 class UGameplayEffect;
+class UDRThrowableItemDefinition;
 
 UCLASS()
-class DEEPRAIDERS_API UDRGA_InstantCareSkill : public UDRGA_CharacterSkillBase
+class DEEPRAIDERS_API UDRGA_InstantCareSkill : public UDRGA_ThrowSkill
 {
 	GENERATED_BODY()
 
+public:
+	UDRGA_InstantCareSkill();
+
 protected:
-	virtual void ActivateAbility(
+	virtual bool SpawnServerProjectile(
+		const FVector& LaunchLocation,
+		const FVector& LaunchDirection) override;
+	virtual UDRThrowableItemDefinition* ResolveThrowableDefinition(
 		const FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo,
-		const FGameplayAbilityActivationInfo ActivationInfo,
-		const FGameplayEventData* TriggerEventData) override;
+		const FGameplayAbilityActorInfo* ActorInfo) const override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care")
+	TObjectPtr<UDRThrowableItemDefinition> ThrowableDefinition;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care")
 	TSubclassOf<ADRInstantCareProjectile> ProjectileClass;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care", meta = (ShowOnlyInnerProperties))
-	FDRThrowActionSettings ActionSettings;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care")
 	TSubclassOf<UGameplayEffect> RecoveryEffectClass;
@@ -35,10 +38,4 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float HealthRecoveryAmount = 2.5f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care|Throw", meta = (ClampMin = "1.0", UIMin = "1.0", Units = "cm/s"))
-	float InitialSpeed = 1400.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Instant Care|Throw", meta = (ClampMin = "0.0", UIMin = "0.0"))
-	float GravityScale = 1.0f;
 };
