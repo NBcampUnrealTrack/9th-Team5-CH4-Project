@@ -2,11 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "HAL/ThreadSafeBool.h"
+#include "VoxelIntBox.h"
 #include "DRMeshVoxelCarver.generated.h"
 
 class AVoxelWorld;
 class ADRMiningGameStateBase;
 class UStaticMeshComponent;
+
+// 같은 복셀 마스크를 완성 판정과 종료 정리에 사용한다.
+struct FDRMeshVoxelMask
+{
+	FVoxelIntBox Bounds;
+	TSet<FIntVector> InsideVoxels;
+};
 
 UENUM(BlueprintType)
 enum class EDRMeshVoxelCarveMode : uint8
@@ -37,6 +46,14 @@ public:
 	/** 복셀 월드 초기화 후 배치 carve를 다시 시작한다. */
 	void RestartCarveBatch();
 	bool ShouldCarveOnGameStart(int32 PhaseIndex) const;
+	bool IsCarving() const;
+
+	static bool BuildMeshVoxelMask(UStaticMeshComponent* Mesh, AVoxelWorld* VoxelWorld,
+		int32 MaxSamples, FDRMeshVoxelMask& OutMask);
+	static bool TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransform& BoxTransform,
+		const FVector& BoxExtent, const FDRMeshVoxelMask& KeepMask, int32 MaxSamples,
+		const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
+		TFunction<void(bool)>&& Completion);
 
 protected:
 	virtual void BeginPlay() override;
@@ -119,7 +136,7 @@ protected:
 private:
 	AVoxelWorld* ResolveVoxelWorld();
 	void StartCarveBatch(bool bForGameStart);
-	bool StartCarveAsync(TFunction<void()>&& Completion);
+	bool StartCarveAsync(TFunction<void(bool)>&& Completion);
 	void TryExecuteCarveBatch();
 	void ExecuteNextCarver();
 
@@ -137,4 +154,7 @@ private:
 	int32 RetryCount = 0;
 	int32 PendingCarverIndex = 0;
 	TArray<TWeakObjectPtr<ADRMeshVoxelCarver>> PendingCarvers;
+	bool bBatchSucceeded = true;
+	uint32 BatchGeneration = 0;
+	TSharedPtr<FThreadSafeBool, ESPMode::ThreadSafe> CarveCancellation;
 };

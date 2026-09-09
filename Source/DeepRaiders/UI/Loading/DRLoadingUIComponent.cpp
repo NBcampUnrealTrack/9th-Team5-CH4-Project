@@ -3,6 +3,7 @@
 #include "Blueprint/UserWidget.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
+#include "DeepRaiders/Player/Components/DRSnowJoinComponent.h"
 #include "DeepRaiders/UI/Core/DRUIConfig.h"
 #include "DeepRaiders/UI/Core/DRUIManagerSubsystem.h"
 #include "DeepRaiders/UI/ViewModel/DRLoadingViewModel.h"
@@ -27,6 +28,7 @@ void UDRLoadingUIComponent::BeginPlay()
 	}
 
 	AddTickPrerequisiteActor(GetOwner());
+	AddTickPrerequisiteComponent(PC->GetSnowJoinComponent());
 	SetComponentTickEnabled(true);
 	RefreshLoadingScreen();
 }
@@ -47,7 +49,8 @@ void UDRLoadingUIComponent::RefreshLoadingScreen()
 		return;
 	}
 
-	const EDRSnowJoinLoadingPhase Phase = PC->GetSnowJoinLoadingPhase();
+	const UDRSnowJoinComponent* SnowJoin = PC->GetSnowJoinComponent();
+	const EDRSnowJoinLoadingPhase Phase = SnowJoin->GetSnowJoinLoadingPhase();
 	// 서버의 checkpoint 생성/압축이 끝나기 전에도 씬 진입 대기 화면을 보여준다.
 	// 호스트/독립 실행에는 적용하지 않고 최초 로컬 조종 준비까지만 유지한다.
 	const APawn* Pawn = PC->GetPawn();
@@ -55,7 +58,8 @@ void UDRLoadingUIComponent::RefreshLoadingScreen()
 		&& Phase == EDRSnowJoinLoadingPhase::Idle
 		&& (PC->GetStateName() != NAME_Playing || !IsValid(Pawn) || !Pawn->IsLocallyControlled());
 	if ((Phase == EDRSnowJoinLoadingPhase::Idle && !bWaitingForInitialControl)
-		|| Phase == EDRSnowJoinLoadingPhase::Complete)
+		|| Phase == EDRSnowJoinLoadingPhase::Complete
+		|| Phase == EDRSnowJoinLoadingPhase::Failed)
 	{
 		CloseLoadingScreen();
 		bReportedSetupError = false;
@@ -90,7 +94,7 @@ void UDRLoadingUIComponent::RefreshLoadingScreen()
 	{
 		LoadingViewModel = NewObject<UDRLoadingViewModel>(this);
 	}
-	LoadingViewModel->SetProgress(bWaitingForInitialControl ? 0.f : PC->GetSnowJoinSnapshotProgress());
+	LoadingViewModel->SetProgress(bWaitingForInitialControl ? 0.f : SnowJoin->GetSnowJoinSnapshotProgress());
 	switch (Phase)
 	{
 	case EDRSnowJoinLoadingPhase::Idle:

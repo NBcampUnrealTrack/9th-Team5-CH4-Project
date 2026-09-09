@@ -3,12 +3,15 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetComponent.h"
 #include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DeepRaiders/UI/HUD/DRPointLocationWidget.h"
 #include "EngineUtils.h"
+#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
+#include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "VoxelData/VoxelDataIncludes.h"
 #include "VoxelData/VoxelDataLock.h"
@@ -122,6 +125,8 @@ ADRSnowControlZone::ADRSnowControlZone()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	bReplicates = true;
+	bAlwaysRelevant = true;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -131,6 +136,25 @@ ADRSnowControlZone::ADRSnowControlZone()
 	ZoneBounds->SetBoxExtent(FVector(500.f, 500.f, 200.f));
 	ZoneBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ZoneBounds->SetHiddenInGame(true);
+
+	TargetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TargetMesh"));
+	TargetMesh->SetupAttachment(Root);
+	TargetMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TargetMesh->SetGenerateOverlapEvents(false);
+	TargetMesh->SetCastShadow(false);
+	TargetMesh->SetRenderInMainPass(true);
+	TargetMesh->SetRenderInDepthPass(true);
+	TargetMesh->SetRenderCustomDepth(false);
+	TargetMesh->SetVisibility(false);
+	TargetMesh->SetHiddenInGame(true);
+	TargetMesh->SetCustomDepthStencilValue(1);
+	TargetMesh->bNeverDistanceCull = true;
+
+	CleanupBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("CleanupBounds"));
+	CleanupBounds->SetupAttachment(Root);
+	CleanupBounds->SetBoxExtent(FVector(700.f, 700.f, 400.f));
+	CleanupBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CleanupBounds->SetHiddenInGame(true);
 
 	PointLocationWidgetComponent =
 		CreateDefaultSubobject<UWidgetComponent>(TEXT("PointLocationWidget"));
@@ -143,10 +167,11 @@ ADRSnowControlZone::ADRSnowControlZone()
 void ADRSnowControlZone::BeginPlay()
 {
 	Super::BeginPlay();
+	RefreshControlVisuals();
 
 	RefreshControlRatio();
-	SetActorTickEnabled(bUpdateControlRatioEveryTick);
-	if (!bUpdateControlRatioEveryTick)
+	SetActorTickEnabled(HasAuthority() && bUpdateControlRatioEveryTick);
+	if (HasAuthority() && !bUpdateControlRatioEveryTick)
 	{
 		GetWorldTimerManager().SetTimer(
 			ControlUpdateTimerHandle,
@@ -161,6 +186,10 @@ void ADRSnowControlZone::BeginPlay()
 
 void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (CleanupCancellation.IsValid())
+	{
+		*CleanupCancellation = true;
+	}
 	GetWorldTimerManager().ClearTimer(ControlUpdateTimerHandle);
 	DeinitializeDebug();
 	Super::EndPlay(EndPlayReason);
@@ -174,6 +203,10 @@ void ADRSnowControlZone::Tick(float DeltaSeconds)
 
 FBox ADRSnowControlZone::GetZoneWorldBounds() const
 {
+	if (IsValid(TargetMesh) && TargetMesh->GetStaticMesh())
+	{
+		return TargetMesh->Bounds.GetBox();
+	}
 	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
 }
 
@@ -184,6 +217,49 @@ FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
 
 void ADRSnowControlZone::RefreshControlRatio()
 {
+	if (!HasAuthority() || bControlFrozen)
+	{
+		return;
+	}
+	if (TargetMesh && TargetMesh->GetStaticMesh())
+	{
+		if (!bZoneActive)
+		{
+			return;
+		}
+		const FDRSnowVoxelMaterialScanResult Scan = ScanVoxelMaterials();
+		if (Scan.bTruncated || Scan.ScannedVoxelCount <= 0)
+		{
+			CachedControlRatio = FDRSnowControlRatio();
+			CompletionRatio = 0.f;
+			OnRep_ControlState();
+			return;
+		}
+		// 메쉬 거점은 실제 채워진 복셀의 팀 재질로 보상과 최종 결과를 함께 계산한다.
+		CachedControlRatio = FDRSnowControlRatio();
+		CachedControlRatio.TotalAmount = Scan.FilledVoxelCount;
+		CachedControlRatio.NeutralAmount = Scan.NeutralCount + Scan.UnknownCount;
+		CachedControlRatio.SampledCellCount = Scan.ScannedVoxelCount;
+		for (const FDRSnowVoxelMaterialTeamCount& Team : Scan.Teams)
+		{
+			FDRSnowTeamAmount& Amount = CachedControlRatio.Teams.AddDefaulted_GetRef();
+			Amount.TeamId = Team.TeamId;
+			Amount.Amount = Team.VoxelCount;
+			Amount.Ratio = Scan.FilledVoxelCount > 0
+				? float(Team.VoxelCount) / Scan.FilledVoxelCount : 0.f;
+		}
+		CompletionRatio = float(Scan.FilledVoxelCount) / Scan.ScannedVoxelCount;
+		bZoneCompleted |= CompletionRatio >= FMath::Clamp(RequiredCompletionRatio, 0.01f, 1.f);
+		OnRep_ControlState();
+		if (bZoneCompleted && !bRewardGranted && GetLeadingTeamId() != INDEX_NONE)
+		{
+			if (ADRMiningGameModeBase* Mode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+			{
+				Mode->HandleControlZoneCompleted(this);
+			}
+		}
+		return;
+	}
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
 	{
@@ -202,6 +278,190 @@ void ADRSnowControlZone::RefreshControlRatio()
 
 	CachedControlRatio = SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
 	RefreshPointLocationWidget();
+}
+
+void ADRSnowControlZone::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ADRSnowControlZone, bZoneActive);
+	DOREPLIFETIME(ADRSnowControlZone, bZoneCompleted);
+	DOREPLIFETIME(ADRSnowControlZone, CompletionRatio);
+	DOREPLIFETIME(ADRSnowControlZone, CachedControlRatio);
+}
+
+void ADRSnowControlZone::ResetForGame()
+{
+	if (CleanupCancellation.IsValid())
+	{
+		*CleanupCancellation = true;
+		CleanupCancellation.Reset();
+	}
+	bMaskAttempted = false;
+	TargetMask = FDRMeshVoxelMask();
+	bControlFrozen = false;
+	if (HasAuthority())
+	{
+		bZoneActive = false;
+		bZoneCompleted = false;
+		bRewardGranted = false;
+		CompletionRatio = 0.f;
+		CachedControlRatio = FDRSnowControlRatio();
+		OnRep_ControlState();
+		ForceNetUpdate();
+	}
+}
+
+bool ADRSnowControlZone::PrepareForGame() const
+{
+	if (!EnsureTargetMask())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Control zone %s needs a valid closed TargetMesh."), *GetName());
+		return false;
+	}
+	return true;
+}
+
+void ADRSnowControlZone::ActivateForPhase(int32 PhaseIndex)
+{
+	if (!HasAuthority() || bZoneActive || bControlFrozen || PhaseIndex < ActivationPhaseIndex)
+	{
+		return;
+	}
+	if (!EnsureTargetMask())
+	{
+		return;
+	}
+	// 이후 페이즈에서도 미완성 거점과 기존 점유량을 유지한다.
+	bZoneActive = true;
+	RefreshControlRatio();
+	OnRep_ControlState();
+	ForceNetUpdate();
+}
+
+void ADRSnowControlZone::FreezeForGameEnd()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const bool bWasActive = bZoneActive;
+	bZoneActive = true;
+	RefreshControlRatio();
+	bZoneActive = bWasActive;
+	bControlFrozen = true;
+	ForceNetUpdate();
+}
+
+bool ADRSnowControlZone::TryClaimCompletionReward()
+{
+	if (!HasAuthority() || !bZoneActive || !bZoneCompleted || bRewardGranted
+		|| GetLeadingTeamId() == INDEX_NONE)
+	{
+		return false;
+	}
+	bRewardGranted = true;
+	return true;
+}
+
+bool ADRSnowControlZone::EnsureTargetMask() const
+{
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated()
+		|| !TargetMesh || !TargetMesh->GetStaticMesh())
+	{
+		return false;
+	}
+	const FTransform MeshTransform = TargetMesh->GetComponentTransform();
+	if (bMaskAttempted && CachedTargetMesh == TargetMesh->GetStaticMesh()
+		&& CachedVoxelWorld == VoxelWorld && CachedMeshTransform.Equals(MeshTransform)
+		&& CachedVoxelTransform.Equals(VoxelWorld->GetTransform())
+		&& CachedWorldOffset == VoxelWorld->GetWorldOffset() && CachedVoxelSize == VoxelWorld->VoxelSize
+		&& CachedMaskLimit == MaxVoxelScanCount)
+	{
+		return !TargetMask.InsideVoxels.IsEmpty();
+	}
+	bMaskAttempted = true;
+	CachedTargetMesh = TargetMesh->GetStaticMesh();
+	CachedVoxelWorld = VoxelWorld;
+	CachedMeshTransform = MeshTransform;
+	CachedVoxelTransform = VoxelWorld->GetTransform();
+	CachedWorldOffset = VoxelWorld->GetWorldOffset();
+	CachedVoxelSize = VoxelWorld->VoxelSize;
+	CachedMaskLimit = MaxVoxelScanCount;
+	if (!ADRMeshVoxelCarver::BuildMeshVoxelMask(TargetMesh, VoxelWorld, MaxVoxelScanCount, TargetMask))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Control zone %s: invalid mesh mask; scoring/cleanup disabled."),
+			*GetName());
+		return false;
+	}
+	return true;
+}
+
+bool ADRSnowControlZone::StartEndCleanup(TFunction<void(bool)>&& Completion)
+{
+	if (!bCleanupOnGameEnd || !TargetMesh || !TargetMesh->GetStaticMesh())
+	{
+		Completion(true);
+		return true;
+	}
+	if (!EnsureTargetMask() || !CleanupBounds)
+	{
+		return false;
+	}
+	if (CleanupCancellation.IsValid() && !*CleanupCancellation)
+	{
+		return false;
+	}
+	FDRMeshVoxelMask KeepMask = TargetMask;
+	// 정리 Box가 겹쳐도 다른 거점의 목표 모양은 함께 보존한다.
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && It->ResolveVoxelWorld() == ResolveVoxelWorld()
+			&& It->GetZoneWorldBounds().Intersect(CleanupBounds->Bounds.GetBox()))
+		{
+			if (!It->EnsureTargetMask())
+			{
+				return false;
+			}
+			KeepMask.InsideVoxels.Append(It->TargetMask.InsideVoxels);
+		}
+	}
+	CleanupCancellation = MakeShared<FThreadSafeBool, ESPMode::ThreadSafe>(false);
+	const bool bStarted = ADRMeshVoxelCarver::TrimOutsideMesh(ResolveVoxelWorld(),
+		CleanupBounds->GetComponentTransform(), CleanupBounds->GetUnscaledBoxExtent(), KeepMask,
+		MaxCleanupVoxelCount, CleanupCancellation.ToSharedRef(), MoveTemp(Completion));
+	if (!bStarted)
+	{
+		*CleanupCancellation = true;
+	}
+	return bStarted;
+}
+
+void ADRSnowControlZone::OnRep_ControlState()
+{
+	RefreshControlVisuals();
+	RefreshPointLocationWidget();
+}
+
+void ADRSnowControlZone::RefreshControlVisuals()
+{
+	if (TargetMesh)
+	{
+		// 활성화된 미완성 거점만 목표 모양을 표시한다.
+		const bool bShowTargetMesh = bZoneActive && !bZoneCompleted;
+		TargetMesh->SetRenderCustomDepth(bShowTargetMesh);
+		TargetMesh->SetCustomDepthStencilValue(OutlineStencilValue);
+		TargetMesh->SetRenderInMainPass(true);
+		TargetMesh->SetRenderInDepthPass(true);
+		TargetMesh->SetVisibility(bShowTargetMesh);
+		TargetMesh->SetHiddenInGame(!bShowTargetMesh);
+		TargetMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (PointLocationWidgetComponent)
+	{
+		PointLocationWidgetComponent->SetVisibility(bZoneActive);
+	}
 }
 
 int32 ADRSnowControlZone::GetLeadingTeamId() const
@@ -293,6 +553,12 @@ void ADRSnowControlZone::DeinitializeDebug()
 FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 {
 	FDRSnowVoxelMaterialScanResult Result;
+	const bool bUseMesh = TargetMesh && TargetMesh->GetStaticMesh();
+	if (bUseMesh && !EnsureTargetMask())
+	{
+		Result.bTruncated = true;
+		return Result;
+	}
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
 	if (!IsValid(VoxelWorld) ||
@@ -302,7 +568,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 		return Result;
 	}
 
-	const FVoxelIntBox VoxelBounds = MakeVoxelBoundsFromWorldBounds(VoxelWorld, GetZoneWorldBounds());
+	const FVoxelIntBox VoxelBounds = bUseMesh ? TargetMask.Bounds
+		: MakeVoxelBoundsFromWorldBounds(VoxelWorld, GetZoneWorldBounds());
 	if (!VoxelBounds.IsValid())
 	{
 		return Result;
@@ -317,7 +584,7 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 			{
 				for (int32 X = VoxelBounds.Min.X; X < VoxelBounds.Max.X; ++X)
 				{
-					if (MaxVoxelScanCount > 0 && Result.ScannedVoxelCount >= MaxVoxelScanCount)
+					if (!bUseMesh && MaxVoxelScanCount > 0 && Result.ScannedVoxelCount >= MaxVoxelScanCount)
 					{
 						Result.bTruncated = true;
 						break;
@@ -325,7 +592,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 
 					const FIntVector VoxelPosition(X, Y, Z);
 					const FVector WorldLocation = VoxelWorld->LocalToGlobal(VoxelPosition);
-					if (!IsWorldLocationInsideZoneBounds(WorldLocation))
+					if (bUseMesh ? !TargetMask.InsideVoxels.Contains(VoxelPosition)
+						: !IsWorldLocationInsideZoneBounds(WorldLocation))
 					{
 						continue;
 					}

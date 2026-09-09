@@ -13,6 +13,10 @@
 #include "VoxelTools/VoxelToolHelpers.h"
 #include "VoxelWorld.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
+
 namespace DRMeshVoxelCarver
 {
 	constexpr int32 MaxRetryCount = 100;
@@ -46,7 +50,12 @@ namespace DRMeshVoxelCarver
 		TWeakObjectPtr<UStaticMeshComponent> CarveMesh;
 		TWeakObjectPtr<AVoxelWorld> VoxelWorld;
 		bool bHideMeshAfterCarve = true;
-		TFunction<void()> Completion;
+		bool bTrimOutsideMesh = false;
+		FTransform CleanupTransform;
+		FVector CleanupExtent = FVector::ZeroVector;
+		TSet<FIntVector> KeepVoxels;
+		TSharedPtr<FThreadSafeBool, ESPMode::ThreadSafe> Cancellation;
+		TFunction<void(bool)> Completion;
 	};
 
 	bool IsPointInsideMesh(
@@ -54,7 +63,7 @@ namespace DRMeshVoxelCarver
 		const TArray<FVector3f>& Vertices,
 		const TArray<uint32>& Indices)
 	{
-		int32 HitCount = 0;
+		TArray<double, TInlineAllocator<16>> HitDistances;
 		for (int32 Index = 0; Index + 2 < Indices.Num(); Index += 3)
 		{
 			const FVector A(Vertices[Indices[Index]]);
@@ -82,11 +91,80 @@ namespace DRMeshVoxelCarver
 			const double Distance = FVector::DotProduct(EdgeAC, Q) * InverseDeterminant;
 			if (V >= 0.0 && U + V <= 1.0 && Distance > KINDA_SMALL_NUMBER)
 			{
-				++HitCount;
+				HitDistances.Add(Distance);
 			}
 		}
 
+		// 삼각형의 공유 변에 걸친 교차를 한 번만 센다.
+		HitDistances.Sort();
+		int32 HitCount = 0;
+		double PreviousDistance = -1.0;
+		for (double Distance : HitDistances)
+		{
+			if (!FMath::IsNearlyEqual(Distance, PreviousDistance, 0.0001))
+			{
+				++HitCount;
+				PreviousDistance = Distance;
+			}
+		}
 		return HitCount % 2 == 1;
+	}
+
+	FVoxelIntBox GetVoxelBounds(AVoxelWorld* World, const FBox& Bounds)
+	{
+		FIntVector Min(MAX_int32);
+		FIntVector Max(MIN_int32);
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			const FVector Point((Corner & 1) ? Bounds.Max.X : Bounds.Min.X,
+				(Corner & 2) ? Bounds.Max.Y : Bounds.Min.Y,
+				(Corner & 4) ? Bounds.Max.Z : Bounds.Min.Z);
+			const FIntVector Local = World->GlobalToLocal(
+				Point, EVoxelWorldCoordinatesRounding::RoundDown);
+			Min = FIntVector(FMath::Min(Min.X, Local.X), FMath::Min(Min.Y, Local.Y),
+				FMath::Min(Min.Z, Local.Z));
+			Max = FIntVector(FMath::Max(Max.X, Local.X + 2), FMath::Max(Max.Y, Local.Y + 2),
+				FMath::Max(Max.Z, Local.Z + 2));
+		}
+		return FVoxelIntBox(Min - 1, Max);
+	}
+
+	bool ReadMesh(UStaticMesh* Mesh, TArray<FVector3f>& Vertices, TArray<uint32>& Indices)
+	{
+		if (!IsValid(Mesh))
+		{
+			return false;
+		}
+#if !WITH_EDITOR
+		if (!Mesh->bAllowCPUAccess)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Enable Allow CPU Access on %s."), *GetNameSafe(Mesh));
+			return false;
+		}
+#endif
+		const FStaticMeshRenderData* RenderData = Mesh->GetRenderData();
+		if (!RenderData || RenderData->LODResources.IsEmpty())
+		{
+			return false;
+		}
+		const FStaticMeshLODResources& LOD = RenderData->LODResources[0];
+		const uint32 VertexCount = LOD.VertexBuffers.PositionVertexBuffer.GetNumVertices();
+		Vertices.Reserve(VertexCount);
+		for (uint32 Index = 0; Index < VertexCount; ++Index)
+		{
+			Vertices.Add(LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(Index));
+		}
+		const FIndexArrayView SourceIndices = LOD.IndexBuffer.GetArrayView();
+		Indices.Reserve(SourceIndices.Num());
+		for (int32 Index = 0; Index < SourceIndices.Num(); ++Index)
+		{
+			if (SourceIndices[Index] >= VertexCount)
+			{
+				return false;
+			}
+			Indices.Add(SourceIndices[Index]);
+		}
+		return Indices.Num() >= 3 && Indices.Num() % 3 == 0;
 	}
 
 	class FMeshVoxelCarveWork final : public FVoxelAsyncWork
@@ -119,6 +197,15 @@ namespace DRMeshVoxelCarver
 	};
 
 	void StartNextCarveChunk(const TSharedRef<FCarveContext, ESPMode::ThreadSafe>& Context);
+
+	bool ShouldTrimVoxel(const FCarveContext& Context, const FIntVector& Position)
+	{
+		const FVector WorldPoint = Context.VoxelTransform.TransformPosition(
+			Context.VoxelSize * FVector(Position + Context.VoxelWorldOffset));
+		const FVector Local = Context.CleanupTransform.InverseTransformPosition(WorldPoint).GetAbs();
+		return Local.X <= Context.CleanupExtent.X && Local.Y <= Context.CleanupExtent.Y
+			&& Local.Z <= Context.CleanupExtent.Z && !Context.KeepVoxels.Contains(Position);
+	}
 }
 
 ADRMeshVoxelCarver::ADRMeshVoxelCarver()
@@ -150,6 +237,7 @@ void ADRMeshVoxelCarver::BeginPlay()
 
 void ADRMeshVoxelCarver::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	RestartCarveBatch();
 	if (MiningGameState.IsValid())
 	{
 		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
@@ -164,8 +252,15 @@ void ADRMeshVoxelCarver::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADRMeshVoxelCarver::RestartCarveBatch()
 {
+	++BatchGeneration;
+	if (CarveCancellation.IsValid())
+	{
+		*CarveCancellation = true;
+		CarveCancellation.Reset();
+	}
 	GetWorldTimerManager().ClearTimer(RetryTimerHandle);
 	PendingCarvers.Reset();
+	bBatchSucceeded = true;
 	bStartedForCurrentGame = false;
 	ActiveGamePhaseIndex = INDEX_NONE;
 }
@@ -173,6 +268,12 @@ void ADRMeshVoxelCarver::RestartCarveBatch()
 bool ADRMeshVoxelCarver::ShouldCarveOnGameStart(int32 PhaseIndex) const
 {
 	return bCarveOnGameStart && StartPhaseIndex == PhaseIndex;
+}
+
+bool ADRMeshVoxelCarver::IsCarving() const
+{
+	return (CarveCancellation.IsValid() && !*CarveCancellation)
+		|| GetWorldTimerManager().IsTimerActive(RetryTimerHandle) || !PendingCarvers.IsEmpty();
 }
 
 void ADRMeshVoxelCarver::HandleGamePhaseChanged(
@@ -192,6 +293,8 @@ void ADRMeshVoxelCarver::HandleGamePhaseChanged(
 
 void ADRMeshVoxelCarver::StartCarveBatch(bool bForGameStart)
 {
+	++BatchGeneration;
+	bBatchSucceeded = true;
 	bCarveBatchForGameStart = bForGameStart;
 	RetryCount = 0;
 	PendingCarverIndex = 0;
@@ -206,58 +309,41 @@ void ADRMeshVoxelCarver::StartCarveBatch(bool bForGameStart)
 
 bool ADRMeshVoxelCarver::CarveVoxelWorld()
 {
-	return StartCarveAsync([]() {});
+	return StartCarveAsync([](bool) {});
 }
 
-bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
+bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void(bool)>&& Completion)
 {
+	if (CarveCancellation.IsValid() && !*CarveCancellation)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Carver] Rejected Actor=%s Phase=%d Reason=AlreadyRunning"),
+			*GetPathName(), StartPhaseIndex);
+		return false;
+	}
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
 	UStaticMesh* StaticMesh = CarveMesh ? CarveMesh->GetStaticMesh() : nullptr;
 	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !IsValid(StaticMesh))
 	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[Carver] Rejected Actor=%s Phase=%d World=%s Created=%d Mesh=%s"),
+			*GetPathName(), StartPhaseIndex, *GetNameSafe(VoxelWorld),
+			IsValid(VoxelWorld) && VoxelWorld->IsCreated(), *GetNameSafe(StaticMesh));
 		return false;
 	}
 
-	const FStaticMeshRenderData* RenderData = StaticMesh->GetRenderData();
-	if (!RenderData || RenderData->LODResources.IsEmpty())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Mesh voxel carve failed: %s has no render data."),
-			*GetNameSafe(StaticMesh));
-		return false;
-	}
-
-#if !WITH_EDITOR
-	if (!StaticMesh->bAllowCPUAccess)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Mesh voxel carve failed: enable Allow CPU Access on %s."),
-			*GetNameSafe(StaticMesh));
-		return false;
-	}
-#endif
-
-	const FStaticMeshLODResources& LOD = RenderData->LODResources[0];
 	TArray<FVector3f> Vertices;
-	Vertices.SetNumUninitialized(LOD.VertexBuffers.PositionVertexBuffer.GetNumVertices());
-	for (uint32 Index = 0; Index < LOD.VertexBuffers.PositionVertexBuffer.GetNumVertices(); ++Index)
-	{
-		Vertices[Index] = LOD.VertexBuffers.PositionVertexBuffer.VertexPosition(Index);
-	}
-
-	const FIndexArrayView SourceIndices = LOD.IndexBuffer.GetArrayView();
 	TArray<uint32> Indices;
-	Indices.Reserve(SourceIndices.Num());
-	for (int32 Index = 0; Index < SourceIndices.Num(); ++Index)
+	if (!DRMeshVoxelCarver::ReadMesh(StaticMesh, Vertices, Indices))
 	{
-		Indices.Add(SourceIndices[Index]);
+		UE_LOG(LogTemp, Error, TEXT("Mesh voxel carve failed: invalid mesh %s."),
+			*GetNameSafe(StaticMesh));
+		return false;
 	}
 
-	const FBoxSphereBounds MeshBounds = CarveMesh->Bounds;
-	const FVector WorldMin = MeshBounds.Origin - MeshBounds.BoxExtent;
-	const FVector WorldMax = MeshBounds.Origin + MeshBounds.BoxExtent;
-	const FIntVector Min = VoxelWorld->GlobalToLocal(
-		WorldMin, EVoxelWorldCoordinatesRounding::RoundDown) - 1;
-	const FIntVector Max = VoxelWorld->GlobalToLocal(
-		WorldMax, EVoxelWorldCoordinatesRounding::RoundUp) + 1;
+	const FVoxelIntBox Bounds = DRMeshVoxelCarver::GetVoxelBounds(
+		VoxelWorld, CarveMesh->Bounds.GetBox());
+	const FIntVector Min = Bounds.Min;
+	const FIntVector Max = Bounds.Max;
 	const int32 Step = FMath::Max(1, SamplingStep);
 	const int32 ChunkSize = FMath::DivideAndRoundUp(FMath::Max(Step, CarveChunkSize), Step) * Step;
 	const int64 SampleCount = int64(FMath::DivideAndRoundUp(Max.X - Min.X, Step))
@@ -316,6 +402,8 @@ bool ADRMeshVoxelCarver::StartCarveAsync(TFunction<void()>&& Completion)
 	Context->VoxelWorld = VoxelWorld;
 	Context->bHideMeshAfterCarve = bHideMeshAfterCarve;
 	Context->Completion = MoveTemp(Completion);
+	CarveCancellation = MakeShared<FThreadSafeBool, ESPMode::ThreadSafe>(false);
+	Context->Cancellation = CarveCancellation;
 
 	for (int32 X = Min.X; X < Max.X; X += ChunkSize)
 	{
@@ -358,9 +446,10 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 	const TSharedRef<FCarveContext, ESPMode::ThreadSafe>& Context)
 {
 	AVoxelWorld* VoxelWorld = Context->VoxelWorld.Get();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || *Context->Cancellation)
 	{
-		Context->Completion();
+		*Context->Cancellation = true;
+		Context->Completion(false);
 		return;
 	}
 
@@ -373,7 +462,8 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 				CarveMesh->SetVisibility(false, true);
 			}
 		}
-		Context->Completion();
+		*Context->Cancellation = true;
+		Context->Completion(true);
 		return;
 	}
 
@@ -393,12 +483,30 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 	auto Work = [Context, ChunkMin, ChunkMax, EditedBounds, GameThreadTasks](FVoxelData& Data)
 	{
 		FVoxelWriteScopeLock Lock(Data, EditedBounds, FUNCTION_FNAME);
+		if (*Context->Cancellation)
+		{
+			GameThreadTasks->AddTask([Context]()
+			{
+				Context->Completion(false);
+			});
+			return;
+		}
 		for (int32 X = ChunkMin.X; X < ChunkMax.X; X += Context->Step)
 		{
 			for (int32 Y = ChunkMin.Y; Y < ChunkMax.Y; Y += Context->Step)
 			{
 				for (int32 Z = ChunkMin.Z; Z < ChunkMax.Z; Z += Context->Step)
 				{
+					if (Context->bTrimOutsideMesh)
+					{
+						const FIntVector Position(X, Y, Z);
+						if (ShouldTrimVoxel(*Context, Position))
+						{
+							// 보존 마스크 내부는 값과 재질 모두 쓰지 않는다.
+							Data.SetValue(Position, FVoxelValue::Empty());
+						}
+						continue;
+					}
 					const FIntVector SampleCenter(
 						FMath::Min(X + Context->Step / 2, Context->Max.X - 1),
 						FMath::Min(Y + Context->Step / 2, Context->Max.Y - 1),
@@ -467,9 +575,11 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 		GameThreadTasks->AddTask([Context, EditedBounds]()
 		{
 			AVoxelWorld* CompletedVoxelWorld = Context->VoxelWorld.Get();
-			if (!IsValid(CompletedVoxelWorld) || !CompletedVoxelWorld->IsCreated())
+			if (!IsValid(CompletedVoxelWorld) || !CompletedVoxelWorld->IsCreated()
+				|| *Context->Cancellation)
 			{
-				Context->Completion();
+				*Context->Cancellation = true;
+				Context->Completion(false);
 				return;
 			}
 
@@ -485,6 +595,95 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 	FVoxelToolHelpers::StartAsyncEditTask(
 		VoxelWorld,
 		new FMeshVoxelCarveWork(*VoxelWorld, MoveTemp(Work)));
+}
+
+bool ADRMeshVoxelCarver::BuildMeshVoxelMask(UStaticMeshComponent* Mesh, AVoxelWorld* VoxelWorld,
+	int32 MaxSamples, FDRMeshVoxelMask& OutMask)
+{
+	OutMask = FDRMeshVoxelMask();
+	if (!IsValid(Mesh) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	{
+		return false;
+	}
+	TArray<FVector3f> Vertices;
+	TArray<uint32> Indices;
+	if (!DRMeshVoxelCarver::ReadMesh(Mesh->GetStaticMesh(), Vertices, Indices))
+	{
+		return false;
+	}
+	OutMask.Bounds = DRMeshVoxelCarver::GetVoxelBounds(VoxelWorld, Mesh->Bounds.GetBox());
+	const FIntVector Size = OutMask.Bounds.Max - OutMask.Bounds.Min;
+	const int64 Count = int64(Size.X) * Size.Y * Size.Z;
+	if (Count <= 0 || Count > MaxSamples)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Mesh mask exceeds sample limit: %s (%lld / %d)."),
+			*GetNameSafe(Mesh->GetStaticMesh()), Count, MaxSamples);
+		return false;
+	}
+	const FTransform Transform = Mesh->GetComponentTransform();
+	for (int32 X = OutMask.Bounds.Min.X; X < OutMask.Bounds.Max.X; ++X)
+	{
+		for (int32 Y = OutMask.Bounds.Min.Y; Y < OutMask.Bounds.Max.Y; ++Y)
+		{
+			for (int32 Z = OutMask.Bounds.Min.Z; Z < OutMask.Bounds.Max.Z; ++Z)
+			{
+				const FIntVector Position(X, Y, Z);
+				const FVector Local = Transform.InverseTransformPosition(VoxelWorld->LocalToGlobal(Position));
+				if (DRMeshVoxelCarver::IsPointInsideMesh(Local, Vertices, Indices))
+				{
+					OutMask.InsideVoxels.Add(Position);
+				}
+			}
+		}
+	}
+	return !OutMask.InsideVoxels.IsEmpty();
+}
+
+bool ADRMeshVoxelCarver::TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransform& BoxTransform,
+	const FVector& BoxExtent, const FDRMeshVoxelMask& KeepMask, int32 MaxSamples,
+	const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
+	TFunction<void(bool)>&& Completion)
+{
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || KeepMask.InsideVoxels.IsEmpty())
+	{
+		return false;
+	}
+	const FBox WorldBox = FBox(-BoxExtent, BoxExtent).TransformBy(BoxTransform);
+	const FVoxelIntBox Bounds = DRMeshVoxelCarver::GetVoxelBounds(VoxelWorld, WorldBox);
+	const FIntVector Size = Bounds.Max - Bounds.Min;
+	const int64 Count = int64(Size.X) * Size.Y * Size.Z;
+	if (Count <= 0 || Count > MaxSamples)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Zone cleanup exceeds sample limit (%lld / %d)."), Count, MaxSamples);
+		return false;
+	}
+	const auto Context = MakeShared<DRMeshVoxelCarver::FCarveContext, ESPMode::ThreadSafe>();
+	Context->Min = Bounds.Min;
+	Context->Max = Bounds.Max;
+	Context->VoxelWorld = VoxelWorld;
+	Context->VoxelTransform = VoxelWorld->GetTransform();
+	Context->VoxelSize = VoxelWorld->VoxelSize;
+	Context->VoxelWorldOffset = VoxelWorld->GetWorldOffset();
+	Context->bHideMeshAfterCarve = false;
+	Context->bTrimOutsideMesh = true;
+	Context->CleanupTransform = BoxTransform;
+	Context->CleanupExtent = BoxExtent;
+	Context->KeepVoxels = KeepMask.InsideVoxels;
+	Context->Cancellation = Cancellation;
+	Context->Completion = MoveTemp(Completion);
+	// 종료 정리는 Step=1, Cube 고정으로 경계 안쪽을 침범하지 않는다.
+	for (int32 X = Bounds.Min.X; X < Bounds.Max.X; X += Context->ChunkSize)
+	{
+		for (int32 Y = Bounds.Min.Y; Y < Bounds.Max.Y; Y += Context->ChunkSize)
+		{
+			for (int32 Z = Bounds.Min.Z; Z < Bounds.Max.Z; Z += Context->ChunkSize)
+			{
+				Context->ChunkMins.Add(FIntVector(X, Y, Z));
+			}
+		}
+	}
+	DRMeshVoxelCarver::StartNextCarveChunk(Context);
+	return true;
 }
 
 AVoxelWorld* ADRMeshVoxelCarver::ResolveVoxelWorld()
@@ -541,13 +740,28 @@ void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 		return;
 	}
 
-	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+	ADRMeshVoxelCarver* WaitingCarver = nullptr;
+	for (ADRMeshVoxelCarver* Carver : Carvers)
+	{
+		AVoxelWorld* VoxelWorld = IsValid(Carver) ? Carver->ResolveVoxelWorld() : nullptr;
+		if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+		{
+			WaitingCarver = Carver;
+			break;
+		}
+	}
+	if (WaitingCarver != nullptr)
 	{
 		if (++RetryCount >= DRMeshVoxelCarver::MaxRetryCount)
 		{
 			GetWorldTimerManager().ClearTimer(RetryTimerHandle);
-			UE_LOG(LogTemp, Error, TEXT("Game start carve batch failed: voxel world is not ready."));
+			UE_LOG(LogTemp, Error,
+				TEXT("[Carver] BatchFailed WaitingActor=%s Phase=%d Reason=WorldNotReady"),
+				*GetPathNameSafe(WaitingCarver), ActiveGamePhaseIndex);
+			if (ADRMiningGameModeBase* Mode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+			{
+				Mode->NotifyPhaseCarversReady(ActiveGamePhaseIndex, false);
+			}
 		}
 		return;
 	}
@@ -576,16 +790,32 @@ void ADRMeshVoxelCarver::ExecuteNextCarver()
 		}
 
 		const TWeakObjectPtr<ADRMeshVoxelCarver> WeakThis(this);
-		if (Carver->StartCarveAsync([WeakThis]()
+		const int32 BatchPhase = ActiveGamePhaseIndex;
+		const uint32 Generation = BatchGeneration;
+		const FString CarverName = Carver->GetPathName();
+		if (Carver->StartCarveAsync([WeakThis, BatchPhase, Generation, CarverName](bool bSucceeded)
 		{
 			if (ADRMeshVoxelCarver* BatchOwner = WeakThis.Get())
 			{
-				BatchOwner->ExecuteNextCarver();
+				if (BatchOwner->ActiveGamePhaseIndex == BatchPhase && BatchOwner->BatchGeneration == Generation)
+				{
+					if (!bSucceeded)
+					{
+						UE_LOG(LogTemp, Error,
+							TEXT("[Carver] Interrupted Actor=%s Phase=%d; world lost or work cancelled."),
+							*CarverName, BatchPhase);
+					}
+					BatchOwner->bBatchSucceeded &= bSucceeded;
+					BatchOwner->ExecuteNextCarver();
+				}
 			}
 		}))
 		{
 			return;
 		}
+		bBatchSucceeded = false;
+		UE_LOG(LogTemp, Error, TEXT("[Carver] FailedToStart Actor=%s Phase=%d"),
+			*CarverName, BatchPhase);
 	}
 
 	PendingCarvers.Reset();
@@ -593,7 +823,51 @@ void ADRMeshVoxelCarver::ExecuteNextCarver()
 	{
 		if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
 		{
-			GameMode->NotifyGameStartCarversReady();
+			GameMode->NotifyPhaseCarversReady(ActiveGamePhaseIndex, bBatchSucceeded);
 		}
 	}
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDRMeshPreservationTest, "DeepRaiders.GameFlow.MeshPreservation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDRMeshPreservationTest::RunTest(const FString&)
+{
+	const TArray<FVector3f> Vertices =
+	{
+		{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
+		{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}
+	};
+	const TArray<uint32> Indices =
+	{
+		0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4,
+		3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5
+	};
+	TestTrue(TEXT("Closed mesh center is inside"),
+		DRMeshVoxelCarver::IsPointInsideMesh(FVector::ZeroVector, Vertices, Indices));
+	TestFalse(TEXT("Outside stays outside"),
+		DRMeshVoxelCarver::IsPointInsideMesh(FVector(3, 0, 0), Vertices, Indices));
+	const FVector VertexRay = FVector(1, 1, 1) - DRMeshVoxelCarver::RayDirection * 0.5;
+	TestTrue(TEXT("Shared triangle vertex counts once"),
+		DRMeshVoxelCarver::IsPointInsideMesh(VertexRay, Vertices, Indices));
+
+	DRMeshVoxelCarver::FCarveContext Context;
+	Context.VoxelSize = 1.f;
+	Context.CleanupExtent = FVector(2);
+	Context.KeepVoxels.Add(FIntVector::ZeroValue);
+	TestFalse(TEXT("Existing mesh interior is never written"),
+		DRMeshVoxelCarver::ShouldTrimVoxel(Context, FIntVector::ZeroValue));
+	TestTrue(TEXT("Box minus mesh is removed"),
+		DRMeshVoxelCarver::ShouldTrimVoxel(Context, FIntVector(1, 0, 0)));
+	TestFalse(TEXT("Outside box is never written"),
+		DRMeshVoxelCarver::ShouldTrimVoxel(Context, FIntVector(3, 0, 0)));
+	Context.CleanupExtent = FVector(2, 0.5, 1);
+	Context.CleanupTransform = FTransform(FRotator(0, 90, 0), FVector::ZeroVector);
+	TestTrue(TEXT("Rotated box long axis"),
+		DRMeshVoxelCarver::ShouldTrimVoxel(Context, FIntVector(0, 1, 0)));
+	TestFalse(TEXT("Rotated box short axis"),
+		DRMeshVoxelCarver::ShouldTrimVoxel(Context, FIntVector(1, 0, 0)));
+	return true;
+}
+#endif

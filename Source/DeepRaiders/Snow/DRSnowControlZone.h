@@ -5,6 +5,7 @@
 #include "DeepRaiders/Snow/DRSnowVolumeTypes.h"
 #include "VoxelIntBox.h"
 #include "VoxelMaterial.h"
+#include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DRSnowControlZone.generated.h"
 
 class AVoxelWorld;
@@ -14,6 +15,8 @@ class USceneComponent;
 class UTextBlock;
 class UUserWidget;
 class UWidgetComponent;
+class UGameplayEffect;
+class UStaticMesh;
 
 #pragma region Debug
 
@@ -75,6 +78,26 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	void ResetForGame();
+	bool PrepareForGame() const;
+	void ActivateForPhase(int32 PhaseIndex);
+	void FreezeForGameEnd();
+	bool StartEndCleanup(TFunction<void(bool)>&& Completion);
+	bool TryClaimCompletionReward();
+	float GetRewardSnowGauge() const { return RewardSnowGauge; }
+	const TArray<TSubclassOf<UGameplayEffect>>& GetRewardEffects() const { return RewardEffects; }
+
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	bool IsZoneActive() const { return bZoneActive; }
+
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	bool IsZoneCompleted() const { return bZoneCompleted; }
+
+	UFUNCTION(BlueprintPure, Category = "Snow|Control")
+	float GetCompletionRatio() const { return CompletionRatio; }
 
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	FBox GetZoneWorldBounds() const;
@@ -95,6 +118,39 @@ public:
 	}
 
 protected:
+	// 닫힌 메쉬를 지정한다. 패키징 시 메쉬의 Allow CPU Access가 필요하다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
+	TObjectPtr<UStaticMeshComponent> TargetMesh;
+
+	// 이 Box 안에서 목표 메쉬 외부의 기존 복셀만 제거한다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
+	TObjectPtr<UBoxComponent> CleanupBounds;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control", meta = (ClampMin = "0"))
+	int32 ActivationPhaseIndex = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control",
+		meta = (ClampMin = "0.01", ClampMax = "1.0"))
+	float RequiredCompletionRatio = 0.8f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Reward",
+		meta = (ClampMin = "0"))
+	float RewardSnowGauge = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Reward")
+	TArray<TSubclassOf<UGameplayEffect>> RewardEffects;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual",
+		meta = (ClampMin = "1", ClampMax = "255"))
+	int32 OutlineStencilValue = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Cleanup")
+	bool bCleanupOnGameEnd = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Cleanup",
+		meta = (ClampMin = "1"))
+	int32 MaxCleanupVoxelCount = 2000000;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<USceneComponent> Root;
 
@@ -135,11 +191,39 @@ protected:
 		meta = (ClampMin = "0.01", Units = "s", EditCondition = "!bUpdateControlRatioEveryTick"))
 	float ControlUpdateInterval = 1.f;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Update")
+	UPROPERTY(ReplicatedUsing = OnRep_ControlState, VisibleInstanceOnly, BlueprintReadOnly,
+		Category = "Snow|Control|Update")
 	FDRSnowControlRatio CachedControlRatio;
 
 private:
 	void RefreshPointLocationWidget();
+	bool EnsureTargetMask() const;
+	void RefreshControlVisuals();
+
+	UFUNCTION()
+	void OnRep_ControlState();
+
+	UPROPERTY(ReplicatedUsing = OnRep_ControlState)
+	bool bZoneActive = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ControlState)
+	bool bZoneCompleted = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ControlState)
+	float CompletionRatio = 0.f;
+
+	bool bRewardGranted = false;
+	bool bControlFrozen = false;
+	mutable FDRMeshVoxelMask TargetMask;
+	mutable TWeakObjectPtr<UStaticMesh> CachedTargetMesh;
+	mutable TWeakObjectPtr<AVoxelWorld> CachedVoxelWorld;
+	mutable FTransform CachedMeshTransform;
+	mutable FTransform CachedVoxelTransform;
+	mutable FIntVector CachedWorldOffset = FIntVector::ZeroValue;
+	mutable float CachedVoxelSize = 0.f;
+	mutable bool bMaskAttempted = false;
+	mutable int32 CachedMaskLimit = 0;
+	TSharedPtr<FThreadSafeBool, ESPMode::ThreadSafe> CleanupCancellation;
 
 #pragma region Debug
 
@@ -168,7 +252,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug", meta = (EditCondition = "bCreateDebugWidget"))
 	FName DebugTextBlockName = TEXT("TextBlock_SnowCount");
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Debug", meta = (ClampMin = "1"))
+	// 메쉬 Bounds의 마스크 샘플 한도다. 초과 시 부분 집계 대신 준비를 중단한다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Sampling",
+		meta = (ClampMin = "1"))
 	int32 MaxVoxelScanCount = 250000;
 
 private:

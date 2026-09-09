@@ -180,8 +180,7 @@ void UDRShieldComponent::HandleActiveGameplayEffectAdded(
 	if (!GetOwner()->HasAuthority()
 		|| !IsValid(TargetAbilitySystem)
 		|| EffectSpec.Def == nullptr
-		|| !EffectSpec.Def->InheritableOwnedTagsContainer.CombinedTags.HasTagExact(
-			DRGameplayTags::State_PersonalShield))
+		|| !EffectSpec.Def->GetGrantedTags().HasTagExact(DRGameplayTags::State_PersonalShield))
 	{
 		return;
 	}

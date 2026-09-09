@@ -45,6 +45,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FDRGameFlowMessageChanged, const FText&, GameFlowMessage);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRMatchHUDStateChanged);
+
 USTRUCT()
 struct FDRTeamRegisteredTeleportPoint
 {
@@ -59,6 +61,40 @@ struct FDRTeamRegisteredTeleportPoint
 
 struct FDRSnowOperationBatcher;
 struct FDRSnowLoadTest;
+
+USTRUCT(BlueprintType)
+struct FDRPhaseCountdownState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 RemainingSeconds = 0;
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsExitCountdown = false;
+
+	UPROPERTY(BlueprintReadOnly)
+	FText Text;
+};
+
+USTRUCT(BlueprintType)
+struct FDRControlZoneGameResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bHasResult = false;
+
+	UPROPERTY(BlueprintReadOnly)
+	float Team0Ratio = 0.f;
+
+	UPROPERTY(BlueprintReadOnly)
+	float Team1Ratio = 0.f;
+
+	// INDEX_NONE은 동률 또는 양 팀 모두 점유량이 없는 경우다.
+	UPROPERTY(BlueprintReadOnly)
+	int32 WinningTeamId = INDEX_NONE;
+};
 
 UCLASS()
 class DEEPRAIDERS_API ADRMiningGameStateBase : public AGameStateBase
@@ -92,6 +128,30 @@ public:
 		const TArray<FText>& PlayerMessages);
 	void SetGameEndDebugText(const FString& DebugText);
 	void SetGameResultText(const FText& ResultText);
+	void SetPhaseCountdown(const FDRPhaseCountdownState& Countdown);
+	void SetControlZoneResult(const FDRControlZoneGameResult& Result);
+	void RequestControlZoneCleanup();
+	void AddControlZoneReward(int32 TeamId, float Amount);
+	void SetResultCountdown(int32 RemainingSeconds, const FText& CountdownText);
+	void ResetMatchHUDState();
+
+	UFUNCTION(BlueprintPure, Category = "Game|Reward")
+	float GetControlZoneRewardTotal(int32 TeamId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Game|Result")
+	int32 GetResultRemainingSeconds() const { return ResultRemainingSeconds; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Result")
+	FText GetResultCountdownText() const { return ResultCountdownText; }
+
+	UPROPERTY(BlueprintAssignable, Category = "Game|HUD")
+	FDRMatchHUDStateChanged OnMatchHUDStateChanged;
+
+	UFUNCTION(BlueprintPure, Category = "Game|Phase")
+	FDRPhaseCountdownState GetPhaseCountdown() const { return PhaseCountdown; }
+
+	UFUNCTION(BlueprintPure, Category = "Game|Result")
+	FDRControlZoneGameResult GetControlZoneResult() const { return ControlZoneResult; }
 
 	int32 GetGameRemainingSeconds() const { return GameRemainingSeconds; }
 	bool IsGameStarted() const { return GameFlowState == EDRGameFlowState::Playing; }
@@ -123,6 +183,41 @@ public:
 	FDRGamePhaseChanged OnGamePhaseChanged;
 
 private:
+	UFUNCTION()
+	void OnRep_MatchHUDState();
+
+	// 개인의 현재 잔액과 분리한, 이번 경기 거점 보상 누계다.
+	UPROPERTY(ReplicatedUsing = OnRep_MatchHUDState)
+	float Team0ControlZoneReward = 0.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MatchHUDState)
+	float Team1ControlZoneReward = 0.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MatchHUDState)
+	int32 ResultRemainingSeconds = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_MatchHUDState)
+	FText ResultCountdownText;
+
+	UFUNCTION()
+	void OnRep_ControlZoneResult();
+
+	UPROPERTY(ReplicatedUsing = OnRep_GamePhaseState)
+	FDRPhaseCountdownState PhaseCountdown;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ControlZoneResult)
+	FDRControlZoneGameResult ControlZoneResult;
+
+	UFUNCTION()
+	void OnRep_ZoneCleanupSequence();
+	void TryClientZoneCleanup();
+
+	UPROPERTY(ReplicatedUsing = OnRep_ZoneCleanupSequence)
+	int32 ZoneCleanupSequence = INDEX_NONE;
+
+	FTimerHandle ZoneCleanupRetryTimer;
+	bool bClientZoneCleanupStarted = false;
+
 	UFUNCTION()
 	void OnRep_GameTimerState();
 

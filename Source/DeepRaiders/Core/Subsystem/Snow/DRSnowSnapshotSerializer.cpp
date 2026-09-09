@@ -241,8 +241,18 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 	const TArray<uint8>& VoxelSaveData,
 	int32 OriginalVoxelSaveSize,
 	const TArray<uint8>& SnowVolumeData,
-	int32 OriginalSnowVolumeSize)
+	int32 OriginalSnowVolumeSize,
+	bool* bOutWaitingForWorld)
 {
+	if (bOutWaitingForWorld)
+	{
+		*bOutWaitingForWorld = false;
+	}
+	if (VoxelSaveData.IsEmpty() || SnowVolumeData.IsEmpty()
+		|| OriginalVoxelSaveSize <= 0 || OriginalSnowVolumeSize <= 0)
+	{
+		return false;
+	}
 	AVoxelWorld* VoxelWorld = nullptr;
 	if (VoxelWorldName.IsNone())
 	{
@@ -264,8 +274,12 @@ bool FDRSnowSnapshotSerializer::ApplyCheckpoint(
 		}
 	}
 
-	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || VoxelSaveData.IsEmpty())
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
 	{
+		if (bOutWaitingForWorld)
+		{
+			*bOutWaitingForWorld = true;
+		}
 		return false;
 	}
 
