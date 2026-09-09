@@ -221,6 +221,7 @@ void UDRPlayerLifecycleComponent::DropInventoryItemsFromServer()
 		return;
 	}
 
+	LootDrop->SetSpawnMode(EDRLootSpawnMode::AllAtOnce);
 	const int32 SpawnedItemCount = LootDrop->SpawnItemInstances(DroppedItems, Character->GetActorTransform());
 	if (SpawnedItemCount != DroppedItems.Num())
 	{

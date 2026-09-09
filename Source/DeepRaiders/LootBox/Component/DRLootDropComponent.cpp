@@ -7,11 +7,19 @@
 #include "DeepRaiders/LootBox/Data/DRLootDropProfile.h"
 #include "Engine/DataTable.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 
 UDRLootDropComponent::UDRLootDropComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SetIsReplicatedByDefault(false);
+}
+
+void UDRLootDropComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ResetSpawnSequence();
+
+	Super::EndPlay(EndPlayReason);
 }
 
 int32 UDRLootDropComponent::GenerateAndSpawnLoot(EDRLootTier LootTier, const FTransform& SourceTransform)
@@ -68,7 +76,7 @@ int32 UDRLootDropComponent::GenerateAndSpawnLoot(EDRLootTier LootTier, const FTr
 }
 
 int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances,
-	const FTransform& SourceTransform) const
+	const FTransform& SourceTransform)
 {
 	FRandomStream RandomStream(FMath::Rand());
 
@@ -76,9 +84,9 @@ int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& It
 }
 
 int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& ItemInstances,
-	const FTransform& SourceTransform, FRandomStream& RandomStream) const
+	const FTransform& SourceTransform, FRandomStream& RandomStream)
 {
-	if (ItemInstances.IsEmpty())
+	if (ItemInstances.IsEmpty() || bSpawnSequenceActive)
 	{
 		return 0;
 	}
@@ -93,21 +101,20 @@ int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& It
 		return 0;
 	}
 
-	UDRWorldItemSubsystem* WorldItemSubsystem = World->GetSubsystem<UDRWorldItemSubsystem>();
-	if (!IsValid(WorldItemSubsystem))
+	if (!IsValid(World->GetSubsystem<UDRWorldItemSubsystem>()))
 	{
 		UE_LOG(LogTemp, Error, TEXT("[%s]: WorldItemSubsystem is unavailable."), *GetName());
 		return 0;
 	}
 
-	TArray<const FDRItemInstance*> SpawnEntries;
+	TArray<FDRItemInstance> SpawnEntries;
 	SpawnEntries.Reserve(ItemInstances.Num());
 
 	for (const FDRItemInstance& ItemInstance : ItemInstances)
 	{
 		if (ItemInstance.IsValid())
 		{
-			SpawnEntries.Add(&ItemInstance);
+			SpawnEntries.Add(ItemInstance);
 		}
 	}
 
@@ -116,48 +123,180 @@ int32 UDRLootDropComponent::SpawnItemInstances(const TArray<FDRItemInstance>& It
 		return 0;
 	}
 
+	if (SpawnMode == EDRLootSpawnMode::AllAtOnce || SpawnEntries.Num() == 1)
+	{
+		return SpawnAllItems(SpawnEntries, SourceTransform, RandomStream);
+	}
+
+	PendingItemInstances = MoveTemp(SpawnEntries);
+	PendingSourceTransform = FTransform(
+		SourceTransform.GetRotation(), SourceTransform.GetLocation(), FVector::OneVector);
+	BuildSpawnTargetTransforms(PendingItemInstances.Num(), PendingSourceTransform, RandomStream,
+		PendingTargetTransforms);
+	PendingSpawnDelays.Reserve(PendingItemInstances.Num() - 1);
+
+	for (int32 Index = 1; Index < PendingItemInstances.Num(); ++Index)
+	{
+		PendingSpawnDelays.Add(GetNextSpawnDelay(RandomStream));
+	}
+
+	PendingItemIndex = 0;
+	bSpawnSequenceActive = true;
+
+	const int32 QueuedItemCount = PendingItemInstances.Num();
+	SpawnNextSequenceItem();
+	return QueuedItemCount;
+}
+
+int32 UDRLootDropComponent::SpawnAllItems(const TArray<FDRItemInstance>& ItemInstances,
+	const FTransform& SourceTransform, FRandomStream& RandomStream)
+{
+	const FTransform CleanSourceTransform(
+		SourceTransform.GetRotation(), SourceTransform.GetLocation(), FVector::OneVector);
+	TArray<FTransform> TargetTransforms;
+	BuildSpawnTargetTransforms(ItemInstances.Num(), CleanSourceTransform, RandomStream, TargetTransforms);
+
+	int32 SpawnedActorCount = 0;
+
+	for (int32 Index = 0; Index < ItemInstances.Num(); ++Index)
+	{
+		if (SpawnPreparedItem(ItemInstances[Index], CleanSourceTransform, TargetTransforms[Index]))
+		{
+			++SpawnedActorCount;
+		}
+	}
+
+	return SpawnedActorCount;
+}
+
+void UDRLootDropComponent::BuildSpawnTargetTransforms(int32 ItemCount, const FTransform& SourceTransform,
+	FRandomStream& RandomStream, TArray<FTransform>& OutTargetTransforms) const
+{
+	OutTargetTransforms.Reset();
+	if (ItemCount <= 0)
+	{
+		return;
+	}
+
+	OutTargetTransforms.Reserve(ItemCount);
 	const float SafeMinRadius = FMath::Max(0.f, MinSpawnRadius);
 	const float SafeMaxRadius = FMath::Max(SafeMinRadius, MaxSpawnRadius);
 	const float MaxJitterRadians = FMath::DegreesToRadians(FMath::Max(0.f, MaxSpawnAngleJitterDegrees));
 	const float BaseAngle = RandomStream.FRandRange(0.f, UE_TWO_PI);
+	const FTransform CleanSourceTransform(
+		SourceTransform.GetRotation(), SourceTransform.GetLocation(), FVector::OneVector);
 
-	// 상자나 SpawnPoint의 Scale이 Item Actor에 전파되지 않게 한다.
-	const FTransform CleanSourceTransform(SourceTransform.GetRotation(), SourceTransform.GetLocation(),
-		FVector::OneVector);
-
-	int32 SpawnedActorCount = 0;
-
-	for (int32 Index = 0; Index < SpawnEntries.Num(); ++Index)
+	for (int32 Index = 0; Index < ItemCount; ++Index)
 	{
-		const FDRItemInstance& ItemInstance = *SpawnEntries[Index];
-		const float EvenAngle = UE_TWO_PI * static_cast<float>(Index) / static_cast<float>(SpawnEntries.Num());
+		const float EvenAngle = UE_TWO_PI * static_cast<float>(Index) / static_cast<float>(ItemCount);
 		const float SpawnAngle = BaseAngle * EvenAngle + RandomStream.FRandRange(-MaxJitterRadians, MaxJitterRadians);
 		const float SpawnRadius = RandomStream.FRandRange(SafeMinRadius, SafeMaxRadius);
-
 		const FVector SpawnDirection(FMath::Cos(SpawnAngle), FMath::Sin(SpawnAngle), 0.f);
 		const FVector TargetLocation = CleanSourceTransform.GetLocation() + SpawnDirection * SpawnRadius;
 		const FRotator TargetRotation(0.f, RandomStream.FRandRange(0.f, 360.f), 0.f);
-		const FTransform TargetTransform(TargetRotation, TargetLocation, FVector::OneVector);
 
-		FDRWorldItemSpawnParams SpawnParams;
-		SpawnParams.SourceTransform = CleanSourceTransform;
-		SpawnParams.TargetTransform = TargetTransform;
-		SpawnParams.IgnoredActor = Owner;
-		SpawnParams.bPlayEmergence = true;
+		OutTargetTransforms.Emplace(TargetRotation, TargetLocation, FVector::OneVector);
+	}
+}
 
-		ADRWorldItemActor* SpawnedItem = WorldItemSubsystem->SpawnWorldItem(ItemInstance, SpawnParams);
+bool UDRLootDropComponent::SpawnPreparedItem(const FDRItemInstance& ItemInstance,
+	const FTransform& SourceTransform, const FTransform& TargetTransform) const
+{
+	AActor* Owner = GetOwner();
+	UWorld* World = GetWorld();
+	UDRWorldItemSubsystem* WorldItemSubsystem = IsValid(World) ? World->GetSubsystem<UDRWorldItemSubsystem>() : nullptr;
 
-		if (IsValid(SpawnedItem))
-		{
-			++SpawnedActorCount;
-			continue;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[%s]: Failed to spawn item instance '%s'."),
-			*GetName(), *GetNameSafe(ItemInstance.Definition));
+	if (!IsValid(Owner) || !Owner->HasAuthority() || !IsValid(WorldItemSubsystem))
+	{
+		return false;
 	}
 
-	return SpawnedActorCount;
+	FDRWorldItemSpawnParams SpawnParams;
+	SpawnParams.SourceTransform = SourceTransform;
+	SpawnParams.TargetTransform = TargetTransform;
+	SpawnParams.IgnoredActor = Owner;
+	SpawnParams.bPlayEmergence = true;
+
+	ADRWorldItemActor* SpawnedItem = WorldItemSubsystem->SpawnWorldItem(ItemInstance, SpawnParams);
+	if (IsValid(SpawnedItem))
+	{
+		return true;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[%s]: Failed to spawn item instance '%s'."),
+		*GetName(), *GetNameSafe(ItemInstance.Definition));
+	return false;
+}
+
+void UDRLootDropComponent::SpawnNextSequenceItem()
+{
+	if (!bSpawnSequenceActive
+		|| !PendingItemInstances.IsValidIndex(PendingItemIndex)
+		|| !PendingTargetTransforms.IsValidIndex(PendingItemIndex))
+	{
+		FinishSpawnSequence();
+		return;
+	}
+
+	SpawnPreparedItem(PendingItemInstances[PendingItemIndex], PendingSourceTransform,
+		PendingTargetTransforms[PendingItemIndex]);
+	++PendingItemIndex;
+
+	if (PendingItemIndex >= PendingItemInstances.Num())
+	{
+		FinishSpawnSequence();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		FinishSpawnSequence();
+		return;
+	}
+
+	if (!PendingSpawnDelays.IsValidIndex(PendingItemIndex - 1))
+	{
+		FinishSpawnSequence();
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		SpawnTimerHandle, this, &ThisClass::SpawnNextSequenceItem,
+		PendingSpawnDelays[PendingItemIndex - 1], false);
+}
+
+void UDRLootDropComponent::FinishSpawnSequence()
+{
+	if (!bSpawnSequenceActive)
+	{
+		return;
+	}
+
+	ResetSpawnSequence();
+	OnSpawnSequenceCompleted.Broadcast();
+}
+
+void UDRLootDropComponent::ResetSpawnSequence()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SpawnTimerHandle);
+	}
+
+	PendingItemInstances.Reset();
+	PendingTargetTransforms.Reset();
+	PendingSpawnDelays.Reset();
+	PendingSourceTransform = FTransform::Identity;
+	PendingItemIndex = 0;
+	bSpawnSequenceActive = false;
+}
+
+float UDRLootDropComponent::GetNextSpawnDelay(FRandomStream& RandomStream) const
+{
+	const float SafeInterval = FMath::Max(SpawnInterval, 0.01f);
+	const float SafeDeviation = FMath::Max(SpawnIntervalRandomDeviation, 0.f);
+	return FMath::Max(0.01f, SafeInterval + RandomStream.FRandRange(-SafeDeviation, SafeDeviation));
 }
 
 bool UDRLootDropComponent::BuildValidLootPools(TArray<const FDRLootTableRow*>& OutAllRows,
@@ -317,7 +456,7 @@ bool UDRLootDropComponent::RollLootQuantities(EDRLootTier LootTier, const FDRLoo
 }
 
 int32 UDRLootDropComponent::SpawnLootQuantities(const TMap<UDRItemDefinition*, int32>& GeneratedQuantities,
-                                                const FTransform& SourceTransform, FRandomStream& RandomStream) const
+                                                const FTransform& SourceTransform, FRandomStream& RandomStream)
 {
 	if (GeneratedQuantities.IsEmpty())
 	{

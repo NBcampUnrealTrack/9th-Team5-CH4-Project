@@ -35,9 +35,10 @@ ADRHoveringWorldItemActor::ADRHoveringWorldItemActor()
 
 	InteractionSphereComponent = CreateDefaultSubobject<USphereComponent>(
 		TEXT("InteractionSphereComponent"));
-
-	InteractionSphereComponent->SetupAttachment(PresentationMeshComponent);
-	InteractionSphereComponent->SetSphereRadius(InteractionRadius);
+	
+	// 외관 메시가 아닌 RootComponent인 StaticMeshComponent에 부착, 외관 메시의 Scale에 영향 받지 않도록
+	InteractionSphereComponent->SetupAttachment(StaticMeshComponent);
+	InteractionSphereComponent->SetSphereRadius(DefaultInteractionRadius);
 	InteractionSphereComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	InteractionSphereComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionSphereComponent->SetCollisionResponseToChannel(
@@ -66,7 +67,7 @@ void ADRHoveringWorldItemActor::BeginPlay()
 	
 	if (InteractionSphereComponent)
 	{
-		InteractionSphereComponent->SetSphereRadius(InteractionRadius);
+		InteractionSphereComponent->SetSphereRadius(DefaultInteractionRadius);
 	}
 	
 	SetActorTickEnabled(GetNetMode() != NM_DedicatedServer);
@@ -161,7 +162,7 @@ void ADRHoveringWorldItemActor::RefreshItemPresentation()
 	}
 	
 	PresentationMeshComponent->SetStaticMesh(Definition->WorldMesh);
-	PresentationMeshComponent->SetRelativeTransform((FTransform::Identity));
+	PresentationMeshComponent->SetRelativeTransform(Definition->PresentationOffsetTransform);
 	
 	SetActorHiddenInGame(false);
 	

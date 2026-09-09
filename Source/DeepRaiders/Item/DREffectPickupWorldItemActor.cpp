@@ -27,7 +27,11 @@ void ADREffectPickupWorldItemActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	InteractionSphereComponent->SetSphereRadius(PickupRadius);
+	if (InteractionSphereComponent)
+	{
+		InteractionSphereComponent->SetSphereRadius(DefaultInteractionRadius);		
+	}
+	
 	RefreshPickupCollision();
 }
 

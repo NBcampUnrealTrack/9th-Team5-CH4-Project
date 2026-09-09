@@ -25,9 +25,6 @@ protected:
 	virtual void RefreshItemPresentation() override;
 	virtual void HandleWorldItemStateChanged() override;
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "1.0", Units = "cm"))
-	float PickupRadius = 100.f;
-	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.1", Units = "s"))
 	float PostPickupDestroyDelay = 0.25f;
 

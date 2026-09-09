@@ -60,6 +60,10 @@ protected:
 	// 서버와 클라이언트에서 각각 실행되는 외관 처리
 	virtual void ApplyBrokenPresentation();
 
+	// 파괴 후 비동기 Gameplay 처리가 남은 자식 클래스는 수명 카운트다운을 유예할 수 있다.
+	virtual bool ShouldDeferBrokenDestruction() const;
+	void StartBrokenDestructionCountdown();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Breakable", meta = (DisplayName = "On Broken Presentation"))
 	void BP_OnBrokenPresentation();
 	

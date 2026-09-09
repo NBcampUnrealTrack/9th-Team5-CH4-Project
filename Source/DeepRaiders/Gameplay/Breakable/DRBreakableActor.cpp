@@ -107,6 +107,24 @@ void ADRBreakableActor::BreakActor(const FDRBreakableDamageContext& DamageContex
 	
 	ForceNetUpdate();
 	
+	if (!ShouldDeferBrokenDestruction())
+	{
+		StartBrokenDestructionCountdown();
+	}
+}
+
+bool ADRBreakableActor::ShouldDeferBrokenDestruction() const
+{
+	return false;
+}
+
+void ADRBreakableActor::StartBrokenDestructionCountdown()
+{
+	if (!HasAuthority() || !bIsBroken)
+	{
+		return;
+	}
+
 	if (BrokenLifeSpan <= KINDA_SMALL_NUMBER)
 	{
 		Destroy();

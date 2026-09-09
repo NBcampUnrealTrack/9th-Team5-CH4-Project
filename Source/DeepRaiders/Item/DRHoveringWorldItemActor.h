@@ -49,7 +49,7 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "World Item|Interaction",
 		meta = (ClampMin = "1.0", Units = "cm"))
-	float InteractionRadius = 100.f;
+	float DefaultInteractionRadius = 100.f;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.0", Units = "s"))
 	float UncollectedLifeSpan = 30.f;
