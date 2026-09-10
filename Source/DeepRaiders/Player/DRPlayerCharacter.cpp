@@ -2,6 +2,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/GameStateBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -252,8 +253,58 @@ void ADRPlayerCharacter::ApplyKnockback(const FVector& Origin, float Distance)
 	if (UDRCharacterMovementComponent* Movement =
 		Cast<UDRCharacterMovementComponent>(GetCharacterMovement()))
 	{
-		Movement->ApplyKnockback(Origin, Distance);
+		FVector KnockbackDirection = GetActorLocation() - Origin;
+		if (!KnockbackDirection.Normalize())
+		{
+			KnockbackDirection = GetActorForwardVector().GetSafeNormal();
+		}
+
+		if (KnockbackDirection.IsNearlyZero())
+		{
+			return;
+		}
+
+		const float Duration = Movement->GetKnockbackDuration();
+		if (!Movement->ApplyKnockback(KnockbackDirection, Distance, Duration, 0.f))
+		{
+			return;
+		}
+
+		if (!IsLocallyControlled())
+		{
+			const AGameStateBase* GameState = GetWorld() != nullptr ? GetWorld()->GetGameState() : nullptr;
+			const float ServerStartTime = IsValid(GameState)
+				? static_cast<float>(GameState->GetServerWorldTimeSeconds())
+				: -1.f;
+			ClientApplyKnockback(KnockbackDirection, Distance, Duration, ServerStartTime);
+		}
 	}
+}
+
+void ADRPlayerCharacter::ClientApplyKnockback_Implementation(
+	FVector_NetQuantizeNormal Direction, float Distance, float Duration, float ServerStartTime)
+{
+	if (HasAuthority() || !IsLocallyControlled())
+	{
+		return;
+	}
+
+	UDRCharacterMovementComponent* Movement =
+		Cast<UDRCharacterMovementComponent>(GetCharacterMovement());
+	if (!IsValid(Movement))
+	{
+		return;
+	}
+
+	float ElapsedTime = 0.f;
+	const AGameStateBase* GameState = GetWorld() != nullptr ? GetWorld()->GetGameState() : nullptr;
+	if (IsValid(GameState) && ServerStartTime >= 0.f)
+	{
+		const double ServerElapsedTime = GameState->GetServerWorldTimeSeconds() - ServerStartTime;
+		ElapsedTime = static_cast<float>(FMath::Max(ServerElapsedTime, 0.0));
+	}
+
+	Movement->ApplyKnockback(Direction, Distance, Duration, ElapsedTime);
 }
 
 float ADRPlayerCharacter::GetMaxHealth() const

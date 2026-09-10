@@ -823,24 +823,28 @@ void UDRCharacterMovementComponent::ClearAirborneMomentumPreservation()
     PreservedLateralSpeed = 0.f;
 }
 
-bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float Distance)
+bool UDRCharacterMovementComponent::ApplyKnockback(
+	const FVector& Direction, float Distance, float Duration, float ElapsedTime)
 {
+	const bool bIsAutonomousClient = IsValid(CharacterOwner)
+		&& CharacterOwner->GetLocalRole() == ROLE_AutonomousProxy
+		&& CharacterOwner->IsLocallyControlled();
+	const bool bCanSimulateKnockback = IsValid(CharacterOwner)
+		&& (CharacterOwner->HasAuthority() || bIsAutonomousClient);
+	const float SafeDuration = FMath::Max(Duration, 0.01f);
+	const float SafeElapsedTime = FMath::Max(ElapsedTime, 0.f);
 	if (!IsValid(CharacterOwner)
-		|| !CharacterOwner->HasAuthority()
+		|| !bCanSimulateKnockback
 		|| Distance <= KINDA_SMALL_NUMBER
-		|| Origin.ContainsNaN()
+		|| Direction.ContainsNaN()
+		|| SafeElapsedTime >= SafeDuration
 		|| MovementMode == MOVE_None
 		|| IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
 	{
 		return false;
 	}
 
-	FVector KnockbackDirection = CharacterOwner->GetActorLocation() - Origin;
-	if (!KnockbackDirection.Normalize())
-	{
-		KnockbackDirection = CharacterOwner->GetActorForwardVector().GetSafeNormal();
-	}
-
+	const FVector KnockbackDirection = Direction.GetSafeNormal();
 	if (KnockbackDirection.IsNearlyZero())
 	{
 		return false;
@@ -877,7 +881,7 @@ bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float 
 	KnockbackSource->InstanceName = KnockbackRootMotionSourceName;
 	KnockbackSource->Priority = 1000;
 	KnockbackSource->AccumulateMode = ERootMotionAccumulateMode::Additive;
-	KnockbackSource->Duration = FMath::Max(KnockbackDuration, 0.01f);
+	KnockbackSource->Duration = SafeDuration;
 	KnockbackSource->StartLocation = StartLocation;
 	KnockbackSource->InitialTargetLocation = StartLocation + KnockbackDirection * Distance;
 	KnockbackSource->TargetLocation = KnockbackSource->InitialTargetLocation;
@@ -886,9 +890,13 @@ bool UDRCharacterMovementComponent::ApplyKnockback(const FVector& Origin, float 
         KnockBackCurve.Get() : UCurveFloat::StaticClass()->GetDefaultObject<UCurveFloat>();
 	KnockbackSource->Settings.SetFlag(ERootMotionSourceSettingsFlags::UseSensitiveLiftoffCheck);
 	KnockbackSource->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::MaintainLastRootMotionVelocity;
+	KnockbackSource->SetTime(SafeElapsedTime);
 
 	ApplyRootMotionSource(KnockbackSource);
-	CharacterOwner->ForceNetUpdate();
+	if (CharacterOwner->HasAuthority())
+	{
+		CharacterOwner->ForceNetUpdate();
+	}
 	return true;
 }
 
