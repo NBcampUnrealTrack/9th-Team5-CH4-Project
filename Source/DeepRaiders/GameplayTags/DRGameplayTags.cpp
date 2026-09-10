@@ -551,6 +551,11 @@ namespace DRGameplayTags
 		"Persistent forward dash trail visual effects");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_SuperJump_HeroLanding,
+		"GameplayCue.VFX.Skill.SuperJump.HeroLanding",
+		"Super Jump hero landing impact visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_VFX_Skill_CombatRoll,
 		"GameplayCue.VFX.Skill.CombatRoll",
 		"Persistent combat roll trail visual effects");

@@ -10,6 +10,7 @@
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 
@@ -140,6 +141,14 @@ void UDRGA_SuperJumpSkill::ApplyLandingEffects()
 	// 넉백 GE는 EffectContext Origin을 기준으로 대상의 밀려날 방향을 계산한다.
 	// Spec은 착지 시점까지 보관되므로, SuperJump 발동 위치가 아니라 실제 착지 위치를 기록한다.
 	const FVector LandingOrigin = SourceCharacter->GetActorLocation();
+	FGameplayCueParameters CueParameters;
+	CueParameters.Location = LandingOrigin;
+	CueParameters.Normal = FVector::UpVector;
+	CueParameters.Instigator = SourceCharacter;
+	CueParameters.EffectCauser = SourceCharacter;
+	SourceAbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_SuperJump_HeroLanding,
+		CueParameters);
 	for (const FGameplayEffectSpecHandle& EffectSpec : PendingLandingEffectSpecs)
 	{
 		if (EffectSpec.IsValid())
