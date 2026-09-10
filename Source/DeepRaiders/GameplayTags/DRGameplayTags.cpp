@@ -546,6 +546,11 @@ namespace DRGameplayTags
 		"MoveSpeed slow effect visual effects");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_ForwardDash,
+		"GameplayCue.VFX.Skill.ForwardDash",
+		"Persistent forward dash trail visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_VFX_Skill_CombatRoll,
 		"GameplayCue.VFX.Skill.CombatRoll",
 		"Persistent combat roll trail visual effects");
