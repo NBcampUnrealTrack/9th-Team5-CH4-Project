@@ -25,6 +25,8 @@ protected:
 	virtual void RefreshItemPresentation() override;
 	virtual void HandleWorldItemStateChanged() override;
 	
+	virtual void MulticastPlayPickupSound_Implementation(APawn* Interactor) override;
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect Pickup", meta = (ClampMin = "0.1", Units = "s"))
 	float PostPickupDestroyDelay = 0.25f;
 

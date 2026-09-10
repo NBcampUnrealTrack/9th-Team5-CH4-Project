@@ -70,6 +70,8 @@ protected:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayPickupSound(APawn* Interactor);
+	
+	virtual void MulticastPlayPickupSound_Implementation(APawn* Interactor);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayDroppedSound();

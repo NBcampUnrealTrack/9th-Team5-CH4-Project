@@ -789,6 +789,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Item_PickedUp,
 		"GameplayCue.Sound.Item.PickedUp",
 		"Item picked up.");
+		
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+    	GameplayCue_Sound_Item_EffectPickedUp,
+    	"GameplayCue.Sound.Item.EffectPickedUp",
+    	"Effect Item picked up.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Ore_Dropped,

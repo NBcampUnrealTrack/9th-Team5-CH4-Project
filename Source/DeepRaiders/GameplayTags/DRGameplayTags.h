@@ -230,6 +230,7 @@ namespace DRGameplayTags
 	// Gameplay Cue - Sound - World / Etc
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_PickedUp);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_EffectPickedUp);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Dropped);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Discovered);
 
