@@ -28,6 +28,7 @@ public:
 	bool CanEquipSkill(const UDRSkillDefinition* SkillDefinition) const;
 	bool EquipSkill(UDRSkillDefinition* SkillDefinition);
 	void GrantDefaultSkills();
+	void ResetSkills();
 
 	UPROPERTY(BlueprintAssignable, Category = "Skill")
 	FDRSkillChangedSignature OnSkillChanged;
