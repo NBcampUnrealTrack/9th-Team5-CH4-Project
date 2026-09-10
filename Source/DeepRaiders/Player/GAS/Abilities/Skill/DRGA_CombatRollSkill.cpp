@@ -3,11 +3,13 @@
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 
 UDRGA_CombatRollSkill::UDRGA_CombatRollSkill()
 {
@@ -121,6 +123,8 @@ void UDRGA_CombatRollSkill::ActivateAbility(
 		return;
 	}
 
+	StartRollGameplayCue(Character, RollDirection);
+
 	MontageTask->OnCompleted.AddDynamic(this, &ThisClass::HandleRollFinished);
 	MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::HandleRollInterrupted);
 	MontageTask->OnCancelled.AddDynamic(this, &ThisClass::HandleRollInterrupted);
@@ -138,6 +142,22 @@ void UDRGA_CombatRollSkill::ActivateAbility(
 
 	MoveTask->ReadyForActivation();
 	MontageTask->ReadyForActivation();
+}
+
+void UDRGA_CombatRollSkill::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool IsReplicateEndAbility,
+	bool IsWasCancelled)
+{
+	StopRollGameplayCue();
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		IsReplicateEndAbility,
+		IsWasCancelled);
 }
 
 FVector UDRGA_CombatRollSkill::ResolveRollDirection(const ADRPlayerCharacter* Character) const
@@ -202,6 +222,52 @@ FName UDRGA_CombatRollSkill::ResolveRollSection(
 	}
 
 	return FrontLeftRollSection;
+}
+
+void UDRGA_CombatRollSkill::StartRollGameplayCue(
+	ADRPlayerCharacter* Character,
+	const FVector& RollDirection)
+{
+	if (IsRollGameplayCueActive)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(Character)
+		|| !IsValid(AbilitySystem)
+		|| RollDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = Character->GetActorLocation();
+	Parameters.Normal = RollDirection.GetSafeNormal2D();
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+	Parameters.SourceObject = GetCurrentSkillDefinition();
+
+	AbilitySystem->AddGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_CombatRoll,
+		Parameters);
+	IsRollGameplayCueActive = true;
+}
+
+void UDRGA_CombatRollSkill::StopRollGameplayCue()
+{
+	if (!IsRollGameplayCueActive)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
+	{
+		AbilitySystem->RemoveGameplayCue(
+			DRGameplayTags::GameplayCue_VFX_Skill_CombatRoll);
+	}
+
+	IsRollGameplayCueActive = false;
 }
 
 void UDRGA_CombatRollSkill::HandleRollFinished()
