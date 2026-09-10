@@ -17,7 +17,12 @@
 UDRGA_DropSelectedItem::UDRGA_DropSelectedItem()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;	
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerOnly;
+
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(DRGameplayTags::Ability_Action);
+	SetAssetTags(AssetTags);
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 }
 

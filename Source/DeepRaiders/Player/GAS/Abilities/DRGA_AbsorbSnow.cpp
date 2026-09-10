@@ -21,6 +21,7 @@ UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 	bReplicateInputDirectly = true;
 
 	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(DRGameplayTags::Ability_Action);
 	AssetTags.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 	SetAssetTags(AssetTags);
 

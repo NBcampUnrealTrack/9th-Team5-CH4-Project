@@ -12,6 +12,7 @@
 UDRGA_BarrierSkill::UDRGA_BarrierSkill()
 {
 	FGameplayTagContainer BarrierAbilityTags;
+	BarrierAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	BarrierAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	BarrierAbilityTags.AddTag(DRGameplayTags::Ability_Skill_Barrier);
 	SetAssetTags(BarrierAbilityTags);

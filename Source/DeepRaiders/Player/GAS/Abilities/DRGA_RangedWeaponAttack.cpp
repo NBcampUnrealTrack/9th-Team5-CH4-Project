@@ -32,6 +32,7 @@ UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 
 	// 모든 원거리 공격 Ability 식별용
 	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
 
 	SetAssetTags(InitialTags);

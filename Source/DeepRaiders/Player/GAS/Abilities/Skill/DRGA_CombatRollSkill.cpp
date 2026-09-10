@@ -12,6 +12,7 @@
 UDRGA_CombatRollSkill::UDRGA_CombatRollSkill()
 {
 	FGameplayTagContainer CombatRollAbilityTags;
+	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Skill_CombatRoll);
 	SetAssetTags(CombatRollAbilityTags);

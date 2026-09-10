@@ -15,6 +15,7 @@
 UDRGA_GrappleSkill::UDRGA_GrappleSkill()
 {
 	FGameplayTagContainer InitialAbilityTags;
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill_Grapple);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_MovementAction);

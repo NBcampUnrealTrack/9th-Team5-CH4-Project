@@ -248,8 +248,10 @@ protected:
 	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleHeatGaugeChanged(const FOnAttributeChangeData& Data);
 	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleFrozenTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void HandlePersonalShieldTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void SetFrozenAbilityBlockActive(bool bActive);
 	
 	void EvaluateFrozenState(float FreezeGauge, float Health);
 
@@ -269,8 +271,10 @@ protected:
 
 	FTimerHandle FreezeDecayTimerHandle;
 	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle FrozenTagChangedHandle;
 	FDelegateHandle VoxelContainedTagChangedHandle;
 	FDelegateHandle PersonalShieldTagChangedHandle;
+	bool bFrozenAbilityBlockApplied = false;
 
 	// Heat / Overheat
 	void EvaluateOverheatedState(float HeatGauge);
