@@ -170,6 +170,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_SpeedSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Blink);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_ForwardDash);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_SuperJump_HeroLanding);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_CombatRoll);

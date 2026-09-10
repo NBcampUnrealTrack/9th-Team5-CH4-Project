@@ -31,7 +31,7 @@ UNiagaraComponent* UDRVFXSubsystem::PlayApplicationVFX(const UDRVFXLibrary* Libr
 	const FDRVFXDefinition* Definition = ResolveDefinition(Library, Request);
 	
 	return Definition ?
-		SpawnAttachedSystem(*Definition, Definition->ApplicationSystem, Request, false) : nullptr;
+		SpawnSystem(*Definition, Definition->ApplicationSystem, Request, false) : nullptr;
 }
 
 UNiagaraComponent* UDRVFXSubsystem::StartPersistentVFX(const UDRVFXLibrary* Library, const FDRVFXRequest& Request)
@@ -63,7 +63,7 @@ UNiagaraComponent* UDRVFXSubsystem::StartPersistentVFX(const UDRVFXLibrary* Libr
 		return nullptr;
 	}
 	
-	UNiagaraComponent* NiagaraComponent = SpawnAttachedSystem(*Definition, Definition->PersistentSystem, Request, true);
+	UNiagaraComponent* NiagaraComponent = SpawnSystem(*Definition, Definition->PersistentSystem, Request, true);
 	
 	if (IsValid(NiagaraComponent))
 	{
@@ -124,7 +124,7 @@ UNiagaraComponent* UDRVFXSubsystem::PlayRemovalVFX(const UDRVFXLibrary* Library,
 {
 	const FDRVFXDefinition* Definition = ResolveDefinition(Library, Request);
 	
-	return Definition ? SpawnAttachedSystem(*Definition, Definition->RemovalSystem, Request, false) : nullptr;
+	return Definition ? SpawnSystem(*Definition, Definition->RemovalSystem, Request, false) : nullptr;
 }
 
 const FDRVFXDefinition* UDRVFXSubsystem::ResolveDefinition(const UDRVFXLibrary* Library,
@@ -146,8 +146,8 @@ const FDRVFXDefinition* UDRVFXSubsystem::ResolveDefinition(const UDRVFXLibrary* 
 	return Definition;
 }
 
-UNiagaraComponent* UDRVFXSubsystem::SpawnAttachedSystem(const FDRVFXDefinition& Definition,
-	UNiagaraSystem* NiagaraSystem, const FDRVFXRequest& Request, bool bPersistent) const
+UNiagaraComponent* UDRVFXSubsystem::SpawnSystem(const FDRVFXDefinition& Definition,
+	UNiagaraSystem* NiagaraSystem, const FDRVFXRequest& Request, bool IsPersistent) const
 {
 	UWorld* World = GetWorld();
 	
@@ -159,38 +159,61 @@ UNiagaraComponent* UDRVFXSubsystem::SpawnAttachedSystem(const FDRVFXDefinition& 
 		return nullptr;
 	}
 	
-	USceneComponent* AttachComponent = ResolveAttachComponent(Definition, Request.TargetActor);
-	if (!IsValid(AttachComponent))
-	{
-		return nullptr;
-	}
-	
-	FName AttachSocketName = Definition.AttachSocketName;
-	if (!AttachSocketName.IsNone() 
-		&& !AttachComponent->DoesSocketExist(AttachSocketName))
-	{
-		AttachSocketName = NAME_None;
-	}
-	
 	const FVector RelativeLocation = Definition.RelativeTransform.GetLocation();
-	const FRotator RelativeRotation = Definition.RelativeTransform.Rotator();
+	FRotator SpawnRotation = Definition.RelativeTransform.Rotator();
 	const FVector RelativeScale = Definition.RelativeTransform.GetScale3D();
-	
-	UNiagaraComponent* NiagaraComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
-		NiagaraSystem, AttachComponent, AttachSocketName, RelativeLocation, RelativeRotation, RelativeScale,
-		EAttachLocation::KeepRelativeOffset, !bPersistent, ENCPoolMethod::None, false, true);
+	if (Definition.IsCueNormalRotationEnabled
+		&& !Request.Direction.IsNearlyZero())
+	{
+		SpawnRotation = (Request.Direction.Rotation().Quaternion()
+			* Definition.RelativeTransform.GetRotation()).Rotator();
+	}
+
+	UNiagaraComponent* NiagaraComponent = nullptr;
+	if (Definition.AttachTarget == EDRVFXAttachTarget::WorldLocation)
+	{
+		NiagaraComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			NiagaraSystem,
+			Request.Location + RelativeLocation,
+			SpawnRotation,
+			RelativeScale,
+			!IsPersistent,
+			false,
+			ENCPoolMethod::None,
+			true);
+	}
+	else
+	{
+		USceneComponent* AttachComponent = ResolveAttachComponent(Definition, Request.TargetActor);
+		if (!IsValid(AttachComponent))
+		{
+			return nullptr;
+		}
+
+		FName AttachSocketName = Definition.AttachSocketName;
+		if (!AttachSocketName.IsNone()
+			&& !AttachComponent->DoesSocketExist(AttachSocketName))
+		{
+			AttachSocketName = NAME_None;
+		}
+
+		NiagaraComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			NiagaraSystem, AttachComponent, AttachSocketName, RelativeLocation,
+			Definition.RelativeTransform.Rotator(), RelativeScale,
+			EAttachLocation::KeepRelativeOffset, !IsPersistent, ENCPoolMethod::None, false, true);
+	}
 	
 	if (!IsValid(NiagaraComponent))
 	{
 		return nullptr;
 	}
 
-	if (Definition.IsCueNormalRotationEnabled
+	if (Definition.AttachTarget != EDRVFXAttachTarget::WorldLocation
+		&& Definition.IsCueNormalRotationEnabled
 		&& !Request.Direction.IsNearlyZero())
 	{
-		const FQuat WorldRotation = Request.Direction.Rotation().Quaternion()
-			* Definition.RelativeTransform.GetRotation();
-		NiagaraComponent->SetWorldRotation(WorldRotation);
+		NiagaraComponent->SetWorldRotation(SpawnRotation);
 	}
 	
 	ApplyUserParameters(NiagaraComponent, Definition, Request);
