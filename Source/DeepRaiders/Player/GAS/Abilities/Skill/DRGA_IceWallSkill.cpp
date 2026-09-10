@@ -14,6 +14,7 @@
 UDRGA_IceWallSkill::UDRGA_IceWallSkill()
 {
 	FGameplayTagContainer IceWallAbilityTags;
+	IceWallAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	IceWallAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	IceWallAbilityTags.AddTag(DRGameplayTags::Ability_Skill_IceWall);
 	SetAssetTags(IceWallAbilityTags);

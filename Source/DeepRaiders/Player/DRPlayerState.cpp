@@ -365,11 +365,10 @@ void ADRPlayerState::BeginPlay()
 	Super::BeginPlay();
 
 	GrantDefaultAbilities();
+	BindStatusPolicy();
 
 	if (HasAuthority())
 	{
-		BindStatusPolicy();
-
 		EvaluateDeadState();
 		EvaluateFrozenState(PlayerAttributeSet->GetFreezeGauge(), PlayerAttributeSet->GetHealth());
 		EvaluateOverheatedState(PlayerAttributeSet->GetHeatGauge());
@@ -504,6 +503,18 @@ void ADRPlayerState::BindStatusPolicy()
 				this,
 				&ThisClass::HandleHealthChanged);
 
+	FrozenTagChangedHandle =
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_Frozen,
+			EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(
+			this,
+			&ThisClass::HandleFrozenTagChanged);
+
+	SetFrozenAbilityBlockActive(
+		AbilitySystemComponent->HasMatchingGameplayTag(
+			DRGameplayTags::State_Frozen));
+
 	VoxelContainedTagChangedHandle =
 		AbilitySystemComponent->RegisterGameplayTagEvent(
 			DRGameplayTags::State_VoxelContained,
@@ -558,6 +569,17 @@ void ADRPlayerState::UnbindStatusPolicy()
 		HealthChangedHandle.Reset();
 	}
 
+	if (FrozenTagChangedHandle.IsValid())
+	{
+		AbilitySystemComponent->RegisterGameplayTagEvent(
+			DRGameplayTags::State_Frozen,
+			EGameplayTagEventType::NewOrRemoved)
+		.Remove(FrozenTagChangedHandle);
+		FrozenTagChangedHandle.Reset();
+	}
+
+	SetFrozenAbilityBlockActive(false);
+
 	if (VoxelContainedTagChangedHandle.IsValid())
 	{
 		AbilitySystemComponent->RegisterGameplayTagEvent(
@@ -575,6 +597,36 @@ void ADRPlayerState::UnbindStatusPolicy()
 		.Remove(PersonalShieldTagChangedHandle);
 		PersonalShieldTagChangedHandle.Reset();
 	}
+}
+
+void ADRPlayerState::HandleFrozenTagChanged(
+	const FGameplayTag CallbackTag,
+	int32 NewCount)
+{
+	SetFrozenAbilityBlockActive(NewCount > 0);
+}
+
+void ADRPlayerState::SetFrozenAbilityBlockActive(bool bActive)
+{
+	if (!IsValid(AbilitySystemComponent)
+		|| bFrozenAbilityBlockApplied == bActive)
+	{
+		return;
+	}
+
+	FGameplayTagContainer ActionAbilityTags;
+	ActionAbilityTags.AddTag(DRGameplayTags::Ability_Action);
+
+	if (bActive)
+	{
+		bFrozenAbilityBlockApplied = true;
+		AbilitySystemComponent->BlockAbilitiesWithTags(ActionAbilityTags);
+		AbilitySystemComponent->CancelAbilities(&ActionAbilityTags);
+		return;
+	}
+
+	AbilitySystemComponent->UnBlockAbilitiesWithTags(ActionAbilityTags);
+	bFrozenAbilityBlockApplied = false;
 }
 
 void ADRPlayerState::HandlePersonalShieldTagChanged(
@@ -845,15 +897,6 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 	{
 		return;
 	}
-
-	/*
-	 * Frozen 진입 전에 이미 진행 중이던
-	 * 원거리 공격 Ability를 즉시 종료한다.
-	 */
-	FGameplayTagContainer RangedAttackTags;
-	RangedAttackTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
-
-	AbilitySystemComponent->CancelAbilities(&RangedAttackTags);
 
 	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
 

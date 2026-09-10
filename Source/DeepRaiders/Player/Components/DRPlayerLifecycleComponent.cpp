@@ -436,6 +436,8 @@ void UDRPlayerLifecycleComponent::RespawnAtPlayerStart()
 		return;
 	}
 
+	ApplyRespawnInvincibility(Cast<ADRPlayerCharacter>(NewPawn));
+
 	UE_LOG(LogTemp, Log, TEXT("[Respawn] OldPawn=%s NewPawn=%s Location=%s"),
 		*GetNameSafe(Character), *GetNameSafe(NewPawn), *NewPawn->GetActorLocation().ToString());
 
@@ -540,10 +542,48 @@ void UDRPlayerLifecycleComponent::RespawnAtRagdollLocation()
 		return;
 	}
 
+	ApplyRespawnInvincibility(Cast<ADRPlayerCharacter>(NewPawn));
+
 	UE_LOG(LogTemp, Warning, TEXT( "[Respawn] " "OldPawn=%s NewPawn=%s " "UsedRagdollLocation=%d " "Location=%s"), 
 		*GetNameSafe(Character), *GetNameSafe(NewPawn), bFoundRagdollRespawnLocation, *NewPawn-> GetActorLocation(). ToString());
 
 	Character->Destroy();
+}
+
+void UDRPlayerLifecycleComponent::ApplyRespawnInvincibility(
+	ADRPlayerCharacter* RespawnedCharacter) const
+{
+	if (!IsValid(RespawnedCharacter)
+		|| !RespawnedCharacter->HasAuthority()
+		|| !RespawnInvincibilityEffectClass)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = RespawnedCharacter->GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystem))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Respawn] Invincibility skipped: missing ASC. Character=%s"),
+			*GetNameSafe(RespawnedCharacter));
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = AbilitySystem->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
+	FGameplayEffectSpecHandle EffectSpec = AbilitySystem->MakeOutgoingSpec(
+		RespawnInvincibilityEffectClass, 1.f, EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		return;
+	}
+
+	const FActiveGameplayEffectHandle EffectHandle =
+		AbilitySystem->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+	if (EffectHandle.IsValid())
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Respawn] Invincibility applied. Character=%s Effect=%s"),
+			*GetNameSafe(RespawnedCharacter), *GetNameSafe(RespawnInvincibilityEffectClass.Get()));
+	}
 }
 
 bool UDRPlayerLifecycleComponent::TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const

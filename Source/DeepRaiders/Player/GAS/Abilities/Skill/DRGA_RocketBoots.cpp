@@ -10,6 +10,7 @@ UDRGA_RocketBoots::UDRGA_RocketBoots()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer AbilityTagContainer;
+	AbilityTagContainer.AddTag(DRGameplayTags::Ability_Action);
 	AbilityTagContainer.AddTag(DRGameplayTags::Ability_Perk_SuperJump_RocketBoots);
 	SetAssetTags(AbilityTagContainer);
 

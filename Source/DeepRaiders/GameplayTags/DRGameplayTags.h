@@ -17,6 +17,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Overheated);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PersonalShield);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_RespawnInvincible);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
@@ -29,6 +30,7 @@ namespace DRGameplayTags
 	
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Root);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Action);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
@@ -168,6 +170,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_SpeedSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Search);
 	
 	// Weapon Effect

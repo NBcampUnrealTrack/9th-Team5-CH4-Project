@@ -17,6 +17,10 @@ UDRGA_UseConsumableEffects::UDRGA_UseConsumableEffects()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(DRGameplayTags::Ability_Action);
+	SetAssetTags(AssetTags);
 	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);

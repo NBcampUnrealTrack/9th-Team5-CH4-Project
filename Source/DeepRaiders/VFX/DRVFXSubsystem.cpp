@@ -184,6 +184,14 @@ UNiagaraComponent* UDRVFXSubsystem::SpawnAttachedSystem(const FDRVFXDefinition& 
 	{
 		return nullptr;
 	}
+
+	if (Definition.IsCueNormalRotationEnabled
+		&& !Request.Direction.IsNearlyZero())
+	{
+		const FQuat WorldRotation = Request.Direction.Rotation().Quaternion()
+			* Definition.RelativeTransform.GetRotation();
+		NiagaraComponent->SetWorldRotation(WorldRotation);
+	}
 	
 	ApplyUserParameters(NiagaraComponent, Definition, Request);
 	NiagaraComponent->Activate(true);

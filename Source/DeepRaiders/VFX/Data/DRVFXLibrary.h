@@ -36,6 +36,9 @@ struct DEEPRAIDERS_API FDRVFXDefinition
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX", meta = (ShowOnlyInnerProperties))
 	FTransform RelativeTransform = FTransform::Identity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX")
+	bool IsCueNormalRotationEnabled = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "VFX|Parameters")
 	TMap<FName, float> FloatParameters;

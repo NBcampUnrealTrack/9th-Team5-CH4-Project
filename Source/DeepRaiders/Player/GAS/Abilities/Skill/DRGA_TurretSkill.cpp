@@ -21,6 +21,7 @@
 UDRGA_TurretSkill::UDRGA_TurretSkill()
 {
 	FGameplayTagContainer TurretAbilityTags;
+	TurretAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	TurretAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	TurretAbilityTags.AddTag(DRGameplayTags::Ability_Skill_Turret);
 	SetAssetTags(TurretAbilityTags);

@@ -21,6 +21,7 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer InitialAbilityTags;
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	SetAssetTags(InitialAbilityTags);
 

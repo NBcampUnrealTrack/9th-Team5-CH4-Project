@@ -29,6 +29,7 @@ UDRGA_ThrowItem::UDRGA_ThrowItem()
 	NetExecutionPolicy  = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	
 	FGameplayTagContainer DefaultTags;
+	DefaultTags.AddTag(DRGameplayTags::Ability_Action);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Attack);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Throw);
 	DefaultTags.AddTag(DRGameplayTags::Ability_Item_Throw);

@@ -24,5 +24,7 @@ void UDRWorldItemPresentationProfile::ApplyRarityParameters(UNiagaraComponent* N
 	
 
 	NiagaraComponent->SetVariableLinearColor(TEXT("User.RarityColor"),
-		RarityVisual.RarityColor * RarityVisual.Intensity);
+		RarityVisual.RarityColor);
+	NiagaraComponent->SetVariableLinearColor(TEXT("User.IntensityColor"),
+	RarityVisual.RarityColor * RarityVisual.Intensity);
 }
