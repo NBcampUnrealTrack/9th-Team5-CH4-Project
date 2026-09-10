@@ -346,6 +346,19 @@ void ADRProjectile::BeginPlay()
 	{
 		CollisionComponent->SetCollisionEnabled(
 			ECollisionEnabled::NoCollision);
+
+		if (ShouldInterpolateReplicatedMovement())
+		{
+			ProjectileMovement->bSimulationEnabled = false;
+			ProjectileMovement->bInterpMovement = true;
+			ProjectileMovement->bInterpRotation = true;
+			ProjectileMovement->SetInterpolatedComponent(MeshComponent);
+			ProjectileMovement->Velocity = GetReplicatedMovement().LinearVelocity;
+			LastMovementVelocity = ProjectileMovement->Velocity;
+			ProjectileMovement->UpdateComponentVelocity();
+			return;
+		}
+
 		ProjectileMovement->Velocity = LaunchVelocity;
 		LastMovementVelocity = LaunchVelocity;
 
@@ -415,6 +428,33 @@ void ADRProjectile::EndPlay(
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ADRProjectile::PostNetReceiveLocationAndRotation()
+{
+	if (!ShouldInterpolateReplicatedMovement() || !IsValid(ProjectileMovement))
+	{
+		Super::PostNetReceiveLocationAndRotation();
+		return;
+	}
+
+	const FRepMovement& CachedReplicatedMovement = GetReplicatedMovement();
+	const FVector TargetLocation = FRepMovement::RebaseOntoLocalOrigin(CachedReplicatedMovement.Location, this);
+	ProjectileMovement->MoveInterpolationTarget(TargetLocation, CachedReplicatedMovement.Rotation);
+}
+
+void ADRProjectile::PostNetReceiveVelocity(const FVector& NewVelocity)
+{
+	Super::PostNetReceiveVelocity(NewVelocity);
+
+	if (!ShouldInterpolateReplicatedMovement() || !IsValid(ProjectileMovement))
+	{
+		return;
+	}
+
+	ProjectileMovement->Velocity = NewVelocity;
+	LastMovementVelocity = NewVelocity;
+	ProjectileMovement->UpdateComponentVelocity();
 }
 
 void ADRProjectile::Tick(float DeltaSeconds)

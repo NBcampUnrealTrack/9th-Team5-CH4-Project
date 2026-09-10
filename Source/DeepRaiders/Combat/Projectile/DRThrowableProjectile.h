@@ -35,6 +35,7 @@ protected:
 	virtual void HandleImpact(const FHitResult& ImpactResult) override;
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override;
 	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult) override;
+	virtual bool ShouldInterpolateReplicatedMovement() const override { return true; }
 	virtual bool ShouldAffectInstigator() const { return false; }
 	virtual bool IsValidEffectTarget(const AActor* TargetActor) const;
 	virtual void HandleTargetRejected(
