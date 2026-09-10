@@ -734,6 +734,26 @@ void ADRMiningGameStateBase::RegisterSnowRemove(
 	QueueSnowOperationForBroadcast(MoveTemp(Record));
 }
 
+void ADRMiningGameStateBase::RegisterSnowDeposit(const FDRVoxelDepositResult& Result)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	for (int32 Start = 0; Start < Result.Cells.Num(); Start += FDRVoxelDepositResult::MaxCellsPerRecord)
+	{
+		FDRSnowOperationRecord Record;
+		Record.Sequence = ++NextSnowOperationSequence;
+		Record.bIsAddOperation = false;
+		Record.bIsDepositOperation = true;
+		Record.DepositOperation.VoxelWorldName = Result.VoxelWorldName;
+		Record.DepositOperation.MaterialIndex = Result.MaterialIndex;
+		Record.DepositOperation.Cells.Append(Result.Cells.GetData() + Start,
+			FMath::Min(FDRVoxelDepositResult::MaxCellsPerRecord, Result.Cells.Num() - Start));
+		QueueSnowOperationForBroadcast(MoveTemp(Record));
+	}
+}
+
 void ADRMiningGameStateBase::QueueSnowOperationForBroadcast(FDRSnowOperationRecord&& Record)
 {
 	UWorld* World = GetWorld();
@@ -940,9 +960,8 @@ bool ADRMiningGameStateBase::IsSnowOperationReady(const FDRSnowOperationRecord& 
 		return false;
 	}
 
-	const FName VoxelWorldName = Record.bIsAddOperation
-		? Record.AddOperation.VoxelWorldName
-		: Record.RemoveOperation.VoxelWorldName;
+	const FName VoxelWorldName = Record.bIsDepositOperation ? Record.DepositOperation.VoxelWorldName
+		: (Record.bIsAddOperation ? Record.AddOperation.VoxelWorldName : Record.RemoveOperation.VoxelWorldName);
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorldByName(VoxelWorldName);
 	return IsValid(VoxelWorld) && VoxelWorld->IsCreated();
 }
@@ -1041,7 +1060,12 @@ void ADRMiningGameStateBase::TryApplyPendingSnowOperations()
 	// Keep only one directional operation in flight. A completion may schedule
 	// the next sequence in this frame, subject to the start/time budget above.
 	bool bApplied = false;
-	if (Record.bIsAddOperation)
+	if (Record.bIsDepositOperation)
+	{
+		bApplied = FDRVoxelDepositOperations::ApplyDepositResult(
+			ResolveVoxelWorldByName(Record.DepositOperation.VoxelWorldName), Record.DepositOperation);
+	}
+	else if (Record.bIsAddOperation)
 	{
 		const bool bDirectional =
 			Record.AddOperation.EditTool == EDRSnowVoxelEditTool::DirectionalSurfaceTool;

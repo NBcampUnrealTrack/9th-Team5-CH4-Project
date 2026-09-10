@@ -29,6 +29,7 @@ namespace DRGameplayTags
 	
 	// Ability
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Root);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Action);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);

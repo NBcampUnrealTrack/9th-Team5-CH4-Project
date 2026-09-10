@@ -18,6 +18,7 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
 	SetAssetTags(InitialTags);
 

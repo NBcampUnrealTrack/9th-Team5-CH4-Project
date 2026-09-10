@@ -269,17 +269,17 @@ public:
 
 private:
 	bool ApplyTerrainDigOnce(const FDRTerrainDigOperation& Operation);
-#pragma endregion 
+#pragma endregion
 
 #pragma region Snow
 public:
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation);
 	void RegisterSnowAdd(const FDRSnowAddOperation& Operation, float ServerAppliedAmount);
-	void RegisterSnowRemove(
-		const FDRSnowRemoveOperation& Operation);
-	void RegisterSnowRemove(
-		const FDRSnowRemoveOperation& Operation,
+	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation);
+	void RegisterSnowRemove(const FDRSnowRemoveOperation& Operation,
 		const FBox& EditedWorldBounds);
+	void RegisterSnowDeposit(const FDRVoxelDepositResult& Result);
+	friend class FDRVoxelDepositTest;
 	int32 GetSnowOperationSequence() const { return NextSnowOperationSequence; }
 	void ResetSnowOperationState();
 	void ResetSnowApplicationStateForCheckpoint(int32 CheckpointSequence);
@@ -344,7 +344,7 @@ private:
 	double SnowReplayDispatchMsThisFrame = 0.0;
 	TSharedPtr<FDRSnowLoadTest> SnowLoadTest;
 #pragma endregion
-	
+
 #pragma region Teleport
 public:
 	void AddTeamRegisteredTeleportPoint(int32 TeamId, ADRTeleportPoint* TeleportPoint);

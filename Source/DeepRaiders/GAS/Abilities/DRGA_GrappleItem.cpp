@@ -27,6 +27,7 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 		EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer InitialAbilityTags;
+	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_MovementAction);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Item_Grapple);
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Input_SecondaryCancel);

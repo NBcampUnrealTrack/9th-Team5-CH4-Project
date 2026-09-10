@@ -7,7 +7,6 @@
 
 class AVoxelWorld;
 class ADRMiningGameStateBase;
-enum class EDRSnowJoinSnapshotResult : uint8;
 
 UCLASS()
 class DEEPRAIDERS_API ADRVoxelDepositArea : public AActor
@@ -20,6 +19,7 @@ public:
 #if WITH_EDITOR
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
 protected:
@@ -63,6 +63,26 @@ protected:
 		meta = (ClampMin = "0"))
 	int32 StartPhaseIndex = 0;
 
+	/** 팀 ID 기반으로 머터리얼 인덱스를 자동 지정할지 여부입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Voxel Terrain|Deposit")
+	bool bUseTeamId = true;
+
+	/** 퇴적할 눈의 소유 팀입니다. INDEX_NONE(-1)이면 중립 눈(0번 머터리얼)입니다. */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Terrain|Deposit",
+		meta = (EditCondition = "bUseTeamId", EditConditionHides))
+	int32 TeamId = INDEX_NONE;
+
+	/** 수동으로 지정할 복셀 머터리얼 인덱스입니다. (bUseTeamId가 false일 때 사용) */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Voxel Terrain|Deposit",
+		meta = (EditCondition = "!bUseTeamId", EditConditionHides))
+	uint8 ManualMaterialIndex = 0;
+
 	UPROPERTY(EditAnywhere, Category="Voxel Terrain|Deposit")
 	FDRVoxelDepositInBoxSettings DepositSettings;
 
@@ -88,20 +108,12 @@ protected:
 
 private:
 	FVector GetAreaExtent() const;
-
-	/**
-	 * 퇴적 명령을 서버와 모든 현재 클라이언트에 전달합니다.
-	 * @param Command 모든 인스턴스에서 준비할 퇴적 명령입니다.
-	 */
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPrepareDeposit(const FDRVoxelDepositCommand& Command);
+	AVoxelWorld* EnsureVoxelWorld();
+	uint8 GetDepositMaterialIndex() const;
+	void UpdateDepositMaterialIndex();
 
 	FTimerHandle DepositTimerHandle;
-	FTimerHandle DepositPipelineTimerHandle;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
-	FDRVoxelDepositPlan PreparedDepositPlan;
-	TArray<FDRVoxelDepositCommand> QueuedDepositCommands;
-	int32 ActiveJoinSnapshotCount = 0;
 	bool bDepositStarted = false;
 
 	/**
@@ -110,8 +122,6 @@ private:
 	 * @return 유효한 명령을 만들면 true입니다.
 	 */
 	bool MakeDepositCommand(FDRVoxelDepositCommand& OutCommand) const;
-	void HandleJoinSnapshotStarted();
-	void HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult Result);
 
 	UFUNCTION()
 	void HandleGamePhaseChanged(
@@ -122,7 +132,4 @@ private:
 	void StartDepositing();
 	void StopDepositing();
 	void RequestDepositArea();
-	void PrepareNextQueuedDeposit();
-	void ApplyPreparedDeposit();
-	void CancelDepositPipeline();
 };

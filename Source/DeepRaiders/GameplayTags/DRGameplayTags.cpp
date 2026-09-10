@@ -121,6 +121,11 @@ namespace DRGameplayTags
 		"Root tag for all gameplay abilities.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_Action,
+		"Ability.Action",
+		"Additive tag for player-driven abilities that may be blocked by action-locking states.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_Attack,
 		"Ability.Attack",
 		"Parent tag for attack abilities.");

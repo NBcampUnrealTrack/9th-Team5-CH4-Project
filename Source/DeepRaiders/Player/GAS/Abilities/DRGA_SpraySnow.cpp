@@ -25,6 +25,7 @@ UDRGA_SpraySnow::UDRGA_SpraySnow()
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
 	FGameplayTagContainer InitialTags;
+	InitialTags.AddTag(DRGameplayTags::Ability_Action);
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Ranged);
 	SetAssetTags(InitialTags);
 

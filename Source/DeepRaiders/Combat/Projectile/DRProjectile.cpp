@@ -37,7 +37,7 @@ namespace DRProjectilePresentation
 			"Seconds an owning-client local predicted projectile waits "
 			"for its authoritative projectile. "
 			"<= 0 disables the prediction confirmation timeout."));
-	
+
 	bool IsPredictionDebugEnabled()
 	{
 		if (const IConsoleVariable* CVar =
@@ -679,7 +679,7 @@ void ADRProjectile::ApplyImpactEffect(UAbilitySystemComponent* TargetAbilitySyst
 	}
 
 	bool bAppliedAnyEffect = false;
-	
+
 	for (const FGameplayEffectSpecHandle& SpecHandle : ImpactEffectSpecs)
 	{
 		if (!SpecHandle.IsValid())
@@ -738,8 +738,8 @@ bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)
 {
 	ADRBreakableActor* BreakableTarget = Cast<ADRBreakableActor>(ImpactResult.GetActor());
 
-	if (!IsValid(BreakableTarget) 
-		|| BreakableTarget->IsBroken() 
+	if (!IsValid(BreakableTarget)
+		|| BreakableTarget->IsBroken()
 		|| BreakableDamageAmount <= 0.f)
 	{
 		return false;
@@ -807,7 +807,7 @@ bool ADRProjectile::IsFriendlyTarget(const AActor* TargetActor) const
 	// INDEX_NONE에 대하여 항상 적군
 	if (SourceTeamId == INDEX_NONE)
 		return false;
-	
+
 	return DRCombatTeam::IsFriendlyTarget(SourceTeamId, TargetActor);
 }
 
@@ -823,7 +823,7 @@ void ADRProjectile::RefreshFriendlyCollisionIgnores()
 	{
 		return;
 	}
-	
+
 	TArray<APawn*> FriendlyPawns;
 	DRCombatTeam::GetFriendlyPawns(GetWorld(), SourceTeamId, FriendlyPawns);
 
@@ -848,7 +848,9 @@ void ADRProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
 
 	FGameplayEffectContextHandle EffectContext = SourceASC->MakeEffectContext();
 
-	EffectContext.AddHitResult(ImpactResult, true);
+	FHitResult SanitizedHit = ImpactResult;
+	SanitizedHit.Component = nullptr;
+	EffectContext.AddHitResult(SanitizedHit, true);
 
 	FGameplayCueParameters Parameters(EffectContext);
 	Parameters.Location = ImpactResult.Location;
@@ -863,11 +865,11 @@ void ADRProjectile::ExecuteImpactGameplayCue(const FHitResult& ImpactResult)
 void ADRProjectile::ConfigureProjectileMovement(float InitialSpeed, float GravityScale)
 {
 	const float SafeSpeed = FMath::Max(InitialSpeed, 1.f);
-	
+
 	ProjectileMovement->InitialSpeed = SafeSpeed;
 	ProjectileMovement->MaxSpeed = SafeSpeed;
 	ProjectileMovement->ProjectileGravityScale = FMath::Max(GravityScale, 0.f);
-	
+
 	ProjectileMovement->bInitialVelocityInLocalSpace = false;
 	ProjectileMovement->Velocity = GetActorForwardVector() * SafeSpeed;
 }
@@ -1152,7 +1154,7 @@ void ADRProjectile::TryReconcileOwnerPrediction()
 
 	LocalPrediction->bAuthoritativeConfirmed = true;
 	bOwnerPredictionReconciled = true;
-	
+
 	/*
 	 * matching local proxy가 있으면 owner는 local proxy를 계속 본다.
 	 * server replica를 local 위치로 snap하거나 local을 server 위치로 되감지 않는다.

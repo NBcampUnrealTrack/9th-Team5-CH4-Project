@@ -139,6 +139,7 @@ bool UDRGA_FireProjectile::SendLocalShotRequest()
 	ShotAimHit.TraceEnd = AimPoint;
 	ShotAimHit.Location = AimPoint;
 	ShotAimHit.ImpactPoint = AimPoint;
+	ShotAimHit.Component = nullptr;
 
 	/*
 	 * 실제 Projectile Spawn과 Presentation 모두 Character의 GameplayFireAnchor를

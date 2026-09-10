@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "VoxelWorld.h"
+#include "DeepRaiders/Snow/Deposit/DRVoxelDepositOperations.h"
 #include "DRSnowTypes.generated.h"
 
 // TeamId는 게임 규칙용 식별자이고 MaterialIndex는 Voxel 표현용 식별자다.
@@ -336,6 +337,12 @@ struct DEEPRAIDERS_API FDRSnowOperationRecord
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	bool bIsAddOperation = true;
+
+	UPROPERTY()
+	bool bIsDepositOperation = false;
+
+	UPROPERTY()
+	FDRVoxelDepositResult DepositOperation;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	FDRSnowAddOperation AddOperation;

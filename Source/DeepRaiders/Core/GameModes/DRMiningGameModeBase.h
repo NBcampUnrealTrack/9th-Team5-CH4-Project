@@ -164,6 +164,9 @@ protected:
 	FText GamePreparationFailedMessage = NSLOCTEXT(
 		"DRGameFlow", "PreparationFailed", "지형을 준비하지 못했습니다.");
 
+public:
+	bool IsSnowJoinInProgress() const { return !PendingSnowJoinPlayers.IsEmpty(); }
+
 private:
 	void ResetGameState();
 	void TickGameTimer();
@@ -186,6 +189,7 @@ private:
 	void FinishPendingSnowJoin(APlayerController* PlayerController, EDRSnowJoinSnapshotResult Result);
 	TSet<TWeakObjectPtr<APlayerController>> PendingSnowJoinPlayers;
 	friend class FDRSnowJoinLifecycleTest;
+	friend class FDRVoxelDepositTest;
 
 	FTimerHandle GameStartTimerHandle;
 	TWeakObjectPtr<class ADRGameStartActor> CountdownSource;

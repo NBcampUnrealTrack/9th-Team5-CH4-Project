@@ -17,6 +17,11 @@ UDRGA_Interact::UDRGA_Interact()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+	FGameplayTagContainer AssetTags;
+	AssetTags.AddTag(DRGameplayTags::Ability_Action);
+	SetAssetTags(AssetTags);
+
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 }
 

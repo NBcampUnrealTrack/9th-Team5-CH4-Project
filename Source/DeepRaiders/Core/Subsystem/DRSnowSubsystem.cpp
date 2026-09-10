@@ -19,6 +19,11 @@ UDRSnowSubsystem::UDRSnowSubsystem()
 
 UDRSnowSubsystem::~UDRSnowSubsystem() = default;
 
+bool UDRSnowSubsystem::IsSnowEditInProgress() const
+{
+	return AddPipeline && AddPipeline->IsBusy();
+}
+
 void UDRSnowSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);

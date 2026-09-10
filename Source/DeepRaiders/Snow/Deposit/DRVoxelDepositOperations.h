@@ -6,6 +6,7 @@
 class AActor;
 class AVoxelWorld;
 class UWorld;
+class UPrimitiveComponent;
 
 /** 퇴적을 허용할 월드 축 기준 영역 모양입니다. */
 UENUM(BlueprintType)
@@ -16,93 +17,6 @@ enum class EDRVoxelDepositAreaShape : uint8
 	Cylinder
 };
 
-namespace DRVoxelDeposit
-{
-	template<typename ElementType>
-	void ShuffleArray(TArray<ElementType>& Values, FRandomStream& RandomStream)
-	{
-		for (int32 Index = Values.Num() - 1; Index > 0; --Index)
-		{
-			Values.Swap(Index, RandomStream.RandRange(0, Index));
-		}
-	}
-
-	/**
-	 * 전체 배열을 만들지 않고 중복 없는 무작위 인덱스를 선택합니다.
-	 * @param PopulationSize 선택 가능한 전체 인덱스 수입니다.
-	 * @param RequestedCount 선택할 인덱스 수입니다.
-	 * @param RandomStream 난수를 소비할 스트림입니다.
-	 * @param OutIndices 선택된 인덱스 배열입니다.
-	 */
-	inline void BuildRandomUniqueIndices(
-		int32 PopulationSize,
-		int32 RequestedCount,
-		FRandomStream& RandomStream,
-		TArray<int32>& OutIndices)
-	{
-		OutIndices.Reset();
-		if (PopulationSize <= 0 || RequestedCount <= 0)
-		{
-			return;
-		}
-
-		const int32 SampleCount = FMath::Clamp(RequestedCount, 0, PopulationSize);
-		TSet<int32> SelectedIndices;
-		SelectedIndices.Reserve(SampleCount);
-		OutIndices.Reserve(SampleCount);
-		for (int32 UpperBound = PopulationSize - SampleCount;
-			UpperBound < PopulationSize;
-			++UpperBound)
-		{
-			const int32 Candidate = RandomStream.RandRange(0, UpperBound);
-			const int32 SelectedIndex = SelectedIndices.Contains(Candidate)
-				? UpperBound
-				: Candidate;
-			SelectedIndices.Add(SelectedIndex);
-			OutIndices.Add(SelectedIndex);
-		}
-
-		ShuffleArray(OutIndices, RandomStream);
-	}
-
-	/**
-	 * 원형 풋프린트 포함 여부와 거리 기반 값을 계산합니다.
-	 * @param OffsetX 중심 기준 X 오프셋입니다.
-	 * @param OffsetY 중심 기준 Y 오프셋입니다.
-	 * @param Radius 풋프린트 반경입니다.
-	 * @param EdgeStrength 가장자리 퇴적량 배율입니다.
-	 * @param MaximumSlopeTangent 허용할 최대 경사의 탄젠트 값입니다.
-	 * @param OutAmountScale 계산된 퇴적량 배율입니다.
-	 * @param OutAllowedHeightDelta 계산된 허용 높이 차입니다.
-	 * @return 오프셋이 원형 풋프린트 안에 있으면 true입니다.
-	 */
-	inline bool EvaluateFootprintOffset(
-		int32 OffsetX,
-		int32 OffsetY,
-		int32 Radius,
-		float EdgeStrength,
-		float MaximumSlopeTangent,
-		float& OutAmountScale,
-		float& OutAllowedHeightDelta)
-	{
-		const float RadiusAsFloat = static_cast<float>(FMath::Max(1, Radius));
-		const float Distance = FMath::Sqrt(
-			static_cast<float>(OffsetX * OffsetX + OffsetY * OffsetY));
-		if (Radius > 0 && Distance > RadiusAsFloat + 0.5f)
-		{
-			return false;
-		}
-
-		const float DistanceAlpha = Radius > 0
-			? FMath::Clamp(Distance / RadiusAsFloat, 0.f, 1.f)
-			: 0.f;
-		OutAmountScale = FMath::Lerp(1.f, EdgeStrength, DistanceAlpha);
-		OutAllowedHeightDelta = FMath::Max(
-			1.f,
-			Distance * MaximumSlopeTangent + 0.5f);
-		return true;
-	}
-}
 
 USTRUCT()
 struct FDRVoxelDepositInBoxSettings
@@ -112,10 +26,12 @@ struct FDRVoxelDepositInBoxSettings
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
 	float SurfaceSampleSpacing = 50.f;
 
+	/** 한 회당 표면 상승량(복셀 단위). 평탄화 보정 후에도 최대 0.25셀만 상승합니다. */
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
 	float DepositAmountPerPass = 0.05f;
 
-	UPROPERTY(EditAnywhere, Category="Voxel|Deposit")
+	/** 현재 퇴적에 적용될 복셀 머터리얼 인덱스입니다. (bUseTeamId에 따라 자동 설정되거나 수동 지정됩니다) */
+	UPROPERTY(VisibleAnywhere, Category="Voxel|Deposit")
 	uint8 DepositMaterialIndex = 0;
 
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="1"))
@@ -126,6 +42,10 @@ struct FDRVoxelDepositInBoxSettings
 
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
 	float DepositSpreadRadius = 100.f;
+
+	/** 양옆 표면보다 낮으면 더 쌓고 높으면 덜 쌓습니다. 0이면 기존 퇴적량입니다. */
+	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="2.0"))
+	float LevelingStrength = 1.f;
 
 	UPROPERTY()
 	int32 RandomSeed = 0;
@@ -152,30 +72,7 @@ struct FDRVoxelDepositCommand
 	EDRVoxelDepositAreaShape AreaShape = EDRVoxelDepositAreaShape::Box;
 
 	/** Extent는 박스 반크기 또는 (반지름, 반지름, 절반 높이)입니다. */
-	bool ContainsWorldPosition(const FVector& Position) const
-	{
-		const FVector Offset = Position - AreaCenter;
-		const FVector Extent = AreaExtent.GetAbs();
-		if (Offset.ContainsNaN() || Extent.ContainsNaN() || Extent.GetMin() <= 0.0)
-		{
-			return false;
-		}
-		if (FMath::Abs(Offset.Z) > Extent.Z)
-		{
-			return false;
-		}
-		switch (AreaShape)
-		{
-		case EDRVoxelDepositAreaShape::Box:
-			return FMath::Abs(Offset.X) <= Extent.X && FMath::Abs(Offset.Y) <= Extent.Y;
-		case EDRVoxelDepositAreaShape::Sphere:
-			return Offset.SizeSquared() <= FMath::Square(Extent.X);
-		case EDRVoxelDepositAreaShape::Cylinder:
-			return Offset.SizeSquared2D() <= FMath::Square(Extent.X);
-		default:
-			return false;
-		}
-	}
+	bool ContainsWorldPosition(const FVector& Position) const;
 
 	UPROPERTY()
 	FDRVoxelDepositInBoxSettings Settings;
@@ -200,6 +97,43 @@ struct FDRVoxelDepositWrite
 	float StaticMeshSurfaceZ = 0.f;
 	bool bHasStaticMeshSupport = false;
 	bool bAllowBelowSupport = false;
+	// 서로 다른 메시 지지면을 평탄화 이웃으로 섞지 않습니다. 서버 준비 단계 전용입니다.
+	TWeakObjectPtr<UPrimitiveComponent> SupportComponent;
+};
+
+/** 서버에서 실제로 기록한 값입니다. 같은 pass의 모든 셀은 같은 머터리얼을 씁니다. */
+USTRUCT()
+struct FDRVoxelDepositCell
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FIntVector Position = FIntVector::ZeroValue;
+
+	UPROPERTY()
+	int16 Value = 0;
+
+	// 기존 고체의 값만 조절할 때는 팀 머터리얼을 보존합니다.
+	UPROPERTY()
+	bool bPaintMaterial = true;
+};
+
+USTRUCT()
+struct FDRVoxelDepositResult
+{
+	GENERATED_BODY()
+
+	// 큰 pass는 기존 시퀀스 큐에서 나눠 보냅니다.
+	static constexpr int32 MaxCellsPerRecord = 128;
+
+	UPROPERTY()
+	FName VoxelWorldName = NAME_None;
+
+	UPROPERTY()
+	uint8 MaterialIndex = 0;
+
+	UPROPERTY()
+	TArray<FDRVoxelDepositCell> Cells;
 };
 
 struct FDRVoxelDepositPlan
@@ -224,7 +158,7 @@ class DEEPRAIDERS_API FDRVoxelDepositOperations
 {
 public:
 	/**
-	 * 표면을 검사하고 다음 프레임에 적용할 퇴적 계획을 만듭니다.
+	 * 서버 표면을 검사하고 즉시 적용할 퇴적 계획을 만듭니다.
 	 * @param World StaticMesh 트레이스에 사용할 월드입니다.
 	 * @param VoxelWorld 표면을 검사할 복셀 월드입니다.
 	 * @param TraceOwner 트레이스에서 제외할 액터입니다.
@@ -243,10 +177,18 @@ public:
 	 * 준비된 계획을 복셀 월드에 적용하고 계획을 비웁니다.
 	 * @param VoxelWorld 계획을 적용할 복셀 월드입니다.
 	 * @param Plan 적용 후 초기화할 퇴적 계획입니다.
+	 * @param OutResult 서버가 실제로 기록한 결과입니다.
 	 * @return 계획 적용 또는 빈 계획 처리가 성공하면 true입니다.
 	 */
 	static bool ApplyDepositPlan(
 		AVoxelWorld* VoxelWorld,
-		FDRVoxelDepositPlan& Plan);
+		FDRVoxelDepositPlan& Plan,
+		FDRVoxelDepositResult& OutResult);
+
+	/** 클라이언트는 표면을 재검사하지 않고 서버의 최종 값을 기록합니다. */
+	static bool ApplyDepositResult(AVoxelWorld* VoxelWorld, const FDRVoxelDepositResult& Result);
+
+	/** 연결된 양옆 표본이 있는 축만 사용해 평면 경사를 유지합니다. */
+	static void LevelDepositPlan(AVoxelWorld* VoxelWorld, FDRVoxelDepositPlan& Plan);
 
 };

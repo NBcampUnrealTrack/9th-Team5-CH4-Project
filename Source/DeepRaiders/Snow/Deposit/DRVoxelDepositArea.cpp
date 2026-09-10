@@ -5,7 +5,10 @@
 #endif
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
 #include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
+#include "DeepRaiders/Core/Subsystem/DRSnowSubsystem.h"
+#include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 #include "VoxelWorld.h"
 
@@ -76,6 +79,8 @@ ADRVoxelDepositArea::ADRVoxelDepositArea()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	NetDormancy = DORM_Never;
+
+	UpdateDepositMaterialIndex();
 }
 
 #if WITH_EDITOR
@@ -96,7 +101,35 @@ bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
 {
 	return true;
 }
+
+void ADRVoxelDepositArea::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
+		? PropertyChangedEvent.Property->GetFName()
+		: NAME_None;
+
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, bUseTeamId) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, TeamId) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, ManualMaterialIndex))
+	{
+		UpdateDepositMaterialIndex();
+	}
+}
 #endif
+
+uint8 ADRVoxelDepositArea::GetDepositMaterialIndex() const
+{
+	return bUseTeamId
+		? DRSnowMaterialMapping::TeamToMaterialIndex(TeamId)
+		: ManualMaterialIndex;
+}
+
+void ADRVoxelDepositArea::UpdateDepositMaterialIndex()
+{
+	DepositSettings.DepositMaterialIndex = GetDepositMaterialIndex();
+}
 
 FVector ADRVoxelDepositArea::GetAreaExtent() const
 {
@@ -109,6 +142,22 @@ FVector ADRVoxelDepositArea::GetAreaExtent() const
 	default:
 		return BoxExtent.GetAbs();
 	}
+}
+
+AVoxelWorld* ADRVoxelDepositArea::EnsureVoxelWorld()
+{
+	if (!IsValid(VoxelWorld) && IsValid(GetWorld()))
+	{
+		for (TActorIterator<AVoxelWorld> It(GetWorld()); It; ++It)
+		{
+			if (IsValid(*It))
+			{
+				VoxelWorld = *It;
+				break;
+			}
+		}
+	}
+	return VoxelWorld;
 }
 
 bool ADRVoxelDepositArea::MakeDepositCommand(
@@ -132,6 +181,7 @@ bool ADRVoxelDepositArea::MakeDepositCommand(
 	}
 
 	OutCommand.Settings = DepositSettings;
+	OutCommand.Settings.DepositMaterialIndex = GetDepositMaterialIndex();
 	OutCommand.Settings.RandomSeed = FMath::Rand();
 	// 검사 영역은 X/Y만 줄이고 Z는 관리 영역 전체를 사용합니다.
 	const float RequestedHalfSize = RandomScanWorldSize * 0.5f;
@@ -172,20 +222,12 @@ void ADRVoxelDepositArea::BeginPlay()
 #endif
 
 	SetActorTickEnabled(false);
+	EnsureVoxelWorld();
+	UpdateDepositMaterialIndex();
 
 	if (!HasAuthority())
 	{
 		return;
-	}
-
-	if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
-	{
-		GameMode->OnJoinSnapshotStarted.AddUObject(
-			this,
-			&ThisClass::HandleJoinSnapshotStarted);
-		GameMode->OnJoinSnapshotFinished.AddUObject(
-			this,
-			&ThisClass::HandleJoinSnapshotFinished);
 	}
 
 	MiningGameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
@@ -203,15 +245,6 @@ void ADRVoxelDepositArea::BeginPlay()
 
 void ADRVoxelDepositArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UWorld* World = GetWorld();
-	ADRMiningGameModeBase* GameMode = IsValid(World)
-		? World->GetAuthGameMode<ADRMiningGameModeBase>()
-		: nullptr;
-	if (IsValid(GameMode))
-	{
-		GameMode->OnJoinSnapshotStarted.RemoveAll(this);
-		GameMode->OnJoinSnapshotFinished.RemoveAll(this);
-	}
 	if (MiningGameState.IsValid())
 	{
 		MiningGameState->OnGamePhaseChanged.RemoveDynamic(
@@ -234,7 +267,7 @@ void ADRVoxelDepositArea::HandleGamePhaseChanged(
 		StopDepositing();
 		return;
 	}
-	if (!bDepositStarted && PhaseIndex == StartPhaseIndex)
+	if (!bDepositStarted && PhaseIndex >= StartPhaseIndex)
 	{
 		StartDepositing();
 	}
@@ -261,39 +294,22 @@ void ADRVoxelDepositArea::StopDepositing()
 {
 	bDepositStarted = false;
 	GetWorldTimerManager().ClearTimer(DepositTimerHandle);
-	CancelDepositPipeline();
-}
-
-void ADRVoxelDepositArea::HandleJoinSnapshotStarted()
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	++ActiveJoinSnapshotCount;
-}
-
-void ADRVoxelDepositArea::HandleJoinSnapshotFinished(EDRSnowJoinSnapshotResult)
-{
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	ActiveJoinSnapshotCount = FMath::Max(0, ActiveJoinSnapshotCount - 1);
 }
 
 void ADRVoxelDepositArea::RequestDepositArea()
 {
-	if (!HasAuthority() || ActiveJoinSnapshotCount > 0)
+	if (!HasAuthority() || !bDepositStarted || !MiningGameState.IsValid())
 	{
 		return;
 	}
 
-	// 이전 명령이 끝날 때까지 새 RPC 생성을 막습니다.
-	if (!PreparedDepositPlan.IsEmpty() || QueuedDepositCommands.Num() > 0 ||
-		DepositPipelineTimerHandle.IsValid())
+	EnsureVoxelWorld();
+
+	const ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>();
+	const UDRSnowSubsystem* SnowSubsystem = GetWorld()->GetSubsystem<UDRSnowSubsystem>();
+	// 기존 난입자 집합을 직접 확인합니다. 별도 카운터나 재개 대기열은 필요 없습니다.
+	if (!IsValid(GameMode) || GameMode->IsSnowJoinInProgress() ||
+		!IsValid(SnowSubsystem) || SnowSubsystem->IsSnowEditInProgress())
 	{
 		return;
 	}
@@ -311,12 +327,6 @@ void ADRVoxelDepositArea::RequestDepositArea()
 		return;
 	}
 
-	MulticastPrepareDeposit(Command);
-}
-
-void ADRVoxelDepositArea::MulticastPrepareDeposit_Implementation(
-	const FDRVoxelDepositCommand& Command)
-{
 #if ENABLE_DRAW_DEBUG
 	if (bDrawDebug)
 	{
@@ -325,83 +335,19 @@ void ADRVoxelDepositArea::MulticastPrepareDeposit_Implementation(
 	}
 #endif
 
-	// 명령을 수신 순서대로 대기열에 추가합니다.
-	QueuedDepositCommands.Add(Command);
-	// 파이프라인이 비어 있을 때만 즉시 준비를 시작합니다.
-	if (PreparedDepositPlan.IsEmpty() && !DepositPipelineTimerHandle.IsValid())
-	{
-		PrepareNextQueuedDeposit();
-	}
-}
-
-void ADRVoxelDepositArea::PrepareNextQueuedDeposit()
-{
-	DepositPipelineTimerHandle.Invalidate();
-	if (!PreparedDepositPlan.IsEmpty() || QueuedDepositCommands.Num() == 0)
-	{
-		return;
-	}
-
-	// 실패한 명령을 재시도하지 않도록 대기열에서 먼저 제거합니다.
-	const FDRVoxelDepositCommand Command = QueuedDepositCommands[0];
-	QueuedDepositCommands.RemoveAt(0, 1, EAllowShrinking::No);
-
+	// 서버의 한 게임 스레드 콜백 안에서 끝냅니다. 스냅샷 사이에 남는 next-tick 쓰기가 없습니다.
+	FDRVoxelDepositPlan Plan;
+	FDRVoxelDepositResult Result;
 	if (!FDRVoxelDepositOperations::PrepareDepositCommand(
 		GetWorld(),
 		VoxelWorld,
 		this,
 		Command,
-		PreparedDepositPlan))
+		Plan) || !FDRVoxelDepositOperations::ApplyDepositPlan(VoxelWorld, Plan, Result))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to prepare deposit RPC command."));
-	}
-	else if (!PreparedDepositPlan.IsEmpty())
-	{
-		// 준비와 적용을 서로 다른 프레임에 실행합니다.
-		DepositPipelineTimerHandle = GetWorldTimerManager().SetTimerForNextTick(
-			this,
-			&ThisClass::ApplyPreparedDeposit);
+		UE_LOG(LogTemp, Warning, TEXT("Failed to apply surface deposit."));
 		return;
 	}
 
-	if (QueuedDepositCommands.Num() > 0)
-	{
-		DepositPipelineTimerHandle = GetWorldTimerManager().SetTimerForNextTick(
-			this,
-			&ThisClass::PrepareNextQueuedDeposit);
-	}
-}
-
-void ADRVoxelDepositArea::ApplyPreparedDeposit()
-{
-	DepositPipelineTimerHandle.Invalidate();
-	if (PreparedDepositPlan.IsEmpty())
-	{
-		return;
-	}
-
-	if (!FDRVoxelDepositOperations::ApplyDepositPlan(
-		VoxelWorld,
-		PreparedDepositPlan))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to apply prepared deposit."));
-	}
-
-	if (QueuedDepositCommands.Num() > 0)
-	{
-		DepositPipelineTimerHandle = GetWorldTimerManager().SetTimerForNextTick(
-			this,
-			&ThisClass::PrepareNextQueuedDeposit);
-	}
-}
-
-void ADRVoxelDepositArea::CancelDepositPipeline()
-{
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(DepositPipelineTimerHandle);
-	}
-	DepositPipelineTimerHandle.Invalidate();
-	PreparedDepositPlan.Reset();
-	QueuedDepositCommands.Reset();
+	MiningGameState->RegisterSnowDeposit(Result);
 }

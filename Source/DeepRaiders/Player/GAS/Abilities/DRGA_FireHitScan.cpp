@@ -9,15 +9,15 @@
 #include "GameplayPrediction.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 
-namespace 
+namespace
 {
-	constexpr int32 MaxHitScanIterations = 64;	
+	constexpr int32 MaxHitScanIterations = 64;
 }
 
 void UDRGA_FireHitScan::OnRangedWeaponActivated()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	
+
 	if (ActorInfo != nullptr
 		&& ActorInfo->IsNetAuthority()
 		&& !ActorInfo->IsLocallyControlled())
@@ -34,13 +34,13 @@ void UDRGA_FireHitScan::OnRangedWeaponEnded()
 bool UDRGA_FireHitScan::SendLocalShotRequest()
 {
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
-	
+
 	if (ActorInfo == nullptr
 		|| !ActorInfo->IsLocallyControlled())
 	{
 		return false;
 	}
-	
+
 	FVector ViewLocation;
 	FRotator ViewRotation;
 
@@ -77,25 +77,26 @@ bool UDRGA_FireHitScan::SendLocalShotRequest()
 	{
 		PlayLocalFirePresentation(GameplayFireOrigin, PresentationTarget);
 	}
-	
+
+	CameraHit.Component = nullptr;
 	FGameplayAbilityTargetDataHandle TargetData(new FGameplayAbilityTargetData_SingleTargetHit(CameraHit));
 	if (ActorInfo->IsNetAuthority())
 	{
 		HandleServerTargetData(TargetData, FGameplayTag());
 		return true;
 	}
-	
+
 	UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 	if (!IsValid(AbilitySystem))
 	{
 		return false;
 	}
-	
+
 	// 부모 GA가 생성한 Prediction Key로 TargetData와 예측 Cooldown을 연결
 	AbilitySystem->CallServerSetReplicatedTargetData(GetCurrentAbilitySpecHandle(),
 		GetCurrentActivationInfo().GetActivationPredictionKey(),
 		TargetData, FGameplayTag(), AbilitySystem->ScopedPredictionKey);
-	
+
 	return true;
 }
 
@@ -182,7 +183,7 @@ void UDRGA_FireHitScan::HandleServerTargetData(const FGameplayAbilityTargetDataH
 	{
 		return;
 	}
-	
+
 	const FVector CameraAimPoint = CameraHit.bBlockingHit ? CameraHit.ImpactPoint : CameraHit.TraceEnd;
 	FVector GameplayFireOrigin;
 
@@ -221,8 +222,8 @@ bool UDRGA_FireHitScan::ValidateTargetData(const FGameplayAbilityTargetDataHandl
 
 	const FHitResult* ClientHitResult =	Data != nullptr ? Data->GetHitResult() : nullptr;
 
-	if (ClientHitResult == nullptr 
-		|| ClientHitResult->TraceStart.ContainsNaN() 
+	if (ClientHitResult == nullptr
+		|| ClientHitResult->TraceStart.ContainsNaN()
 		|| ClientHitResult->TraceEnd.ContainsNaN())
 	{
 		return false;
@@ -250,7 +251,7 @@ bool UDRGA_FireHitScan::ValidateTargetData(const FGameplayAbilityTargetDataHandl
 	{
 		return false;
 	}
-	
+
 	// 서버와 클라이언트 회전 오차 허용 범위
 	const float MinimumAimDot = FMath::Cos(FMath::DegreesToRadians(WeaponDefinition->MaxServerAimDeviationDegrees));
 
@@ -279,7 +280,7 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 	{
 		return TraceEnd;
 	}
-	
+
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
 
@@ -289,7 +290,7 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 	{
 		FHitResult HitResult;
 
-		const bool bBlockingHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, 
+		const bool bBlockingHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd,
 			DRCollisionChannels::Projectile,	QueryParams);
 
 		if (!bBlockingHit)
@@ -307,11 +308,11 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 			continue;
 		}
 
-		UAbilitySystemComponent* TargetAbilitySystem = IsValid(HitActor) ? 
+		UAbilitySystemComponent* TargetAbilitySystem = IsValid(HitActor) ?
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor)	: nullptr;
 
 		DrawDebugLine(GetWorld(), TraceStart, HitResult.ImpactPoint, FColor::Red, false, 1.0f, 0, 3);
-		
+
 		if (IsValid(TargetAbilitySystem))
 		{
 			if (bApplyServerEffects)
