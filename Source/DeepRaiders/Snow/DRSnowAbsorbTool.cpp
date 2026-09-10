@@ -1,4 +1,5 @@
 #include "DRSnowAbsorbTool.h"
+#include "DRSnowSurfaceQuery.h"
 
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -298,7 +299,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 	FVoxelSurfaceEditsVoxels SurfaceVoxels;
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Full_QuerySurface);
-		UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(SurfaceVoxels, VoxelWorld, Bounds, true);
+		DRSnowSurfaceQuery::FindSurface(SurfaceVoxels, VoxelWorld, Bounds);
 	}
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Absorb/Full/SurfaceQueried"), SurfaceVoxels.Voxels->Num());
 
@@ -523,11 +524,10 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 		FVoxelSurfaceEditsVoxels SurfaceVoxels;
 		{
 			TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_Adaptive_QuerySurface);
-			UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+			DRSnowSurfaceQuery::FindSurface(
 				SurfaceVoxels,
 				VoxelWorld,
-				SliceBounds,
-				true);
+				SliceBounds);
 		}
 		TotalSurfaceVoxelCount += SurfaceVoxels.Voxels->Num();
 

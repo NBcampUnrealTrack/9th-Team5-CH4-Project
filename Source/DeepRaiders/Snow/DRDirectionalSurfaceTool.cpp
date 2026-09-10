@@ -1,4 +1,5 @@
 #include "DRDirectionalSurfaceTool.h"
+#include "DRSnowSurfaceQuery.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "VoxelAsyncWork.h"
 #include "VoxelData/VoxelDataImpl.inl"
@@ -181,11 +182,10 @@ FVoxelSurfaceEditsProcessedVoxels UDRDirectionalSurfaceTool::FindSurfaceFootprin
 	}
 
 	FVoxelSurfaceEditsVoxels SurfaceVoxels;
-	UVoxelSurfaceTools::FindSurfaceVoxelsFromDistanceField(
+	DRSnowSurfaceQuery::FindSurface(
 		SurfaceVoxels,
 		VoxelWorld,
-		SurfaceBounds,
-		true);
+		SurfaceBounds);
 
 	// SurfaceTool과 같은 브러시 결과를 만든다.
 	// 여기서 나온 Strength의 부호가 Add/Remove 방향 판정에 사용된다.
