@@ -142,9 +142,8 @@ void ADRThrowableProjectile::HandleImpact(const FHitResult& ImpactResult)
 		if (ApplyBreakableDamage(TargetActor))
 		{
 			ExecuteImpactGameplayCue(ImpactResult);
-
-			Destroy();
-			return;
+			
+			continue;
 		}
 
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetActor);
