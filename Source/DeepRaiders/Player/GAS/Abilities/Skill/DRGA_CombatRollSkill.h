@@ -28,6 +28,13 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
+	virtual void EndAbility(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool IsReplicateEndAbility,
+		bool IsWasCancelled) override;
+
 	UFUNCTION()
 	void HandleRollFinished();
 
@@ -70,4 +77,8 @@ protected:
 private:
 	FVector ResolveRollDirection(const ADRPlayerCharacter* Character) const;
 	FName ResolveRollSection(const ADRPlayerCharacter* Character, const FVector& RollDirection) const;
+	void StartRollGameplayCue(ADRPlayerCharacter* Character, const FVector& RollDirection);
+	void StopRollGameplayCue();
+
+	bool IsRollGameplayCueActive = false;
 };

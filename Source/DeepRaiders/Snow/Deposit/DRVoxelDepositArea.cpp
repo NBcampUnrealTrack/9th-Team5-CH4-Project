@@ -80,7 +80,6 @@ ADRVoxelDepositArea::ADRVoxelDepositArea()
 	bAlwaysRelevant = true;
 	NetDormancy = DORM_Never;
 
-	UpdateDepositMaterialIndex();
 }
 
 #if WITH_EDITOR
@@ -102,21 +101,6 @@ bool ADRVoxelDepositArea::ShouldTickIfViewportsOnly() const
 	return true;
 }
 
-void ADRVoxelDepositArea::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
-		? PropertyChangedEvent.Property->GetFName()
-		: NAME_None;
-
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, bUseTeamId) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, TeamId) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(ADRVoxelDepositArea, ManualMaterialIndex))
-	{
-		UpdateDepositMaterialIndex();
-	}
-}
 #endif
 
 uint8 ADRVoxelDepositArea::GetDepositMaterialIndex() const
@@ -124,11 +108,6 @@ uint8 ADRVoxelDepositArea::GetDepositMaterialIndex() const
 	return bUseTeamId
 		? DRSnowMaterialMapping::TeamToMaterialIndex(TeamId)
 		: ManualMaterialIndex;
-}
-
-void ADRVoxelDepositArea::UpdateDepositMaterialIndex()
-{
-	DepositSettings.DepositMaterialIndex = GetDepositMaterialIndex();
 }
 
 FVector ADRVoxelDepositArea::GetAreaExtent() const
@@ -168,7 +147,7 @@ bool ADRVoxelDepositArea::MakeDepositCommand(
 	const FVector AreaExtent = GetAreaExtent();
 	if (!IsValid(GetWorld()) || !IsValid(VoxelWorld) || !VoxelWorld->IsCreated() ||
 		GetActorLocation().ContainsNaN() || AreaExtent.ContainsNaN() ||
-		!FMath::IsFinite(RandomScanWorldSize) || RandomScanWorldSize <= 0.f)
+		DropsPerInterval <= 0)
 	{
 		return false;
 	}
@@ -180,26 +159,12 @@ bool ADRVoxelDepositArea::MakeDepositCommand(
 		return false;
 	}
 
-	OutCommand.Settings = DepositSettings;
+	OutCommand.Settings.DropsPerInterval = DropsPerInterval;
+	OutCommand.Settings.DepositAmountPerPass = DepositAmountPerPass;
+	OutCommand.Settings.DepositSpreadRadius = DepositSpreadRadius;
+	OutCommand.Settings.LevelingStrength = LevelingStrength;
 	OutCommand.Settings.DepositMaterialIndex = GetDepositMaterialIndex();
 	OutCommand.Settings.RandomSeed = FMath::Rand();
-	// 검사 영역은 X/Y만 줄이고 Z는 관리 영역 전체를 사용합니다.
-	const float RequestedHalfSize = RandomScanWorldSize * 0.5f;
-	OutCommand.ScanExtent = FVector(
-		FMath::Min(AreaExtent.X, RequestedHalfSize),
-		FMath::Min(AreaExtent.Y, RequestedHalfSize),
-		AreaExtent.Z);
-	FRandomStream ScanAreaRandomStream(
-		OutCommand.Settings.RandomSeed ^ 0x27D4EB2D);
-	// 검사 영역이 관리 영역 안에 있도록 중심 이동 범위를 제한합니다.
-	OutCommand.ScanCenter = GetActorLocation() + FVector(
-		ScanAreaRandomStream.FRandRange(
-			-(AreaExtent.X - OutCommand.ScanExtent.X),
-			AreaExtent.X - OutCommand.ScanExtent.X),
-		ScanAreaRandomStream.FRandRange(
-			-(AreaExtent.Y - OutCommand.ScanExtent.Y),
-			AreaExtent.Y - OutCommand.ScanExtent.Y),
-		0.f);
 	OutCommand.AreaCenter = GetActorLocation();
 	OutCommand.AreaExtent = AreaExtent;
 	OutCommand.AreaShape = AreaShape;
@@ -223,13 +188,13 @@ void ADRVoxelDepositArea::BeginPlay()
 
 	SetActorTickEnabled(false);
 	EnsureVoxelWorld();
-	UpdateDepositMaterialIndex();
 
 	if (!HasAuthority())
 	{
 		return;
 	}
 
+	if (bIgnoreGamePhase) { StartDepositing(); }
 	MiningGameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
 	if (MiningGameState.IsValid())
 	{
@@ -262,6 +227,11 @@ void ADRVoxelDepositArea::HandleGamePhaseChanged(
 	int32,
 	const TArray<FText>&)
 {
+	if (bIgnoreGamePhase)
+	{
+		StartDepositing();
+		return;
+	}
 	if (PhaseIndex == INDEX_NONE)
 	{
 		StopDepositing();
@@ -330,7 +300,7 @@ void ADRVoxelDepositArea::RequestDepositArea()
 #if ENABLE_DRAW_DEBUG
 	if (bDrawDebug)
 	{
-		DrawDepositAreaBox(GetWorld(), Command.ScanCenter, Command.ScanExtent,
+		DrawDepositAreaBox(GetWorld(), Command.AreaCenter, Command.AreaExtent,
 			FColor(255, 165, 0), false, 1.f, 3.f);
 	}
 #endif

@@ -2,10 +2,13 @@
 
 #include "Abilities/Tasks/AbilityTask_ApplyRootMotionMoveToForce.h"
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 
 void UDRGA_ForwardDashSkill::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
@@ -69,9 +72,73 @@ void UDRGA_ForwardDashSkill::ActivateAbility(
 		return;
 	}
 
+	StartDashGameplayCue(Character, DashDirection);
+
 	EndTask->OnFinish.AddDynamic(this, &ThisClass::HandleDashFinished);
 	MoveTask->ReadyForActivation();
 	EndTask->ReadyForActivation();
+}
+
+void UDRGA_ForwardDashSkill::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool IsReplicateEndAbility,
+	bool IsWasCancelled)
+{
+	StopDashGameplayCue();
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		IsReplicateEndAbility,
+		IsWasCancelled);
+}
+
+void UDRGA_ForwardDashSkill::StartDashGameplayCue(
+	ADRPlayerCharacter* Character,
+	const FVector& DashDirection)
+{
+	if (IsDashGameplayCueActive)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(Character)
+		|| !IsValid(AbilitySystem)
+		|| DashDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = Character->GetActorLocation();
+	Parameters.Normal = DashDirection.GetSafeNormal2D();
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+	Parameters.SourceObject = GetCurrentSkillDefinition();
+
+	AbilitySystem->AddGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash,
+		Parameters);
+	IsDashGameplayCueActive = true;
+}
+
+void UDRGA_ForwardDashSkill::StopDashGameplayCue()
+{
+	if (!IsDashGameplayCueActive)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
+	{
+		AbilitySystem->RemoveGameplayCue(
+			DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash);
+	}
+
+	IsDashGameplayCueActive = false;
 }
 
 void UDRGA_ForwardDashSkill::HandleDashFinished()

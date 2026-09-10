@@ -16,6 +16,13 @@ protected:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
+	virtual void EndAbility(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool IsReplicateEndAbility,
+		bool IsWasCancelled) override;
+
 	UFUNCTION()
 	void HandleDashFinished();
 
@@ -26,4 +33,10 @@ protected:
 	/** 대쉬가 목표 거리에 도달하는 데 걸리는 시간. 내부 속도는 Distance / Duration으로 계산된다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Forward Dash", meta = (ClampMin = "0.01", UIMin = "0.01", Units = "s"))
 	float DashDuration = 0.2f;
+
+private:
+	void StartDashGameplayCue(ADRPlayerCharacter* Character, const FVector& DashDirection);
+	void StopDashGameplayCue();
+
+	bool IsDashGameplayCueActive = false;
 };

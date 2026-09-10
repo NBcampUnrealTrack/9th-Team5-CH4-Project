@@ -25,6 +25,9 @@ struct DEEPRAIDERS_API FDRVFXRequest
 
 	UPROPERTY(BlueprintReadWrite, Category = "VFX")
 	float RawMagnitude = 0.0f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "VFX")
+	FVector Direction = FVector::ZeroVector;
 };
 
 UCLASS()

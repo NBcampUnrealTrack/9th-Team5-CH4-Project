@@ -19,12 +19,12 @@ enum class EDRVoxelDepositAreaShape : uint8
 
 
 USTRUCT()
-struct FDRVoxelDepositInBoxSettings
+struct FDRVoxelDepositSettings
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
-	float SurfaceSampleSpacing = 50.f;
+	UPROPERTY()
+	int32 DropsPerInterval = 16;
 
 	/** 한 회당 표면 상승량(복셀 단위). 평탄화 보정 후에도 최대 0.25셀만 상승합니다. */
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
@@ -34,14 +34,8 @@ struct FDRVoxelDepositInBoxSettings
 	UPROPERTY(VisibleAnywhere, Category="Voxel|Deposit")
 	uint8 DepositMaterialIndex = 0;
 
-	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="1"))
-	int32 RandomSurfaceSampleCount = 16;
-
-	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="1"))
-	int32 MaxSelectedSurfaceCount = 4;
-
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0"))
-	float DepositSpreadRadius = 100.f;
+	float DepositSpreadRadius = 20.f;
 
 	/** 양옆 표면보다 낮으면 더 쌓고 높으면 덜 쌓습니다. 0이면 기존 퇴적량입니다. */
 	UPROPERTY(EditAnywhere, Category="Voxel|Deposit", meta=(ClampMin="0.0", ClampMax="2.0"))
@@ -57,12 +51,6 @@ struct FDRVoxelDepositCommand
 	GENERATED_BODY()
 
 	UPROPERTY()
-	FVector ScanCenter = FVector::ZeroVector;
-
-	UPROPERTY()
-	FVector ScanExtent = FVector::ZeroVector;
-
-	UPROPERTY()
 	FVector AreaCenter = FVector::ZeroVector;
 
 	UPROPERTY()
@@ -75,7 +63,7 @@ struct FDRVoxelDepositCommand
 	bool ContainsWorldPosition(const FVector& Position) const;
 
 	UPROPERTY()
-	FDRVoxelDepositInBoxSettings Settings;
+	FDRVoxelDepositSettings Settings;
 
 	UPROPERTY()
 	FName RequiredStaticMeshSurfaceTag = NAME_None;
@@ -138,7 +126,7 @@ struct FDRVoxelDepositResult
 
 struct FDRVoxelDepositPlan
 {
-	FDRVoxelDepositInBoxSettings Settings;
+	FDRVoxelDepositSettings Settings;
 	FIntVector WriteVoxelMin = FIntVector::ZeroValue;
 	FIntVector WriteVoxelMax = FIntVector::ZeroValue;
 	TArray<FDRVoxelDepositWrite> Writes;

@@ -7,6 +7,7 @@
 class ADRPlayerCharacter;
 class UCameraShakeBase;
 class UAbilitySystemComponent;
+class UGameplayEffect;
 struct FGameplayTag;
 
 UCLASS(ClassGroup = (Player), meta = (BlueprintSpawnableComponent))
@@ -53,6 +54,7 @@ private:
 	void RespawnAtPlayerStart();
 	void RespawnAtRagdollLocation();
 	bool TryFindRagdollRespawnTransform(FTransform& OutRespawnTransform) const;
+	void ApplyRespawnInvincibility(ADRPlayerCharacter* RespawnedCharacter) const;
 	bool bDeathRagdollApplied = false;
 	FTimerHandle RespawnTimerHandle;
 	
@@ -66,6 +68,10 @@ protected:
 	// Respawn Settings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn", meta = (ClampMin = "0.0", Units = "s"))
 	float RespawnDelay = 3.f;
+
+	/** 사망 후 리스폰한 Pawn에 적용할 시간제 무적 Gameplay Effect. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn")
+	TSubclassOf<UGameplayEffect> RespawnInvincibilityEffectClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lifecycle|Respawn")
 	FName RespawnRagdollBoneName = TEXT("pelvis");

@@ -71,6 +71,11 @@ namespace DRGameplayTags
 		"Player currently has a consumable personal shield.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_RespawnInvincible,
+		"State.RespawnInvincible",
+		"Player is temporarily invincible after a death respawn.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_UI_InventoryOpen,
 		"State.UI.InventoryOpen",
 		"Local player's inventory UI is open.");
@@ -539,6 +544,16 @@ namespace DRGameplayTags
 		GameplayCue_VFX_Effect_SpeedSlow,
 		"GameplayCue.VFX.Effect.SpeedSlow",
 		"MoveSpeed slow effect visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_ForwardDash,
+		"GameplayCue.VFX.Skill.ForwardDash",
+		"Persistent forward dash trail visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_CombatRoll,
+		"GameplayCue.VFX.Skill.CombatRoll",
+		"Persistent combat roll trail visual effects");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_VFX_Skill_Search,
