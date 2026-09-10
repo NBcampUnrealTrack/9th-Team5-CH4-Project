@@ -56,7 +56,7 @@ ADRHoveringWorldItemActor::ADRHoveringWorldItemActor()
 	IdleAuraVFXComponent = CreateDefaultSubobject<UNiagaraComponent>(
 		TEXT("IdleAuraVFXComponent"));
 
-	IdleAuraVFXComponent->SetupAttachment(PresentationMeshComponent);
+	IdleAuraVFXComponent->SetupAttachment(StaticMeshComponent);
 	IdleAuraVFXComponent->SetAutoActivate(false);
 	IdleAuraVFXComponent->SetIsReplicated(false);
 }
@@ -326,8 +326,14 @@ void ADRHoveringWorldItemActor::UpdateEmergenceTransform()
 			0.f, 1.f);
 	}
 	
-	const FVector StartRelativelocation = GetActorTransform().InverseTransformPosition(EmergenceData.SourceWorldLocation);
-	FVector RelativeLocation = FMath::Lerp(StartRelativelocation, FVector::ZeroVector, MovementAlpha);
+	const FVector StartRelativeLocation = GetActorTransform().InverseTransformPosition(EmergenceData.SourceWorldLocation);
+	FVector RelativeLocation = FMath::Lerp(StartRelativeLocation, FVector::ZeroVector, MovementAlpha);
+	
+	if (const UDRItemDefinition* Definition = ItemInstance.GetDefinition())
+	{
+		RelativeLocation =	FMath::Lerp(StartRelativeLocation, FVector::ZeroVector, MovementAlpha)
+			+ Definition->PresentationOffsetTransform.GetLocation();
+	}
 	
 	RelativeLocation.Z += 4.f * GetEmergenceArcHeight() * RawAlpha * (1.f - RawAlpha);
 	
@@ -342,7 +348,12 @@ void ADRHoveringWorldItemActor::UpdateHoverTransform()
 	const float TimeRadians = GetSynchronizedWorldTime() * GetHoverFrequency() * UE_TWO_PI;
 	const float HoverOffset = FMath::Sin(TimeRadians + PhaseRadians) * GetHoverAmplitude();
 	
-	PresentationMeshComponent->SetRelativeLocation(FVector::UpVector * HoverOffset);	
+	FVector MeshOffsetLocation = FVector::ZeroVector;
+	if (const UDRItemDefinition* Definition = ItemInstance.GetDefinition())
+	{
+		MeshOffsetLocation = Definition->PresentationOffsetTransform.GetTranslation();
+	}
+	PresentationMeshComponent->SetRelativeLocation(MeshOffsetLocation + FVector::UpVector * HoverOffset);	
 }
 
 float ADRHoveringWorldItemActor::GetSynchronizedWorldTime() const
