@@ -204,10 +204,25 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Enter);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Kill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Footstep);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Jump);
 
 	// Gameplay Cue - Sound - Item
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Throw);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Emergence);
+
+	// Gameplay Cue - Sound - Movement Action
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_MovementAction_Grapple_Launch);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_MovementAction_Grapple_Attach);
+
+	// Gameplay Cue - Sound - Breakable
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_Destroyed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Destroyed);
 
 	// Gameplay Cue - Sound - World / Etc
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);

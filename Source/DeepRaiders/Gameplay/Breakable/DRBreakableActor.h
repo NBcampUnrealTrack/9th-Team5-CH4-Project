@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagContainer.h"
 #include "DRBreakableActor.generated.h"
 
 class AController;
+class APawn;
 class UStaticMeshComponent;
 
 USTRUCT(BlueprintType)
@@ -78,10 +80,24 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breakable|Lifecycle", meta = (ClampMin = "0.0", Units = "s"))
 	float BrokenLifeSpan = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breakable|Sound",
+		meta = (Categories = "GameplayCue.Sound"))
+	FGameplayTag HitSoundCueTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Breakable|Sound",
+		meta = (Categories = "GameplayCue.Sound"))
+	FGameplayTag DestroyedSoundCueTag;
 	
 private:
 	UFUNCTION()
 	void OnRep_IsBroken();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayDamageSoundFeedback(
+		FVector_NetQuantize SoundLocation,
+		APawn* InstigatorPawn,
+		bool bDestroyedThisHit);
 	
 	void BreakActor(const FDRBreakableDamageContext& DamageContext);
 	

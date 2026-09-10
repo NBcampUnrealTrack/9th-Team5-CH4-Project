@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
@@ -215,9 +216,19 @@ bool ADRGameplayCueGrapple::BeginPresentation(AActor* Target, const FGameplayCue
 	
 	StartComponent = ResolvedStartComponent;
 	StartSocketName = ResolvedSocketName;
+	SoundTargetActor = Target;
 	
 	LaunchLocation = GetCurrentStartLocation();
 	TargetLocation = Parameters.Location;
+
+	FGameplayCueParameters LaunchSoundParameters;
+	LaunchSoundParameters.Location = LaunchLocation;
+	LaunchSoundParameters.Instigator = Target;
+	LaunchSoundParameters.EffectCauser = Target;
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Target,
+		DRGameplayTags::GameplayCue_Sound_MovementAction_Grapple_Launch,
+		LaunchSoundParameters);
 	
 	const FVector CueNormal = Parameters.Normal;
 	TargetNormal = CueNormal.ContainsNaN() ? FVector::ZeroVector : CueNormal.GetSafeNormal();
@@ -406,6 +417,19 @@ void ADRGameplayCueGrapple::EnterAttachedPhase()
 	}
 
 	bAttachmentFeedbackPlayed = true;
+
+	if (AActor* SoundTarget = SoundTargetActor.Get(); IsValid(SoundTarget))
+	{
+		FGameplayCueParameters AttachSoundParameters;
+		AttachSoundParameters.Location = TargetLocation;
+		AttachSoundParameters.Instigator = SoundTarget;
+		AttachSoundParameters.EffectCauser = SoundTarget;
+		UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+			SoundTarget,
+			DRGameplayTags::GameplayCue_Sound_MovementAction_Grapple_Attach,
+			AttachSoundParameters);
+	}
+
 	ReceiveHookAttached(TargetLocation, TargetNormal);
 }
 
@@ -458,6 +482,7 @@ void ADRGameplayCueGrapple::ResetPresentationState()
 
 	StartComponent.Reset();
 	FollowTargetActor.Reset();
+	SoundTargetActor.Reset();
 	StartSocketName = NAME_None;
 
 	LaunchLocation = FVector::ZeroVector;

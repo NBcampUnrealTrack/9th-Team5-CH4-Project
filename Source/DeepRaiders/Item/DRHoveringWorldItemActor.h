@@ -61,6 +61,7 @@ private:
 	
 	// WorldItemState에 맞는 표시 상태 적용
 	void ApplyPresentationState();
+	void TryPlayEmergenceSound();
 	void RefreshRarityPresentation();
 	void RefreshPresentationTransform();
 	
@@ -75,6 +76,7 @@ private:
 	const UDRWorldItemPresentationProfile* GetPresentationProfile() const;
 	
 	bool bLoggedMissingPresentationProfile = false;
+	bool bEmergenceSoundPlayed = false;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_EmergenceData)
 	FDRWorldItemEmergenceData EmergenceData;

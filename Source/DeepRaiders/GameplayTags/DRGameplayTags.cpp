@@ -814,6 +814,26 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Player_Frozen_Death,
 		"GameplayCue.Sound.Player.Frozen.Death",
 		"Frozen player died.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Death,
+		"GameplayCue.Sound.Player.Death",
+		"Local feedback for the player who died.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Kill,
+		"GameplayCue.Sound.Player.Kill",
+		"Local feedback for the player who killed another player.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Footstep,
+		"GameplayCue.Sound.Player.Footstep",
+		"Player footstep sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Jump,
+		"GameplayCue.Sound.Player.Jump",
+		"Player jump takeoff sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Item_Throwable_Throw,
@@ -824,6 +844,41 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Item_Throwable_Impact,
 		"GameplayCue.Sound.Item.Throwable.Impact",
 		"Throwable impact sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Item_Emergence,
+		"GameplayCue.Sound.Item.Emergence",
+		"World item emergence started.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_MovementAction_Grapple_Launch,
+		"GameplayCue.Sound.MovementAction.Grapple.Launch",
+		"Grapple hook launched.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_MovementAction_Grapple_Attach,
+		"GameplayCue.Sound.MovementAction.Grapple.Attach",
+		"Grapple hook attached to its target.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Breakable_Hit,
+		"GameplayCue.Sound.Breakable.Hit",
+		"Breakable actor took damage.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Breakable_Destroyed,
+		"GameplayCue.Sound.Breakable.Destroyed",
+		"Breakable actor was destroyed.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Breakable_LootBox_Hit,
+		"GameplayCue.Sound.Breakable.LootBox.Hit",
+		"Breakable actor took damage.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Breakable_LootBox_Destroyed,
+		"GameplayCue.Sound.Breakable.LootBox.Destroyed",
+		"Breakable actor was destroyed.");
 	
 	// =====================================================
 	// Gameplay Cue - Sound - Weapon

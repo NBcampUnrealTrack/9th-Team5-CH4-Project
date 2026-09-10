@@ -103,7 +103,10 @@ UAudioComponent* UDRSoundSubsystem::CreateAudioComponent(const FDRSoundDefinitio
 		return nullptr;
 	}
 
-	UObject* Outer = IsValid(Request.SourceActor) ? static_cast<UObject*>(Request.SourceActor) : World;
+	const bool bWorldLocation = Definition.PlaybackMode == EDRSoundPlaybackMode::WorldLocation_3D;
+	UObject* Outer = !bWorldLocation && IsValid(Request.SourceActor)
+		? static_cast<UObject*>(Request.SourceActor)
+		: World;
 	UAudioComponent* AudioComponent = NewObject<UAudioComponent>(Outer);
 	if (!AudioComponent)
 	{
@@ -112,7 +115,7 @@ UAudioComponent* UDRSoundSubsystem::CreateAudioComponent(const FDRSoundDefinitio
 
 	AudioComponent->bAutoDestroy = true;
 	AudioComponent->bAutoActivate = false;
-	AudioComponent->bStopWhenOwnerDestroyed = true;
+	AudioComponent->bStopWhenOwnerDestroyed = !bWorldLocation;
 	AudioComponent->bOverridePriority = true;
 	AudioComponent->Priority = Definition.bAlwaysPlay ? MAX_flt : Priority;
 	AudioComponent->VolumeMultiplier = Definition.VolumeMultiplier;
@@ -127,8 +130,10 @@ UAudioComponent* UDRSoundSubsystem::CreateAudioComponent(const FDRSoundDefinitio
 
 	const bool bAttached = Definition.PlaybackMode == EDRSoundPlaybackMode::AttachedToSource_3D
 		&& IsValid(Request.SourceActor) && IsValid(Request.SourceActor->GetRootComponent());
-	AudioComponent->bAllowSpatialization = bAttached;
-	AudioComponent->bIsUISound = !bAttached;
+	const bool bUseWorldLocation = bWorldLocation
+		|| (Definition.PlaybackMode == EDRSoundPlaybackMode::AttachedToSource_3D && !bAttached);
+	AudioComponent->bAllowSpatialization = bAttached || bUseWorldLocation;
+	AudioComponent->bIsUISound = Definition.PlaybackMode == EDRSoundPlaybackMode::TwoDimensional_2D;
 	AudioComponent->RegisterComponentWithWorld(World);
 
 	if (bAttached)
@@ -136,11 +141,9 @@ UAudioComponent* UDRSoundSubsystem::CreateAudioComponent(const FDRSoundDefinitio
 		AudioComponent->AttachToComponent(Request.SourceActor->GetRootComponent(),
 			FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	}
-	else if (Definition.PlaybackMode == EDRSoundPlaybackMode::AttachedToSource_3D)
+	else if (bUseWorldLocation)
 	{
 		AudioComponent->SetWorldLocation(Request.WorldLocation);
-		AudioComponent->bAllowSpatialization = true;
-		AudioComponent->bIsUISound = false;
 	}
 
 	return AudioComponent;

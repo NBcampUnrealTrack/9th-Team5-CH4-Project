@@ -2,7 +2,10 @@
 #include "DRBreakableActor.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "Engine/DamageEvents.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 
@@ -39,8 +42,8 @@ void ADRBreakableActor::GetLifetimeReplicatedProps(TArray<class FLifetimePropert
 	DOREPLIFETIME(ThisClass, bIsBroken);
 }
 
-float ADRBreakableActor::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
-	class AController* EventInstigator, AActor* DamageCauser)
+float ADRBreakableActor::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
+	AController* EventInstigator, AActor* DamageCauser)
 {
 	if (!HasAuthority()
 		|| bIsBroken
@@ -70,7 +73,18 @@ float ADRBreakableActor::TakeDamage(float DamageAmount, struct FDamageEvent cons
 		DamageContext.HitResult = PointDamageEvent.HitInfo;
 	}
 	
-	if (CurrentHealth <= KINDA_SMALL_NUMBER)
+	const bool bDestroyedThisHit = CurrentHealth <= KINDA_SMALL_NUMBER;
+	if (HitSoundCueTag.IsValid() || (bDestroyedThisHit && DestroyedSoundCueTag.IsValid()))
+	{
+		const FVector SoundLocation = DamageContext.HitResult.bBlockingHit
+			? DamageContext.HitResult.ImpactPoint
+			: GetActorLocation();
+		APawn* InstigatorPawn = IsValid(EventInstigator) ? EventInstigator->GetPawn().Get() : Cast<APawn>(DamageCauser);
+
+		MulticastPlayDamageSoundFeedback(SoundLocation, InstigatorPawn, bDestroyedThisHit);
+	}
+
+	if (bDestroyedThisHit)
 	{
 		BreakActor(DamageContext);
 	}
@@ -87,6 +101,27 @@ void ADRBreakableActor::OnRep_IsBroken()
 	if (bIsBroken)
 	{
 		ApplyBrokenPresentation();
+	}
+}
+
+void ADRBreakableActor::MulticastPlayDamageSoundFeedback_Implementation(
+	FVector_NetQuantize SoundLocation,
+	APawn* InstigatorPawn,
+	bool bDestroyedThisHit)
+{
+	FGameplayCueParameters Parameters;
+	Parameters.Location = SoundLocation;
+	Parameters.Instigator = InstigatorPawn;
+	Parameters.EffectCauser = this;
+
+	if (HitSoundCueTag.IsValid())
+	{
+		UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(this, HitSoundCueTag, Parameters);
+	}
+
+	if (bDestroyedThisHit && DestroyedSoundCueTag.IsValid())
+	{
+		UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(this, DestroyedSoundCueTag, Parameters);
 	}
 }
 

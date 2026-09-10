@@ -152,6 +152,13 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 
 	if (UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent())
 	{
+		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+		Context.AddInstigator(Character, Character);
+
+		FGameplayCueParameters Parameters(Context);
+		Parameters.Location = Character->GetActorLocation();
+		ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Death, Parameters);
+
 		FGameplayTagContainer AttackTags;
 
 		AttackTags.AddTag(DRGameplayTags::Ability_Attack);

@@ -14,7 +14,8 @@ UENUM(BlueprintType)
 enum class EDRSoundPlaybackMode : uint8
 {
 	TwoDimensional_2D,
-	AttachedToSource_3D
+	AttachedToSource_3D,
+	WorldLocation_3D
 };
 
 UENUM(BlueprintType)

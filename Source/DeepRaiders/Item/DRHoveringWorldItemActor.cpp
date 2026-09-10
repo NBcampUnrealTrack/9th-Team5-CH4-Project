@@ -5,6 +5,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Data/DRWorldItemPresentationProfile.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "GameFramework/GameStateBase.h"
@@ -169,6 +171,7 @@ void ADRHoveringWorldItemActor::RefreshItemPresentation()
 	RefreshRarityPresentation();
 	ApplyPresentationState();
 	RefreshPresentationTransform();	
+	TryPlayEmergenceSound();
 }
 
 void ADRHoveringWorldItemActor::HandleWorldItemStateChanged()
@@ -180,6 +183,7 @@ void ADRHoveringWorldItemActor::HandleWorldItemStateChanged()
 	
 	ApplyPresentationState();
 	RefreshPresentationTransform();
+	TryPlayEmergenceSound();
 }
 
 void ADRHoveringWorldItemActor::OnRep_EmergenceData()
@@ -213,6 +217,29 @@ void ADRHoveringWorldItemActor::CompleteEmergence()
 	
 	SetWorldItemState(EDRWorldItemState::Dropped);
 	MulticastPlayDroppedSound();
+}
+
+void ADRHoveringWorldItemActor::TryPlayEmergenceSound()
+{
+	if (bEmergenceSoundPlayed
+		|| GetNetMode() == NM_DedicatedServer
+		|| WorldItemState != EDRWorldItemState::Emerging
+		|| !ItemInstance.IsValid())
+	{
+		return;
+	}
+
+	bEmergenceSoundPlayed = true;
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = EmergenceData.SourceWorldLocation;
+	Parameters.Instigator = this;
+	Parameters.EffectCauser = this;
+	Parameters.SourceObject = ItemInstance.GetDefinition();
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		this,
+		DRGameplayTags::GameplayCue_Sound_Item_Emergence,
+		Parameters);
 }
 
 void ADRHoveringWorldItemActor::ApplyPresentationState()

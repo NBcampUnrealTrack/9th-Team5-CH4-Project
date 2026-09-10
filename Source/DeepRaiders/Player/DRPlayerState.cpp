@@ -74,6 +74,23 @@ void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, flo
 	 */
 	HandleHostileHitResolved(SourcePlayerState);
 
+	if (bFatal && IsValid(SourcePlayerState) && SourcePlayerState != this)
+	{
+		UAbilitySystemComponent* SourceASC = SourcePlayerState->GetAbilitySystemComponent();
+		if (IsValid(SourceASC))
+		{
+			AActor* SourceActor = IsValid(SourcePlayerState->GetPawn())
+				? static_cast<AActor*>(SourcePlayerState->GetPawn())
+				: SourcePlayerState;
+			FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+			Context.AddInstigator(SourceActor, SourceActor);
+
+			FGameplayCueParameters Parameters(Context);
+			Parameters.Location = SourceActor->GetActorLocation();
+			SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Kill, Parameters);
+		}
+	}
+
 	if (!IsValid(CombatStatsComponent))
 	{
 		return;

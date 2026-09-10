@@ -108,6 +108,7 @@ private:
 
 	TWeakObjectPtr<USceneComponent> StartComponent;
 	TWeakObjectPtr<AActor> FollowTargetActor;
+	TWeakObjectPtr<AActor> SoundTargetActor;
 	
 	FName StartSocketName = NAME_None;
 		
