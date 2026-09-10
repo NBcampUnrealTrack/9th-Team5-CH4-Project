@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Room Service",
+  "Description": "Self-hosted room routing and one dedicated server process per room.",
+  "Category": "Networking",
+  "CanContainContent": false,
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "RoomService",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}

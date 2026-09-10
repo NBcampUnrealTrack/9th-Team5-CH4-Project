@@ -7,6 +7,8 @@
 class UDRTitleJoinWidget;
 class UDRTitleMapChoiceWidget;
 class UDRTitleSettingsWidget;
+class UDRRoomServiceWidget;
+class UDRCreateRoomWidget;
 
 UCLASS()
 class DEEPRAIDERS_API UHostOrJoinWidget : public UUserWidget
@@ -49,16 +51,26 @@ public:
 	void HandleSettingsCancelClicked();
 
 protected:
+	virtual void NativeConstruct() override;
+	// Title 루트는 유지하고 메뉴 영역만 숨긴다. 두 화면은 이 영역 밖의 형제다.
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UWidget> Overlay_Title;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UDRRoomServiceWidget> WBP_RoomService;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UDRCreateRoomWidget> WBP_CreateRoom;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRTitleJoinWidget> WBP_Join;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRTitleSettingsWidget> WBP_Settings;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UDRTitleMapChoiceWidget> WBP_ChoiceMap;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Session")
-	// FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
-	FString DedicatedServerAddress = TEXT("katherine-fc.tun.ply.gg:55341");
+	FString DedicatedServerAddress = TEXT("shees95.myddns.me:17777");
+	//FString DedicatedServerAddress = TEXT("katherine-fc.tun.ply.gg:55341");
+
 };

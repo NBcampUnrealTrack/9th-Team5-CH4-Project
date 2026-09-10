@@ -19,8 +19,14 @@ bool UDRTitleJoinWidget::Initialize()
 	return true;
 }
 
-void UDRTitleJoinWidget::Show()
+void UDRTitleJoinWidget::Show(UUserWidget* InReturnWidget)
 {
+	ReturnWidget = InReturnWidget;
+	if (ReturnWidget.IsValid())
+	{
+		ReturnWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	SetVisibility(ESlateVisibility::Visible);
 	Overlay_Join->SetVisibility(ESlateVisibility::Visible);
 	ETB_IPAddress->SetKeyboardFocus();
 }
@@ -46,4 +52,10 @@ void UDRTitleJoinWidget::HandleJoinClicked()
 void UDRTitleJoinWidget::HandleCloseJoinClicked()
 {
 	Overlay_Join->SetVisibility(ESlateVisibility::Collapsed);
+	if (ReturnWidget.IsValid())
+	{
+		ReturnWidget->SetVisibility(ESlateVisibility::Visible);
+		ReturnWidget->SetKeyboardFocus();
+		ReturnWidget.Reset();
+	}
 }

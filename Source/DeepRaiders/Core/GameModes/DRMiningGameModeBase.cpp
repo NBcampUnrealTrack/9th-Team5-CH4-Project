@@ -614,6 +614,14 @@ void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 		*StaticEnum<EDRGameFlowState>()->GetNameStringByValue(static_cast<int64>(NewState)),
 		CurrentPhaseArrayIndex, PhaseRemainingSeconds, GameRemainingSeconds);
 	GameFlowState = NewState;
+	// 관리 방은 준비 시작부터 입장을 닫고 결과 화면 이후 Master가 회수한다.
+	if (IsManagedRoom())
+	{
+		const ERoomServiceState ReportState = NewState == EDRGameFlowState::WaitingForPlayers
+			? ERoomServiceState::Waiting : NewState == EDRGameFlowState::Results
+			? ERoomServiceState::Ending : ERoomServiceState::Playing;
+		SetRoomServiceState(ReportState);
+	}
 	if (bWasPreparing != bIsPreparing)
 	{
 		for (APlayerState* PlayerState : GameState->PlayerArray)

@@ -13,7 +13,7 @@ public class DeepRaiders : ModuleRules
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
 			
 			// Online
-			"OnlineSubsystem", "OnlineSubsystemUtils", "Sockets",
+			"OnlineSubsystem", "OnlineSubsystemUtils", "Sockets", "RoomService",
 			
 			// Voxel
 			"Voxel",
