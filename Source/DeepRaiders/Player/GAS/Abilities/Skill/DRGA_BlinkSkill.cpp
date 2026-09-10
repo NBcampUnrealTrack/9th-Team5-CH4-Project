@@ -1,9 +1,11 @@
 #include "DRGA_BlinkSkill.h"
 
+#include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
 
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Skill/DRSkillDefinition.h"
 #include "DeepRaiders/Skill/Effects/DRGE_BlinkRecovery.h"
 
 void UDRGA_BlinkSkill::ActivateAbility(
@@ -37,7 +39,8 @@ void UDRGA_BlinkSkill::ActivateAbility(
 		return;
 	}
 
-	const FVector Destination = Character->GetActorLocation() + BlinkDirection * BlinkDistance;
+	const FVector BlinkLocation = Character->GetActorLocation();
+	const FVector Destination = BlinkLocation + BlinkDirection * BlinkDistance;
 	const FRotator CharacterRotation = Character->GetActorRotation();
 	FHitResult HitResult;
 
@@ -51,6 +54,7 @@ void UDRGA_BlinkSkill::ActivateAbility(
 	// to the first impact instead of allowing teleport destination adjustment past it.
 	Character->SetActorLocation(Destination, true, &HitResult, ETeleportType::TeleportPhysics);
 	Character->SetActorRotation(CharacterRotation, ETeleportType::TeleportPhysics);
+	PlayBlinkVFX(Character, BlinkLocation, BlinkDirection);
 
 	if (RecoveryDuration > 0.0f)
 	{
@@ -75,4 +79,28 @@ void UDRGA_BlinkSkill::ActivateAbility(
 	}
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+void UDRGA_BlinkSkill::PlayBlinkVFX(
+	ADRPlayerCharacter* Character,
+	const FVector& BlinkLocation,
+	const FVector& BlinkDirection) const
+{
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+	if (!IsValid(Character)
+		|| !IsValid(AbilitySystem))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = BlinkLocation;
+	Parameters.Normal = BlinkDirection.GetSafeNormal2D();
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+	Parameters.SourceObject = GetCurrentSkillDefinition();
+
+	AbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_Blink,
+		Parameters);
 }

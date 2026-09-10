@@ -83,6 +83,20 @@ void UDRStartingSelectionComponent::RequestSkillSelection(FName RowName)
 	}
 }
 
+void UDRStartingSelectionComponent::ResetSkillSelection()
+{
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());
+	if (!IsValid(PlayerController) || !PlayerController->HasAuthority())
+	{
+		return;
+	}
+
+	IsSkillOneSelected = false;
+	IsSkillTwoSelected = false;
+	PlayerController->ForceNetUpdate();
+	NotifySelectionStateChanged();
+}
+
 void UDRStartingSelectionComponent::ServerSelectWeapon_Implementation(FName RowName)
 {
 	const ADRPlayerController* PlayerController = Cast<ADRPlayerController>(GetOwner());

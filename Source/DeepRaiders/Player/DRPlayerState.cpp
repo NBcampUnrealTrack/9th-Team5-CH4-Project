@@ -284,6 +284,10 @@ void ADRPlayerState::ResetForGameStart()
 	{
 		PerkComponent->ResetPerks();
 	}
+	if (IsValid(SkillComponent))
+	{
+		SkillComponent->ResetSkills();
+	}
 	CharacterUpgradeComponent->ResetUpgrades();
 }
 

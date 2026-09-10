@@ -87,6 +87,39 @@ void UDRSkillComponent::GrantDefaultSkills()
 	}
 }
 
+void UDRSkillComponent::ResetSkills()
+{
+	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());
+	UAbilitySystemComponent* AbilitySystemComponent = IsValid(PlayerState)
+		? PlayerState->GetAbilitySystemComponent()
+		: nullptr;
+
+	if (!IsValid(PlayerState)
+		|| !PlayerState->HasAuthority()
+		|| !IsValid(AbilitySystemComponent))
+	{
+		return;
+	}
+
+	for (int32 SlotIndex = 0; SlotIndex < SkillAbilityHandles.Num(); ++SlotIndex)
+	{
+		const UDRSkillDefinition* SkillDefinition = EquippedSkills.IsValidIndex(SlotIndex)
+			? EquippedSkills[SlotIndex]
+			: nullptr;
+		if (IsValid(SkillDefinition) && SkillDefinition->CooldownTag.IsValid())
+		{
+			FGameplayTagContainer CooldownTags(SkillDefinition->CooldownTag);
+			AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(CooldownTags);
+		}
+
+		RemovePreviousSkillAbility(AbilitySystemComponent, SlotIndex);
+	}
+
+	EquippedSkills.Init(nullptr, static_cast<int32>(EDRSkillSlot::Count));
+	PlayerState->ForceNetUpdate();
+	OnSkillChanged.Broadcast();
+}
+
 void UDRSkillComponent::RemovePreviousSkillAbility(
 	UAbilitySystemComponent* AbilitySystemComponent,
 	int32 SlotIndex)

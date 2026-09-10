@@ -19,6 +19,9 @@ struct DEEPRAIDERS_API FDRVFXRequest
 	
 	UPROPERTY(BlueprintReadWrite, Category = "VFX")
 	TObjectPtr<AActor> TargetActor = nullptr;
+
+	UPROPERTY(BlueprintReadWrite, Category = "VFX")
+	FVector Location = FVector::ZeroVector;
 	
 	UPROPERTY(BlueprintReadWrite, Category = "VFX", meta = (Categories = "GameplayCue.VFX"))
 	FGameplayTag VFXTag;
@@ -71,9 +74,9 @@ private:
 	// VFXDefinition 탐색 후 반환
 	const FDRVFXDefinition* ResolveDefinition(const UDRVFXLibrary* Library, const FDRVFXRequest& Request) const;
 	
-	// 요청에 맞춰 VFX 생성 후 부착
-	UNiagaraComponent* SpawnAttachedSystem(const FDRVFXDefinition& Definition, UNiagaraSystem* NiagaraSystem,
-		const FDRVFXRequest& Request, bool bPersistent) const;
+	// 요청에 맞춰 VFX 생성
+	UNiagaraComponent* SpawnSystem(const FDRVFXDefinition& Definition, UNiagaraSystem* NiagaraSystem,
+		const FDRVFXRequest& Request, bool IsPersistent) const;
 	
 	// 부착할 위치 탐색 후 반환
 	USceneComponent* ResolveAttachComponent(const FDRVFXDefinition& Definition, AActor* TargetActor) const;

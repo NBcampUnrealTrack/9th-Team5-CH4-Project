@@ -15,10 +15,13 @@ protected:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Blink", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float BlinkDistance = 600.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Skill|Blink", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float RecoveryDuration = 0.5f;
+
+private:
+	void PlayBlinkVFX(ADRPlayerCharacter* Character, const FVector& BlinkLocation,
+		const FVector& BlinkDirection) const;
 };

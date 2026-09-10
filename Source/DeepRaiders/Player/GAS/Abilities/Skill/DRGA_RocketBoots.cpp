@@ -1,5 +1,7 @@
 #include "DRGA_RocketBoots.h"
 
+#include "Abilities/Tasks/AbilityTask_WaitDelay.h"
+#include "AbilitySystemComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
@@ -90,5 +92,85 @@ void UDRGA_RocketBoots::ActivateAbility(
 	MovementComponent->ClearAirborneMomentumPreservation();
 	MovementComponent->AddImpulse(DashDirection * ImpulseStrength, true);
 	ConsumedSuperJumpSequence = MovementComponent->GetSuperJumpSequence();
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	StartDashGameplayCue(Character, DashDirection);
+
+	UAbilityTask_WaitDelay* EndTask = UAbilityTask_WaitDelay::WaitDelay(
+		this, DashGameplayCueDuration);
+	if (!IsValid(EndTask))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+		return;
+	}
+
+	EndTask->OnFinish.AddDynamic(this, &ThisClass::HandleDashGameplayCueFinished);
+	EndTask->ReadyForActivation();
+}
+
+void UDRGA_RocketBoots::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool IsReplicateEndAbility,
+	bool IsWasCancelled)
+{
+	StopDashGameplayCue();
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		IsReplicateEndAbility,
+		IsWasCancelled);
+}
+
+void UDRGA_RocketBoots::StartDashGameplayCue(
+	ADRPlayerCharacter* Character,
+	const FVector& DashDirection)
+{
+	UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo();
+	if (IsDashGameplayCueActive
+		|| !IsValid(Character)
+		|| !IsValid(AbilitySystem)
+		|| DashDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = Character->GetActorLocation();
+	Parameters.Normal = DashDirection.GetSafeNormal2D();
+	Parameters.Instigator = Character;
+	Parameters.EffectCauser = Character;
+	AbilitySystem->AddGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash,
+		Parameters);
+	IsDashGameplayCueActive = true;
+}
+
+void UDRGA_RocketBoots::StopDashGameplayCue()
+{
+	if (!IsDashGameplayCueActive)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponentFromActorInfo())
+	{
+		AbilitySystem->RemoveGameplayCue(
+			DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash);
+	}
+
+	IsDashGameplayCueActive = false;
+}
+
+void UDRGA_RocketBoots::HandleDashGameplayCueFinished()
+{
+	if (IsActive())
+	{
+		EndAbility(
+			GetCurrentAbilitySpecHandle(),
+			GetCurrentActorInfo(),
+			GetCurrentActivationInfo(),
+			true,
+			false);
+	}
 }

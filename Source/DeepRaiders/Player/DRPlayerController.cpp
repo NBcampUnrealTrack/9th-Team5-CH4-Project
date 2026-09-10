@@ -1055,13 +1055,20 @@ bool ADRPlayerController::TrySendSecondaryMovementCancelEvent(int32 InputId)
 
 void ADRPlayerController::ResetForGameStart()
 {
-	if (!HasAuthority() || !IsValid(InventoryComponent))
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	InventoryComponent->ResetInventory();
-	InitializeStartingQuickSlot();
+	if (IsValid(InventoryComponent))
+	{
+		InventoryComponent->ResetInventory();
+		InitializeStartingQuickSlot();
+	}
+	if (IsValid(StartingSelectionComponent))
+	{
+		StartingSelectionComponent->ResetSkillSelection();
+	}
 }
 
 void ADRPlayerController::ApplyViewPitchLimits()

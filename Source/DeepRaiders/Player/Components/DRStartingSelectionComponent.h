@@ -34,6 +34,7 @@ public:
 
 	void RequestWeaponSelection(FName RowName);
 	void RequestSkillSelection(FName RowName);
+	void ResetSkillSelection();
 
 	bool IsWeaponSelectionAvailable() const
 	{

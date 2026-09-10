@@ -82,6 +82,7 @@ bool UDRGameplayCueVFX::BuildRequest(AActor* Target, const FGameplayCueParameter
 	}
 
 	OutRequest.TargetActor = Target;
+	OutRequest.Location = Parameters.Location;
 	OutRequest.VFXTag = VFXTag;
 	OutRequest.RawMagnitude = Parameters.RawMagnitude;
 	OutRequest.Direction = Parameters.Normal.GetSafeNormal();

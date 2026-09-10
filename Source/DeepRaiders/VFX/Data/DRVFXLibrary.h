@@ -11,7 +11,8 @@ UENUM(BlueprintType)
 enum class EDRVFXAttachTarget : uint8
 {
 	ActorRoot,
-	SkeletalMesh
+	SkeletalMesh,
+	WorldLocation
 };
 
 USTRUCT(BlueprintType)

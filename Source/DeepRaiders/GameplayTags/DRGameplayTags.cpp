@@ -546,9 +546,19 @@ namespace DRGameplayTags
 		"MoveSpeed slow effect visual effects");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_Blink,
+		"GameplayCue.VFX.Skill.Blink",
+		"Blink skill visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_VFX_Skill_ForwardDash,
 		"GameplayCue.VFX.Skill.ForwardDash",
 		"Persistent forward dash trail visual effects");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_SuperJump_HeroLanding,
+		"GameplayCue.VFX.Skill.SuperJump.HeroLanding",
+		"Super Jump hero landing impact visual effects");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_VFX_Skill_CombatRoll,
