@@ -19,7 +19,6 @@ public:
 #if WITH_EDITOR
 	virtual void Tick(float DeltaSeconds) override;
 	virtual bool ShouldTickIfViewportsOnly() const override;
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
 protected:
@@ -83,12 +82,23 @@ protected:
 		meta = (EditCondition = "!bUseTeamId", EditConditionHides))
 	uint8 ManualMaterialIndex = 0;
 
-	UPROPERTY(EditAnywhere, Category="Voxel Terrain|Deposit")
-	FDRVoxelDepositInBoxSettings DepositSettings;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="1", ClampMax="1024"))
+	int32 DropsPerInterval = 16;
 
-	/** 관리 영역 안에서 무작위로 고를 XY 검사 창의 월드 크기입니다. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="1.0"))
-	float RandomScanWorldSize = 2000.f;
+	/** 페이즈만 무시합니다. 중도 난입과 진행 중인 눈 편집 대기는 유지합니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit")
+	bool bIgnoreGamePhase = false;
+
+	/** 복셀 단위 상승량. 한 번에 최대 0.25셀입니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="0.0", ClampMax="0.25"))
+	float DepositAmountPerPass = 0.05f;
+
+	/** 월드 단위 반경. 작업량 상한 안에서 실제 분출 수가 제한됩니다. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="0.0"))
+	float DepositSpreadRadius = 20.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit", meta=(ClampMin="0.0", ClampMax="2.0"))
+	float LevelingStrength = 1.f;
 
 	/** StaticMesh 표면 퇴적 사용 여부입니다. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Voxel Terrain|Deposit|Static Mesh")
@@ -107,10 +117,10 @@ protected:
 	bool bTraceComplexStaticMeshSurfaces = false;
 
 private:
+	friend class FDRVoxelDepositScatterTest;
 	FVector GetAreaExtent() const;
 	AVoxelWorld* EnsureVoxelWorld();
 	uint8 GetDepositMaterialIndex() const;
-	void UpdateDepositMaterialIndex();
 
 	FTimerHandle DepositTimerHandle;
 	TWeakObjectPtr<ADRMiningGameStateBase> MiningGameState;
