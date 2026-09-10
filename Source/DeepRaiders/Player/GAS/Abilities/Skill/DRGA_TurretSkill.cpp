@@ -115,23 +115,31 @@ FDRTurretWeaponSettings UDRGA_TurretSkill::ResolveWeaponSettings() const
 	}
 
 	const FGameplayTag SkillId = SkillDefinition->SkillId;
-	if (PerkComponent->HasSkillPerk(
-		SkillId,
-		DRGameplayTags::Perk_Skill_Turret_StatBoost))
+	const FGameplayTag StatBoostPerkTags[] =
 	{
+		DRGameplayTags::Perk_Skill_Turret_StatBoost,
+		DRGameplayTags::Perk_Skill_Turret_CannonProjectile
+	};
+	for (const FGameplayTag PerkTag : StatBoostPerkTags)
+	{
+		if (!PerkComponent->HasSkillPerk(SkillId, PerkTag))
+		{
+			continue;
+		}
+
 		const float DamageScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
 			SkillId,
-			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			PerkTag,
 			EDRSkillEffectTrigger::OnSkillCommitted,
 			DRGameplayTags::Data_Perk_Turret_DamageBonusRatio);
 		const float FireRateScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
 			SkillId,
-			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			PerkTag,
 			EDRSkillEffectTrigger::OnSkillCommitted,
 			DRGameplayTags::Data_Perk_Turret_FireRateBonusRatio);
 		const float RangeScale = 1.f + PerkComponent->GetSkillPerkEffectValue(
 			SkillId,
-			DRGameplayTags::Perk_Skill_Turret_StatBoost,
+			PerkTag,
 			EDRSkillEffectTrigger::OnSkillCommitted,
 			DRGameplayTags::Data_Perk_Turret_RangeBonusRatio);
 
