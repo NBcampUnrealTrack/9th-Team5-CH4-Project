@@ -208,6 +208,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Kill);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Footstep);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Jump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_QuickSlot_Switch);
 
 	// Gameplay Cue - Sound - Item
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Throw);

@@ -834,6 +834,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Player_Jump,
 		"GameplayCue.Sound.Player.Jump",
 		"Player jump takeoff sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_QuickSlot_Switch,
+		"GameplayCue.Sound.Player.QuickSlot.Switch",
+		"Local feedback when the selected quick slot changes.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Item_Throwable_Throw,

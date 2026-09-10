@@ -139,6 +139,7 @@ private:
 	
 	void RefreshQuickSlotCollectionState();
 	void RefreshSelectedItemState();
+	void PlayQuickSlotSwitchSound() const;
 	
 	// 현재 장착 아이템에서 부여된 Ability가 하나라도 활성 상태인지 검사
 	bool HasActiveHeldItemAbility() const;
