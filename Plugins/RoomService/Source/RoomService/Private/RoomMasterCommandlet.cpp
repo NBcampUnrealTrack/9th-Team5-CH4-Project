@@ -28,6 +28,12 @@ namespace
 {
 	using namespace RoomServiceProtocol;
 
+	FString GetServerExecutable(const URoomServiceSettings* Settings)
+	{
+		return Settings->bUseEditorServer
+			? FString(FPlatformProcess::ExecutablePath()) : Settings->ServerExecutable;
+	}
+
 	struct FReply
 	{
 		FHttpResultCallback Callback;
@@ -76,6 +82,7 @@ namespace
 		bool bPublishing = false;
 		bool bRegistered = false;
 		bool bStopping = false;
+		bool bHadPlayers = false;
 		TArray<TSharedPtr<FReply>> Waiting;
 		TMap<FString, FTicket> Tickets;
 
@@ -187,10 +194,12 @@ namespace
 				const bool bHeartbeatExpired = Room.bRegistered
 					&& Now - Room.LastReport > Settings->HeartbeatTimeout;
 				const bool bEmptyExpired = Now - Room.EmptySince > Settings->EmptyRoomTimeout;
+				// 첫 입장 대기는 유지하되, 사용한 방은 마지막 인원과 예약이 사라지면 정리한다.
+				const bool bRoomVacated = Room.bHadPlayers && Room.Occupied() == 0;
 				const bool bEndingExpired = Room.EndingSince > 0
 					&& Now - Room.EndingSince > Settings->EndingTimeout;
 				if (!Room.bStopping && (bStartupExpired || bHeartbeatExpired
-					|| (Room.bRegistered && bEmptyExpired) || bEndingExpired))
+					|| (Room.bRegistered && (bEmptyExpired || bRoomVacated)) || bEndingExpired))
 				{
 					Stop(Room);
 				}
@@ -300,7 +309,9 @@ namespace
 				return;
 			}
 			FRoomServiceInfo Info;
-			if (!ReadRoom(Body, Info) || !Settings->Maps.Contains(Info.MapId))
+			Info.MapId = String(Body, TEXT("mapId"));
+			if (Operation == TEXT("create")
+				&& (!ReadRoom(Body, Info) || !Settings->Maps.Contains(Info.MapId)))
 			{
 				Reply->Fail(TEXT("invalid_room_definition"), 400);
 				return;
@@ -329,18 +340,9 @@ namespace
 						return;
 					}
 				}
-				// 준비 중인 Public 방에도 예약해 동시 퀵매치의 중복 프로세스 생성을 막는다.
-				for (auto& Pair : Rooms)
-				{
-					FRoom& Room = *Pair.Value;
-					if (!Room.bRegistered && !Room.bStopping && !Room.Info.bPrivate
-						&& (bAnyMap || Room.Info.MapId == Info.MapId)
-						&& Room.Occupied() < Room.Info.MaxPlayers)
-					{
-						Room.Waiting.Add(Reply);
-						return;
-					}
-				}
+				// 빈 방이 없으면 클라이언트에서 생성 화면을 연다.
+				Reply->Fail(TEXT("no_joinable_room"));
+				return;
 			}
 			Create(MoveTemp(Info), Reply);
 		}
@@ -393,14 +395,21 @@ namespace
 			Room->Secret = NewSecret();
 			Room->Started = Room->LastReport = Room->EmptySince = FPlatformTime::Seconds();
 			Room->Waiting.Add(Reply);
-			const FString Args = FString::Printf(
+			FString Args = FString::Printf(
 				TEXT("%s -port=%d -RoomId=%s -RoomSecret=%s -RoomMaster=http://127.0.0.1:%d ")
 				TEXT("-RoomMaxPlayers=%d -RoomHeartbeat=%f -RoomLease=%f -unattended -nullrhi"),
 				*Settings->Maps[Room->Info.MapId], Port, *Room->Info.RoomId, *Room->Secret,
 				Settings->MasterPort, Room->Info.MaxPlayers, Settings->HeartbeatInterval,
 				Settings->HeartbeatTimeout);
-			Room->Process = FPlatformProcess::CreateProc(*Settings->ServerExecutable, *Args,
-				false, true, true, nullptr, 0, *FPaths::GetPath(Settings->ServerExecutable), nullptr);
+			if (Settings->bUseEditorServer)
+			{
+				// 프로젝트 경로가 첫 인자이고 그 다음에 맵이 와야 한다.
+				const FString Project = FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
+				Args = FString::Printf(TEXT("\"%s\" %s -server"), *Project, *Args);
+			}
+			const FString Executable = GetServerExecutable(Settings);
+			Room->Process = FPlatformProcess::CreateProc(*Executable, *Args,
+				false, true, true, nullptr, 0, *FPaths::GetPath(Executable), nullptr);
 			if (!Room->Process.IsValid())
 			{
 				Ports.Remove(Port);
@@ -511,6 +520,7 @@ namespace
 			}
 			Room.LastReport = FPlatformTime::Seconds();
 			Room.Info.CurrentPlayers = Count;
+			Room.bHadPlayers |= Count > 0;
 			// Ending은 종단 상태다. 늦게 도착한 Waiting 보고가 방을 다시 열지 않는다.
 			if (Room.Info.State != TEXT("Ending"))
 			{
@@ -703,7 +713,7 @@ namespace
 		Room->Tickets.Empty();
 		Quick->SetStringField(TEXT("matchMode"), TEXT("map"));
 		Master->HandleClient(Quick, MakeReply(Status), TEXT("quick"));
-		TestEqual(TEXT("SelectedMap skips other maps and reaches creation limit"), Status, 409);
+		TestEqual(TEXT("SelectedMap reports no joinable room on other maps"), Status, 409);
 		Room->Info.bPrivate = true;
 		Quick->SetStringField(TEXT("matchMode"), TEXT("any"));
 		Master->HandleClient(Quick, MakeReply(Status), TEXT("quick"));
@@ -728,6 +738,17 @@ URoomMasterCommandlet::URoomMasterCommandlet()
 int32 URoomMasterCommandlet::Main(const FString& Params)
 {
 	const auto* Settings = GetDefault<URoomServiceSettings>();
+	const FString Executable = GetServerExecutable(Settings);
+	if (Settings->bUseEditorServer)
+	{
+		const FString Project = FPaths::GetProjectFilePath();
+		if (!WITH_EDITOR || Project.IsEmpty() || !FPaths::FileExists(Project)
+			|| Project.Contains(TEXT("\"")))
+		{
+			UE_LOG(LogRoomMaster, Error, TEXT("Editor server requires a valid .uproject."));
+			return 1;
+		}
+	}
 	if (Settings->MasterPort < 1 || Settings->MasterPort > 65535
 		|| Settings->FirstGamePort < 1 || Settings->LastGamePort > 65535
 		|| Settings->FirstGamePort > Settings->LastGamePort || Settings->MaxRooms < 1
@@ -739,9 +760,9 @@ int32 URoomMasterCommandlet::Main(const FString& Params)
 		|| Settings->RequestTimeout <= Settings->StartupTimeout + 5.f
 		|| Settings->ReservationTimeout <= Settings->HeartbeatTimeout
 		|| Settings->EmptyRoomTimeout <= Settings->ReservationTimeout || Settings->EndingTimeout < 1.f
-		|| !FPaths::FileExists(Settings->ServerExecutable)
-		|| FPaths::IsRelative(Settings->ServerExecutable)
-		|| Settings->ServerExecutable.Contains(TEXT("\"")))
+		|| !FPaths::FileExists(Executable)
+		|| FPaths::IsRelative(Executable)
+		|| Executable.Contains(TEXT("\"")))
 	{
 		UE_LOG(LogRoomMaster, Error, TEXT("Invalid RoomService settings; see README configuration."));
 		return 1;

@@ -137,7 +137,8 @@ void UDRRoomServiceWidget::RefreshRooms()
 
 void UDRRoomServiceWidget::HandleQuickMatchClicked()
 {
-	if (!GetDefault<URoomServiceSettings>()->Maps.Contains(QuickMatchMapId))
+	if (QuickMatchMode == ERoomQuickMatchMode::SelectedMap
+		&& !GetDefault<URoomServiceSettings>()->Maps.Contains(QuickMatchMapId))
 	{
 		SetStatus(NSLOCTEXT("Rooms", "QuickMapMissing", "퀵매치 맵 설정을 확인해 주세요."));
 		return;
@@ -213,6 +214,7 @@ void UDRRoomServiceWidget::HandlePrivateJoinClicked()
 	}
 	// Master 응답 대기와 무관하게 기존 IP 직접 접속 창을 사용한다.
 	CancelOwnedRequest();
+	RefreshEnabledState();
 	ListenJoinPanel->Show(this);
 }
 
@@ -326,6 +328,11 @@ void UDRRoomServiceWidget::HandleRequestFailed(const FString& Error)
 	bOwnsRequest = false;
 	bConnecting = false;
 	bBusy = false;
+	if (Error == TEXT("no_joinable_room"))
+	{
+		HandleCreateRoomClicked();
+		return;
+	}
 	FText Message = NSLOCTEXT("Rooms", "Failed", "서버 요청에 실패했습니다. 다시 시도해 주세요.");
 	if (Error == TEXT("room_not_joinable"))
 	{

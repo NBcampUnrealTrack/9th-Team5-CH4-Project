@@ -93,6 +93,13 @@ Editor 모듈과 Server 타깃을 **사용자가 빌드한 뒤** 다음을 실�
   'C:/Projects/MyGame/MyGame.uproject' -run=RoomMaster -unattended -nullrhi
 ```
 
+개발용으로 프로젝트 Config/DefaultRoomService.ini에 `bUseEditorServer=True`를 설정하면
+Master 자신과 동일한 실행 파일에 프로젝트 경로, 맵, `-server`를 전달해 방을 실행한다.
+이 모드에서는 ServerExecutable 설정과 서버 패키징이 필요 없다. 클라이언트 에디터도
+Master와 동일한 엔진을 사용해야 한다. 에디터의 Launch Separate Server는 꺼둔다.
+`bUseEditorServer=False`로 바꾸면 기존 패키징 서버 실행 모드를 사용한다.
+코드 빌드 전에는 Master와 자식 서버, 에디터를 종료해 DLL 잠금을 해제한다.
+
 현재 Master 실행 형태는 UnrealEditor-Cmd에 로드되는 Commandlet이다. 별도 독립 Master.exe
 타깃은 만들지 않았다. Master PC에도 해당 프로젝트의 빌드된 Editor 모듈과 엔진이 필요하다.
 자식 방 프로세스는 설정의 패키징된 GameServer.exe다. ServerExecutable이 비어 있거나

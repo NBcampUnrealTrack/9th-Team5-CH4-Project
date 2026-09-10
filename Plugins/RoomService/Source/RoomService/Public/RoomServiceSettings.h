@@ -22,6 +22,9 @@ public:
 	FString AdvertisedHost = TEXT("127.0.0.1");
 	UPROPERTY(Config, EditAnywhere, Category = "Master")
 	FString ServerExecutable;
+	// 개발 시 Master와 같은 엔진으로 uncooked Dedicated 서버를 실행한다.
+	UPROPERTY(Config, EditAnywhere, Category = "Master")
+	bool bUseEditorServer = false;
 	UPROPERTY(Config, EditAnywhere, Category = "Master")
 	int32 FirstGamePort = 7100;
 	UPROPERTY(Config, EditAnywhere, Category = "Master")

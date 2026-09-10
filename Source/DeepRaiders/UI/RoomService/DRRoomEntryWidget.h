@@ -38,17 +38,17 @@ protected:
 	virtual void NativeOnListItemObjectSet(UObject* ListItemObject) override;
 	virtual void NativeOnEntryReleased() override;
 
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UTextBlock> RoomId;
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UImage> RoomImage;
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UTextBlock> RoomName;
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UTextBlock> RoomJoinCount;
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UTextBlock> RoomState;
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, Category = "Rooms", meta = (BindWidget))
 	TObjectPtr<UWidget> Join;
 
 private:
