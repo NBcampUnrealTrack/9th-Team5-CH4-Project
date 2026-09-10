@@ -13,6 +13,7 @@
 #include "DeepRaiders/Gameplay/Voxel/DRMeshVoxelCarver.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
+#include "DeepRaiders/Skill/Turret/DRTurret.h"
 #include "DeepRaiders/Snow/DRSnowControlZone.h"
 #include "GameFramework/PawnMovementComponent.h"
 #include "EngineUtils.h"
@@ -414,6 +415,10 @@ void ADRMiningGameModeBase::EndGame()
 		MiningGameState->SetGameTimerState(0);
 	}
 	UpdateReplicatedGamePhase();
+	for (TActorIterator<ADRTurret> Iterator(GetWorld()); Iterator; ++Iterator)
+	{
+		Iterator->Destroy();
+	}
 
 	double WeightedTeamScores[2] = {0.0, 0.0};
 	TArray<FString> ZoneDebugTexts;
