@@ -728,10 +728,8 @@ void ADRProjectile::ExecutePlayerHitGameplayCue(UAbilitySystemComponent* TargetA
 	Parameters.EffectCauser = this;
 	Parameters.SourceObject = PresentationSourceObject.Get();
 
-    // 모든 Player 피격 공통 Presentation.
+	// 모든 Player 피격 공통 Presentation.
 	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Player_Hit, Parameters);
-    // Snowball Projectile에 맞았을 때만 재생하는 피격음.
-	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Snowball_Impact, Parameters);
 }
 
 bool ADRProjectile::ApplyBreakableDamage(const FHitResult& ImpactResult)

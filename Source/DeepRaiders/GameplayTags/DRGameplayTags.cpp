@@ -776,9 +776,19 @@ namespace DRGameplayTags
 		"Melee weapon swing.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Projectile_Snow_Impact,
+		"GameplayCue.Sound.Projectile.Snow.Impact",
+		"Snow projectile impact at the collision location.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Hit,
+		"GameplayCue.Sound.Player.Hit",
+		"Player received a resolved hostile hit.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Dig,

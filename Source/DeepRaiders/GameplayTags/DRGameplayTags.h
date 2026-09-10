@@ -199,8 +199,12 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Kill);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Swing);
 
+	// Gameplay Cue - Sound - Projectile
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Projectile_Snow_Impact);
+
 	// Gameplay Cue - Sound - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Snowball_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Hit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Land);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);

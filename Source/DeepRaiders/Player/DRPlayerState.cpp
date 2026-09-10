@@ -137,6 +137,20 @@ void ADRPlayerState::HandleHostileHitResolved(
 		return;
 	}
 
+	if (IsValid(AbilitySystemComponent))
+	{
+		AActor* TargetActor = IsValid(GetPawn()) ? static_cast<AActor*>(GetPawn()) : this;
+		AActor* SourceActor = IsValid(SourcePlayerState->GetPawn())
+			? static_cast<AActor*>(SourcePlayerState->GetPawn())
+			: SourcePlayerState;
+
+		FGameplayCueParameters Parameters;
+		Parameters.Location = TargetActor->GetActorLocation();
+		Parameters.Instigator = SourceActor;
+		Parameters.EffectCauser = SourceActor;
+		AbilitySystemComponent->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Hit, Parameters);
+	}
+
 	ADRPlayerController* SourceController =
 		Cast<ADRPlayerController>(
 			SourcePlayerState->GetOwner());

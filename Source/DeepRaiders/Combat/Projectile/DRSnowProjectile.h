@@ -19,6 +19,7 @@ public:
 	virtual float GetConfiguredInitialSpeed() const override;
 
 protected:
+	virtual void ExecuteImpactGameplayCue(const FHitResult& ImpactResult) override;
 	virtual void HandleWorldImpact(const FHitResult& ImpactResult) override;
 
 private:
