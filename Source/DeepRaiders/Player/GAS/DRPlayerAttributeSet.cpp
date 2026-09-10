@@ -264,6 +264,19 @@ bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackD
 		return false;
 	}
 
+	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+	if (IsValid(TargetASC)
+		&& TargetASC->HasMatchingGameplayTag(DRGameplayTags::State_RespawnInvincible)
+		&& ((Data.EvaluatedData.Attribute == GetIncomingDamageAttribute()
+				&& Data.EvaluatedData.Magnitude > KINDA_SMALL_NUMBER)
+			|| (Data.EvaluatedData.Attribute == GetFreezeGaugeAttribute()
+				&& Data.EvaluatedData.Magnitude > KINDA_SMALL_NUMBER)
+			|| (Data.EvaluatedData.Attribute == GetIncomingKnockbackDistanceAttribute()
+				&& Data.EvaluatedData.Magnitude > KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
 	/*
 	 * 일반 분사 공격은 Health Damage 대신 FreezeGauge를 직접 증가시킨다.
 	 * 양수 빙결 누적도 공격으로 간주하여 개인 쉴드가 먼저 흡수하고,
@@ -281,7 +294,6 @@ bool UDRPlayerAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackD
 		return true;
 	}
 
-	UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
 	ADRPlayerState* TargetPlayerState = IsValid(TargetASC)
 		? Cast<ADRPlayerState>(TargetASC->GetOwnerActor())
 		: nullptr;

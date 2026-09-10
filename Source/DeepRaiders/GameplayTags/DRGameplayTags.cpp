@@ -71,6 +71,11 @@ namespace DRGameplayTags
 		"Player currently has a consumable personal shield.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_RespawnInvincible,
+		"State.RespawnInvincible",
+		"Player is temporarily invincible after a death respawn.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_UI_InventoryOpen,
 		"State.UI.InventoryOpen",
 		"Local player's inventory UI is open.");
