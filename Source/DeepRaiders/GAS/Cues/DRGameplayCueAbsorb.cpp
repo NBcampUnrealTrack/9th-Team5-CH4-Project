@@ -28,7 +28,6 @@ ADRGameplayCueAbsorb::ADRGameplayCueAbsorb(const FObjectInitializer& ObjectIniti
 	bUniqueInstancePerSourceObject = true;
 	bAllowMultipleOnActiveEvents = false;
 	bAllowMultipleWhileActiveEvents = false;
-	GameplayCueTag = DRGameplayTags::GameplayCue_Weapon_Absorb_Active;
 	GameplayCueName = GameplayCueTag.GetTagName();
 
 	PresentationRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
