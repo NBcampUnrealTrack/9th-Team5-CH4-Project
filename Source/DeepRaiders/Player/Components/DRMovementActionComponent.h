@@ -357,6 +357,16 @@ public:
 	// 성공적인 Zipline 진입/이탈 시 쿨타임을 시작한다.
 	void CommitZiplineInteractionCooldown();
 	
+	// 실제 그래플 당기기 이동이 활성화되어 있는지 확인한다.
+	// HookFlying / 줄 회수 연출 / Grab 액션은 포함하지 않는다.
+	UFUNCTION(BlueprintPure, Category = "Player|Animation|Grapple")
+	bool IsGrappleActive() const;
+
+	// 현재 그래플 훅의 World Space 위치.
+	// 비활성 상태에서는 ZeroVector를 반환한다.
+	UFUNCTION(BlueprintPure, Category = "Player|Animation|Grapple")
+	FVector GetGrappleHookLocation() const;
+
 protected:
 	UFUNCTION()
 	void OnRep_AuthoritativeActionState(const FDRMovementActionState& PreviousState);
