@@ -136,8 +136,7 @@ void ADRCannonProjectile::HandleImpact(
 		{
 			ExecuteImpactGameplayCue(ImpactResult);
 
-			Destroy();
-			return;
+			continue;
 		}
 		
 		if (!IsValid(TargetActor)

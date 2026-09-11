@@ -175,11 +175,13 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_SuperJump_HeroLanding);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Blink_End);
 	
 	// Weapon Effect
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Absorb_Active);
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
@@ -199,8 +201,19 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Kill);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Swing);
 
+	// Gameplay Cue - Sound - Projectile
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Projectile_Snow_Impact);
+
+	// Gameplay Cue - Sound - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Turret_Install);
+
 	// Gameplay Cue - Sound - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Snowball_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Hit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Land);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
@@ -210,6 +223,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Kill);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Footstep);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Jump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_QuickSlot_Switch);
 
 	// Gameplay Cue - Sound - Item
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Throw);
@@ -229,6 +243,7 @@ namespace DRGameplayTags
 	// Gameplay Cue - Sound - World / Etc
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_PickedUp);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_EffectPickedUp);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Dropped);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Discovered);
 
@@ -240,6 +255,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Fire);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Start);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Loop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_End);
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);
@@ -250,4 +268,7 @@ namespace DRGameplayTags
 
 	// Gameplay Cue - Skill
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Skill_Grab_Active);
+	
+	//Gameplaye Cue - Sound - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Blink);
 }

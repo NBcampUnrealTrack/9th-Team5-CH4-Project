@@ -154,6 +154,11 @@ namespace DRGameplayTags
 		GameplayCue_Weapon_Sprayer_Active,
 		"GameplayCue.Weapon.Sprayer.Active",
 		"Data-driven active sprayer presentation.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Absorb_Active,
+		"GameplayCue.Weapon.Absorb.Active",
+		"Persistent snow absorb beam and sound presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Item_Throwable_Throw,
@@ -571,6 +576,11 @@ namespace DRGameplayTags
 		"Search skill visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_Blink_End,
+		"GameplayCue.VFX.Skill.BlinkEnd",
+		"Blink End effect visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
 		"Snow amount passed through GAS.");
@@ -776,9 +786,44 @@ namespace DRGameplayTags
 		"Melee weapon swing.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Projectile_Snow_Impact,
+		"GameplayCue.Sound.Projectile.Snow.Impact",
+		"Snow projectile impact at the collision location.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_ForwardDash,
+		"GameplayCue.Sound.Skill.ForwardDash",
+		"Forward dash skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_CombatRoll,
+		"GameplayCue.Sound.Skill.CombatRoll",
+		"Combat roll skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump,
+		"GameplayCue.Sound.Skill.SuperJump",
+		"Super jump skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump_HeroLanding,
+		"GameplayCue.Sound.Skill.SuperJump.HeroLanding",
+		"Super jump hero landing sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_Turret_Install,
+		"GameplayCue.Sound.Skill.Turret.Install",
+		"Turret installation sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Hit,
+		"GameplayCue.Sound.Player.Hit",
+		"Player received a resolved hostile hit.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Dig,
@@ -789,6 +834,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Item_PickedUp,
 		"GameplayCue.Sound.Item.PickedUp",
 		"Item picked up.");
+		
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+    	GameplayCue_Sound_Item_EffectPickedUp,
+    	"GameplayCue.Sound.Item.EffectPickedUp",
+    	"Effect Item picked up.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Ore_Dropped,
@@ -844,6 +894,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Player_Jump,
 		"GameplayCue.Sound.Player.Jump",
 		"Player jump takeoff sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_QuickSlot_Switch,
+		"GameplayCue.Sound.Player.QuickSlot.Switch",
+		"Local feedback when the selected quick slot changes.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Item_Throwable_Throw,
@@ -927,6 +982,21 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Sprayer_Active,
 		"GameplayCue.Sound.Weapon.Sprayer.Active",
 		"Active sprayer loop sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_Start,
+		"GameplayCue.Sound.Weapon.Absorb.Start",
+		"Snow absorb start sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_Loop,
+		"GameplayCue.Sound.Weapon.Absorb.Loop",
+		"Snow absorb loop sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_End,
+		"GameplayCue.Sound.Weapon.Absorb.End",
+		"Snow absorb end sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Player_Hit,
@@ -949,4 +1019,10 @@ namespace DRGameplayTags
 		GameplayCue_Skill_Grab_Active,
 		"GameplayCue.Skill.Grab.Active",
 		"Persistent hook and cable presentation for an active grab projectile.");
+	
+	// Gameplay Cue - Sound - Skill
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+	GameplayCue_Sound_Skill_Blink,
+	"GameplayCue.Sound.Skill.Blink",
+	"Blink skill sound.");
 }

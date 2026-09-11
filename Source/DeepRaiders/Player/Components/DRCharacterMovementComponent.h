@@ -105,8 +105,13 @@ public:
 		return bAirborneMomentumPreservationActive;
 	}
 
-	/** 현재 속도를 대체하고 Origin 반대 방향으로 지정된 거리만큼 이동한다. */
-	bool ApplyKnockback(const FVector& Origin, float Distance);
+	/** 서버 또는 피격 소유 클라이언트에서 동일한 넉백 Root Motion Source를 시작한다. */
+	bool ApplyKnockback(const FVector& Direction, float Distance, float Duration, float ElapsedTime);
+
+	float GetKnockbackDuration() const
+	{
+		return FMath::Max(KnockbackDuration, 0.01f);
+	}
 	
 	// 외부 이동 액션이 사용할 공통 커스텀 이동 모드 설정 함수
 	void SetCustomMovementMode(EDRCustomMovementMode NewMode);

@@ -295,6 +295,10 @@ private:
 	UFUNCTION(Server, Unreliable)
 	void ServerSetLatestMovementInput(FVector2D InMovementInput);
 
+	/** 서버에서 확정된 넉백을 소유 클라이언트의 CharacterMovement에도 같은 Root Motion으로 적용한다. */
+	UFUNCTION(Client, Reliable)
+	void ClientApplyKnockback(FVector_NetQuantizeNormal Direction, float Distance, float Duration, float ServerStartTime);
+
 	/**
 	 * GetLastMovementInputVector는 CharacterMovement tick 뒤에 비워질 수 있다.
 	 * 이동 스킬은 이 값을 사용해, 입력 시점의 8방향을 보존한다.

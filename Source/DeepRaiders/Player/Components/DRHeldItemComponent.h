@@ -40,8 +40,6 @@ private:
 	void RefreshVisual();
 	void RefreshSnowComponents();
 
-	void PlayEquipSound();
-
 	UFUNCTION()
 	void OnRep_HeldItemDefinition();
 
@@ -65,6 +63,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Held Item|Action", meta = (ClampMin = "0.01"))
 	float DigActionCooldown = 0.6f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Held Item|Sound")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Held Item|Sound",
+		meta = (DeprecatedProperty,
+			DeprecationMessage = "Use GameplayCue.Sound.Player.QuickSlot.Switch in DA_SoundLibrary."))
 	TObjectPtr<USoundBase> EquipSound;
 };

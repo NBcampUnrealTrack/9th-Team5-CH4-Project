@@ -2,6 +2,7 @@
 
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "AbilitySystemComponent.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
@@ -142,6 +143,10 @@ void UDRGA_RocketBoots::StartDashGameplayCue(
 	Parameters.EffectCauser = Character;
 	AbilitySystem->AddGameplayCue(
 		DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash,
+		Parameters);
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
+		DRGameplayTags::GameplayCue_Sound_Skill_ForwardDash,
 		Parameters);
 	IsDashGameplayCueActive = true;
 }

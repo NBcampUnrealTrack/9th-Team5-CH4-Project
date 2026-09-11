@@ -6,7 +6,6 @@
 
 #include "DeepRaiders/Snow/Components/DRSnowRemoveComponent.h"
 
-#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -103,7 +102,6 @@ void UDRHeldItemComponent::RefreshAnimationLayer()
 		Mesh->LinkAnimClassLayers(LinkedAnimLayerClass);
 	}
 }
-
 void UDRHeldItemComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -121,7 +119,6 @@ void UDRHeldItemComponent::RefreshHeldItemState()
 	RefreshVisual();
 	RefreshSnowComponents();
 	RefreshAnimationLayer();
-	PlayEquipSound();
 }
 
 void UDRHeldItemComponent::RefreshVisual()
@@ -174,16 +171,4 @@ void UDRHeldItemComponent::RefreshSnowComponents()
 		SnowRemoveComponent->DestroyComponent();
 		SnowRemoveComponent = nullptr;
 	}
-}
-
-void UDRHeldItemComponent::PlayEquipSound()
-{
-	ADRPlayerCharacter* Character = GetOwnerCharacter();
-
-	if (!IsValid(Character) || !Character->IsLocallyControlled() || !IsValid(HeldItemDefinition) || !IsValid(EquipSound))
-	{
-		return;
-	}
-
-	UGameplayStatics::PlaySound2D(Character, EquipSound);
 }

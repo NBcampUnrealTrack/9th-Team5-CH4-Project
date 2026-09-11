@@ -13,6 +13,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Animation/AnimMontage.h"
 #include "HAL/IConsoleManager.h"
 
 namespace
@@ -72,6 +74,27 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		return;
 	}
 
+	// Presentation
+	// LocalPredicted Ability이므로 owning client에서는 즉시 재생되고,
+	// server montage state를 통해 simulated proxy에도 전달된다.
+	if (IsValid(AbsorbMontage))
+	{
+		UAbilityTask_PlayMontageAndWait* MontageTask =
+			UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+				this,
+				NAME_None,
+				AbsorbMontage,
+				1.f,
+				NAME_None,
+				true); // Ability 종료 시 Montage 자동 정지
+
+		if (IsValid(MontageTask))
+		{
+			MontageTask->ReadyForActivation();
+		}
+	}
+
+	// 실제 Snow Absorb는 기존처럼 서버 전용
 	if (!ActorInfo->IsNetAuthority())
 	{
 		return;
@@ -79,10 +102,21 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 
 	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
-	UDRSnowRemoveComponent* SnowRemoveComponent =
-		IsValid(AvatarActor) ? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>() : nullptr;
 
-	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(SnowRemoveComponent))
+	if (!IsValid(ASC) || !IsValid(AvatarActor))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	StartAbsorbGameplayCue();
+	
+	UDRSnowRemoveComponent* SnowRemoveComponent =
+		IsValid(AvatarActor)
+			? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>()
+			: nullptr;
+
+	if (!IsValid(SnowRemoveComponent))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -111,12 +145,13 @@ void UDRGA_AbsorbSnow::EndAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo,
-	const bool bReplicateEndAbility,
-	const bool bWasCancelled)
+	bool bReplicateEndAbility,
+	bool bWasCancelled)
 {
+	StopAbsorbGameplayCue();
 	LogAbsorbSummary();
 	ResetAbsorbSummary();
-
+	
 	Super::EndAbility(
 		Handle,
 		ActorInfo,
@@ -307,6 +342,52 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 
 	AbsorbDelayTask->OnFinish.AddDynamic(this, &ThisClass::HandleAbsorbDelayFinished);
 	AbsorbDelayTask->ReadyForActivation();
+}
+
+void UDRGA_AbsorbSnow::StartAbsorbGameplayCue()
+{
+	if (bAbsorbGameplayCueActive)
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	if (ActorInfo == nullptr || !IsValid(ASC) || !IsValid(AvatarActor))
+	{
+		return;
+	}
+
+	UObject* SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
+	if (!IsValid(Cast<UDRRangedWeaponDefinition>(SourceObject)))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = AvatarActor->GetActorLocation();
+	Parameters.Normal = AvatarActor->GetActorForwardVector();
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = SourceObject;
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Absorb_Active, Parameters);
+	bAbsorbGameplayCueActive = true;
+}
+
+void UDRGA_AbsorbSnow::StopAbsorbGameplayCue()
+{
+	if (!bAbsorbGameplayCueActive)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Weapon_Absorb_Active);
+	}
+
+	bAbsorbGameplayCueActive = false;
 }
 
 bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const

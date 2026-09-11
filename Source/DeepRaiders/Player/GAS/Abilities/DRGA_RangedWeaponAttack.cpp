@@ -401,12 +401,6 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
-	if (ActorInfo->IsNetAuthority())
-	{
-		SendLocalShotRequest();
-		return;
-	}
-	
 	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
 	UDRQuickSlotComponent* QuickSlot = IsValid(PlayerController) ?
 		PlayerController->GetQuickSlotComponent() : nullptr;
@@ -420,6 +414,16 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 
 	if (!QuickSlot->CanRequestLocalWeaponShot(WeaponInstanceId))
 	{
+		return;
+	}
+
+	if (ActorInfo->IsNetAuthority())
+	{
+		if (SendLocalShotRequest())
+		{
+			QuickSlot->RecordLocalWeaponShot(WeaponInstanceId, GetWeaponFireInterval());
+		}
+
 		return;
 	}
 	
@@ -1104,13 +1108,15 @@ bool UDRGA_RangedWeaponAttack::TryConsumeServerFireInterval()
 	}
 
 	/*
-	 * 핵심:
-	 * Now + Interval이 아니라 기존 cadence에서 전진한다.
+	 * 한 frame 일찍 도착한 요청은 기존 cadence를 유지하고,
+	 * 늦게 도착한 요청은 현재 시각부터 새 cadence를 시작한다.
 	 *
-	 * 그래야 packet arrival jitter가 실제 weapon cadence를
-	 * 계속 흔들지 않는다.
+	 * 늦어진 cadence backlog를 따라잡기 위해 같은 frame의
+	 * 후속 요청을 연속 승인하지 않는다.
 	 */
-	ServerNextAllowedShotTime += FireInterval;
+	ServerNextAllowedShotTime = FMath::Max(
+		ServerNextAllowedShotTime + FireInterval,
+		Now + FireInterval);
 
 	return true;
 }

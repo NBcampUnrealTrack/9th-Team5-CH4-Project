@@ -5,6 +5,7 @@
 #include "DeepRaiders/Combat/Team/DRCombatTeamLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
@@ -98,6 +99,15 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 	const float JumpVelocity = GravityMagnitude > KINDA_SMALL_NUMBER
 		? FMath::Sqrt(2.0f * GravityMagnitude * FMath::Max(JumpHeight, 0.0f))
 		: 0.0f;
+	FGameplayCueParameters SoundParameters;
+	SoundParameters.Location = Character->GetActorLocation();
+	SoundParameters.Instigator = Character;
+	SoundParameters.EffectCauser = Character;
+	SoundParameters.SourceObject = GetCurrentSkillDefinition();
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
+		DRGameplayTags::GameplayCue_Sound_Skill_SuperJump,
+		SoundParameters);
 	Character->LaunchCharacter(FVector::UpVector * JumpVelocity, false, true);
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
@@ -149,6 +159,12 @@ void UDRGA_SuperJumpSkill::ApplyLandingEffects()
 	SourceAbilitySystem->ExecuteGameplayCue(
 		DRGameplayTags::GameplayCue_VFX_Skill_SuperJump_HeroLanding,
 		CueParameters);
+	FGameplayCueParameters SoundParameters = CueParameters;
+	SoundParameters.OriginalTag =
+		DRGameplayTags::GameplayCue_Sound_Skill_SuperJump_HeroLanding;
+	SourceAbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_Sound_Skill_SuperJump_HeroLanding,
+		SoundParameters);
 	for (const FGameplayEffectSpecHandle& EffectSpec : PendingLandingEffectSpecs)
 	{
 		if (EffectSpec.IsValid())

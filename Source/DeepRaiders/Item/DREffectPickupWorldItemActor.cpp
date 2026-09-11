@@ -8,6 +8,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/Data/DRWorldItemPresentationProfile.h"
 #include "DREffectPickupItemDefinition.h"
+#include "GameplayCueManager.h"
 #include "GameplayEffect.h"
 #include "GameFramework/Pawn.h"
 #include "NiagaraComponent.h"
@@ -45,6 +46,28 @@ void ADREffectPickupWorldItemActor::HandleWorldItemStateChanged()
 {
 	Super::HandleWorldItemStateChanged();
 	RefreshPickupCollision();
+}
+
+void ADREffectPickupWorldItemActor::MulticastPlayPickupSound_Implementation(APawn* Interactor)
+{
+	if (!IsValid(Interactor))
+	{
+		return;
+	}
+
+	const UDRItemDefinition* Definition = ItemInstance.GetDefinition();
+	FGameplayCueParameters CueParameters;
+	CueParameters.Location = GetActorLocation();
+	CueParameters.Instigator = Interactor;
+	CueParameters.EffectCauser = this;
+	CueParameters.SourceObject = Definition;
+
+	if (UGameplayCueManager* CueManager = UAbilitySystemGlobals::Get().GetGameplayCueManager())
+	{
+		CueManager->HandleGameplayCue(Interactor,
+			DRGameplayTags::GameplayCue_Sound_Item_EffectPickedUp,
+			EGameplayCueEvent::Executed, CueParameters);
+	}
 }
 
 

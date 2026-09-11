@@ -69,6 +69,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void PostNetReceiveLocationAndRotation() override;
+	virtual void PostNetReceiveVelocity(const FVector& NewVelocity) override;
 	
 	// ProjectileMovement가 Blocking Hit로 정지했을 때
 	UFUNCTION()
@@ -123,6 +125,12 @@ protected:
 	virtual bool ShouldIgnoreFriendlyBlockingHit() const
 	{
 		return true;
+	}
+
+	/** true면 Simulated Proxy는 자체 궤적을 계산하지 않고 서버 위치 사이에서 Mesh만 보간한다. */
+	virtual bool ShouldInterpolateReplicatedMovement() const
+	{
+		return false;
 	}
 
 	float EvaluateFalloffStrengthAtLocation(const FVector& Location) const;

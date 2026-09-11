@@ -5,6 +5,7 @@
 
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Inventory/DRInventoryTypes.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
@@ -845,9 +846,36 @@ void UDRQuickSlotComponent::RefreshSelectedItemState()
 		CachedSelectedSlotIndex = NewSelectedSlotIndex;
 		
 		OnSelectedQuickSlotIndexChangedDelegate.Broadcast(PreviousSlotIndex, NewSelectedSlotIndex);
+
+		if (PreviousSlotIndex != INDEX_NONE && NewSelectedSlotIndex != INDEX_NONE)
+		{
+			PlayQuickSlotSwitchSound();
+		}
 	}
 	
 	RefreshHeldItem();
+}
+
+void UDRQuickSlotComponent::PlayQuickSlotSwitchSound() const
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	AActor* SoundTarget = IsValid(PlayerController->GetPawn())
+		? static_cast<AActor*>(PlayerController->GetPawn())
+		: PlayerController;
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = SoundTarget->GetActorLocation();
+	Parameters.Instigator = PlayerController;
+	Parameters.EffectCauser = SoundTarget;
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		SoundTarget,
+		DRGameplayTags::GameplayCue_Sound_Player_QuickSlot_Switch,
+		Parameters);
 }
 
 void UDRQuickSlotComponent::HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData)

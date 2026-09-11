@@ -15,7 +15,7 @@ class DEEPRAIDERS_API UDRTitleJoinWidget : public UUserWidget
 public:
 	virtual bool Initialize() override;
 
-	void Show();
+	void Show(UUserWidget* InReturnWidget = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = "Title|Join")
 	void HandleJoinClicked();
@@ -24,6 +24,7 @@ public:
 	void HandleCloseJoinClicked();
 
 protected:
+	TWeakObjectPtr<UUserWidget> ReturnWidget;
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_Join;
 
