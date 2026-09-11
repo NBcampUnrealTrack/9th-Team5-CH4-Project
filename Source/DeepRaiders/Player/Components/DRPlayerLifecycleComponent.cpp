@@ -5,6 +5,7 @@
 #include "DeepRaiders/Player/Components/DRPlayerCameraComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
+#include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
 #include "DeepRaiders/Player/DRPlayerController.h"
 #include "Camera/CameraShakeBase.h"
@@ -172,7 +173,7 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 	}
 
 	ApplyDeathRagdoll();
-	DropInventoryItemsFromServer();
+	DropDeathItemsFromServer();
 
 	Character->GetWorldTimerManager().SetTimer(
 		RespawnTimerHandle, this, &ThisClass::RespawnAtPlayerStart, RespawnDelay, false);
@@ -188,43 +189,56 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 	UE_LOG(LogTemp, Warning, TEXT( "[Death] " "Character=%s " "RespawnDelay=%.1f"), *GetNameSafe(Character), RespawnDelay);
 }
 
-void UDRPlayerLifecycleComponent::DropInventoryItemsFromServer()
+void UDRPlayerLifecycleComponent::DropDeathItemsFromServer()
 {
 	ADRPlayerCharacter* Character = GetOwnerCharacter();
-	ADRPlayerController* Controller = IsValid(Character) ? Cast<ADRPlayerController>(Character->GetController()) : nullptr;
-	UDRInventoryComponent* Inventory = IsValid(Controller) ? Controller->GetInventoryComponent() : nullptr;
 	UDRLootDropComponent* LootDrop = IsValid(Character) ? Character->GetDeathLootDropComponent() : nullptr;
 
-	if (!IsValid(Character) || !Character->HasAuthority() || !IsValid(Inventory) || !IsValid(LootDrop))
+	if (!IsValid(Character) || !Character->HasAuthority() || !IsValid(LootDrop))
 	{
 		return;
 	}
 
 	TArray<FDRItemInstance> DroppedItems;
-	TArray<FGuid> DroppedInstanceIds;
+	ADRPlayerController* Controller = Cast<ADRPlayerController>(Character->GetController());
+	UDRInventoryComponent* Inventory = IsValid(Controller) ? Controller->GetInventoryComponent() : nullptr;
 
-	for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
+	if (IsValid(Inventory))
 	{
-		if (!ItemInstance.IsValid()
-			|| !IsValid(ItemInstance.Definition)
-			|| !ItemInstance.Definition->bDropOnDeath)
+		TArray<FDRItemInstance> InventoryDroppedItems;
+		TArray<FGuid> DroppedInstanceIds;
+
+		for (const FDRItemInstance& ItemInstance : Inventory->GetItemInstances())
 		{
-			continue;
+			if (!ItemInstance.IsValid()
+				|| !IsValid(ItemInstance.Definition)
+				|| !ItemInstance.Definition->bDropOnDeath)
+			{
+				continue;
+			}
+
+			InventoryDroppedItems.Add(ItemInstance);
+			DroppedInstanceIds.Add(ItemInstance.InstanceId);
 		}
 
-		DroppedItems.Add(ItemInstance);
-		DroppedInstanceIds.Add(ItemInstance.InstanceId);
+		if (!DroppedInstanceIds.IsEmpty())
+		{
+			if (Inventory->TryRemoveItemInstanceArray(DroppedInstanceIds))
+			{
+				DroppedItems.Append(MoveTemp(InventoryDroppedItems));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("[DeathDrop] Failed to remove inventory items. Character=%s Count=%d"),
+					*GetNameSafe(Character), DroppedInstanceIds.Num());
+			}
+		}
 	}
+
+	AppendCurrencyDeathDropsFromServer(Character->GetPlayerState<ADRPlayerState>(), DroppedItems);
 
 	if (DroppedItems.IsEmpty())
 	{
-		return;
-	}
-
-	if (!Inventory->TryRemoveItemInstanceArray(DroppedInstanceIds))
-	{
-		UE_LOG(LogTemp, Error, TEXT("[DeathDrop] Failed to remove inventory items. Character=%s Count=%d"),
-			*GetNameSafe(Character), DroppedInstanceIds.Num());
 		return;
 	}
 
@@ -235,6 +249,140 @@ void UDRPlayerLifecycleComponent::DropInventoryItemsFromServer()
 		UE_LOG(LogTemp, Warning, TEXT("[DeathDrop] Some items failed to spawn. Character=%s Requested=%d Spawned=%d"),
 			*GetNameSafe(Character), DroppedItems.Num(), SpawnedItemCount);
 	}
+}
+
+void UDRPlayerLifecycleComponent::AppendCurrencyDeathDropsFromServer(
+	ADRPlayerState* PlayerState, TArray<FDRItemInstance>& OutDroppedItems) const
+{
+	if (!IsValid(PlayerState) || !PlayerState->HasAuthority())
+	{
+		return;
+	}
+
+	constexpr int32 MaxCurrencyDropEntryCount = 2;
+	TArray<const FDRDeathCurrencyDropEntry*> ValidEntries;
+
+	for (int32 EntryIndex = 0; EntryIndex < CurrencyDropEntries.Num() && ValidEntries.Num() < MaxCurrencyDropEntryCount; ++EntryIndex)
+	{
+		const FDRDeathCurrencyDropEntry& Entry = CurrencyDropEntries[EntryIndex];
+		if (!IsValid(Entry.ItemDefinition) 
+			|| Entry.SnowGaugeValue <= 0)
+		{
+			continue;
+		}
+
+		ValidEntries.Add(&Entry);
+	}
+
+	if (CurrencyDropEntries.Num() > MaxCurrencyDropEntryCount)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[DeathCurrencyDrop] More than two entries are configured. Only two valid entries are used. Character=%s"),
+			*GetNameSafe(GetOwnerCharacter()));
+	}
+
+	if (ValidEntries.IsEmpty())
+	{
+		return;
+	}
+
+	const FDRDeathCurrencyDropEntry* FixedRewardEntry = ValidEntries[0];
+	for (const FDRDeathCurrencyDropEntry* Entry : ValidEntries)
+	{
+		if (Entry->SnowGaugeValue < FixedRewardEntry->SnowGaugeValue)
+		{
+			FixedRewardEntry = Entry;
+		}
+	}
+
+	int32 FixedRewardItemCount = 0;
+	for (int32 ItemIndex = 0; ItemIndex < FMath::Max(0, MinimumCurrencyDropCount); ++ItemIndex)
+	{
+		FDRItemInstance ItemInstance = DRItemInstanceFactory::Create(FixedRewardEntry->ItemDefinition, 1);
+		if (ItemInstance.IsValid())
+		{
+			OutDroppedItems.Add(MoveTemp(ItemInstance));
+			++FixedRewardItemCount;
+		}
+	}
+
+	const float CurrentSnowGauge = FMath::Max(0.f, PlayerState->GetSnowGauge());
+	const float ClampedLossRatio = FMath::Clamp(SnowGaugeLossRatio, 0.f, 1.f);
+	const int32 TargetLoss = FMath::FloorToInt(CurrentSnowGauge * ClampedLossRatio);
+	const int32 MaxLossDropCount = FMath::Max(0, MaximumLossCurrencyDropCount);
+
+	if (TargetLoss <= 0 || MaxLossDropCount <= 0)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[DeathCurrencyDrop] Character=%s Current=%.0f TargetLoss=%d ActualLoss=0 FixedItems=%d LossItems=0"),
+			*GetNameSafe(GetOwnerCharacter()), CurrentSnowGauge, TargetLoss, FixedRewardItemCount);
+		return;
+	}
+
+	if (ValidEntries.Num() == 2 && ValidEntries[0]->SnowGaugeValue < ValidEntries[1]->SnowGaugeValue)
+	{
+		ValidEntries.Swap(0, 1);
+	}
+
+	TArray<int32> PlannedCounts;
+	PlannedCounts.Init(0, ValidEntries.Num());
+	int32 RemainingLoss = TargetLoss;
+
+	for (int32 EntryIndex = 0; EntryIndex < ValidEntries.Num() && RemainingLoss > 0; ++EntryIndex)
+	{
+		const bool bLastDenomination = EntryIndex == ValidEntries.Num() - 1;
+		const int32 DenominationValue = ValidEntries[EntryIndex]->SnowGaugeValue;
+		const int32 ItemCount = bLastDenomination
+			? FMath::DivideAndRoundUp(RemainingLoss, DenominationValue)
+			: RemainingLoss / DenominationValue;
+
+		PlannedCounts[EntryIndex] = ItemCount;
+		const int64 RepresentedValue = static_cast<int64>(ItemCount) * DenominationValue;
+		RemainingLoss = static_cast<int32>(FMath::Max<int64>(0, RemainingLoss - RepresentedValue));
+	}
+
+	int32 PlannedItemCount = 0;
+	for (const int32 ItemCount : PlannedCounts)
+	{
+		PlannedItemCount += ItemCount;
+	}
+
+	if (PlannedItemCount > MaxLossDropCount)
+	{
+		PlannedCounts.Init(0, ValidEntries.Num());
+		PlannedCounts[0] = FMath::Min(
+			MaxLossDropCount,
+			FMath::DivideAndRoundUp(TargetLoss, ValidEntries[0]->SnowGaugeValue));
+	}
+
+	int32 LossItemCount = 0;
+	int64 LossDropNominalValue = 0;
+	for (int32 EntryIndex = 0; EntryIndex < ValidEntries.Num(); ++EntryIndex)
+	{
+		const FDRDeathCurrencyDropEntry& Entry = *ValidEntries[EntryIndex];
+		for (int32 ItemIndex = 0; ItemIndex < PlannedCounts[EntryIndex]; ++ItemIndex)
+		{
+			FDRItemInstance ItemInstance = DRItemInstanceFactory::Create(Entry.ItemDefinition, 1);
+			if (!ItemInstance.IsValid())
+			{
+				continue;
+			}
+
+			OutDroppedItems.Add(MoveTemp(ItemInstance));
+			LossDropNominalValue += Entry.SnowGaugeValue;
+			++LossItemCount;
+		}
+	}
+
+	const int32 ActualLoss = static_cast<int32>(FMath::Min<int64>(TargetLoss, LossDropNominalValue));
+	if (ActualLoss > 0)
+	{
+		PlayerState->AddSnowGauge(-static_cast<float>(ActualLoss));
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[DeathCurrencyDrop] Character=%s Current=%.0f TargetLoss=%d ActualLoss=%d FixedItems=%d LossItems=%d"),
+		*GetNameSafe(GetOwnerCharacter()), CurrentSnowGauge, TargetLoss, ActualLoss, FixedRewardItemCount, LossItemCount);
 }
 
 void UDRPlayerLifecycleComponent::ApplyDeathRagdoll()
