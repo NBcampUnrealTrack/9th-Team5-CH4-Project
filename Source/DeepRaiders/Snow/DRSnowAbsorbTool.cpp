@@ -2,6 +2,8 @@
 #include "DRSnowSurfaceQuery.h"
 
 #include "DrawDebugHelpers.h"
+#include "DRSnowTypes.h"
+#include "DRSnowAbsorbPlanes.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "ProfilingDebugging/CountersTrace.h"
@@ -20,13 +22,13 @@ DEFINE_LOG_CATEGORY_STATIC(LogDRSnowAbsorb, Log, All);
 TAutoConsoleVariable<int32> CVarDRSnowAbsorbDebugDraw(
 	TEXT("dr.Snow.Absorb.DebugDraw"),
 	0,
-	TEXT("Draw the active snow absorb range. 0: Off, 1: On"),
+	TEXT("눈 흡수 디버그 선을 그린다. 0: 끔, 1: 원본 범위, 2: 서버 차폐 경로도 표시(초록 허용, 빨강 차폐, 노랑 경계)"),
 	ECVF_Default);
 
 TAutoConsoleVariable<int32> CVarDRSnowAbsorbLog(
 	TEXT("dr.Snow.Absorb.Log"),
 	0,
-	TEXT("Log snow absorb pipeline. 0: Off, 1: On"),
+	TEXT("눈 흡수 파이프라인 로그를 남긴다. 0: 끔, 1: 요약 및 주변 차폐물, 2: 전체 후보·깊이 격자·복셀 샘플"),
 	ECVF_Default);
 
 float SmoothStep(const float Value)
@@ -35,10 +37,45 @@ float SmoothStep(const float Value)
 	return ClampedValue * ClampedValue * (3.f - 2.f * ClampedValue);
 }
 
-// Repair material data after the density edit but before the first render update.
-// Unlike FVoxelSurfaceEditToolsImpl::PropagateVoxelMaterials this path never
-// asserts when a surface sample has no filled neighbor: it simply leaves that
-// sample unchanged. Only voxels that actually changed density are considered.
+bool IsBehindAbsorbOccluder(
+	const TArray<uint8>& OcclusionDepths,
+	const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
+	const FVector& PointDelta,
+	const FVector& RadialDelta,
+	const FVector& AxisY,
+	const FVector& AxisZ,
+	const float RadiusAtPoint,
+	const float DistanceAlong,
+	const float FrustumRange)
+{
+	if (DRSnowAbsorbPlanes::IsBlocked(OcclusionVolumes, PointDelta)) { return true; }
+	if (OcclusionDepths.IsEmpty()) { return false; }
+	if (OcclusionDepths.Num() != DRSnowAbsorbOcclusion::SampleCount ||
+		RadiusAtPoint <= KINDA_SMALL_NUMBER || FrustumRange <= KINDA_SMALL_NUMBER)
+	{
+		return true;
+	}
+
+	const float NormalizedX = FVector::DotProduct(RadialDelta, AxisY) / RadiusAtPoint;
+	const float NormalizedY = FVector::DotProduct(RadialDelta, AxisZ) / RadiusAtPoint;
+	// 타일에는 샘플 레이 깊이가 아니라 검증된 빈 부피의 접두 구간을 저장한다.
+	// 보간하면 검증되지 않았거나 차폐된 영역까지 접두 구간이 늘어나므로 사용하지 않는다.
+	const int32 X = FMath::Clamp(FMath::FloorToInt(
+		(NormalizedX + 1.f) * 0.5f * DRSnowAbsorbOcclusion::Resolution),
+		0, DRSnowAbsorbOcclusion::Resolution - 1);
+	const int32 Y = FMath::Clamp(FMath::FloorToInt(
+		(NormalizedY + 1.f) * 0.5f * DRSnowAbsorbOcclusion::Resolution),
+		0, DRSnowAbsorbOcclusion::Resolution - 1);
+	const uint8 Depth = OcclusionDepths[DRSnowAbsorbOcclusion::GetCellIndex(X, Y)];
+	if (Depth == DRSnowAbsorbOcclusion::OpenDepth) { return false; }
+	const float SafeDepth = FrustumRange * Depth / DRSnowAbsorbOcclusion::MaxBlockedDepth;
+	return DistanceAlong >= SafeDepth;
+}
+
+// 밀도 편집 뒤, 첫 렌더 갱신 전에 머티리얼 데이터를 복구한다.
+// FVoxelSurfaceEditToolsImpl::PropagateVoxelMaterials와 달리 표면 샘플에
+// 채워진 이웃이 없어도 assert하지 않고 해당 샘플을 그대로 둔다. 실제로
+// 밀도가 바뀐 복셀만 처리한다.
 void RepairAbsorbMaterialsBeforeRender(
 	AVoxelWorld* VoxelWorld,
 	const FVoxelSurfaceEditsProcessedVoxels& ProcessedVoxels,
@@ -199,6 +236,8 @@ FVoxelIntBoxWithValidity UDRSnowAbsorbTool::DoEdit()
 		FarStrengthRatio,
 		Strength,
 		DistanceDivisor,
+		TArray<uint8>(),
+		TArray<FDRSnowAbsorbConvex>(),
 		ModifiedValues,
 		EditedBounds,
 		false);
@@ -215,6 +254,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 	const float FarStrengthRatio,
 	const float Strength,
 	const float DistanceDivisor,
+	const TArray<uint8>& OcclusionDepths,
+	const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
 	TArray<FModifiedVoxelValue>& OutModifiedValues,
 	FVoxelIntBox& OutEditedBounds,
 	const bool bUpdateRender)
@@ -305,6 +346,9 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 
 	const float InnerRadius = OuterRadius * FMath::Clamp(InnerRadiusRatio, 0.f, 1.f);
 	const float ClampedFarStrengthRatio = FMath::Clamp(FarStrengthRatio, 0.f, 1.f);
+	FVector OcclusionAxisY;
+	FVector OcclusionAxisZ;
+	Direction.FindBestAxisVectors(OcclusionAxisY, OcclusionAxisZ);
 	TArray<FVoxelSurfaceEditsVoxel> AbsorbVoxels;
 	int32 FrustumVoxelCount = 0;
 	int32 StrengthVoxelCount = 0;
@@ -325,6 +369,19 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 			? RadialDelta.Size() / RadiusAtPoint
 			: (RadialDelta.IsNearlyZero() ? 0.f : BIG_NUMBER);
 		if (RadialAlpha > 1.f)
+		{
+			continue;
+		}
+		if (IsBehindAbsorbOccluder(
+			OcclusionDepths,
+			OcclusionVolumes,
+			Delta,
+			RadialDelta,
+			OcclusionAxisY,
+			OcclusionAxisZ,
+			RadiusAtPoint,
+			DistanceAlong,
+			Length))
 		{
 			continue;
 		}
@@ -370,8 +427,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_EditValues);
-		// Hold the render update until material data is repaired. This prevents the
-		// renderer from ever seeing the intermediate density-only state.
+		// 머티리얼 데이터 복구가 끝날 때까지 렌더 갱신을 보류한다. 렌더러가
+		// 중간 밀도 전용 상태를 보지 않게 한다.
 		UVoxelSurfaceEditTools::EditVoxelValues(
 			OutModifiedValues,
 			OutEditedBounds,
@@ -414,6 +471,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 	const float DistanceDivisor,
 	const float SweepRadius,
 	const int32 MaxSweepsPerTick,
+	const TArray<uint8>& OcclusionDepths,
+	const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
 	TArray<FModifiedVoxelValue>& OutModifiedValues,
 	FVoxelIntBox& OutEditedBounds,
 	const bool bUpdateRender)
@@ -440,6 +499,9 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 
 	const float InnerRadius = OuterRadius * FMath::Clamp(InnerRadiusRatio, 0.f, 1.f);
 	const float ClampedFarStrengthRatio = FMath::Clamp(FarStrengthRatio, 0.f, 1.f);
+	FVector OcclusionAxisY;
+	FVector OcclusionAxisZ;
+	Direction.FindBestAxisVectors(OcclusionAxisY, OcclusionAxisZ);
 	DrawAbsorbRange(VoxelWorld->GetWorld(), BrushOrigin, TargetLocation, InnerRadius, OuterRadius);
 
 	// 기본 slab 깊이가 너무 작아 설정된 횟수로 전체 range를 못 덮는 경우에는
@@ -460,6 +522,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 	TSet<FIntVector> CandidatePositions;
 	FBox LocalCandidateBounds(ForceInit);
 	int32 TotalSurfaceVoxelCount = 0;
+	int32 OcclusionRejectedCount = 0;
+	int32 RejectedSamples = 0;
 
 	for (int32 SliceIndex = 0; SliceIndex < SliceCount; ++SliceIndex)
 	{
@@ -551,6 +615,28 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 			{
 				continue;
 			}
+			if (IsBehindAbsorbOccluder(
+				OcclusionDepths,
+				OcclusionVolumes,
+				Delta,
+				RadialDelta,
+				OcclusionAxisY,
+				OcclusionAxisZ,
+				RadiusAtPoint,
+				DistanceAlong,
+				FrustumRange))
+			{
+				++OcclusionRejectedCount;
+				if (CVarDRSnowAbsorbLog.GetValueOnGameThread() >= 2 && RejectedSamples++ < 4)
+				{
+					UE_LOG(LogDRSnowAbsorb, Log,
+						TEXT("[RejectedVoxel] World=%s VoxelWorld=%s Local=%s Position=%s Origin=%s Distance=%.3f Radius=%.3f MaskCells=%d PlaneVolumes=%d"),
+						*GetNameSafe(VoxelWorld->GetWorld()), *VoxelWorld->GetPathName(),
+						*SourceVoxel.Position.ToString(), *VoxelLocation.ToCompactString(),
+						*BrushOrigin.ToCompactString(), DistanceAlong, RadiusAtPoint, OcclusionDepths.Num(), OcclusionVolumes.Num());
+				}
+				continue;
+			}
 
 			const float DistanceWeight = FMath::Lerp(
 				1.f,
@@ -585,8 +671,9 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 		if (bLogAbsorb)
 		{
 			UE_LOG(LogDRSnowAbsorb, Log,
-				TEXT("Adaptive slab query found no editable surface: Slices=%d Depth=%.1f Range=%.1f Surface=%d"),
-				SliceCount, SliceDepth, FrustumRange, TotalSurfaceVoxelCount);
+				TEXT("Adaptive slab query found no editable surface: Slices=%d Depth=%.1f Range=%.1f Surface=%d OcclusionRejected=%d MaskCells=%d PlaneVolumes=%d"),
+				SliceCount, SliceDepth, FrustumRange, TotalSurfaceVoxelCount,
+				OcclusionRejectedCount, OcclusionDepths.Num(), OcclusionVolumes.Num());
 		}
 		return 0.f;
 	}
@@ -603,8 +690,8 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(DRSnow_Absorb_EditValues);
-		// Hold the render update until material data is repaired. This prevents the
-		// renderer from ever seeing the intermediate density-only state.
+		// 머티리얼 데이터 복구가 끝날 때까지 렌더 갱신을 보류한다. 렌더러가
+		// 중간 밀도 전용 상태를 보지 않게 한다.
 		UVoxelSurfaceEditTools::EditVoxelValues(
 			OutModifiedValues,
 			OutEditedBounds,
@@ -624,17 +711,31 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 	TRACE_UNCHECKED_INT_VALUE(TEXT("DRSnow/Absorb/Adaptive/ModifiedValues"), OutModifiedValues.Num());
 
 	float ModifiedAmount = 0.f;
+	int32 Changed = 0, SolidToEmpty = 0, EmptyDensityOnly = 0, Samples = 0;
 	for (const FModifiedVoxelValue& ModifiedValue : OutModifiedValues)
 	{
 		ModifiedAmount += FMath::Max(0.f, ModifiedValue.NewValue - ModifiedValue.OldValue);
+		if (ModifiedValue.NewValue == ModifiedValue.OldValue) { continue; }
+		++Changed;
+		SolidToEmpty += ModifiedValue.OldValue <= 0.f && ModifiedValue.NewValue > 0.f;
+		EmptyDensityOnly += ModifiedValue.OldValue > 0.f && ModifiedValue.NewValue > 0.f;
+		if (CVarDRSnowAbsorbLog.GetValueOnGameThread() >= 2 && Samples++ < 4)
+		{
+			UE_LOG(LogDRSnowAbsorb, Log,
+				TEXT("[ChangedVoxel] VoxelWorld=%s Position=%s Old=%.6f New=%.6f"),
+				*VoxelWorld->GetPathName(), *VoxelWorld->LocalToGlobal(ModifiedValue.Position).ToCompactString(),
+				ModifiedValue.OldValue, ModifiedValue.NewValue);
+		}
 	}
 
 	if (bLogAbsorb)
 	{
 		UE_LOG(LogDRSnowAbsorb, Log,
-			TEXT("Adaptive slab edit: Slices=%d Depth=%.1f Range=%.1f Surface=%d Candidates=%d Modified=%d Applied=%.4f"),
+			TEXT("Adaptive slab edit: World=%s VoxelWorld=%s Origin=%s Slices=%d Depth=%.1f Range=%.1f Surface=%d Candidates=%d OcclusionRejected=%d MaskCells=%d PlaneVolumes=%d ModifiedRecords=%d Changed=%d SolidToEmpty=%d EmptyDensityOnly=%d Applied=%.6f"),
+			*GetNameSafe(VoxelWorld->GetWorld()), *VoxelWorld->GetPathName(), *BrushOrigin.ToCompactString(),
 			SliceCount, SliceDepth, FrustumRange, TotalSurfaceVoxelCount,
-			ProcessedVoxels.Voxels->Num(), OutModifiedValues.Num(), ModifiedAmount);
+			ProcessedVoxels.Voxels->Num(), OcclusionRejectedCount, OcclusionDepths.Num(), OcclusionVolumes.Num(),
+			OutModifiedValues.Num(), Changed, SolidToEmpty, EmptyDensityOnly, ModifiedAmount);
 	}
 	return ModifiedAmount;
 }

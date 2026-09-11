@@ -675,6 +675,8 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 			SnowSurfaceDistanceDivisor,
 			Request.AbsorbSweepRadius,
 			Request.AbsorbMaxSweepsPerTick,
+			Request.AbsorbOcclusionDepths,
+			Request.AbsorbOcclusionVolumes,
 			ModifiedValues,
 			EditedBounds);
 	}
@@ -689,6 +691,8 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 			0.2f,
 			Request.RequestedAmount,
 			SnowSurfaceDistanceDivisor,
+			Request.AbsorbOcclusionDepths,
+			Request.AbsorbOcclusionVolumes,
 			ModifiedValues,
 			EditedBounds);
 	}

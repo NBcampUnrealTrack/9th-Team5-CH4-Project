@@ -13,6 +13,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "HAL/IConsoleManager.h"
 
 UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 {
@@ -164,7 +165,19 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		SnowRemoveComponent->TryRemoveSnowAlongDirection(
 			AbsorbFrustumOrigin, AbsorbDirection, EffectiveRemovalSpec);
 	
+	const IConsoleVariable* AbsorbLog = IConsoleManager::Get().FindConsoleVariable(TEXT("dr.Snow.Absorb.Log"));
+	const bool bLogGauge = AbsorbLog && AbsorbLog->GetInt() > 0;
+	const float GaugeBefore = bLogGauge ? ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()) : 0.f;
 	ApplySnowGaugeGain(ASC, RemovedAmount);
+	if (bLogGauge)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[DRSnowAbsorb][Gauge] Avatar=%s Removed=%.6f Before=%.6f After=%.6f Max=%.6f Effect=%s"),
+			*GetPathNameSafe(GetAvatarActorFromActorInfo()), RemovedAmount, GaugeBefore,
+			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()),
+			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()),
+			*GetNameSafe(SnowGainEffectClass.Get()));
+	}
 
 	ScheduleNextAbsorbTick();
 }

@@ -29,7 +29,9 @@ public class DeepRaiders : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"CableComponent", "NetCore", "DeveloperSettings"
+			"CableComponent", "NetCore", "DeveloperSettings", "PhysicsCore", "Chaos",
+			// FConvex/TBox 인라인 메서드가 ChaosCore의 TAABB 내보내기 심볼을 직접 참조한다.
+			"ChaosCore"
 		});
 
 		// Uncomment if you are using Slate UI
