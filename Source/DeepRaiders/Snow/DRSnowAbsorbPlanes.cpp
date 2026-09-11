@@ -14,6 +14,11 @@ namespace DRSnowAbsorbPlanes
 {
 namespace
 {
+// 다면체 충돌 Hull은 수학적으로 볼록하더라도, 실제 메시의 외곽을 크게 감싼
+// 단순 충돌인 경우가 많다. 흡수 표면 판정에는 상자/저면 수가 적은 Hull만
+// 해석적으로 사용하고, 그보다 복잡한 Hull은 컴포넌트 첫 표면 Trace 경로로 보낸다.
+constexpr int32 MaxAnalyticAbsorbConvexPlanes = 12;
+
 bool ReadPolytope(const Chaos::FImplicitObject& Geometry, const FMatrix& ToWorld,
 	TArray<FPlane>& OutPlanes, TArray<FVector>& OutVertices, int32 Depth = 0)
 {
@@ -65,8 +70,7 @@ bool ReadPolytope(const Chaos::FImplicitObject& Geometry, const FMatrix& ToWorld
 	case ImplicitObjectType::Convex:
 	{
 		const auto& Convex = Geometry.GetObjectChecked<FConvex>();
-		// 면 수가 많은 충돌 Hull은 스냅샷 작업량을 제한한다.
-		if (Convex.NumPlanes() > FDRSnowAbsorbConvex::MaxPlanes || Convex.NumVertices() > 256) { return false; }
+		if (Convex.NumPlanes() > MaxAnalyticAbsorbConvexPlanes || Convex.NumVertices() > 256) { return false; }
 		for (int32 I = 0; I < Convex.NumPlanes(); ++I)
 		{
 			const auto P = Convex.GetPlane(I);
