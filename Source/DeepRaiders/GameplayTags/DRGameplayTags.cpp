@@ -786,6 +786,11 @@ namespace DRGameplayTags
 		"Snow projectile impact at the collision location.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_ForwardDash,
+		"GameplayCue.Sound.Skill.ForwardDash",
+		"Forward dash skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");

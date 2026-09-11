@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Controller.h"
 
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
@@ -108,7 +109,8 @@ void UDRGA_BlinkSkill::PlayBlinkVFX(
 		DRGameplayTags::GameplayCue_VFX_Skill_Blink_End,
 		Parameters);
 	
-	AbilitySystem->ExecuteGameplayCue(
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
 		DRGameplayTags::GameplayCue_Sound_Skill_Blink,
 		Parameters);
 }
