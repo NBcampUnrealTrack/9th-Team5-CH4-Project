@@ -23,12 +23,18 @@ public:
 	void Show();
 
 	UFUNCTION(BlueprintCallable, Category = "Title|Map")
-	void HandleCreateMapClicked();
+	virtual void HandleCreateMapClicked();
 
 	UFUNCTION(BlueprintCallable, Category = "Title|Map")
-	void HandleCloseChoiceMapClicked();
+	virtual void HandleCloseChoiceMapClicked();
 
 protected:
+	// 생성 화면은 기존 맵 선택/미리보기를 재사용하고 생성 방식만 교체한다.
+	TSoftObjectPtr<UWorld> GetSelectedPlayMap() const
+	{
+		return SelectedPlayMap;
+	}
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UOverlay> Overlay_ChoiceMap;
 
