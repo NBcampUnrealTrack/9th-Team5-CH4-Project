@@ -5,7 +5,6 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
-#include "SNegativeActionButton.h"
 #include "SocketSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 
