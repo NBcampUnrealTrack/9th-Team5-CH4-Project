@@ -64,7 +64,11 @@ bool UDRGA_SpraySnow::CanActivateAbility(const FGameplayAbilitySpecHandle Handle
 		return false;
 	}
 	
-	const float TickCost = WeaponDefinition->SnowCostPerSecond * WeaponDefinition->SprayTickInterval;
+	const float SnowCostMultiplier = GetWeaponStatMultiplier(
+		UDRPlayerAttributeSet::GetWeaponSnowCostMultiplierAttribute());
+	const float TickCost = WeaponDefinition->SnowCostPerSecond
+		* SnowCostMultiplier
+		* WeaponDefinition->SprayTickInterval;
 	
 	const float CurrentSnow = AbilitySystem->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 	return CurrentSnow + KINDA_SMALL_NUMBER >= TickCost;
@@ -261,8 +265,11 @@ void UDRGA_SpraySnow::ApplyHeatForSuccessfulSprayTick()
 		return;
 	}
 
-	const float HeatAmount =
-		WeaponDefinition->HeatSettings.HeatPerSecond * WeaponDefinition->SprayTickInterval;
+	const float HeatGenerationMultiplier = GetWeaponStatMultiplier(
+		UDRPlayerAttributeSet::GetWeaponHeatGenerationMultiplierAttribute());
+	const float HeatAmount = WeaponDefinition->HeatSettings.HeatPerSecond
+		* HeatGenerationMultiplier
+		* WeaponDefinition->SprayTickInterval;
 
 	PlayerState->AddWeaponHeat(
 		HeatAmount,
@@ -603,7 +610,11 @@ bool UDRGA_SpraySnow::TryConsumeSnowCost()
 		return false;
 	}
 
-	const float TickCost = WeaponDefinition->SnowCostPerSecond * WeaponDefinition->SprayTickInterval;
+	const float SnowCostMultiplier = GetWeaponStatMultiplier(
+		UDRPlayerAttributeSet::GetWeaponSnowCostMultiplierAttribute());
+	const float TickCost = WeaponDefinition->SnowCostPerSecond
+		* SnowCostMultiplier
+		* WeaponDefinition->SprayTickInterval;
 
 	const float CurrentSnow = AbilitySystem->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 
@@ -695,7 +706,20 @@ void UDRGA_SpraySnow::BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& 
 		{
 			if (Pair.Key.IsValid())
 			{
-				EffectSpec.Data->SetSetByCallerMagnitude(Pair.Key, Pair.Value);
+				float Magnitude = Pair.Value;
+
+				if (Pair.Key == DRGameplayTags::Data_Damage)
+				{
+					Magnitude *= GetWeaponStatMultiplier(
+						UDRPlayerAttributeSet::GetWeaponDamageMultiplierAttribute());
+				}
+				else if (Pair.Key == DRGameplayTags::Data_Freeze_Amount)
+				{
+					Magnitude *= GetWeaponStatMultiplier(
+						UDRPlayerAttributeSet::GetWeaponFreezeAmountMultiplierAttribute());
+				}
+
+				EffectSpec.Data->SetSetByCallerMagnitude(Pair.Key, Magnitude);
 			}
 		}
 
@@ -741,6 +765,17 @@ int32 UDRGA_SpraySnow::GetSourceTeamId() const
 const UDRSprayerWeaponDefinition* UDRGA_SpraySnow::GetSprayerDefinition() const
 {
 	return Cast<UDRSprayerWeaponDefinition>(GetSourceObject(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo()));
+}
+
+float UDRGA_SpraySnow::GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	const UAbilitySystemComponent* ASC =
+		ActorInfo != nullptr ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	return IsValid(ASC) && Attribute.IsValid()
+		? FMath::Max(0.0f, ASC->GetNumericAttribute(Attribute))
+		: 1.0f;
 }
 
 void UDRGA_SpraySnow::StartSprayMontage()

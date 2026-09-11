@@ -19,6 +19,7 @@
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Item/DRWorldItemActor.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementTargetActor.h"
@@ -59,7 +60,7 @@
 #include "DrawDebugHelpers.h"
 #include "DeepRaiders/Combat/Projectile/DRProjectile.h"
 #include "HAL/IConsoleManager.h"
-
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 
 ADRPlayerController::ADRPlayerController()
 	: bCanTeleportInteract(false)
@@ -754,6 +755,53 @@ void ADRPlayerController::GiveWeapon(FString WeaponName)
 #endif
 }
 
+void ADRPlayerController::FullSnow()
+{
+#if !UE_BUILD_SHIPPING
+	if (IsLocalController())
+	{
+		ServerFullSnow();
+	}
+#endif
+}
+
+void ADRPlayerController::ServerFullSnow_Implementation()
+{
+#if !UE_BUILD_SHIPPING
+	ADRPlayerState* PS =
+		GetPlayerState<ADRPlayerState>();
+
+	if (!IsValid(PS))
+	{
+		return;
+	}
+
+	const float CurrentSnow = PS->GetSnowGauge();
+
+	// 지금 MaxSnowGauge가 1000만이라 그냥 충분히 큰 값 추가해도
+	// Attribute clamp에서 MaxSnowGauge까지 잘리긴 하지만,
+	// 가능하면 Max 기준으로 채우는 게 낫다.
+	UAbilitySystemComponent* ASC =
+		PS->GetAbilitySystemComponent();
+
+	if (!IsValid(ASC))
+	{
+		return;
+	}
+
+	const float MaxSnow = ASC->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute());
+
+	PS->AddSnowGauge(
+		FMath::Max(0.f, MaxSnow - CurrentSnow));
+
+	ClientMessage(
+		FString::Printf(
+			TEXT("SnowGauge filled: %.0f"),
+			PS->GetSnowGauge()));
+#endif
+}
+
 void ADRPlayerController::ServerGiveWeaponForDebug_Implementation(const FString& WeaponName)
 {
 #if !UE_BUILD_SHIPPING
@@ -828,13 +876,13 @@ void ADRPlayerController::ServerGiveWeaponForDebug_Implementation(const FString&
 void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FString& WeaponName, const FString& StatName)
 {
 #if !UE_BUILD_SHIPPING
-	UDRProjectileWeaponItemDefinition* WeaponDefinition = nullptr;
+	UDRRangedWeaponDefinition* WeaponDefinition = nullptr;
 	FGameplayTag UpgradeTag;
 
 	if (!ResolveWeaponUpgradeDebugTarget(WeaponName, StatName, WeaponDefinition, UpgradeTag))
 	{
 		ReportWeaponUpgradeDebugResult(FString::Printf(
-			TEXT("Upgrade failed: unsupported arguments '%s %s'. Usage: upgrade <rifle|shotgun|cannon> <stat>."),
+			TEXT("Upgrade failed: unsupported arguments '%s %s'. Usage: upgrade <rifle|shotgun|sprayer|cannon> <stat>."),
 			*WeaponName,
 			*StatName));
 		return;
@@ -843,7 +891,7 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 	int32 CurrentLevel = 0;
 
 	if (!IsValid(InventoryComponent)
-		|| !InventoryComponent->GetSnowProjectileWeaponUpgradeLevel(WeaponDefinition, UpgradeTag, CurrentLevel))
+		|| !InventoryComponent->GetWeaponUpgradeLevel(WeaponDefinition, UpgradeTag, CurrentLevel))
 	{
 		ReportWeaponUpgradeDebugResult(FString::Printf(
 			TEXT("Upgrade failed: %s is not in the inventory or its upgrade profile is invalid."),
@@ -851,8 +899,9 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 		return;
 	}
 
-	const FDRWeaponUpgradeLevelData* TargetLevelData = IsValid(WeaponDefinition->UpgradeProfile)
-		? WeaponDefinition->UpgradeProfile->FindLevelData(UpgradeTag, CurrentLevel + 1)
+	UDRWeaponUpgradeProfile* UpgradeProfile = WeaponDefinition->GetUpgradeProfile();
+	const FDRWeaponUpgradeLevelData* TargetLevelData = IsValid(UpgradeProfile)
+		? UpgradeProfile->FindLevelData(UpgradeTag, CurrentLevel + 1)
 		: nullptr;
 
 	if (TargetLevelData == nullptr)
@@ -866,7 +915,7 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 
 	const FDRItemInstance* ItemInstance = InventoryComponent->FindFirstItemInstanceByDefinition(WeaponDefinition);
 	if (ItemInstance == nullptr
-		|| !InventoryComponent->TryUpgradeSnowProjectileWeapon(ItemInstance->InstanceId, UpgradeTag, CurrentLevel))
+		|| !InventoryComponent->TryUpgradeWeapon(ItemInstance->InstanceId, UpgradeTag, CurrentLevel))
 	{
 		ReportWeaponUpgradeDebugResult(FString::Printf(
 			TEXT("Upgrade failed: server rejected %s %s at level %d."),
@@ -889,7 +938,7 @@ void ADRPlayerController::ServerUpgradeWeaponForDebug_Implementation(const FStri
 bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 	const FString& WeaponName,
 	const FString& StatName,
-	UDRProjectileWeaponItemDefinition*& OutWeaponDefinition,
+	UDRRangedWeaponDefinition*& OutWeaponDefinition,
 	FGameplayTag& OutUpgradeTag) const
 {
 	OutWeaponDefinition = nullptr;
@@ -904,7 +953,7 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 
 	if (WeaponKey == TEXT("rifle"))
 	{
-		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingRifle.Get());
+		OutWeaponDefinition = Cast<UDRRangedWeaponDefinition>(StartingRifle.Get());
 
 		if (StatKey == TEXT("damage"))
 		{
@@ -933,7 +982,7 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 	}
 	else if (WeaponKey == TEXT("shotgun"))
 	{
-		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingShotgun.Get());
+		OutWeaponDefinition = Cast<UDRRangedWeaponDefinition>(StartingShotgun.Get());
 
 		if (StatKey == TEXT("damage"))
 		{
@@ -964,9 +1013,34 @@ bool ADRPlayerController::ResolveWeaponUpgradeDebugTarget(
 			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Shotgun_SnowAddAmount;
 		}
 	}
+	else if (WeaponKey == TEXT("sprayer"))
+	{
+		OutWeaponDefinition = Cast<UDRRangedWeaponDefinition>(StartingSprayer.Get());
+
+		if (StatKey == TEXT("damage"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Sprayer_Damage;
+		}
+		else if (StatKey == TEXT("freeze") || StatKey == TEXT("freezeamount") || StatKey == TEXT("freezepower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Sprayer_FreezeAmount;
+		}
+		else if (StatKey == TEXT("snowcost"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Sprayer_SnowCost;
+		}
+		else if (StatKey == TEXT("heat") || StatKey == TEXT("heatgeneration"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Sprayer_HeatGeneration;
+		}
+		else if (StatKey == TEXT("absorb") || StatKey == TEXT("snowabsorb") || StatKey == TEXT("absorbpower"))
+		{
+			OutUpgradeTag = DRGameplayTags::Weapon_Upgrade_Sprayer_SnowAbsorbPower;
+		}
+	}
 	else if (WeaponKey == TEXT("cannon"))
 	{
-		OutWeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(StartingCannon.Get());
+		OutWeaponDefinition = Cast<UDRRangedWeaponDefinition>(StartingCannon.Get());
 
 		if (StatKey == TEXT("damage"))
 		{

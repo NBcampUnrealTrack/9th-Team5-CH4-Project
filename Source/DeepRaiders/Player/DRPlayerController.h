@@ -19,6 +19,7 @@ class UDRShopTransactionComponent;
 class UDRShopUIComponent;
 class UDRItemDefinition;
 class UDRProjectileWeaponItemDefinition;
+class UDRRangedWeaponDefinition;
 class ADRWorldItemActor;
 class ADRStorage;
 class UDRHUDUIComponent;
@@ -282,14 +283,20 @@ public:
 	UFUNCTION(Exec)
 	void GiveWeapon(FString WeaponName);
 	
+	UFUNCTION(Exec)
+	void FullSnow();
+
 private:
+	UFUNCTION(Server, Reliable)
+	void ServerFullSnow();
+	
 	UFUNCTION(Server, Reliable)
 	void ServerUpgradeWeaponForDebug(const FString& WeaponName, const FString& StatName);
 
 	bool ResolveWeaponUpgradeDebugTarget(
 		const FString& WeaponName,
 		const FString& StatName,
-		UDRProjectileWeaponItemDefinition*& OutWeaponDefinition,
+		UDRRangedWeaponDefinition*& OutWeaponDefinition,
 		FGameplayTag& OutUpgradeTag) const;
 
 	void ReportWeaponUpgradeDebugResult(const FString& Message);

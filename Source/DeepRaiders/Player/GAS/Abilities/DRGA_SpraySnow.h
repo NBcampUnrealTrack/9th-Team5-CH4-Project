@@ -51,6 +51,7 @@ private:
 	bool TryConsumeSnowCost();
 	void ApplyHeatForSuccessfulSprayTick();
 	void BuildImpactEffectSpecs(TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
+	float GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const;
 
 	// ================================
 	// Team

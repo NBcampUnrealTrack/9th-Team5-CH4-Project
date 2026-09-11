@@ -414,6 +414,36 @@ namespace DRGameplayTags
 		Weapon_Upgrade_Cannon_SnowAddAmount,
 		"Weapon.Upgrade.Cannon.SnowAddAmount",
 		"Cannon snow add amount upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer,
+		"Weapon.Upgrade.Sprayer",
+		"Parent tag for sprayer stat upgrade tracks.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer_Damage,
+		"Weapon.Upgrade.Sprayer.Damage",
+		"Sprayer frozen-target damage upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer_FreezeAmount,
+		"Weapon.Upgrade.Sprayer.FreezeAmount",
+		"Sprayer freeze gauge application upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer_SnowCost,
+		"Weapon.Upgrade.Sprayer.SnowCost",
+		"Sprayer snow cost upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer_HeatGeneration,
+		"Weapon.Upgrade.Sprayer.HeatGeneration",
+		"Sprayer heat generation upgrade track.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Weapon_Upgrade_Sprayer_SnowAbsorbPower,
+		"Weapon.Upgrade.Sprayer.SnowAbsorbPower",
+		"Sprayer snow absorb power upgrade track.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Ability_MovementAction,
@@ -714,6 +744,11 @@ namespace DRGameplayTags
 		Data_Weapon_SnowAddAmountModifier,
 		"Data.Weapon.SnowAddAmountModifier",
 		"Equipped weapon snow add amount modifier passed through SetByCaller.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Weapon_FreezeAmountModifier,
+		"Data.Weapon.FreezeAmountModifier",
+		"Equipped weapon freeze amount modifier passed through SetByCaller.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		UI_Screen_HUD,

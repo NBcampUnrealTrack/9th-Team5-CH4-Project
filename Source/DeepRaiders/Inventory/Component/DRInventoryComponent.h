@@ -9,7 +9,7 @@
 #include "DRInventoryComponent.generated.h"
 
 class UDRItemDefinition;
-class UDRProjectileWeaponItemDefinition;
+class UDRRangedWeaponDefinition;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRInventoryChanged);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -126,14 +126,14 @@ public:
 	/** 동일 Definition을 가진 첫 번째 유효 인스턴스를 반환한다. */
 	const FDRItemInstance* FindFirstItemInstanceByDefinition(const UDRItemDefinition* Definition) const;
 
-	/** 눈 Projectile Weapon의 특정 독립 스탯 레벨을 조회한다. */
-	bool GetSnowProjectileWeaponUpgradeLevel(
-		const UDRProjectileWeaponItemDefinition* WeaponDefinition,
+	/** 업그레이드를 지원하는 Ranged Weapon의 특정 독립 스탯 레벨을 조회한다. */
+	bool GetWeaponUpgradeLevel(
+		const UDRRangedWeaponDefinition* WeaponDefinition,
 		FGameplayTag UpgradeTag,
 		int32& OutLevel) const;
 
 	/** 서버에서 예상 레벨을 재검증한 뒤 해당 스탯만 한 단계 올린다. */
-	bool TryUpgradeSnowProjectileWeapon(FGuid InstanceId, FGameplayTag UpgradeTag, int32 ExpectedLevel);
+	bool TryUpgradeWeapon(FGuid InstanceId, FGameplayTag UpgradeTag, int32 ExpectedLevel);
 	
 	// InstanceId가 있는 슬롯을 반환
 	int32 FindSlotIndex(FGuid InstanceId) const;

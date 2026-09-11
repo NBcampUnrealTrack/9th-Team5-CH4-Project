@@ -7,7 +7,7 @@
 #include "DeepRaiders/Inventory/DRInventoryTypes.h"
 #include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -512,11 +512,11 @@ void UDRQuickSlotComponent::RefreshHeldItem(const bool bForceReapplyItemGrants)
 void UDRQuickSlotComponent::RefreshEquippedWeaponUpgrade(const FDRItemInstance* SelectedItem)
 {
 	UAbilitySystemComponent* ASC = AbilitySystemComponent.Get();
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = SelectedItem != nullptr
-		? Cast<UDRProjectileWeaponItemDefinition>(SelectedItem->Definition.Get())
+	const UDRRangedWeaponDefinition* WeaponDefinition = SelectedItem != nullptr
+		? Cast<UDRRangedWeaponDefinition>(SelectedItem->Definition.Get())
 		: nullptr;
 	UDRWeaponUpgradeProfile* UpgradeProfile = IsValid(WeaponDefinition)
-		? WeaponDefinition->UpgradeProfile.Get()
+		? WeaponDefinition->GetUpgradeProfile()
 		: nullptr;
 	const FDRSnowProjectileWeaponRuntimeState* WeaponState = SelectedItem != nullptr
 		? SelectedItem->RuntimeState.GetPtr<FDRSnowProjectileWeaponRuntimeState>()

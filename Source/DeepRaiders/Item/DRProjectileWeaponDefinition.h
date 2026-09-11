@@ -126,6 +126,8 @@ class DEEPRAIDERS_API UDRProjectileWeaponItemDefinition : public UDRRangedWeapon
 	
 public:
 	UDRProjectileWeaponItemDefinition();
+
+	virtual UDRWeaponUpgradeProfile* GetUpgradeProfile() const override { return UpgradeProfile.Get(); }
 	
 	// 발사할 때 소비할 자원의 종류
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource")
