@@ -285,10 +285,12 @@ void UDRHUDViewModel::Deinitialize()
 	TargetSnowGauge = 0.f;
 	DisplaySnowGauge = 0.f;
 	SnowGaugeIdleDuration = 0.f;
+	LastSnowGaugePresentationSequence = 0;
 	HeatGaugeZeroDuration = 0.f;
 	HeatGaugeBlinkElapsed = 0.f;
 	bHeatGaugeWasActive = false;
 	bSnowGaugeFadeActive = false;
+	bHasSnowGaugePresentation = false;
 	bHoldHeatGaugeEndColor = false;
 	bInterpolateGauges = false;
 

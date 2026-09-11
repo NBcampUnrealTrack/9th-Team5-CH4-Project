@@ -148,6 +148,14 @@ void UDRHUDUIComponent::RefreshPlayerCharacter()
 	HUDViewModel->Initialize(PlayerCharacter);
 }
 
+void UDRHUDUIComponent::ReceiveSnowGaugePresentation(const float SnowGauge, const uint32 Sequence)
+{
+	if (IsValid(HUDViewModel))
+	{
+		HUDViewModel->ReceiveSnowGaugePresentation(SnowGauge, Sequence);
+	}
+}
+
 void UDRHUDUIComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,

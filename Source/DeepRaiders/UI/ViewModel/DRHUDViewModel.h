@@ -33,6 +33,9 @@ public:
 	/** HUD에 표시되는 게이지 비율을 목표값까지 부드럽게 갱신한다. */
 	void TickGaugeInterpolation(float DeltaSeconds);
 
+	/** 서버가 소유 클라이언트에 보낸 확정 SnowGauge HUD 스냅샷이다. */
+	void ReceiveSnowGaugePresentation(float SnowGauge, uint32 Sequence);
+
 protected:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Health")
 	float CurrentHealth = 0.f;
@@ -141,10 +144,12 @@ private:
 	float TargetSnowGauge = 0.f;
 	float DisplaySnowGauge = 0.f;
 	float SnowGaugeIdleDuration = 0.f;
+	uint32 LastSnowGaugePresentationSequence = 0;
 	float HeatGaugeZeroDuration = 0.f;
 	float HeatGaugeBlinkElapsed = 0.f;
 	bool bHeatGaugeWasActive = false;
 	bool bSnowGaugeFadeActive = false;
+	bool bHasSnowGaugePresentation = false;
 	bool bHoldHeatGaugeEndColor = false;
 	bool bInterpolateGauges = false;
 

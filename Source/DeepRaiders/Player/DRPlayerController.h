@@ -76,6 +76,9 @@ public:
 	/** 로컬 설정의 플레이어 이름을 현재 서버 세션에 반영한다. */
 	void RequestSetPlayerName(const FString& NewPlayerName);
 
+	/** 확정된 SnowGauge를 소유 클라이언트 HUD에만 빠르게 전달한다. */
+	void SendSnowGaugePresentation(float SnowGauge);
+
 	/** 로컬 설치 조준이 시작될 때 휠 입력을 배치 회전 모드로 전환한다. */
 	void BeginPlacementInput(ADRPlacementTargetActor* TargetActor);
 
@@ -145,6 +148,9 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientRevealEnemyName(ADRPlayerState* TargetPlayerState, float Duration);
 
+	UFUNCTION(Client, Reliable)
+	void ClientReceiveSnowGaugePresentation(float SnowGauge, uint32 Sequence);
+
 	/** 적을 마지막으로 맞힌 시점부터 이름을 유지할 시간. */
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Nameplate", meta = (ClampMin = "0.0", Units = "s"))
 	float EnemyNameRevealDuration = 3.f;
@@ -154,6 +160,7 @@ private:
 	 * Target PlayerState마다 서버가 허용한 노출 만료 시각을 보관한다.
 	 */
 	TMap<TWeakObjectPtr<ADRPlayerState>, double> EnemyNameRevealExpireTimes;
+	uint32 SnowGaugePresentationSequence = 0;
 	
 private:
 	/*

@@ -19,6 +19,8 @@ public:
 
 	/** 현재 컨트롤러가 소유한 캐릭터를 HUD ViewModel에 다시 연결한다. */
 	void RefreshPlayerCharacter();
+	/** 서버가 소유 클라이언트에 보낸 SnowGauge HUD 스냅샷을 전달한다. */
+	void ReceiveSnowGaugePresentation(float SnowGauge, uint32 Sequence);
 	UUserWidget* GetHUDWidget() const { return HUDWidget; }
 
 protected:

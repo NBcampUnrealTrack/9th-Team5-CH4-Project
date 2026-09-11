@@ -3,6 +3,7 @@
 #include "Net/UnrealNetwork.h"
 #include "GameplayEffectExtension.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
+#include "DeepRaiders/Player/DRPlayerController.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRShieldComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -214,6 +215,22 @@ void UDRPlayerAttributeSet::PostAttributeChange(const FGameplayAttribute& Attrib
 		if (GetHeatGauge() > NewValue)
 		{
 			SetHeatGauge(NewValue);
+		}
+	}
+
+	if (Attribute == GetSnowGaugeAttribute()
+		&& !FMath::IsNearlyEqual(OldValue, NewValue))
+	{
+		UAbilitySystemComponent* AbilitySystemComponent = GetOwningAbilitySystemComponent();
+		ADRPlayerState* PlayerState = IsValid(AbilitySystemComponent)
+			? Cast<ADRPlayerState>(AbilitySystemComponent->GetOwnerActor())
+			: nullptr;
+		if (IsValid(PlayerState) && PlayerState->HasAuthority())
+		{
+			if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(PlayerState->GetOwner()))
+			{
+				PlayerController->SendSnowGaugePresentation(NewValue);
+			}
 		}
 	}
 }

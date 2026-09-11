@@ -124,6 +124,16 @@ void ADRPlayerController::RequestSetPlayerName(const FString& NewPlayerName)
 	ServerRequestSetPlayerName(SanitizedName);
 }
 
+void ADRPlayerController::SendSnowGaugePresentation(const float SnowGauge)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ClientReceiveSnowGaugePresentation(FMath::Max(0.f, SnowGauge), ++SnowGaugePresentationSequence);
+}
+
 void ADRPlayerController::ServerRequestSetPlayerName_Implementation(
 	const FString& NewPlayerName)
 {
@@ -204,6 +214,16 @@ void ADRPlayerController::ClientRevealEnemyName_Implementation(ADRPlayerState* T
 	 * 단일 만료 시각을 뒤로 갱신한다.
 	 */
 	StoredExpireTime = FMath::Max(StoredExpireTime, NewExpireTime);
+}
+
+void ADRPlayerController::ClientReceiveSnowGaugePresentation_Implementation(
+	const float SnowGauge,
+	const uint32 Sequence)
+{
+	if (IsLocalController() && IsValid(HUDUIComponent))
+	{
+		HUDUIComponent->ReceiveSnowGaugePresentation(SnowGauge, Sequence);
+	}
 }
 
 bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const

@@ -52,7 +52,6 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 	{
 		return;
 	}
-
 	// PlayerArray와 TeamId의 복제 순서에 상관없이 준비 인원을 다시 확인한다.
 	if (!bGameStarted && !bGameEnded)
 	{
@@ -79,6 +78,14 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 		return FMath::IsNearlyEqual(DisplayValue, TargetValue, CompletionTolerance)
 			? TargetValue
 			: FMath::FInterpTo(DisplayValue, TargetValue, DeltaSeconds, InterpolationSpeed);
+	};
+	const auto InterpolateSnowGauge = [DeltaSeconds](float DisplayValue, float TargetValue)
+	{
+		// 데디케이티드 서버에서는 여러 번의 획득이 한 Replication 값으로 합쳐져
+		// 도착한다. FInterpTo는 그 첫 프레임에 큰 폭으로 뛰므로, 숫자 게이지는
+		// 초당 일정 수치로만 따라가게 해 +1 단위로 자연스럽게 보이게 한다.
+		constexpr float UnitsPerSecond = 60.f;
+		return FMath::FInterpConstantTo(DisplayValue, TargetValue, DeltaSeconds, UnitsPerSecond);
 	};
 	constexpr float SnowGaugeHideDelay = 2.f;
 	constexpr float SnowGaugeFadeDuration = 0.3f;
@@ -133,7 +140,7 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, InterpolateValue(CurrentHealth, TargetCurrentHealth));
 	// 눈 수량은 표시값만 보간하고 정수가 바뀔 때 텍스트를 갱신한다.
 	const int32 PreviousSnowCount = FMath::RoundToInt(DisplaySnowGauge);
-	DisplaySnowGauge = InterpolateValue(DisplaySnowGauge, TargetSnowGauge);
+	DisplaySnowGauge = InterpolateSnowGauge(DisplaySnowGauge, TargetSnowGauge);
 	const int32 NewSnowCount = FMath::RoundToInt(DisplaySnowGauge);
 	if (PreviousSnowCount != NewSnowCount)
 	{
@@ -197,9 +204,32 @@ void UDRHUDViewModel::HandleShieldChanged(const FOnAttributeChangeData& ChangeDa
 
 void UDRHUDViewModel::HandleSnowGaugeChanged(const FOnAttributeChangeData& ChangeData)
 {
+	if (bHasSnowGaugePresentation)
+	{
+		return;
+	}
+
 	bSnowGaugeFadeActive = true;
 	SnowGaugeIdleDuration = 0.f;
 	RefreshSnowGaugeText();
+}
+
+void UDRHUDViewModel::ReceiveSnowGaugePresentation(const float SnowGauge, const uint32 Sequence)
+{
+	if (Sequence <= LastSnowGaugePresentationSequence)
+	{
+		return;
+	}
+
+	LastSnowGaugePresentationSequence = Sequence;
+	bHasSnowGaugePresentation = true;
+	// 이 값은 서버가 확정한 현재 보유량이다. 이후 일반 Attribute 복제는
+	// 배치 상태 동기화 전용으로 취급해, 늦은 값이 HUD를 되돌리지 않게 한다.
+	TargetSnowGauge = FMath::Max(0.f, SnowGauge);
+	DisplaySnowGauge = TargetSnowGauge;
+	bSnowGaugeFadeActive = true;
+	SnowGaugeIdleDuration = 0.f;
+	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(FMath::RoundToInt(DisplaySnowGauge)));
 }
 
 void UDRHUDViewModel::HandleHeatGaugeChanged(const FOnAttributeChangeData& ChangeData)
@@ -322,6 +352,17 @@ void UDRHUDViewModel::RefreshSnowGaugeText()
 		? AbilitySystemComponent->GetSet<UDRPlayerAttributeSet>()
 		: nullptr;
 	const float NewSnowGauge = IsValid(AttributeSet) ? AttributeSet->GetSnowGauge() : 0.f;
+	if (bHasSnowGaugePresentation)
+	{
+		return;
+	}
+	// 빠른 HUD 스냅샷이 아직 한 번도 오지 않은 초기화/복구 경로다.
+	// 이때만 일반 Attribute 복제값을 표시 원본으로 사용한다.
+	if (NewSnowGauge < TargetSnowGauge - KINDA_SMALL_NUMBER)
+	{
+		DisplaySnowGauge = FMath::Min(DisplaySnowGauge, NewSnowGauge);
+		UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(FMath::RoundToInt(DisplaySnowGauge)));
+	}
 	TargetSnowGauge = NewSnowGauge;
 	if (!bInterpolateGauges)
 	{
