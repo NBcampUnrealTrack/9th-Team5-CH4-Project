@@ -177,6 +177,52 @@ TArray<uint8> BuildAbsorbOcclusionDepths(
 	}
 	int32 PlaneCount = 0;
 	for (const FDRSnowAbsorbConvex& V : OutVolumes) { PlaneCount += V.Planes.Num(); }
+
+	// 유한 평면으로 표현할 수 없는 도로 같은 복잡한 StaticMesh는 기존 Prefix Hull
+	// 겹침 검사가 표면보다 일찍 차폐해 얼룩을 만든다. 이 경우 8x8 셀마다 실제
+	// 컴포넌트 충돌을 한 번만 추적해, 셀의 차폐 깊이를 정확한 첫 표면으로 기록한다.
+	TArray<uint8> ExactFallbackDepths;
+	int32 ExactFallbackTraceCount = 0;
+	bool bUsedExactFallbackTraces = false;
+	if (!Obstacles.IsEmpty())
+	{
+		ExactFallbackDepths.Init(DRSnowAbsorbOcclusion::OpenDepth, DRSnowAbsorbOcclusion::SampleCount);
+		FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(DRSnowAbsorbFallback), true);
+		TraceParams.bTraceComplex = true;
+		TraceParams.AddIgnoredActor(&Owner);
+		for (int32 Y = 0; Y < DRSnowAbsorbOcclusion::Resolution; ++Y)
+		for (int32 X = 0; X < DRSnowAbsorbOcclusion::Resolution; ++X)
+		{
+			const float NX = 2.f * (X + 0.5f) / DRSnowAbsorbOcclusion::Resolution - 1.f;
+			const float NY = 2.f * (Y + 0.5f) / DRSnowAbsorbOcclusion::Resolution - 1.f;
+			const FVector Radial = Builder.AxisY * NX + Builder.AxisZ * NY;
+			const FVector TraceStart = FrustumOrigin + Radial * Builder.InnerRadius;
+			const FVector TraceEnd = FrustumEnd + Radial * Builder.OuterRadius;
+			float NearestDepth = TNumericLimits<float>::Max();
+			for (const FObstacle& Obstacle : Obstacles)
+			{
+				if (!IsValid(Obstacle.Mesh)) { continue; }
+				FHitResult Hit;
+				++ExactFallbackTraceCount;
+				if (!Obstacle.Mesh->LineTraceComponent(Hit, TraceStart, TraceEnd, TraceParams)) { continue; }
+				const float Depth = FVector::DotProduct(Hit.ImpactPoint - FrustumOrigin, Builder.Direction);
+				if (Depth >= 0.f && Depth <= Builder.Range) { NearestDepth = FMath::Min(NearestDepth, Depth); }
+			}
+			if (NearestDepth != TNumericLimits<float>::Max())
+			{
+				ExactFallbackDepths[DRSnowAbsorbOcclusion::GetCellIndex(X, Y)] = static_cast<uint8>(FMath::Clamp(
+					FMath::FloorToInt(NearestDepth / Builder.Range * DRSnowAbsorbOcclusion::MaxBlockedDepth),
+					0,
+					static_cast<int32>(DRSnowAbsorbOcclusion::MaxBlockedDepth)));
+			}
+		}
+		bUsedExactFallbackTraces = true;
+		if (AbsorbOcclusionLogLevel > 0)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[DRSnowOcclusion][ExactFallback] Id=%llu Components=%d Traces=%d Source=ComponentLineTrace"),
+				QueryId, Obstacles.Num(), ExactFallbackTraceCount);
+		}
+	}
 	int32 GeometryTests = 0;
 	bool bGeometryBudgetExceeded = false;
 	constexpr int32 MaxGeometryTests = 2048;
@@ -216,7 +262,7 @@ TArray<uint8> BuildAbsorbOcclusionDepths(
 		return bHit;
 	};
 	const double BuildStarted = AbsorbOcclusionLogLevel > 0 ? FPlatformTime::Seconds() : 0.;
-	TArray<uint8> Depths = Builder.Build();
+	TArray<uint8> Depths = bUsedExactFallbackTraces ? MoveTemp(ExactFallbackDepths) : Builder.Build();
 	const double BuildFinished = AbsorbOcclusionLogLevel > 0 ? FPlatformTime::Seconds() : 0.;
 	int32 Blocked = 0, ClosedAtStart = 0;
 	uint8 MinDepth = DRSnowAbsorbOcclusion::OpenDepth, MaxDepth = 0;
@@ -230,11 +276,12 @@ TArray<uint8> BuildAbsorbOcclusionDepths(
 	if (AbsorbOcclusionLogLevel > 0)
 	{
 		UE_LOG(LogTemp, Log,
-			TEXT("[DRSnowOcclusion] Id=%llu Mode=FinitePlanesV4 World=%s NetMode=%d Absorber=%s Origin=%s End=%s Scanned=%d FallbackObstacles=%d SkipVoxel=%d SkipOwner=%d SkipNoQuery=%d SkipNonMesh=%d BoundsTests=%d GeometryTests=%d BudgetExceeded=%d GeometryBudgetExceeded=%d FallbackBlockedCells=%d/64 ClosedAtStart=%d MinDepth=%d MaxDepth=%d PrefixExpansionCm=0 Hulls=%d InvalidHulls=%d GatherMs=%.3f BuildMs=%.3f DetailSuppressed=%d PlaneVolumes=%d PlaneCount=%d"),
-			QueryId, *World.GetName(), static_cast<int32>(World.GetNetMode()), *Owner.GetPathName(),
+			TEXT("[DRSnowOcclusion] Id=%llu Mode=%s World=%s NetMode=%d Absorber=%s Origin=%s End=%s Scanned=%d FallbackObstacles=%d SkipVoxel=%d SkipOwner=%d SkipNoQuery=%d SkipNonMesh=%d BoundsTests=%d GeometryTests=%d ExactFallbackTraces=%d BudgetExceeded=%d GeometryBudgetExceeded=%d FallbackBlockedCells=%d/64 ClosedAtStart=%d MinDepth=%d MaxDepth=%d SurfaceAllowanceCm=%.1f Hulls=%d InvalidHulls=%d GatherMs=%.3f BuildMs=%.3f DetailSuppressed=%d PlaneVolumes=%d PlaneCount=%d"),
+			QueryId, bUsedExactFallbackTraces ? TEXT("ExactFallbackV1") : TEXT("FinitePlanesV4"), *World.GetName(), static_cast<int32>(World.GetNetMode()), *Owner.GetPathName(),
 			*FrustumOrigin.ToCompactString(), *FrustumEnd.ToCompactString(), Scanned, Obstacles.Num(),
 			SkippedVoxel, SkippedOwner, SkippedNoQuery, SkippedNonMesh, Builder.Tests, GeometryTests,
-			Builder.bBudgetExceeded, bGeometryBudgetExceeded, Blocked, ClosedAtStart, MinDepth, MaxDepth,
+			ExactFallbackTraceCount, Builder.bBudgetExceeded, bGeometryBudgetExceeded, Blocked, ClosedAtStart, MinDepth, MaxDepth,
+			DRSnowAbsorbPlanes::SurfaceAbsorbAllowanceCm,
 			Builder.HullsBuilt, Builder.InvalidHulls, (BuildStarted - GatherStarted) * 1000.0, (BuildFinished - BuildStarted) * 1000.0,
 			DetailSuppressed, OutVolumes.Num(), PlaneCount);
 		for (int32 Index = 0; Index < Obstacles.Num(); ++Index)

@@ -49,6 +49,7 @@ float GetRemovedSolidDensityAmount(const FModifiedVoxelValue& ModifiedValue)
 bool IsBehindAbsorbOccluder(
 	const TArray<uint8>& OcclusionDepths,
 	const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
+	const float SurfaceAllowanceCm,
 	const FVector& PointDelta,
 	const FVector& RadialDelta,
 	const FVector& AxisY,
@@ -57,7 +58,7 @@ bool IsBehindAbsorbOccluder(
 	const float DistanceAlong,
 	const float FrustumRange)
 {
-	if (DRSnowAbsorbPlanes::IsBlocked(OcclusionVolumes, PointDelta)) { return true; }
+	if (DRSnowAbsorbPlanes::IsBlocked(OcclusionVolumes, PointDelta, SurfaceAllowanceCm)) { return true; }
 	if (OcclusionDepths.IsEmpty()) { return false; }
 	if (OcclusionDepths.Num() != DRSnowAbsorbOcclusion::SampleCount ||
 		RadiusAtPoint <= KINDA_SMALL_NUMBER || FrustumRange <= KINDA_SMALL_NUMBER)
@@ -78,7 +79,9 @@ bool IsBehindAbsorbOccluder(
 	const uint8 Depth = OcclusionDepths[DRSnowAbsorbOcclusion::GetCellIndex(X, Y)];
 	if (Depth == DRSnowAbsorbOcclusion::OpenDepth) { return false; }
 	const float SafeDepth = FrustumRange * Depth / DRSnowAbsorbOcclusion::MaxBlockedDepth;
-	return DistanceAlong >= SafeDepth;
+	// 복잡한 StaticMesh 충돌은 평면 스냅샷 대신 보수적 깊이 마스크를 사용한다.
+	// 이 경로도 표면 안쪽 1cm는 허용해 바닥에 붙은 얇은 눈이 남지 않게 한다.
+	return DistanceAlong >= SafeDepth + SurfaceAllowanceCm;
 }
 
 // 밀도 편집 뒤, 첫 렌더 갱신 전에 머티리얼 데이터를 복구한다.
@@ -355,6 +358,11 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 
 	const float InnerRadius = OuterRadius * FMath::Clamp(InnerRadiusRatio, 0.f, 1.f);
 	const float ClampedFarStrengthRatio = FMath::Clamp(FarStrengthRatio, 0.f, 1.f);
+	// 밀도 표면은 충돌체 안쪽으로 최대 반 복셀까지 위치할 수 있다. 1cm 고정값만
+	// 허용하면 표면에 끼인 눈 한 층이 계속 차폐되므로, 복셀 해상도에 맞춘다.
+	const float SurfaceAllowanceCm = FMath::Max(
+		DRSnowAbsorbPlanes::SurfaceAbsorbAllowanceCm,
+		VoxelWorld->VoxelSize * 0.5f);
 	FVector OcclusionAxisY;
 	FVector OcclusionAxisZ;
 	Direction.FindBestAxisVectors(OcclusionAxisY, OcclusionAxisZ);
@@ -384,6 +392,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 		if (IsBehindAbsorbOccluder(
 			OcclusionDepths,
 			OcclusionVolumes,
+			SurfaceAllowanceCm,
 			Delta,
 			RadialDelta,
 			OcclusionAxisY,
@@ -508,6 +517,11 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 
 	const float InnerRadius = OuterRadius * FMath::Clamp(InnerRadiusRatio, 0.f, 1.f);
 	const float ClampedFarStrengthRatio = FMath::Clamp(FarStrengthRatio, 0.f, 1.f);
+	// 표면 복셀 한 층이 충돌체와 겹치는 경우를 제거할 수 있도록, 최소 1cm와
+	// 반 복셀 중 큰 값을 표면 허용 깊이로 사용한다.
+	const float SurfaceAllowanceCm = FMath::Max(
+		DRSnowAbsorbPlanes::SurfaceAbsorbAllowanceCm,
+		VoxelWorld->VoxelSize * 0.5f);
 	FVector OcclusionAxisY;
 	FVector OcclusionAxisZ;
 	Direction.FindBestAxisVectors(OcclusionAxisY, OcclusionAxisZ);
@@ -627,6 +641,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 			if (IsBehindAbsorbOccluder(
 				OcclusionDepths,
 				OcclusionVolumes,
+				SurfaceAllowanceCm,
 				Delta,
 				RadialDelta,
 				OcclusionAxisY,
