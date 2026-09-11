@@ -51,6 +51,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HUD|MVVM")
 	FName HUDViewModelName = TEXT("DRHUDViewModel");
 
+	/** HP, Freeze 및 Shield 배치 계산이 공통으로 사용하는 상태 게이지 기준 폭이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HUD|Status", meta = (ClampMin = "0.0"))
+	float StatusGaugeWidth = 465.f;
+
+	/** 상태 게이지 내부 SizeBox들이 공통으로 사용하는 Overlay Slot Padding이다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "HUD|Status")
+	FMargin StatusGaugeSlotPadding = FMargin(12.f, 5.f, 26.f, 0.f);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shop")
 	TSubclassOf<UDRShopWidget> ShopWidgetClass;
 

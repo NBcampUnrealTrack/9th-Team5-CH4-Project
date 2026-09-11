@@ -296,8 +296,12 @@ void UDRHUDViewModel::Deinitialize()
 
 	UE_MVVM_SET_PROPERTY_VALUE(HeatGauge, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(FreezeGaugeRatio, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(MaxHealth, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(CurrentShield, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(ShieldRatio, 0.f);
+	RefreshStatusGaugePresentation();
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeText, FText::AsNumber(0));
 	UE_MVVM_SET_PROPERTY_VALUE(SnowGaugeOpacity, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(MaxHeatGauge, 100.f);

@@ -1,8 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/SlateWrapperTypes.h"
 #include "MVVMViewModelBase.h"
 #include "GameplayTagContainer.h"
+#include "Slate/WidgetTransform.h"
 #include "DRHUDViewModel.generated.h"
 
 class ADRPlayerCharacter;
@@ -32,6 +34,8 @@ public:
 
 	/** HUD에 표시되는 게이지 비율을 목표값까지 부드럽게 갱신한다. */
 	void TickGaugeInterpolation(float DeltaSeconds);
+	/** 상태 게이지의 공통 기준 폭과 내부 Slot Padding을 설정한다. */
+	void ConfigureStatusGauge(float InGaugeWidth, const FMargin& InSlotPadding);
 
 	/** 서버가 소유 클라이언트에 보낸 확정 SnowGauge HUD 스냅샷이다. */
 	void ReceiveSnowGaugePresentation(float SnowGauge, uint32 Sequence);
@@ -52,6 +56,33 @@ protected:
 	/** 현재 최대 체력 대비 쉴드 비율이다. */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
 	float ShieldRatio = 0.f;
+
+	/** HP와 Freeze SizeBox가 함께 바인딩할 상태 게이지 기준 폭이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Status")
+	float StatusGaugeWidth = 0.f;
+
+	/** Background, Shield, HP, Freeze 및 Deco가 함께 사용할 Slot Padding이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Status")
+	FMargin StatusGaugeSlotPadding;
+
+	/** ShieldRatio가 반영된 쉴드 구간의 실제 폭이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	float ShieldGaugeWidth = 0.f;
+
+	/** 쉴드 구간을 현재 체력 게이지의 오른쪽 끝으로 옮기는 Transform이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	FWidgetTransform ShieldGaugeTransform;
+
+	/** 폭으로 쉴드 비율을 표현하므로 쉴드가 존재할 때는 항상 1이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	float ShieldGaugePercent = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Shield")
+	ESlateVisibility ShieldGaugeVisibility = ESlateVisibility::Collapsed;
+
+	/** 기본 게이지와 쉴드 구간 및 오른쪽 여백을 포함한 전체 폭이다. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Status")
+	float StatusExtentWidth = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Snow")
 	FText SnowGaugeText;
@@ -115,6 +146,7 @@ private:
 
 	void RefreshHealth();
 	void RefreshShield();
+	void RefreshStatusGaugePresentation();
 	void RefreshSnowGaugeText();
 	void RefreshHeatGauge();
 	void RefreshOverheatedState();

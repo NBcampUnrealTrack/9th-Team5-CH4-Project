@@ -91,6 +91,9 @@ void UDRHUDUIComponent::BeginPlay()
 	}
 
 	HUDViewModel = NewObject<UDRHUDViewModel>(this);
+	HUDViewModel->ConfigureStatusGauge(
+		UIConfig->StatusGaugeWidth,
+		UIConfig->StatusGaugeSlotPadding);
 	TSet<UUserWidget*> VisitedWidgets;
 	const int32 RegisteredViewCount = DRHUDUI::RegisterViewModelRecursively(
 		HUDWidget,

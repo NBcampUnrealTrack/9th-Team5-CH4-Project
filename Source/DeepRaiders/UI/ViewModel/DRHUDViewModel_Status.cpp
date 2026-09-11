@@ -46,6 +46,21 @@ namespace DRHUDStatus
 	}
 }
 
+void UDRHUDViewModel::ConfigureStatusGauge(
+	const float InGaugeWidth,
+	const FMargin& InSlotPadding)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(StatusGaugeWidth, FMath::Max(InGaugeWidth, 0.f));
+	UE_MVVM_SET_PROPERTY_VALUE(
+		StatusGaugeSlotPadding,
+		FMargin(
+			FMath::Max(InSlotPadding.Left, 0.f),
+			FMath::Max(InSlotPadding.Top, 0.f),
+			FMath::Max(InSlotPadding.Right, 0.f),
+			FMath::Max(InSlotPadding.Bottom, 0.f)));
+	RefreshStatusGaugePresentation();
+}
+
 void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 {
 	if (!bInterpolateGauges || DeltaSeconds <= 0.f)
@@ -184,6 +199,7 @@ void UDRHUDViewModel::TickGaugeInterpolation(float DeltaSeconds)
 	UE_MVVM_SET_PROPERTY_VALUE(
 		FreezeScreenEffectRatio,
 		InterpolateRatio(FreezeScreenEffectRatio, TargetScreenEffectRatio));
+	RefreshStatusGaugePresentation();
 }
 
 void UDRHUDViewModel::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
@@ -277,6 +293,7 @@ void UDRHUDViewModel::RefreshHealth()
 		UE_MVVM_SET_PROPERTY_VALUE(CurrentHealth, TargetCurrentHealth);
 		UE_MVVM_SET_PROPERTY_VALUE(HealthRatio, TargetHealthRatio);
 	}
+	RefreshStatusGaugePresentation();
 	
 	// 체력이 변경될 때 빙결 스크린 이펙트 비율(FreezeGauge / CurrentHealth)도 함께 재계산
 	RefreshFreezeGauge();
@@ -300,6 +317,37 @@ void UDRHUDViewModel::RefreshShield()
 		NewMaxHealth > KINDA_SMALL_NUMBER
 			? FMath::Max(0.f, NewShield / NewMaxHealth)
 			: 0.f);
+	RefreshStatusGaugePresentation();
+}
+
+void UDRHUDViewModel::RefreshStatusGaugePresentation()
+{
+	const float ClampedHealthRatio = FMath::Clamp(HealthRatio, 0.f, 1.f);
+	const float ClampedShieldRatio = FMath::Max(ShieldRatio, 0.f);
+	const float NewShieldGaugeWidth = ClampedShieldRatio * StatusGaugeWidth;
+	const float CombinedGaugeRatio = ClampedHealthRatio + ClampedShieldRatio;
+	const float StatusExtentRatio = FMath::Max(1.f, CombinedGaugeRatio);
+	const float HorizontalSlotPadding =
+		StatusGaugeSlotPadding.Left + StatusGaugeSlotPadding.Right;
+
+	FWidgetTransform NewShieldGaugeTransform;
+	NewShieldGaugeTransform.Translation = FVector2D(
+		ClampedHealthRatio * StatusGaugeWidth,
+		0.f);
+
+	UE_MVVM_SET_PROPERTY_VALUE(ShieldGaugeWidth, NewShieldGaugeWidth);
+	UE_MVVM_SET_PROPERTY_VALUE(ShieldGaugeTransform, NewShieldGaugeTransform);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		ShieldGaugePercent,
+		ClampedShieldRatio > KINDA_SMALL_NUMBER ? 1.f : 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		ShieldGaugeVisibility,
+		ClampedShieldRatio > KINDA_SMALL_NUMBER
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	UE_MVVM_SET_PROPERTY_VALUE(
+		StatusExtentWidth,
+		StatusExtentRatio * StatusGaugeWidth + HorizontalSlotPadding);
 }
 
 void UDRHUDViewModel::RefreshHeatGauge()
