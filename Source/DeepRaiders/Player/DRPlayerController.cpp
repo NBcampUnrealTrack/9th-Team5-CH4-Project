@@ -7,7 +7,6 @@
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "EngineUtils.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
@@ -356,11 +355,6 @@ void ADRPlayerController::SetupInputComponent()
 	if (IsValid(SelectQuickSlotAction.Get()))
 	{
 		EnhancedInput->BindAction(SelectQuickSlotAction.Get(), ETriggerEvent::Started, this, &ThisClass::HandleSelectQuickSlot);
-	}
-
-	if (IsValid(ShopAction.Get()))
-	{
-		EnhancedInput->BindAction(ShopAction, ETriggerEvent::Started, this, &ThisClass::HandleToggleShop);
 	}
 
 	if (IsValid(ScrollQuickSlotAction.Get()))
@@ -1364,50 +1358,6 @@ void ADRPlayerController::HandleRotatePlacement(const FInputActionValue& Value)
 	}
 }
 
-void ADRPlayerController::HandleToggleShop(const FInputActionValue&)
-{
-	if (ADRShop* Shop = FindInteractableShop())
-	{
-		ShopUIComponent->ToggleShopWidget(Shop);
-	}
-}
-
-ADRShop* ADRPlayerController::FindInteractableShop() const
-{
-	APawn* ControlledPawn = GetPawn();
-	UWorld* World = GetWorld();
-
-	if (!IsValid(ControlledPawn) || !IsValid(World))
-	{
-		return nullptr;
-	}
-
-	ADRShop* ClosestShop = nullptr;
-	float ClosestDistanceSquared = TNumericLimits<float>::Max();
-
-	for (TActorIterator<ADRShop> ShopIterator(World); ShopIterator; ++ShopIterator)
-	{
-		ADRShop* Shop = *ShopIterator;
-
-		if (!IsValid(Shop) || !Shop->IsPawnInShopArea(ControlledPawn))
-		{
-			continue;
-		}
-
-		const float DistanceSquared = FVector::DistSquared(
-			ControlledPawn->GetActorLocation(),
-			Shop->GetActorLocation());
-
-		if (DistanceSquared < ClosestDistanceSquared)
-		{
-			ClosestShop = Shop;
-			ClosestDistanceSquared = DistanceSquared;
-		}
-	}
-
-	return ClosestShop;
-}
-
 void ADRPlayerController::NotifyShopAreaExited(
 	ADRShop* Shop)
 {
@@ -1418,9 +1368,14 @@ void ADRPlayerController::NotifyShopAreaExited(
 	}
 }
 
-bool ADRPlayerController::IsShopInteractionAvailable() const
+void ADRPlayerController::ClientToggleShop_Implementation(ADRShop* Shop)
 {
-	return IsValid(FindInteractableShop());
+	if (IsLocalController()
+		&& IsValid(ShopUIComponent)
+		&& IsValid(Shop))
+	{
+		ShopUIComponent->ToggleShopWidget(Shop);
+	}
 }
 
 #pragma region Teleport

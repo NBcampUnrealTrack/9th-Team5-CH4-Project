@@ -329,23 +329,14 @@ public:
 	/** 상점 영역 이탈에 따른 상점 UI 종료를 처리한다. */
 	void NotifyShopAreaExited(ADRShop* Shop);
 
-	/** 현재 상점 상호작용이 가능한지 확인한다. */
-	bool IsShopInteractionAvailable() const;
-
-private:
-	/** 현재 Pawn이 상호작용 영역 안에 있는 가장 가까운 상점을 찾는다. */
-	ADRShop* FindInteractableShop() const;
-
-	/** 현재 상점의 UI를 열거나 닫는다. */
-	void HandleToggleShop(const FInputActionValue& Value);
+	/** 서버에서 검증된 상점 상호작용을 로컬 UI에 반영한다. */
+	UFUNCTION(Client, Reliable)
+	void ClientToggleShop(ADRShop* Shop);
 
 protected:
 	/** 로컬 플레이어 UI에서 사용할 위젯 클래스 설정이다. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<UDRUIConfig> UIConfig;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> ShopAction;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|UI")
 	TObjectPtr<UDRShopUIComponent> ShopUIComponent;
