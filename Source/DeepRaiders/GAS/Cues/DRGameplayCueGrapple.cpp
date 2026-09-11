@@ -315,46 +315,84 @@ bool ADRGameplayCueGrapple::ResolveStartAttachment(
 	const ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(Target);
 	if (IsValid(Character))
 	{
+		/*
+		 * Skill Grapple
+		 * Character SkeletalMesh의 전용 발사 Socket을 사용한다.
+		 */
 		if (IsValid(Cast<UDRSkillDefinition>(SourceObject)))
 		{
-			USkeletalMeshComponent* CharacterMesh = Character->GetMesh();
-			if (IsValid(CharacterMesh)
-				&& !SkillLaunchSocketName.IsNone()
-				&& CharacterMesh->DoesSocketExist(SkillLaunchSocketName))
+			USkeletalMeshComponent* CharacterMesh =
+				Character->GetMesh();
+
+			if (!IsValid(CharacterMesh)
+				|| SkillLaunchSocketName.IsNone()
+				|| !CharacterMesh->DoesSocketExist(
+					SkillLaunchSocketName))
 			{
-				OutComponent = CharacterMesh;
-				OutSocketName = SkillLaunchSocketName;
-				return true;
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT(
+						"[GrappleCue] Skill launch socket missing. "
+						"Character=%s Socket=%s"),
+					*GetNameSafe(Character),
+					*SkillLaunchSocketName.ToString());
+
+				return false;
 			}
+
+			OutComponent = CharacterMesh;
+			OutSocketName = SkillLaunchSocketName;
+
+			return true;
 		}
-		else
+
+		/*
+		 * Item Grapple
+		 * 손에 장착된 StaticMesh의 전용 총구 Socket을 사용한다.
+		 *
+		 * Socket이 없을 때 Component Origin으로 fallback하지 않는다.
+		 * 잘못된 위치에서 Cable이 시작하는 것보다 연출을 실패시키는 편이 안전하다.
+		 */
+		UStaticMeshComponent* EquipmentMesh =
+			Character->GetWorldHandEquipmentMesh();
+
+		if (!IsValid(EquipmentMesh)
+			|| !IsValid(EquipmentMesh->GetStaticMesh())
+			|| LaunchSocketName.IsNone()
+			|| !EquipmentMesh->DoesSocketExist(
+				LaunchSocketName))
 		{
-			UStaticMeshComponent* EquipmentMesh = Character->GetWorldHandEquipmentMesh();
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT(
+					"[GrappleCue] Item launch socket missing. "
+					"Character=%s Mesh=%s Socket=%s"),
+				*GetNameSafe(Character),
+				*GetNameSafe(
+					IsValid(EquipmentMesh)
+						? EquipmentMesh->GetStaticMesh()
+						: nullptr),
+				*LaunchSocketName.ToString());
 
-			if (IsValid(EquipmentMesh)
-				&& IsValid(EquipmentMesh->GetStaticMesh()))
-			{
-				OutComponent = EquipmentMesh;
-
-				if (!LaunchSocketName.IsNone()
-					&& EquipmentMesh->DoesSocketExist(LaunchSocketName))
-				{
-					OutSocketName = LaunchSocketName;
-				}
-
-				return true;
-			}
+			return false;
 		}
+
+		OutComponent = EquipmentMesh;
+		OutSocketName = LaunchSocketName;
+
+		return true;
 	}
 	
 	USceneComponent* TargetRoot = Target->GetRootComponent();
-	
 	if (!IsValid(TargetRoot))
 	{
 		return false;
 	}
 	
 	OutComponent = TargetRoot;
+	
 	return true;
 }
 
