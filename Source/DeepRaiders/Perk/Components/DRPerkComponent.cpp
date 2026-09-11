@@ -92,9 +92,14 @@ bool UDRPerkComponent::CanAddPerk(
 		return false;
 	}
 
+	// 중복 구매를 허용하려면 아래 검사를 제거한다.
+	if (GetPerkCount(PerkDefinition) > 0)
+	{
+		return false;
+	}
+
 	if (IsValid(PerkDefinition->ReplacementSkillDefinition)
-		&& (PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill
-			|| GetPerkCount(PerkDefinition) > 0))
+		&& PerkDefinition->EffectTarget != EDRPerkEffectTarget::EquippedSkill)
 	{
 		return false;
 	}
