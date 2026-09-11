@@ -175,6 +175,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_SuperJump_HeroLanding);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Blink_End);
 	
 	// Weapon Effect
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
@@ -256,4 +257,7 @@ namespace DRGameplayTags
 
 	// Gameplay Cue - Skill
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Skill_Grab_Active);
+	
+	//Gameplaye Cue - Sound - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Blink);
 }
