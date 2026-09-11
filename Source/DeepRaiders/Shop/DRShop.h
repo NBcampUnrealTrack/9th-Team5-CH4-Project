@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "GameFramework/Actor.h"
 #include "DRShop.generated.h"
 
@@ -11,7 +12,7 @@ class USceneComponent;
 class USoundBase;
 
 UCLASS()
-class DEEPRAIDERS_API ADRShop : public AActor
+class DEEPRAIDERS_API ADRShop : public AActor, public IDRInteractableInterface
 {
 	GENERATED_BODY()
 
@@ -31,11 +32,24 @@ public:
 		return TransactionSoundVolume;
 	}
 
+	virtual bool CanInteract_Implementation(APawn* Interactor) const override;
+	virtual bool Interact_Implementation(APawn* Interactor) override;
+	virtual bool GetInteractionPromptData_Implementation(
+		APawn* Interactor,
+		FDRInteractionPromptData& OutPromptData) const override;
+	virtual bool GetInteractionLocation_Implementation(
+		APawn* Interactor,
+		FVector& OutInteractionLocation) const override;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	bool FindInteractionPoint(
+		APawn* Interactor,
+		FVector& OutInteractionLocation) const;
+
 	UFUNCTION()
 	void HandleShopAreaExited(APawn* Pawn);
 
