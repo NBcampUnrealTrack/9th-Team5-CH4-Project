@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Skill/DRSkillDefinition.h"
@@ -250,6 +251,10 @@ void UDRGA_CombatRollSkill::StartRollGameplayCue(
 
 	AbilitySystem->AddGameplayCue(
 		DRGameplayTags::GameplayCue_VFX_Skill_CombatRoll,
+		Parameters);
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
+		DRGameplayTags::GameplayCue_Sound_Skill_CombatRoll,
 		Parameters);
 	IsRollGameplayCueActive = true;
 }

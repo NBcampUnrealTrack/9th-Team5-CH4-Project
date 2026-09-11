@@ -791,6 +791,11 @@ namespace DRGameplayTags
 		"Forward dash skill sound.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_CombatRoll,
+		"GameplayCue.Sound.Skill.CombatRoll",
+		"Combat roll skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");

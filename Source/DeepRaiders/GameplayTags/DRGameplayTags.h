@@ -205,6 +205,7 @@ namespace DRGameplayTags
 
 	// Gameplay Cue - Sound - Skill
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_CombatRoll);
 
 	// Gameplay Cue - Sound - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Snowball_Impact);
