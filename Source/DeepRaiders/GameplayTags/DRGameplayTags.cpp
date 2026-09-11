@@ -571,6 +571,11 @@ namespace DRGameplayTags
 		"Search skill visual effects");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_VFX_Skill_Blink_End,
+		"GameplayCue.VFX.Skill.BlinkEnd",
+		"Blink End effect visual effects");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Data_Snow_Amount,
 		"Data.Snow.Amount",
 		"Snow amount passed through GAS.");
@@ -969,4 +974,10 @@ namespace DRGameplayTags
 		GameplayCue_Skill_Grab_Active,
 		"GameplayCue.Skill.Grab.Active",
 		"Persistent hook and cable presentation for an active grab projectile.");
+	
+	// Gameplay Cue - Sound - Skill
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+	GameplayCue_Sound_Skill_Blink,
+	"GameplayCue.Sound.Skill.Blink",
+	"Blink skill sound.");
 }

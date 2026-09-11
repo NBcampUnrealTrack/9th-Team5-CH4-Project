@@ -103,4 +103,12 @@ void UDRGA_BlinkSkill::PlayBlinkVFX(
 	AbilitySystem->ExecuteGameplayCue(
 		DRGameplayTags::GameplayCue_VFX_Skill_Blink,
 		Parameters);
+	
+	AbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_VFX_Skill_Blink_End,
+		Parameters);
+	
+	AbilitySystem->ExecuteGameplayCue(
+		DRGameplayTags::GameplayCue_Sound_Skill_Blink,
+		Parameters);
 }
