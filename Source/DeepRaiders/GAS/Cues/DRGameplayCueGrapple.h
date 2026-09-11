@@ -81,10 +81,10 @@ private:
 	TObjectPtr<UNiagaraComponent> HookNiagaraComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
-	FName LaunchSocketName = TEXT("S_HandGrip_R");
+	FName LaunchSocketName = TEXT("S_GrappleLaunch");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Attachment", meta = (AllowPrivateAccess = "true"))
-	FName SkillLaunchSocketName = TEXT("S_HandGrip_R");
+	FName SkillLaunchSocketName = TEXT("S_GrappleLaunch");
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grapple|Timing",
 		meta = (AllowPrivateAccess = "true", ClampMin = "1.0", Units = "cm/s"))

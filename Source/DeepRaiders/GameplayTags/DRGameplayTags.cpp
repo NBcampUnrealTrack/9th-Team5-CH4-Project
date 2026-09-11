@@ -791,6 +791,31 @@ namespace DRGameplayTags
 		"Snow projectile impact at the collision location.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_ForwardDash,
+		"GameplayCue.Sound.Skill.ForwardDash",
+		"Forward dash skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_CombatRoll,
+		"GameplayCue.Sound.Skill.CombatRoll",
+		"Combat roll skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump,
+		"GameplayCue.Sound.Skill.SuperJump",
+		"Super jump skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump_HeroLanding,
+		"GameplayCue.Sound.Skill.SuperJump.HeroLanding",
+		"Super jump hero landing sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_Turret_Install,
+		"GameplayCue.Sound.Skill.Turret.Install",
+		"Turret installation sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");

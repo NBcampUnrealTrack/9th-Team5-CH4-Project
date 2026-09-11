@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/Components/DRCharacterMovementComponent.h"
@@ -121,6 +122,10 @@ void UDRGA_ForwardDashSkill::StartDashGameplayCue(
 
 	AbilitySystem->AddGameplayCue(
 		DRGameplayTags::GameplayCue_VFX_Skill_ForwardDash,
+		Parameters);
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		Character,
+		DRGameplayTags::GameplayCue_Sound_Skill_ForwardDash,
 		Parameters);
 	IsDashGameplayCueActive = true;
 }

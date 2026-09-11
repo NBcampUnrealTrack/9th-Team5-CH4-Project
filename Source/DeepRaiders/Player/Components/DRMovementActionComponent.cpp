@@ -963,6 +963,25 @@ void UDRMovementActionComponent::CommitZiplineInteractionCooldown()
 	LastZiplineInteractionServerTime = World->GetTimeSeconds();
 }
 
+bool UDRMovementActionComponent::IsGrappleActive() const
+{
+	const FDRMovementActionState& State = GetSimulationActionState();
+
+	return State.IsActive() && State.ActionType == EDRMovementActionType::Grapple;
+}
+
+FVector UDRMovementActionComponent::GetGrappleHookLocation() const
+{
+	const FDRMovementActionState& State = GetSimulationActionState();
+	if (!State.IsActive() || State.ActionType != EDRMovementActionType::Grapple)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FVector HookLocation = State.ReferenceLocation;
+	return HookLocation.ContainsNaN() ? FVector::ZeroVector : HookLocation;
+}
+
 void UDRMovementActionComponent::OnRep_AuthoritativeActionState(
 	const FDRMovementActionState& PreviousState)
 {
