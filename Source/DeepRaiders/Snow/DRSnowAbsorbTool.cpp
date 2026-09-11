@@ -37,6 +37,15 @@ float SmoothStep(const float Value)
 	return ClampedValue * ClampedValue * (3.f - 2.f * ClampedValue);
 }
 
+// Voxel 밀도는 0 미만일 때만 고체(눈)다. 빈 공간(0 이상)의 수치 보정은
+// 눈을 얻은 것이 아니므로 게이지용 제거량에 포함하지 않는다.
+float GetRemovedSolidDensityAmount(const FModifiedVoxelValue& ModifiedValue)
+{
+	const float OldSolidDensity = FMath::Min(ModifiedValue.OldValue, 0.f);
+	const float NewSolidDensity = FMath::Min(ModifiedValue.NewValue, 0.f);
+	return FMath::Max(0.f, NewSolidDensity - OldSolidDensity);
+}
+
 bool IsBehindAbsorbOccluder(
 	const TArray<uint8>& OcclusionDepths,
 	const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
@@ -450,7 +459,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustum(
 	float ModifiedAmount = 0.f;
 	for (const FModifiedVoxelValue& ModifiedValue : OutModifiedValues)
 	{
-		ModifiedAmount += FMath::Max(0.f, ModifiedValue.NewValue - ModifiedValue.OldValue);
+		ModifiedAmount += GetRemovedSolidDensityAmount(ModifiedValue);
 	}
 	if (bLogAbsorb)
 	{
@@ -714,7 +723,7 @@ float UDRSnowAbsorbTool::RemoveSnowFromFrustumAdaptive(
 	int32 Changed = 0, SolidToEmpty = 0, EmptyDensityOnly = 0, Samples = 0;
 	for (const FModifiedVoxelValue& ModifiedValue : OutModifiedValues)
 	{
-		ModifiedAmount += FMath::Max(0.f, ModifiedValue.NewValue - ModifiedValue.OldValue);
+		ModifiedAmount += GetRemovedSolidDensityAmount(ModifiedValue);
 		if (ModifiedValue.NewValue == ModifiedValue.OldValue) { continue; }
 		++Changed;
 		SolidToEmpty += ModifiedValue.OldValue <= 0.f && ModifiedValue.NewValue > 0.f;

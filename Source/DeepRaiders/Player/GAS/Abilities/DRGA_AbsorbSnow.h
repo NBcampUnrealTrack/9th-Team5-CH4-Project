@@ -31,6 +31,13 @@ protected:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo) override;
 
+	virtual void EndAbility(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayAbilityActivationInfo ActivationInfo,
+		bool bReplicateEndAbility,
+		bool bWasCancelled) override;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
 	TSubclassOf<UGameplayEffect> SnowGainEffectClass;
 
@@ -40,7 +47,19 @@ private:
 
 	void PerformAbsorbTick();
 	void ScheduleNextAbsorbTick();
+	void ResetAbsorbSummary();
+	void LogAbsorbSummary() const;
 
 	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
-	void ApplySnowGaugeGain(UAbilitySystemComponent* AbilitySystemComponent, float RemovedAmount) const;
+	float ApplySnowGaugeGain(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		float RemovedAmount,
+		float SolidRemovalPerSnowGauge) const;
+
+	int32 AbsorbSummaryTickCount = 0;
+	float AbsorbSummaryStartTime = 0.f;
+	float AbsorbSummaryRemovedAmount = 0.f;
+	float AbsorbSummaryGaugeGain = 0.f;
+	float AbsorbSummaryPower = 0.f;
+	float AbsorbSummarySolidRemovalPerGauge = 0.f;
 };
