@@ -796,6 +796,16 @@ namespace DRGameplayTags
 		"Combat roll skill sound.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump,
+		"GameplayCue.Sound.Skill.SuperJump",
+		"Super jump skill sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_SuperJump_HeroLanding,
+		"GameplayCue.Sound.Skill.SuperJump.HeroLanding",
+		"Super jump hero landing sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");
