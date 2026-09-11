@@ -78,6 +78,10 @@ struct DEEPRAIDERS_API FDRProjectileWeaponSnowAbsorbSettings
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float Speed = 10.f;
 
+	/** 실제로 제거한 고체 눈 밀도 합이 이 값에 도달하면 SnowGauge를 1 얻는다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb|Gauge", meta = (ClampMin = "0.001", UIMin = "0.001"))
+	float SolidRemovalPerSnowGauge = 100.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
 	float Range = 300.f;
 
@@ -134,6 +138,9 @@ struct DEEPRAIDERS_API FDRRangedWeaponDataTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SnowAbsorbSpeed = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SnowAbsorbSolidRemovalPerGauge = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float SnowAbsorbRange = 300.f;

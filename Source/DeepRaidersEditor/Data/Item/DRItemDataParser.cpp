@@ -329,6 +329,9 @@ namespace ItemParser
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAbsorbRadius"), Row.SnowAbsorbRadius, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAbsorbPower"), Row.SnowAbsorbPower, 0.f);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAbsorbSpeed"), Row.SnowAbsorbSpeed, 0.f);
+		bValid &= ValidateMinimum(
+			Report, RowIndex, Row.RowName, TEXT("SnowAbsorbSolidRemovalPerGauge"),
+			Row.SnowAbsorbSolidRemovalPerGauge, 0.f, false);
 		bValid &= ValidateMinimum(Report, RowIndex, Row.RowName, TEXT("SnowAbsorbRange"), Row.SnowAbsorbRange, 0.f);
 		bValid &= ValidateMinimum(
 			Report, RowIndex, Row.RowName, TEXT("SnowAbsorbSweepRadius"), Row.SnowAbsorbSweepRadius, 1.f);
@@ -453,6 +456,7 @@ namespace ItemParser
 		Definition.SnowAbsorbSettings.Radius = Row.SnowAbsorbRadius;
 		Definition.SnowAbsorbSettings.Power = Row.SnowAbsorbPower;
 		Definition.SnowAbsorbSettings.Speed = Row.SnowAbsorbSpeed;
+		Definition.SnowAbsorbSettings.SolidRemovalPerSnowGauge = Row.SnowAbsorbSolidRemovalPerGauge;
 		Definition.SnowAbsorbSettings.Range = Row.SnowAbsorbRange;
 		Definition.SnowAbsorbSettings.SweepRadius = Row.SnowAbsorbSweepRadius;
 		Definition.SnowAbsorbSettings.MaxSweepsPerTick = Row.SnowAbsorbMaxSweepsPerTick;

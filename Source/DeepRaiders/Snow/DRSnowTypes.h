@@ -32,9 +32,9 @@ namespace DRSnowMaterialMapping
 	}
 }
 
-// StaticMesh virtual-surface hits use a tiny fixed 7x7 support mask.
-// The server builds it from the actual hit component and replicates the 49 bits
-// so client replay clips the same virtual footprint without doing local traces.
+// StaticMesh 가상 표면 Hit에는 작은 고정 7x7 지원 Mask를 사용한다.
+// 서버는 실제 Hit 컴포넌트에서 49비트를 만들고 복제하므로, 클라이언트 재생은
+// 로컬 Trace 없이 같은 가상 Footprint를 자른다.
 namespace DRSnowVirtualSurfaceSupport
 {
 	static constexpr int32 Resolution = 7;
@@ -57,9 +57,39 @@ namespace DRSnowVirtualSurfaceSupport
 	}
 }
 
+// 각 타일에는 서버가 검증한 빈 부피의 접두 구간을 저장한다. 255는 접두 구간
+// 전체가 비어 있음을 뜻한다. 분할을 위해 Resolution은 2의 거듭제곱이어야 한다.
+namespace DRSnowAbsorbOcclusion
+{
+	static constexpr int32 Resolution = 8;
+	static constexpr int32 SampleCount = Resolution * Resolution;
+	static constexpr uint8 OpenDepth = MAX_uint8;
+	static constexpr uint8 MaxBlockedDepth = MAX_uint8 - 1;
+
+	FORCEINLINE int32 GetCellIndex(const int32 X, const int32 Y)
+	{
+		return Y * Resolution + X;
+	}
+}
+
 
 class AActor;
 class APawn;
+
+// 서버가 생성한 유한 볼록 충돌 부피다. 평면은
+// dot(N, Position - BrushOrigin) <= W를 사용하며 모든 계수는 정규화된 float다.
+USTRUCT()
+struct DEEPRAIDERS_API FDRSnowAbsorbConvex
+{
+	GENERATED_BODY()
+	static constexpr int32 MaxVolumes = 16;
+	static constexpr int32 MaxPlanes = 32;
+	static constexpr int32 MaxTotalPlanes = 128;
+	UPROPERTY()
+	TArray<FVector4> Planes;
+	UPROPERTY()
+	float InsetCm = 0.f;
+};
 
 UENUM(BlueprintType)
 enum class EDRSnowVoxelEditTool : uint8
@@ -162,8 +192,8 @@ struct DEEPRAIDERS_API FDRSnowSurfaceAddRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	bool bUseVirtualSurface = false;
 
-	// 7x7 StaticMesh support samples. 0 means legacy/unmasked virtual plane.
-	// UPROPERTY also carries the value through the detailed ServerTryAddSnow(Request) RPC.
+	// 7x7 StaticMesh 지원 샘플이다. 0은 기존 Mask 없는 가상 평면을 뜻한다.
+	// UPROPERTY는 상세 ServerTryAddSnow(Request) RPC에도 값을 전달한다.
 	UPROPERTY()
 	int64 VirtualSurfaceSupportMask = 0;
 
@@ -221,6 +251,13 @@ struct DEEPRAIDERS_API FDRSnowSurfaceRemoveRequest
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	bool bUseAdaptiveAbsorbQuery = true;
 
+	// 서버가 구역 전체의 부피 검사로 확정한 8x8 안전 깊이다.
+	// 비어 있으면 차폐가 없으며, 255인 셀은 최대 사거리까지 열려 있다.
+	UPROPERTY()
+	TArray<uint8> AbsorbOcclusionDepths;
+
+	UPROPERTY()
+	TArray<FDRSnowAbsorbConvex> AbsorbOcclusionVolumes;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Snow")
 	FDRSnowInteractionContext Context;
@@ -261,7 +298,7 @@ struct DEEPRAIDERS_API FDRSnowAddOperation
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	bool bUseVirtualSurface = false;
 
-	// Replicated by FDRSnowOperationRecord::NetSerialize only for virtual surfaces.
+	// 가상 표면에 한해 FDRSnowOperationRecord::NetSerialize로 복제한다.
 	UPROPERTY()
 	int64 VirtualSurfaceSupportMask = 0;
 
@@ -317,6 +354,12 @@ struct DEEPRAIDERS_API FDRSnowRemoveOperation
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	bool bUseAdaptiveAbsorbQuery = true;
 
+	// 서버에서 확정한 8x8 안전 깊이다. 클라이언트는 재추적하지 않고 재사용한다.
+	UPROPERTY()
+	TArray<uint8> AbsorbOcclusionDepths;
+
+	UPROPERTY()
+	TArray<FDRSnowAbsorbConvex> AbsorbOcclusionVolumes;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Snow|Network")
 	int32 TeamId = INDEX_NONE;

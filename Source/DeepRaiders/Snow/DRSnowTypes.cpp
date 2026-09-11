@@ -167,6 +167,55 @@ bool FDRSnowOperationRecord::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& 
 				SerializeOptionalFloat(Ar, Op.AbsorbSweepRadius, 50.f);
 				SerializePackedInt(Ar, Op.AbsorbMaxSweepsPerTick);
 			}
+
+			bool bHasOcclusionDepths =
+				Op.AbsorbOcclusionDepths.Num() == DRSnowAbsorbOcclusion::SampleCount;
+			SerializeFlag(Ar, bHasOcclusionDepths);
+			if (bHasOcclusionDepths)
+			{
+				if (Ar.IsLoading())
+				{
+					Op.AbsorbOcclusionDepths.SetNumUninitialized(
+						DRSnowAbsorbOcclusion::SampleCount);
+				}
+				Ar.Serialize(
+					Op.AbsorbOcclusionDepths.GetData(),
+					DRSnowAbsorbOcclusion::SampleCount);
+			}
+			else if (Ar.IsLoading())
+			{
+				Op.AbsorbOcclusionDepths.Reset();
+			}
+
+			uint32 VolumeCount = Op.AbsorbOcclusionVolumes.Num();
+			if (VolumeCount > FDRSnowAbsorbConvex::MaxVolumes) { Ar.SetError(); bOutSuccess = false; return false; }
+			Ar.SerializeInt(VolumeCount, FDRSnowAbsorbConvex::MaxVolumes + 1);
+			if (VolumeCount > FDRSnowAbsorbConvex::MaxVolumes) { Ar.SetError(); bOutSuccess = false; return false; }
+			if (Ar.IsLoading()) { Op.AbsorbOcclusionVolumes.SetNum(VolumeCount); }
+			int32 TotalPlanes = 0;
+			for (FDRSnowAbsorbConvex& Volume : Op.AbsorbOcclusionVolumes)
+			{
+				uint32 PlaneCount = Volume.Planes.Num();
+				if (Ar.IsSaving() && (PlaneCount < 4 || PlaneCount > FDRSnowAbsorbConvex::MaxPlanes))
+				{ Ar.SetError(); bOutSuccess = false; return false; }
+				Ar.SerializeInt(PlaneCount, FDRSnowAbsorbConvex::MaxPlanes + 1);
+				TotalPlanes += PlaneCount;
+				if (PlaneCount < 4 || PlaneCount > FDRSnowAbsorbConvex::MaxPlanes || TotalPlanes > FDRSnowAbsorbConvex::MaxTotalPlanes)
+				{ Ar.SetError(); bOutSuccess = false; return false; }
+				Ar << Volume.InsetCm;
+				if (!FMath::IsFinite(Volume.InsetCm) || Volume.InsetCm < 0.f || Volume.InsetCm > 1.f)
+				{ Ar.SetError(); bOutSuccess = false; return false; }
+				if (Ar.IsLoading()) { Volume.Planes.SetNum(PlaneCount); }
+				for (FVector4& P : Volume.Planes)
+				{
+					float X = P.X, Y = P.Y, Z = P.Z, W = P.W;
+					Ar << X; Ar << Y; Ar << Z; Ar << W;
+					const float NormalSize = X * X + Y * Y + Z * Z;
+					if (!FMath::IsFinite(NormalSize) || !FMath::IsFinite(W) || NormalSize < 0.99f || NormalSize > 1.01f)
+					{ Ar.SetError(); bOutSuccess = false; return false; }
+					if (Ar.IsLoading()) { P = FVector4(X, Y, Z, W); }
+				}
+			}
 		}
 		else
 		{

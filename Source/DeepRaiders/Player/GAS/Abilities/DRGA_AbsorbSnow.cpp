@@ -15,6 +15,30 @@
 #include "GameFramework/Pawn.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "Animation/AnimMontage.h"
+#include "HAL/IConsoleManager.h"
+
+namespace
+{
+TAutoConsoleVariable<int32> CVarDRSnowAbsorbGaugeSummary(
+	TEXT("dr.Snow.Absorb.GaugeSummary"),
+	0,
+	TEXT("눈 흡수 종료 시 게이지 획득 요약을 한 줄로 남긴다. 0: 끔, 1: 켬"),
+	ECVF_Default);
+
+float CalculateSnowGaugeGain(
+	const float RemovedAmount,
+	const float SolidRemovalPerSnowGauge)
+{
+	if (RemovedAmount <= 0.f || SolidRemovalPerSnowGauge <= UE_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+
+	// 제거량을 그대로 재화로 쓰지 않고 무기 데이터의 환산 단위로만 나눈다.
+	// 따라서 흡수 강도 강화가 실제 고체 눈 제거량을 늘리면 게이지 획득량도 함께 증가한다.
+	return RemovedAmount / SolidRemovalPerSnowGauge;
+}
+}
 
 UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 {
@@ -98,6 +122,7 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		return;
 	}
 
+	ResetAbsorbSummary();
 	PerformAbsorbTick();
 }
 
@@ -124,7 +149,9 @@ void UDRGA_AbsorbSnow::EndAbility(
 	bool bWasCancelled)
 {
 	StopAbsorbGameplayCue();
-
+	LogAbsorbSummary();
+	ResetAbsorbSummary();
+	
 	Super::EndAbility(
 		Handle,
 		ActorInfo,
@@ -216,9 +243,68 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 		SnowRemoveComponent->TryRemoveSnowAlongDirection(
 			AbsorbFrustumOrigin, AbsorbDirection, EffectiveRemovalSpec);
 	
-	ApplySnowGaugeGain(ASC, RemovedAmount);
+	const IConsoleVariable* AbsorbLog = IConsoleManager::Get().FindConsoleVariable(TEXT("dr.Snow.Absorb.Log"));
+	const bool bLogGauge = AbsorbLog && AbsorbLog->GetInt() > 0;
+	const float GaugeBefore = bLogGauge ? ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()) : 0.f;
+	const float SolidRemovalPerSnowGauge = IsValid(WeaponDefinition)
+		? WeaponDefinition->SnowAbsorbSettings.SolidRemovalPerSnowGauge
+		: 0.f;
+	const float RequestedGaugeGain = ApplySnowGaugeGain(
+		ASC,
+		RemovedAmount,
+		SolidRemovalPerSnowGauge);
+	++AbsorbSummaryTickCount;
+	AbsorbSummaryRemovedAmount += RemovedAmount;
+	AbsorbSummaryGaugeGain += RequestedGaugeGain;
+	AbsorbSummaryPower = EffectiveRemovalSpec.SnowAbsorbPower;
+	AbsorbSummarySolidRemovalPerGauge = SolidRemovalPerSnowGauge;
+	if (bLogGauge)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[DRSnowAbsorb][Gauge] Avatar=%s Removed=%.6f PerGauge=%.6f Gain=%.6f Before=%.6f After=%.6f Max=%.6f Effect=%s"),
+			*GetPathNameSafe(GetAvatarActorFromActorInfo()), RemovedAmount, SolidRemovalPerSnowGauge, RequestedGaugeGain, GaugeBefore,
+			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()),
+			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()),
+			*GetNameSafe(SnowGainEffectClass.Get()));
+	}
 
 	ScheduleNextAbsorbTick();
+}
+
+void UDRGA_AbsorbSnow::ResetAbsorbSummary()
+{
+	AbsorbSummaryTickCount = 0;
+	AbsorbSummaryStartTime = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.f;
+	AbsorbSummaryRemovedAmount = 0.f;
+	AbsorbSummaryGaugeGain = 0.f;
+	AbsorbSummaryPower = 0.f;
+	AbsorbSummarySolidRemovalPerGauge = 0.f;
+}
+
+void UDRGA_AbsorbSnow::LogAbsorbSummary() const
+{
+	if (CVarDRSnowAbsorbGaugeSummary.GetValueOnGameThread() == 0
+		|| AbsorbSummaryTickCount <= 0)
+	{
+		return;
+	}
+
+	const float EndTime = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : AbsorbSummaryStartTime;
+	const float Duration = FMath::Max(0.f, EndTime - AbsorbSummaryStartTime);
+	const float AverageGainPerTick = AbsorbSummaryGaugeGain / AbsorbSummaryTickCount;
+	const float GainPerSecond = Duration > UE_SMALL_NUMBER
+		? AbsorbSummaryGaugeGain / Duration
+		: 0.f;
+	UE_LOG(LogTemp, Log,
+		TEXT("[DRSnowAbsorb][Summary] Ticks=%d Duration=%.2fs Power=%.2f PerGauge=%.2f Removed=%.2f Gauge=%.2f AvgTick=%.2f Rate=%.2f/s"),
+		AbsorbSummaryTickCount,
+		Duration,
+		AbsorbSummaryPower,
+		AbsorbSummarySolidRemovalPerGauge,
+		AbsorbSummaryRemovedAmount,
+		AbsorbSummaryGaugeGain,
+		AverageGainPerTick,
+		GainPerSecond);
 }
 
 void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
@@ -338,21 +424,24 @@ bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) cons
 	return OutRemovalSpec.SnowAbsorbPower > 0.f &&
 		OutRemovalSpec.SnowAbsorbRadius > 0.f &&
 		OutRemovalSpec.SnowAbsorbSpeed > 0.f &&
-		OutRemovalSpec.SnowAbsorbRange > 0.f;
+		OutRemovalSpec.SnowAbsorbRange > 0.f &&
+		SnowAbsorbSettings.SolidRemovalPerSnowGauge > UE_SMALL_NUMBER;
 }
 
-void UDRGA_AbsorbSnow::ApplySnowGaugeGain(
+float UDRGA_AbsorbSnow::ApplySnowGaugeGain(
 	UAbilitySystemComponent* AbilitySystemComponent,
-	float RemovedAmount) const
+	const float RemovedAmount,
+	const float SolidRemovalPerSnowGauge) const
 {
-	if (!IsValid(AbilitySystemComponent) || RemovedAmount <= 0.f)
+	const float GaugeGain = CalculateSnowGaugeGain(RemovedAmount, SolidRemovalPerSnowGauge);
+	if (!IsValid(AbilitySystemComponent) || GaugeGain <= UE_SMALL_NUMBER)
 	{
-		return;
+		return 0.f;
 	}
 
 	if (!SnowGainEffectClass)
 	{
-		return;
+		return 0.f;
 	}
 
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
@@ -365,13 +454,15 @@ void UDRGA_AbsorbSnow::ApplySnowGaugeGain(
 
 	if (!EffectSpec.IsValid())
 	{
-		return;
+		return 0.f;
 	}
 
-	EffectSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, RemovedAmount);
+	EffectSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, GaugeGain);
 	ApplyGameplayEffectSpecToOwner(
 		GetCurrentAbilitySpecHandle(),
 		ActorInfo,
 		GetCurrentActivationInfo(),
 		EffectSpec);
+
+	return GaugeGain;
 }

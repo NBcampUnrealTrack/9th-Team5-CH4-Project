@@ -675,6 +675,8 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 			SnowSurfaceDistanceDivisor,
 			Request.AbsorbSweepRadius,
 			Request.AbsorbMaxSweepsPerTick,
+			Request.AbsorbOcclusionDepths,
+			Request.AbsorbOcclusionVolumes,
 			ModifiedValues,
 			EditedBounds);
 	}
@@ -689,11 +691,16 @@ FDRSnowSurfaceEditResult FDRSnowSurfaceEditor::RemoveSnowWithAbsorbTool(
 			0.2f,
 			Request.RequestedAmount,
 			SnowSurfaceDistanceDivisor,
+			Request.AbsorbOcclusionDepths,
+			Request.AbsorbOcclusionVolumes,
 			ModifiedValues,
 			EditedBounds);
 	}
 
-	Result.AppliedAmount = FMath::Min(Request.RequestedAmount, ModifiedValueAmount);
+	// AbsorbTool은 실제 고체 눈에서 제거된 밀도만 합산해 반환한다.
+	// RequestedAmount는 틱당 브러시 세기이지 총 제거량 상한이 아니므로, 여기서
+	// 자르면 복셀 하나와 다수 복셀 제거가 같은 게이지 획득량으로 고정된다.
+	Result.AppliedAmount = FMath::Max(0.f, ModifiedValueAmount);
 	if (Result.AppliedAmount > 0.f)
 	{
 		Result.VoxelWorld = VoxelWorld;

@@ -1289,6 +1289,8 @@ bool ADRMiningGameStateBase::ApplySnowRemoveOnce(const FDRSnowOperationRecord& R
 	Request.AbsorbSweepRadius = Operation.AbsorbSweepRadius;
 	Request.AbsorbMaxSweepsPerTick = Operation.AbsorbMaxSweepsPerTick;
 	Request.bUseAdaptiveAbsorbQuery = Operation.bUseAdaptiveAbsorbQuery;
+	Request.AbsorbOcclusionDepths = Operation.AbsorbOcclusionDepths;
+	Request.AbsorbOcclusionVolumes = Operation.AbsorbOcclusionVolumes;
 	Request.Context.TeamId = Operation.TeamId;
 
 	UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();

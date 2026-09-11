@@ -7,6 +7,7 @@
 #include "DRSnowAbsorbTool.generated.h"
 
 class AVoxelWorld;
+struct FDRSnowAbsorbConvex;
 
 // 청소기 흡수 범위처럼 시작점은 좁고 끝점은 넓은 frustum 형태로 표면의 눈을 점진적으로 제거한다.
 // 게임플레이에서는 Adaptive slab 경로를 사용하고, Voxel Tool 목록에서는 전체 형태/감쇠를 직접 확인할 수 있다.
@@ -44,6 +45,8 @@ public:
 		float FarStrengthRatio,
 		float Strength,
 		float DistanceDivisor,
+		const TArray<uint8>& OcclusionDepths,
+		const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
 		TArray<FModifiedVoxelValue>& OutModifiedValues,
 		FVoxelIntBox& OutEditedBounds,
 		bool bUpdateRender = true);
@@ -61,6 +64,8 @@ public:
 		float DistanceDivisor,
 		float SweepRadius,
 		int32 MaxSweepsPerTick,
+		const TArray<uint8>& OcclusionDepths,
+		const TArray<FDRSnowAbsorbConvex>& OcclusionVolumes,
 		TArray<FModifiedVoxelValue>& OutModifiedValues,
 		FVoxelIntBox& OutEditedBounds,
 		bool bUpdateRender = true);

@@ -58,4 +58,20 @@ private:
 	void ApplySnowGaugeGain(UAbilitySystemComponent* AbilitySystemComponent, float RemovedAmount) const;
 
 	bool bAbsorbGameplayCueActive = false;
+	
+	void ResetAbsorbSummary();
+	void LogAbsorbSummary() const;
+
+	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
+	float ApplySnowGaugeGain(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		float RemovedAmount,
+		float SolidRemovalPerSnowGauge) const;
+
+	int32 AbsorbSummaryTickCount = 0;
+	float AbsorbSummaryStartTime = 0.f;
+	float AbsorbSummaryRemovedAmount = 0.f;
+	float AbsorbSummaryGaugeGain = 0.f;
+	float AbsorbSummaryPower = 0.f;
+	float AbsorbSummarySolidRemovalPerGauge = 0.f;
 };
