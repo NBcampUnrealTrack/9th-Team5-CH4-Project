@@ -116,7 +116,10 @@ bool Canonicalize(const TArray<FPlane>& Planes, const TArray<FVector>& Vertices,
 		}
 		if (!bDuplicate) { Out.Planes.Add(Packed); }
 	}
-	Out.InsetCm = static_cast<float>(FMath::Clamp(MinWidth * 0.25, 0., 1.));
+	Out.InsetCm = static_cast<float>(FMath::Clamp(
+		MinWidth * 0.25,
+		0.,
+		static_cast<double>(SurfaceAbsorbAllowanceCm)));
 	return Out.Planes.Num() >= 4 && Out.Planes.Num() <= FDRSnowAbsorbConvex::MaxPlanes && MinWidth > 0.;
 }
 }

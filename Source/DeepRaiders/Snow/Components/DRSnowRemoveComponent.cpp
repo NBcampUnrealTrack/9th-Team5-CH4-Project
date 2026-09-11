@@ -230,11 +230,12 @@ TArray<uint8> BuildAbsorbOcclusionDepths(
 	if (AbsorbOcclusionLogLevel > 0)
 	{
 		UE_LOG(LogTemp, Log,
-			TEXT("[DRSnowOcclusion] Id=%llu Mode=FinitePlanesV4 World=%s NetMode=%d Absorber=%s Origin=%s End=%s Scanned=%d FallbackObstacles=%d SkipVoxel=%d SkipOwner=%d SkipNoQuery=%d SkipNonMesh=%d BoundsTests=%d GeometryTests=%d BudgetExceeded=%d GeometryBudgetExceeded=%d FallbackBlockedCells=%d/64 ClosedAtStart=%d MinDepth=%d MaxDepth=%d PrefixExpansionCm=0 Hulls=%d InvalidHulls=%d GatherMs=%.3f BuildMs=%.3f DetailSuppressed=%d PlaneVolumes=%d PlaneCount=%d"),
+			TEXT("[DRSnowOcclusion] Id=%llu Mode=FinitePlanesV4 World=%s NetMode=%d Absorber=%s Origin=%s End=%s Scanned=%d FallbackObstacles=%d SkipVoxel=%d SkipOwner=%d SkipNoQuery=%d SkipNonMesh=%d BoundsTests=%d GeometryTests=%d BudgetExceeded=%d GeometryBudgetExceeded=%d FallbackBlockedCells=%d/64 ClosedAtStart=%d MinDepth=%d MaxDepth=%d SurfaceAllowanceCm=%.1f Hulls=%d InvalidHulls=%d GatherMs=%.3f BuildMs=%.3f DetailSuppressed=%d PlaneVolumes=%d PlaneCount=%d"),
 			QueryId, *World.GetName(), static_cast<int32>(World.GetNetMode()), *Owner.GetPathName(),
 			*FrustumOrigin.ToCompactString(), *FrustumEnd.ToCompactString(), Scanned, Obstacles.Num(),
 			SkippedVoxel, SkippedOwner, SkippedNoQuery, SkippedNonMesh, Builder.Tests, GeometryTests,
 			Builder.bBudgetExceeded, bGeometryBudgetExceeded, Blocked, ClosedAtStart, MinDepth, MaxDepth,
+			DRSnowAbsorbPlanes::SurfaceAbsorbAllowanceCm,
 			Builder.HullsBuilt, Builder.InvalidHulls, (BuildStarted - GatherStarted) * 1000.0, (BuildFinished - BuildStarted) * 1000.0,
 			DetailSuppressed, OutVolumes.Num(), PlaneCount);
 		for (int32 Index = 0; Index < Obstacles.Num(); ++Index)
