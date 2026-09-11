@@ -13,6 +13,8 @@
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
+#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "Animation/AnimMontage.h"
 
 UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 {
@@ -48,6 +50,27 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		return;
 	}
 
+	// Presentation
+	// LocalPredicted Ability이므로 owning client에서는 즉시 재생되고,
+	// server montage state를 통해 simulated proxy에도 전달된다.
+	if (IsValid(AbsorbMontage))
+	{
+		UAbilityTask_PlayMontageAndWait* MontageTask =
+			UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+				this,
+				NAME_None,
+				AbsorbMontage,
+				1.f,
+				NAME_None,
+				true); // Ability 종료 시 Montage 자동 정지
+
+		if (IsValid(MontageTask))
+		{
+			MontageTask->ReadyForActivation();
+		}
+	}
+
+	// 실제 Snow Absorb는 기존처럼 서버 전용
 	if (!ActorInfo->IsNetAuthority())
 	{
 		return;
@@ -55,14 +78,18 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 
 	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+
 	UDRSnowRemoveComponent* SnowRemoveComponent =
-		IsValid(AvatarActor) ? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>() : nullptr;
+		IsValid(AvatarActor)
+			? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>()
+			: nullptr;
 
 	if (!IsValid(ASC) || !IsValid(AvatarActor) || !IsValid(SnowRemoveComponent))
 	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
+
 	PerformAbsorbTick();
 }
 

@@ -9,6 +9,7 @@
 
 class UAbilitySystemComponent;
 class UGameplayEffect;
+class UAnimMontage;
 
 // Player가 바라보는 표면의 눈을 흡수해 SnowGauge로 전환하는 GA
 UCLASS()
@@ -34,6 +35,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb")
 	TSubclassOf<UGameplayEffect> SnowGainEffectClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Snow|Absorb|Animation")
+	TObjectPtr<UAnimMontage> AbsorbMontage = nullptr;
+	
 private:
 	UFUNCTION()
 	void HandleAbsorbDelayFinished();
