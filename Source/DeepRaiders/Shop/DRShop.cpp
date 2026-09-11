@@ -25,7 +25,7 @@ ADRShop::ADRShop()
 		TEXT("ShopComponent"));
 
 	static ConstructorHelpers::FObjectFinder<USoundBase> PurchaseSoundAsset(
-		TEXT("/Game/DeepRaiders/Sound/SoundWave/Shop_Buy.Shop_Buy"));
+		TEXT("/Game/DeepRaiders/Sound/SoundWave/Item/Shop_Buy.Shop_Buy"));
 
 	PurchaseSound = PurchaseSoundAsset.Object;
 }

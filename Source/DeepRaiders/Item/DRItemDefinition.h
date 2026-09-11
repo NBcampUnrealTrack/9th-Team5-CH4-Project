@@ -40,7 +40,7 @@ struct DEEPRAIDERS_API FDRItemDataTableRow : public FTableRowBase
 	FString WorldInteractionText;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EDRItemCategory Category;
+	EDRItemCategory Category = EDRItemCategory::Ore;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	EDRItemRarity Rarity = EDRItemRarity::Common;

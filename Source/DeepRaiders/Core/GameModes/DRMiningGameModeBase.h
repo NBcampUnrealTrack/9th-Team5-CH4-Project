@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DeepRaiders/Core/GameStates/DRGameFlowState.h"
-#include "GameFramework/GameModeBase.h"
+#include "RoomServiceGameModeBase.h"
 #include "TimerManager.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "DRMiningGameModeBase.generated.h"
@@ -67,7 +67,7 @@ struct FDRGamePhaseConfig
 
 // 채굴 테스트/플레이용 GameState를 사용하는 GameMode이다.
 UCLASS()
-class DEEPRAIDERS_API ADRMiningGameModeBase : public AGameModeBase
+class DEEPRAIDERS_API ADRMiningGameModeBase : public ARoomServiceGameModeBase
 {
 	GENERATED_BODY()
 
