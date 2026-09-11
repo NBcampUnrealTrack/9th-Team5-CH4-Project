@@ -4,7 +4,7 @@
 #include "DRInventoryComponent.h"
 
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
@@ -456,18 +456,18 @@ const FDRItemInstance* UDRInventoryComponent::FindFirstItemInstanceByDefinition(
 	});
 }
 
-bool UDRInventoryComponent::GetSnowProjectileWeaponUpgradeLevel(
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition,
+bool UDRInventoryComponent::GetWeaponUpgradeLevel(
+	const UDRRangedWeaponDefinition* WeaponDefinition,
 	FGameplayTag UpgradeTag,
 	int32& OutLevel) const
 {
 	OutLevel = 0;
 
-	if (!IsValid(WeaponDefinition)
-		|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
+	UDRWeaponUpgradeProfile* UpgradeProfile =
+		IsValid(WeaponDefinition) ? WeaponDefinition->GetUpgradeProfile() : nullptr;
+	if (!IsValid(UpgradeProfile)
 		|| !UpgradeTag.IsValid()
-		|| !IsValid(WeaponDefinition->UpgradeProfile)
-		|| WeaponDefinition->UpgradeProfile->FindStatUpgrade(UpgradeTag) == nullptr)
+		|| UpgradeProfile->FindStatUpgrade(UpgradeTag) == nullptr)
 	{
 		return false;
 	}
@@ -486,23 +486,23 @@ bool UDRInventoryComponent::GetSnowProjectileWeaponUpgradeLevel(
 	return true;
 }
 
-bool UDRInventoryComponent::TryUpgradeSnowProjectileWeapon(
+bool UDRInventoryComponent::TryUpgradeWeapon(
 	FGuid InstanceId, FGameplayTag UpgradeTag, int32 ExpectedLevel)
 {
 	const FDRItemInstance* ItemInstance = FindItemInstance(InstanceId);
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = ItemInstance != nullptr
-		? Cast<UDRProjectileWeaponItemDefinition>(ItemInstance->Definition.Get()) : nullptr;
+	const UDRRangedWeaponDefinition* WeaponDefinition = ItemInstance != nullptr
+		? Cast<UDRRangedWeaponDefinition>(ItemInstance->Definition.Get()) : nullptr;
+	UDRWeaponUpgradeProfile* UpgradeProfile =
+		IsValid(WeaponDefinition) ? WeaponDefinition->GetUpgradeProfile() : nullptr;
 	if (!HasInventoryAuthority()
-		|| !IsValid(WeaponDefinition)
-		|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::SnowGauge
-		|| !IsValid(WeaponDefinition->UpgradeProfile)
-		|| !WeaponDefinition->UpgradeProfile->IsUsable()
+		|| !IsValid(UpgradeProfile)
+		|| !UpgradeProfile->IsUsable()
 		|| ExpectedLevel < 0 || ExpectedLevel == MAX_int32)
 	{
 		return false;
 	}
 
-	const FDRWeaponStatUpgradeData* UpgradeData = WeaponDefinition->UpgradeProfile->FindStatUpgrade(UpgradeTag);
+	const FDRWeaponStatUpgradeData* UpgradeData = UpgradeProfile->FindStatUpgrade(UpgradeTag);
 	const FDRWeaponUpgradeLevelData* TargetLevelData = UpgradeData != nullptr
 		? UpgradeData->FindLevelData(ExpectedLevel + 1)
 		: nullptr;

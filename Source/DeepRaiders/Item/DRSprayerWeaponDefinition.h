@@ -8,6 +8,7 @@
 #include "DRSprayerWeaponDefinition.generated.h"
 
 class UGameplayEffect;
+class UDRWeaponUpgradeProfile;
 
 USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRSprayerWeaponDataTableRow : public FTableRowBase
@@ -46,6 +47,11 @@ class DEEPRAIDERS_API UDRSprayerWeaponDefinition : public UDRRangedWeaponDefinit
 
 public:
 	UDRSprayerWeaponDefinition();
+
+	virtual UDRWeaponUpgradeProfile* GetUpgradeProfile() const override { return UpgradeProfile.Get(); }
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Upgrade")
+	TObjectPtr<UDRWeaponUpgradeProfile> UpgradeProfile = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Resource|Snow", meta = ( ClampMin = "0.0", UIMin = "0.0"))
 	float SnowCostPerSecond = 10.f;

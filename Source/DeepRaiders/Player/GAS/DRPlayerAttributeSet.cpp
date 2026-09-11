@@ -33,6 +33,7 @@ UDRPlayerAttributeSet::UDRPlayerAttributeSet()
 	InitWeaponHeatGenerationMultiplier(1.f);
 	InitWeaponSnowAbsorbPowerMultiplier(1.f);
 	InitWeaponSnowAddAmountMultiplier(1.f);
+	InitWeaponFreezeAmountMultiplier(1.f);
 }
 
 void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -60,6 +61,8 @@ void UDRPlayerAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponSnowAbsorbPowerMultiplier, COND_OwnerOnly,
 		REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponSnowAddAmountMultiplier, COND_OwnerOnly,
+		REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UDRPlayerAttributeSet, WeaponFreezeAmountMultiplier, COND_OwnerOnly,
 		REPNOTIFY_Always);
 }
 
@@ -165,6 +168,13 @@ void UDRPlayerAttributeSet::OnRep_WeaponSnowAddAmountMultiplier(
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponSnowAddAmountMultiplier,
 		OldWeaponSnowAddAmountMultiplier);
+}
+
+void UDRPlayerAttributeSet::OnRep_WeaponFreezeAmountMultiplier(
+	const FGameplayAttributeData& OldWeaponFreezeAmountMultiplier)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UDRPlayerAttributeSet, WeaponFreezeAmountMultiplier,
+		OldWeaponFreezeAmountMultiplier);
 }
 
 void UDRPlayerAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)

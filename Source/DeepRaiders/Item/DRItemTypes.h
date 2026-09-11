@@ -44,7 +44,7 @@ struct DEEPRAIDERS_API FDRProjectileWeaponRuntimeState : public FDRItemRuntimeSt
 };
 
 /**
- * 눈을 소모하는 Projectile Weapon의 인스턴스별 업그레이드 상태.
+ * 눈 기반 Ranged Weapon의 인스턴스별 업그레이드 상태.
  *
  * 업그레이드 결과값이 아니라 스탯별 현재 레벨을 영구 상태로 보관한다.
  * 레벨에 대응하는 실제 수치는 UDRWeaponUpgradeProfile에서 조회한다.

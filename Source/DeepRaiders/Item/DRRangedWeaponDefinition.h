@@ -6,6 +6,8 @@
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRRangedWeaponDefinition.generated.h"
 
+class UDRWeaponUpgradeProfile;
+
 /*
  * 원거리 무기 공통 Definition.
  *
@@ -166,6 +168,9 @@ class DEEPRAIDERS_API UDRRangedWeaponDefinition : public UDRItemDefinition
 
 public:
 	UDRRangedWeaponDefinition();
+
+	/** 업그레이드를 지원하는 Ranged Weapon이 자신의 Profile을 노출한다. */
+	virtual UDRWeaponUpgradeProfile* GetUpgradeProfile() const { return nullptr; }
 
 	FVector ResolveCameraAimDirection(
 		const FVector& ViewDirection,

@@ -105,6 +105,14 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_HeatGeneration);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAbsorbPower);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAddAmount);
+
+	// Weapon Upgrade - Sprayer
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_FreezeAmount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_SnowAbsorbPower);
 	
 	// Event
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
@@ -157,6 +165,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_HeatGenerationModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAbsorbPowerModifier);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAddAmountModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FreezeAmountModifier);
 	
 	// Effect Policy
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);

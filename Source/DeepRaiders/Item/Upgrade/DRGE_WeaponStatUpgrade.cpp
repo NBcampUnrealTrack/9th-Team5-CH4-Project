@@ -21,6 +21,8 @@ UDRGE_WeaponStatUpgrade::UDRGE_WeaponStatUpgrade()
 		DRGameplayTags::Data_Weapon_SnowAbsorbPowerModifier);
 	AddStat(UDRPlayerAttributeSet::GetWeaponSnowAddAmountMultiplierAttribute(),
 		DRGameplayTags::Data_Weapon_SnowAddAmountModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponFreezeAmountMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_FreezeAmountModifier);
 }
 
 void UDRGE_WeaponStatUpgrade::AddStat(const FGameplayAttribute& Attribute, FGameplayTag ValueTag)

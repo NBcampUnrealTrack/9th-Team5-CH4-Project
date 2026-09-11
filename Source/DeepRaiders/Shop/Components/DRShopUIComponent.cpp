@@ -9,7 +9,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
-#include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Item/Upgrade/DRWeaponUpgradeProfile.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
@@ -388,13 +388,12 @@ void UDRShopUIComponent::RefreshWeaponUpgrades()
 	TArray<FDRShopOfferView> Offers;
 	for (const FDRItemInstance& Item : InventoryComponent->GetItemInstances())
 	{
-		const UDRProjectileWeaponItemDefinition* Weapon = Cast<UDRProjectileWeaponItemDefinition>(Item.Definition.Get());
+		const UDRRangedWeaponDefinition* Weapon = Cast<UDRRangedWeaponDefinition>(Item.Definition.Get());
 		const FDRSnowProjectileWeaponRuntimeState* State = Item.RuntimeState.GetPtr<FDRSnowProjectileWeaponRuntimeState>();
-		if (!Item.IsValid() || !IsValid(Weapon) || Weapon->ResourceType != EDRProjectileWeaponResourceType::SnowGauge)
-		{
-			continue;
-		}
-		if (!IsValid(Weapon->UpgradeProfile) || !Weapon->UpgradeProfile->IsUsable())
+		UDRWeaponUpgradeProfile* UpgradeProfile =
+			IsValid(Weapon) ? Weapon->GetUpgradeProfile() : nullptr;
+		if (!Item.IsValid() || !IsValid(Weapon)
+			|| !IsValid(UpgradeProfile) || !UpgradeProfile->IsUsable())
 		{
 			continue;
 		}
@@ -414,7 +413,7 @@ void UDRShopUIComponent::RefreshWeaponUpgrades()
 			continue;
 		}
 
-		for (const FDRWeaponStatUpgradeData& Data : Weapon->UpgradeProfile->GetStatUpgrades())
+		for (const FDRWeaponStatUpgradeData& Data : UpgradeProfile->GetStatUpgrades())
 		{
 			const int32 Level = State->GetUpgradeLevel(Data.UpgradeTag);
 			const FDRWeaponUpgradeLevelData* NextLevel = Level < Data.GetMaxLevel() ? Data.FindLevelData(Level + 1) : nullptr;
