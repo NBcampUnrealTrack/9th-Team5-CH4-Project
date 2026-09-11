@@ -70,12 +70,6 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		}
 	}
 
-	// 실제 Snow Absorb는 기존처럼 서버 전용
-	if (!ActorInfo->IsNetAuthority())
-	{
-		return;
-	}
-
 	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
 
@@ -86,6 +80,12 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 	}
 
 	StartAbsorbGameplayCue();
+	
+	// 실제 Snow Absorb는 기존처럼 서버 전용
+	if (!ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
 	
 	UDRSnowRemoveComponent* SnowRemoveComponent =
 		IsValid(AvatarActor)
