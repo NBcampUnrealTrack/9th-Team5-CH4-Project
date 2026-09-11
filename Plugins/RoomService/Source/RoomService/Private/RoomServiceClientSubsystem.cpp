@@ -162,7 +162,112 @@ void URoomServiceClientSubsystem::CancelRequest()
 
 void URoomServiceClientSubsystem::Deinitialize()
 {
+	StopWatchingRooms();
 	CancelRequest();
 	Credential.Empty();
 	Super::Deinitialize();
+}
+
+void URoomServiceClientSubsystem::StartWatchingRooms()
+{
+	if (WatchTicker.IsValid())
+	{
+		return;
+	}
+	WatchCursor.Empty();
+	NextWatchRequest = 0;
+	WatchTicker = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateWeakLambda(this, [this](float)
+		{
+			if (!WatchRequest && FPlatformTime::Seconds() >= NextWatchRequest)
+			{
+				SendWatch();
+			}
+			return true;
+		}), 0.2f);
+}
+
+void URoomServiceClientSubsystem::StopWatchingRooms()
+{
+	FTSTicker::GetCoreTicker().RemoveTicker(WatchTicker);
+	WatchTicker.Reset();
+	if (WatchRequest)
+	{
+		WatchRequest->OnProcessRequestComplete().Unbind();
+		WatchRequest->CancelRequest();
+		WatchRequest.Reset();
+	}
+	WatchCursor.Empty();
+}
+
+void URoomServiceClientSubsystem::SendWatch()
+{
+	FJson Body = Object();
+	Body->SetStringField(TEXT("op"), TEXT("watch"));
+	Body->SetStringField(TEXT("credential"), Credential);
+	Body->SetStringField(TEXT("cursor"), WatchCursor);
+	WatchRequest = FHttpModule::Get().CreateRequest();
+	WatchRequest->SetURL(GetDefault<URoomServiceSettings>()->MasterUrl / TEXT("rooms"));
+	WatchRequest->SetVerb(TEXT("POST"));
+	WatchRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	WatchRequest->SetContentAsString(Encode(Body));
+	WatchRequest->SetTimeout(30.f);
+	// 생성/입장 요청과 별도 채널이며, 실패 시 재시도 전에 전체 동기화를 예약한다.
+	WatchRequest->OnProcessRequestComplete().BindWeakLambda(this,
+		[this](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bSuccess)
+		{
+			if (Request != WatchRequest)
+			{
+				return;
+			}
+			WatchRequest.Reset();
+			WatchCursor.Empty();
+			NextWatchRequest = FPlatformTime::Seconds() + 3.0;
+			FJson Json = Response ? Decode(Response->GetContentAsString()) : nullptr;
+			if (!bSuccess || !Response || Response->GetResponseCode() != 200 || !Json)
+			{
+				return;
+			}
+			const TArray<TSharedPtr<FJsonValue>>* ChangedValues = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* RemovedValues = nullptr;
+			bool bReset = false;
+			const FString Cursor = String(Json, TEXT("cursor"));
+			if (Cursor.IsEmpty() || !Json->TryGetBoolField(TEXT("reset"), bReset)
+				|| !Json->TryGetArrayField(TEXT("changed"), ChangedValues)
+				|| !Json->TryGetArrayField(TEXT("removed"), RemovedValues))
+			{
+				return;
+			}
+			TArray<FRoomServiceInfo> Changed;
+			TArray<FString> Removed;
+			for (const auto& Value : *ChangedValues)
+			{
+				const FJson* RoomJson = nullptr;
+				FRoomServiceInfo Info;
+				if (!Value->TryGetObject(RoomJson) || !ReadRoom(*RoomJson, Info))
+				{
+					return;
+				}
+				Changed.Add(MoveTemp(Info));
+			}
+			for (const auto& Value : *RemovedValues)
+			{
+				FString Id;
+				if (!Value->TryGetString(Id))
+				{
+					return;
+				}
+				Removed.Add(Id);
+			}
+			WatchCursor = Cursor;
+			NextWatchRequest = 0;
+			OnRoomListDelta.Broadcast(Changed, Removed, bReset);
+		});
+	if (!WatchRequest->ProcessRequest())
+	{
+		WatchRequest->OnProcessRequestComplete().Unbind();
+		WatchRequest.Reset();
+		WatchCursor.Empty();
+		NextWatchRequest = FPlatformTime::Seconds() + 3.0;
+	}
 }

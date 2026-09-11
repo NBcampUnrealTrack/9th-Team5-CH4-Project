@@ -6,7 +6,21 @@
 
 void UDRRoomEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 {
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
 	CurrentItem = Cast<UDRRoomListItem>(ListItemObject);
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.AddUObject(this, &ThisClass::RefreshRoom);
+	}
+	RefreshRoom();
+	IUserObjectListEntry::NativeOnListItemObjectSet(ListItemObject);
+}
+
+void UDRRoomEntryWidget::RefreshRoom()
+{
 	const FRoomServiceInfo Info = CurrentItem ? CurrentItem->RoomInfo : FRoomServiceInfo();
 	RoomId->SetText(FText::FromString(Info.RoomId));
 	RoomName->SetText(FText::FromString(Info.Title));
@@ -29,11 +43,14 @@ void UDRRoomEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 	RoomImage->SetBrushFromTexture(CurrentItem ? CurrentItem->Preview.Get() : nullptr);
 	Join->SetIsEnabled(CurrentItem && Info.State == TEXT("Waiting")
 		&& Info.CurrentPlayers < Info.MaxPlayers);
-	IUserObjectListEntry::NativeOnListItemObjectSet(ListItemObject);
 }
 
 void UDRRoomEntryWidget::NativeOnEntryReleased()
 {
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
 	CurrentItem = nullptr;
 	Join->SetIsEnabled(false);
 	IUserObjectListEntry::NativeOnEntryReleased();
@@ -46,4 +63,13 @@ void UDRRoomEntryWidget::HandleJoinClicked()
 	{
 		CurrentItem->RoomOwner->JoinRoomById(CurrentItem->RoomInfo.RoomId);
 	}
+}
+
+void UDRRoomEntryWidget::NativeDestruct()
+{
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
+	Super::NativeDestruct();
 }

@@ -18,6 +18,7 @@ class DEEPRAIDERS_API UDRRoomListItem : public UObject
 	GENERATED_BODY()
 
 public:
+	FSimpleMulticastDelegate OnChanged;
 	UPROPERTY(BlueprintReadOnly, Category = "Rooms")
 	FRoomServiceInfo RoomInfo;
 	UPROPERTY()
@@ -35,6 +36,7 @@ public:
 	void HandleJoinClicked();
 
 protected:
+	virtual void NativeDestruct() override;
 	virtual void NativeOnListItemObjectSet(UObject* ListItemObject) override;
 	virtual void NativeOnEntryReleased() override;
 
@@ -52,6 +54,7 @@ protected:
 	TObjectPtr<UWidget> Join;
 
 private:
+	void RefreshRoom();
 	UPROPERTY(Transient)
 	TObjectPtr<UDRRoomListItem> CurrentItem;
 };

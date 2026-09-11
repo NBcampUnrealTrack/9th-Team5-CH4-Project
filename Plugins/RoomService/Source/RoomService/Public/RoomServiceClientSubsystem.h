@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
 #include "Interfaces/IHttpRequest.h"
 #include "RoomServiceTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
@@ -11,6 +12,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRoomListReceived,
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRoomConnectionReceived,
 	const FRoomServiceConnection&, Connection);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRoomRequestFailed, const FString&, Error);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FRoomListDelta,
+	const TArray<FRoomServiceInfo>&, Changed, const TArray<FString>&, Removed, bool, bReset);
 
 // WBP는 이 API/구조체만 사용한다. 인증 credential의 획득은 로그인 시스템이 담당한다.
 UCLASS()
@@ -19,6 +22,9 @@ class ROOMSERVICE_API URoomServiceClientSubsystem : public UGameInstanceSubsyste
 	GENERATED_BODY()
 
 public:
+	FRoomListDelta OnRoomListDelta;
+	void StartWatchingRooms();
+	void StopWatchingRooms();
 	UPROPERTY(BlueprintAssignable, Category = "Rooms")
 	FRoomListReceived OnRoomListReceived;
 	UPROPERTY(BlueprintAssignable, Category = "Rooms")
@@ -53,6 +59,11 @@ public:
 	virtual void Deinitialize() override;
 
 private:
+	FHttpRequestPtr WatchRequest;
+	FTSTicker::FDelegateHandle WatchTicker;
+	FString WatchCursor;
+	double NextWatchRequest = 0;
+	void SendWatch();
 	FString Credential;
 	FHttpRequestPtr ActiveRequest;
 	void Send(const FString& Operation, TSharedPtr<class FJsonObject> Body);

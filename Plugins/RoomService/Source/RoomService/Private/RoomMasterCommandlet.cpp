@@ -154,6 +154,7 @@ namespace
 		void Tick()
 		{
 			const double Now = FPlatformTime::Seconds();
+			TickWatchers(Now);
 			for (const auto& Reply : Replies)
 			{
 				if (Now > Reply->Deadline)
@@ -236,6 +237,95 @@ namespace
 		TMap<FString, TSharedPtr<FRoom>> Rooms;
 		TSet<int32> Ports;
 		TArray<TSharedPtr<FReply>> Replies;
+		struct FWatcher
+		{
+			TSharedPtr<FReply> Reply;
+			FString Cursor;
+			double Deadline;
+		};
+		TArray<FWatcher> Watchers;
+		TMap<FString, TMap<FString, FString>> Snapshots;
+		TArray<FString> SnapshotOrder;
+		FString ListCursor;
+		double NextWatchTick = 0;
+
+		void TickWatchers(double Now)
+		{
+			if (Now < NextWatchTick)
+			{
+				return;
+			}
+			NextWatchTick = Now + 0.2;
+			TMap<FString, FString> Current;
+			for (const auto& Pair : Rooms)
+			{
+				const FRoom& Room = *Pair.Value;
+				if (Room.bRegistered && !Room.bStopping && !Room.Info.bPrivate)
+				{
+					Current.Add(Pair.Key, Encode(ToJson(Room.Info)));
+				}
+			}
+			const auto* Previous = Snapshots.Find(ListCursor);
+			bool bChanged = !Previous || Previous->Num() != Current.Num();
+			if (!bChanged)
+			{
+				for (const auto& Pair : Current)
+				{
+					const FString* Old = Previous->Find(Pair.Key);
+					if (!Old || *Old != Pair.Value)
+					{
+						bChanged = true;
+						break;
+					}
+				}
+			}
+			if (bChanged)
+			{
+				ListCursor = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+				Snapshots.Add(ListCursor, Current);
+				SnapshotOrder.Add(ListCursor);
+				if (SnapshotOrder.Num() > 64)
+				{
+					Snapshots.Remove(SnapshotOrder[0]);
+					SnapshotOrder.RemoveAt(0);
+				}
+			}
+			for (auto& Watcher : Watchers)
+			{
+				if (Watcher.Reply->bDone || (Watcher.Cursor == ListCursor && Now < Watcher.Deadline))
+				{
+					continue;
+				}
+				const auto* Baseline = Snapshots.Find(Watcher.Cursor);
+				TArray<TSharedPtr<FJsonValue>> Changed;
+				TArray<TSharedPtr<FJsonValue>> Removed;
+				for (const auto& Pair : Current)
+				{
+					const FString* Old = Baseline ? Baseline->Find(Pair.Key) : nullptr;
+					if (!Old || *Old != Pair.Value)
+					{
+						Changed.Add(MakeShared<FJsonValueObject>(Decode(Pair.Value)));
+					}
+				}
+				if (Baseline)
+				{
+					for (const auto& Pair : *Baseline)
+					{
+						if (!Current.Contains(Pair.Key))
+						{
+							Removed.Add(MakeShared<FJsonValueString>(Pair.Key));
+						}
+					}
+				}
+				FJson Result = Object();
+				Result->SetStringField(TEXT("cursor"), ListCursor);
+				Result->SetBoolField(TEXT("reset"), !Baseline);
+				Result->SetArrayField(TEXT("changed"), Changed);
+				Result->SetArrayField(TEXT("removed"), Removed);
+				Watcher.Reply->Send(Result);
+			}
+			Watchers.RemoveAll([](const FWatcher& Watcher) { return Watcher.Reply->bDone; });
+		}
 
 		void Stop(FRoom& Room)
 		{
@@ -267,6 +357,19 @@ namespace
 		void HandleClient(const FJson& Body, const TSharedPtr<FReply>& Reply,
 			const FString& Operation)
 		{
+			if (Operation == TEXT("watch"))
+			{
+				if (Watchers.Num() >= 128)
+				{
+					Reply->Fail(TEXT("watch_limit"), 503);
+					return;
+				}
+				// 인증 이후 Public 목록만 구독한다. 오래된 커서는 전체 스냅샷으로 복구한다.
+				const double Deadline = FPlatformTime::Seconds() + 20.0;
+				Reply->Deadline = Deadline + 5.0;
+				Watchers.Add({Reply, String(Body, TEXT("cursor")), Deadline});
+				return;
+			}
 			if (Operation == TEXT("list"))
 			{
 				const TWeakPtr<FMaster> Weak = AsShared();
@@ -722,6 +825,36 @@ namespace
 		Room->Info.State = TEXT("Playing");
 		Master->HandleClient(Quick, MakeReply(Status), TEXT("quick"));
 		TestEqual(TEXT("AnyMap never joins Playing rooms"), Status, 409);
+
+		// 프로세스를 실행하지 않고 목록 변경/대기/삭제/커서 복구 응답을 검증한다.
+		FJson Watch = Object();
+		Master->HandleClient(Watch, MakeReply(Status), TEXT("watch"));
+		double WatchTime = FPlatformTime::Seconds();
+		Master->TickWatchers(WatchTime);
+		TestEqual(TEXT("First subscription receives snapshot"), Status, 200);
+		const FString InitialCursor = Master->ListCursor;
+		Watch->SetStringField(TEXT("cursor"), InitialCursor);
+		Status = 0;
+		Master->HandleClient(Watch, MakeReply(Status), TEXT("watch"));
+		Master->TickWatchers(WatchTime += 1.0);
+		TestEqual(TEXT("Unchanged rooms keep request waiting"), Status, 0);
+		Room->Info.CurrentPlayers = 1;
+		Master->TickWatchers(WatchTime += 1.0);
+		TestEqual(TEXT("Player update completes subscription"), Status, 200);
+		TestTrue(TEXT("Player update advances cursor"), Master->ListCursor != InitialCursor);
+		Watch->SetStringField(TEXT("cursor"), Master->ListCursor);
+		Status = 0;
+		Master->HandleClient(Watch, MakeReply(Status), TEXT("watch"));
+		Room->bStopping = true;
+		Master->TickWatchers(WatchTime += 1.0);
+		TestEqual(TEXT("Room removal completes subscription"), Status, 200);
+		TestEqual(TEXT("Stopping rooms leave public snapshot"),
+			Master->Snapshots[Master->ListCursor].Num(), 0);
+		Watch->SetStringField(TEXT("cursor"), TEXT("expired"));
+		Status = 0;
+		Master->HandleClient(Watch, MakeReply(Status), TEXT("watch"));
+		Master->TickWatchers(WatchTime += 1.0);
+		TestEqual(TEXT("Unknown cursor recovers with snapshot"), Status, 200);
 		return true;
 	}
 #endif

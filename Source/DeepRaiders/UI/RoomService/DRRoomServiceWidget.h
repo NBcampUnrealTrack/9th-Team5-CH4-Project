@@ -8,6 +8,7 @@
 
 class UDataTable;
 class UDRCreateRoomWidget;
+class UDRRoomListItem;
 class UDRTitleJoinWidget;
 class UEditableTextBox;
 class UListView;
@@ -82,6 +83,11 @@ protected:
 	FString QuickMatchMapId = TEXT("SamplePlayMap");
 
 private:
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UDRRoomListItem>> RoomItems;
+	UFUNCTION()
+	void HandleRoomDelta(const TArray<FRoomServiceInfo>& Changed,
+		const TArray<FString>& Removed, bool bReset);
 	UPROPERTY(Transient)
 	TObjectPtr<UDRTitleJoinWidget> ListenJoinPanel;
 	UPROPERTY(Transient)

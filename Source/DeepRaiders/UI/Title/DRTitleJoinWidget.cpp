@@ -4,6 +4,7 @@
 #include "Components/Overlay.h"
 #include "DeepRaiders/Core/Subsystem/DRSessionSubsystem.h"
 #include "GameFramework/PlayerController.h"
+#include "DeepRaiders/UI/RoomService/DRRoomServiceWidget.h"
 
 bool UDRTitleJoinWidget::Initialize()
 {
@@ -68,6 +69,10 @@ void UDRTitleJoinWidget::HandleCloseJoinClicked()
 			Controller->SetShowMouseCursor(true);
 		}
 		ReturnWidget->SetKeyboardFocus();
+		if (UDRRoomServiceWidget* Rooms = Cast<UDRRoomServiceWidget>(ReturnWidget.Get()))
+		{
+			Rooms->RefreshRooms();
+		}
 		ReturnWidget.Reset();
 	}
 }

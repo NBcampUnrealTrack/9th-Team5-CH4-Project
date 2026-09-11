@@ -23,6 +23,7 @@ void UDRRoomServiceWidget::NativeConstruct()
 	RoomSubsystem = GetGameInstance()->GetSubsystem<URoomServiceClientSubsystem>();
 	if (RoomSubsystem)
 	{
+		RoomSubsystem->OnRoomListDelta.AddUniqueDynamic(this, &ThisClass::HandleRoomDelta);
 		RoomSubsystem->OnRoomListReceived.AddUniqueDynamic(this, &ThisClass::HandleRoomListReceived);
 		RoomSubsystem->OnConnectionReceived.AddUniqueDynamic(this, &ThisClass::HandleConnectionReceived);
 		RoomSubsystem->OnRequestFailed.AddUniqueDynamic(this, &ThisClass::HandleRequestFailed);
@@ -128,25 +129,20 @@ void UDRRoomServiceWidget::RefreshEnabledState()
 
 void UDRRoomServiceWidget::RefreshRooms()
 {
-	if (!bCreatePanelOpen && !bPrivatePanelOpen
-		&& BeginRequest(NSLOCTEXT("Rooms", "Fetching", "방 목록을 불러오고 있습니다…")))
+	if (!bConnecting && RoomSubsystem)
 	{
-		RoomSubsystem->RequestRoomList();
+		RoomSubsystem->StopWatchingRooms();
+		RoomSubsystem->StartWatchingRooms();
 	}
 }
 
 void UDRRoomServiceWidget::HandleQuickMatchClicked()
 {
-	if (QuickMatchMode == ERoomQuickMatchMode::SelectedMap
-		&& !GetDefault<URoomServiceSettings>()->Maps.Contains(QuickMatchMapId))
-	{
-		SetStatus(NSLOCTEXT("Rooms", "QuickMapMissing", "퀵매치 맵 설정을 확인해 주세요."));
-		return;
-	}
 	if (!bCreatePanelOpen && !bPrivatePanelOpen
 		&& BeginRequest(NSLOCTEXT("Rooms", "Matching", "참가할 방을 찾고 있습니다…")))
 	{
-		RoomSubsystem->QuickMatchWithMode(QuickMatchMode, QuickMatchMapId);
+		// 타이틀 퀵매치는 맵 제한 없이 빈자리가 있는 공개 방을 찾는다.
+		RoomSubsystem->QuickMatchWithMode(ERoomQuickMatchMode::AnyMap, FString());
 	}
 }
 
@@ -215,6 +211,7 @@ void UDRRoomServiceWidget::HandlePrivateJoinClicked()
 	// Master 응답 대기와 무관하게 기존 IP 직접 접속 창을 사용한다.
 	CancelOwnedRequest();
 	RefreshEnabledState();
+	RoomSubsystem->StopWatchingRooms();
 	ListenJoinPanel->Show(this);
 }
 
@@ -268,15 +265,44 @@ void UDRRoomServiceWidget::HandleRoomListReceived(const TArray<FRoomServiceInfo>
 	}
 	bOwnsRequest = false;
 	bBusy = false;
-	TArray<UObject*> Items;
+	HandleRoomDelta(Rooms, {}, true);
+	RefreshEnabledState();
+}
+
+void UDRRoomServiceWidget::HandleRoomDelta(const TArray<FRoomServiceInfo>& Changed,
+	const TArray<FString>& Removed, bool bReset)
+{
+	TSet<FString> Keep;
+	for (const auto& Info : Changed)
+	{
+		if (!Info.bPrivate)
+		{
+			Keep.Add(Info.RoomId);
+		}
+	}
+	for (auto It = RoomItems.CreateIterator(); It; ++It)
+	{
+		if (Removed.Contains(It.Key()) || (bReset && !Keep.Contains(It.Key())))
+		{
+			RoomListView->RemoveItem(It.Value());
+			It.RemoveCurrent();
+		}
+	}
 	const auto* Settings = GetDefault<URoomServiceSettings>();
-	for (const FRoomServiceInfo& Info : Rooms)
+	for (const FRoomServiceInfo& Info : Changed)
 	{
 		if (Info.bPrivate)
 		{
 			continue;
 		}
-		UDRRoomListItem* Item = NewObject<UDRRoomListItem>(this);
+		UDRRoomListItem* Item = RoomItems.FindRef(Info.RoomId);
+		const bool bNewItem = !Item;
+		if (!Item)
+		{
+			Item = NewObject<UDRRoomListItem>(this);
+			RoomItems.Add(Info.RoomId, Item);
+		}
+		Item->Preview = nullptr;
 		Item->RoomInfo = Info;
 		Item->RoomOwner = this;
 		const FString* Package = Settings->Maps.Find(Info.MapId);
@@ -293,12 +319,17 @@ void UDRRoomServiceWidget::HandleRoomListReceived(const TArray<FRoomServiceInfo>
 				}
 			}
 		}
-		Items.Add(Item);
+		if (bNewItem)
+		{
+			RoomListView->AddItem(Item);
+		}
+		Item->OnChanged.Broadcast();
 	}
-	RoomListView->SetListItems(Items);
-	SetStatus(Items.IsEmpty() ? NSLOCTEXT("Rooms", "Empty", "현재 공개된 방이 없습니다.")
-		: FText::GetEmpty());
-	RefreshEnabledState();
+	if (!bBusy && !bConnecting && !bCreatePanelOpen)
+	{
+		SetStatus(RoomItems.IsEmpty() ? NSLOCTEXT("Rooms", "Empty", "현재 공개된 방이 없습니다.")
+			: FText::GetEmpty());
+	}
 }
 
 void UDRRoomServiceWidget::HandleConnectionReceived(const FRoomServiceConnection& Connection)
@@ -308,6 +339,7 @@ void UDRRoomServiceWidget::HandleConnectionReceived(const FRoomServiceConnection
 		return;
 	}
 	bOwnsRequest = false;
+	RoomSubsystem->StopWatchingRooms();
 	bConnecting = true;
 	bBusy = true;
 	LastRoomId = Connection.RoomId;
@@ -352,6 +384,10 @@ void UDRRoomServiceWidget::HandleRequestFailed(const FString& Error)
 	}
 	SetStatus(Message);
 	RefreshEnabledState();
+	if (IsVisible() && RoomSubsystem)
+	{
+		RoomSubsystem->StartWatchingRooms();
+	}
 }
 
 void UDRRoomServiceWidget::CancelOwnedRequest()
@@ -387,6 +423,8 @@ void UDRRoomServiceWidget::ReleaseBindings()
 {
 	if (RoomSubsystem)
 	{
+		RoomSubsystem->StopWatchingRooms();
+		RoomSubsystem->OnRoomListDelta.RemoveDynamic(this, &ThisClass::HandleRoomDelta);
 		RoomSubsystem->OnRoomListReceived.RemoveDynamic(this, &ThisClass::HandleRoomListReceived);
 		RoomSubsystem->OnConnectionReceived.RemoveDynamic(this, &ThisClass::HandleConnectionReceived);
 		RoomSubsystem->OnRequestFailed.RemoveDynamic(this, &ThisClass::HandleRequestFailed);
@@ -412,6 +450,10 @@ void UDRRoomServiceWidget::HandleExitClicked()
 		return;
 	}
 	CancelOwnedRequest();
+	if (RoomSubsystem)
+	{
+		RoomSubsystem->StopWatchingRooms();
+	}
 	if (ReturnWidget.IsValid())
 	{
 		if (TitleContent.IsValid())
