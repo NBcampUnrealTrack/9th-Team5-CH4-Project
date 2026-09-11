@@ -55,18 +55,14 @@ private:
 	void StopAbsorbGameplayCue();
 
 	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
-	void ApplySnowGaugeGain(UAbilitySystemComponent* AbilitySystemComponent, float RemovedAmount) const;
-
-	bool bAbsorbGameplayCueActive = false;
-	
 	void ResetAbsorbSummary();
 	void LogAbsorbSummary() const;
-
-	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
 	float ApplySnowGaugeGain(
 		UAbilitySystemComponent* AbilitySystemComponent,
 		float RemovedAmount,
 		float SolidRemovalPerSnowGauge) const;
+
+	bool bAbsorbGameplayCueActive = false;
 
 	int32 AbsorbSummaryTickCount = 0;
 	float AbsorbSummaryStartTime = 0.f;
