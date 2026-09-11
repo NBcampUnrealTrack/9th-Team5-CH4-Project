@@ -181,6 +181,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Absorb_Active);
 	
 	// UI Screen
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
@@ -247,6 +248,9 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Fire);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Impact);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Start);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Loop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_End);
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);

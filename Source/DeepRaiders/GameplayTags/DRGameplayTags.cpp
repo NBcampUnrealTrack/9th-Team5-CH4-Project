@@ -154,6 +154,11 @@ namespace DRGameplayTags
 		GameplayCue_Weapon_Sprayer_Active,
 		"GameplayCue.Weapon.Sprayer.Active",
 		"Data-driven active sprayer presentation.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Weapon_Absorb_Active,
+		"GameplayCue.Weapon.Absorb.Active",
+		"Persistent snow absorb beam and sound presentation.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Item_Throwable_Throw,
@@ -952,6 +957,21 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Sprayer_Active,
 		"GameplayCue.Sound.Weapon.Sprayer.Active",
 		"Active sprayer loop sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_Start,
+		"GameplayCue.Sound.Weapon.Absorb.Start",
+		"Snow absorb start sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_Loop,
+		"GameplayCue.Sound.Weapon.Absorb.Loop",
+		"Snow absorb loop sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_End,
+		"GameplayCue.Sound.Weapon.Absorb.End",
+		"Snow absorb end sound.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Player_Hit,

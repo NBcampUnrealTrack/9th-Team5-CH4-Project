@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "DRItemDefinition.h"
+#include "DRWeaponPresentationTypes.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "DRRangedWeaponDefinition.generated.h"
 
@@ -176,4 +177,7 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Absorb"))
 	FDRProjectileWeaponSnowAbsorbSettings SnowAbsorbSettings;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Snow", meta = (DisplayName = "Absorb Presentation"))
+	FDRSnowAbsorbPresentationData SnowAbsorbPresentation;
 };

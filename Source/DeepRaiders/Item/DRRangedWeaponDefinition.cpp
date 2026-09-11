@@ -1,9 +1,15 @@
 ﻿#include "DRRangedWeaponDefinition.h"
 
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+
 UDRRangedWeaponDefinition::UDRRangedWeaponDefinition()
 {
 	Category = EDRItemCategory::Equipment;
 	MaxStackSize = 1;
+
+	SnowAbsorbPresentation.StartSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_Start;
+	SnowAbsorbPresentation.LoopSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_Loop;
+	SnowAbsorbPresentation.EndSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_End;
 }
 
 FVector UDRRangedWeaponDefinition::ResolveCameraAimDirection(

@@ -48,13 +48,21 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 		return;
 	}
 
+	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
+	if (!IsValid(ASC) || !IsValid(AvatarActor))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	StartAbsorbGameplayCue();
+
 	if (!ActorInfo->IsNetAuthority())
 	{
 		return;
 	}
 
-	UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
-	AActor* AvatarActor = ActorInfo->AvatarActor.Get();
 	UDRSnowRemoveComponent* SnowRemoveComponent =
 		IsValid(AvatarActor) ? AvatarActor->FindComponentByClass<UDRSnowRemoveComponent>() : nullptr;
 
@@ -79,6 +87,23 @@ void UDRGA_AbsorbSnow::InputReleased(
 	Super::InputReleased(Handle, ActorInfo, ActivationInfo);
 
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+void UDRGA_AbsorbSnow::EndAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility,
+	bool bWasCancelled)
+{
+	StopAbsorbGameplayCue();
+
+	Super::EndAbility(
+		Handle,
+		ActorInfo,
+		ActivationInfo,
+		bReplicateEndAbility,
+		bWasCancelled);
 }
 
 void UDRGA_AbsorbSnow::PerformAbsorbTick()
@@ -204,6 +229,52 @@ void UDRGA_AbsorbSnow::ScheduleNextAbsorbTick()
 
 	AbsorbDelayTask->OnFinish.AddDynamic(this, &ThisClass::HandleAbsorbDelayFinished);
 	AbsorbDelayTask->ReadyForActivation();
+}
+
+void UDRGA_AbsorbSnow::StartAbsorbGameplayCue()
+{
+	if (bAbsorbGameplayCueActive)
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	if (ActorInfo == nullptr || !IsValid(ASC) || !IsValid(AvatarActor))
+	{
+		return;
+	}
+
+	UObject* SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
+	if (!IsValid(Cast<UDRRangedWeaponDefinition>(SourceObject)))
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = AvatarActor->GetActorLocation();
+	Parameters.Normal = AvatarActor->GetActorForwardVector();
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = SourceObject;
+	ASC->AddGameplayCue(DRGameplayTags::GameplayCue_Weapon_Absorb_Active, Parameters);
+	bAbsorbGameplayCueActive = true;
+}
+
+void UDRGA_AbsorbSnow::StopAbsorbGameplayCue()
+{
+	if (!bAbsorbGameplayCueActive)
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+	{
+		ASC->RemoveGameplayCue(DRGameplayTags::GameplayCue_Weapon_Absorb_Active);
+	}
+
+	bAbsorbGameplayCueActive = false;
 }
 
 bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const
