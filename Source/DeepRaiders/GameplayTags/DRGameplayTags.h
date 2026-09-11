@@ -208,6 +208,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_CombatRoll);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Turret_Install);
 
 	// Gameplay Cue - Sound - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Snowball_Impact);

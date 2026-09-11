@@ -806,6 +806,11 @@ namespace DRGameplayTags
 		"Super jump hero landing sound.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Skill_Turret_Install,
+		"GameplayCue.Sound.Skill.Turret.Install",
+		"Turret installation sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Snowball_Impact,
 		"GameplayCue.Sound.Player.Snowball.Impact",
 		"Snow projectile impact on a player.");

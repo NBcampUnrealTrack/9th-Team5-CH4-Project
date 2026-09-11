@@ -1,5 +1,6 @@
 #include "DRGA_TurretSkill.h"
 
+#include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementPreviewActor.h"
 #include "DeepRaiders/Combat/Placement/DRPlacementTargetActor.h"
@@ -278,6 +279,16 @@ void UDRGA_TurretSkill::HandleTargetDataReady(const FGameplayAbilityTargetDataHa
 			CooldownDuration,
 			WeaponSettings);
 		Turret->FinishSpawning(TurretTransform);
+
+		FGameplayCueParameters SoundParameters;
+		SoundParameters.OriginalTag = DRGameplayTags::GameplayCue_Sound_Skill_Turret_Install;
+		SoundParameters.Location = TurretTransform.GetLocation();
+		SoundParameters.Instigator = ActorInfo->AvatarActor.Get();
+		SoundParameters.EffectCauser = Turret;
+		ActorInfo->AbilitySystemComponent->ExecuteGameplayCue(
+			DRGameplayTags::GameplayCue_Sound_Skill_Turret_Install,
+			SoundParameters);
+
 		EndAbility(GetCurrentAbilitySpecHandle(), ActorInfo, GetCurrentActivationInfo(), true, false);
 		return;
 	}
