@@ -269,9 +269,10 @@ void UDRHUDViewModel::Deinitialize()
 	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownText, FText::GetEmpty());
 	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownSeconds, 0);
 	UE_MVVM_SET_PROPERTY_VALUE(bIsPhaseCountdownVisible, false);
-	UE_MVVM_SET_PROPERTY_VALUE(bIsExitCountdown, false);
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0Ratio, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1Ratio, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0SnowTotal, 0.f);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1SnowTotal, 0.f);
 	UE_MVVM_SET_PROPERTY_VALUE(WinningTeamId, INDEX_NONE);
 	UE_MVVM_SET_PROPERTY_VALUE(bHasFinalResult, false);
 	bGameStarted = false;

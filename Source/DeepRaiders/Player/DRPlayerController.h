@@ -73,6 +73,9 @@ public:
 	/** 해당 적의 이름 노출 시간이 아직 남아 있는지 확인한다. */
 	bool IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const;
 
+	UFUNCTION(Client, Unreliable)
+	void ClientUpdateTeamSnowTotals(float Team0Total, float Team1Total);
+
 	/** 로컬 설정의 플레이어 이름을 현재 서버 세션에 반영한다. */
 	void RequestSetPlayerName(const FString& NewPlayerName);
 

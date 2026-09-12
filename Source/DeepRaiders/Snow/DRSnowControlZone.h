@@ -15,6 +15,7 @@ class USceneComponent;
 class UTextBlock;
 class UUserWidget;
 class UWidgetComponent;
+class USoundBase;
 class UGameplayEffect;
 class UStaticMesh;
 
@@ -83,6 +84,7 @@ public:
 
 	void ResetForGame();
 	bool PrepareForGame() const;
+	void ShowActivationReveal();
 	void ActivateForPhase(int32 PhaseIndex);
 	void FreezeForGameEnd();
 	bool StartEndCleanup(TFunction<void(bool)>&& Completion);
@@ -92,6 +94,16 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	bool IsZoneActive() const { return bZoneActive; }
+
+	bool ShouldActivateForPhase(int32 PhaseIndex) const
+	{
+		return !bZoneActive && !bControlFrozen && PhaseIndex >= ActivationPhaseIndex;
+	}
+
+	int32 GetActivationCountdownRemaining(int32 PhaseIndex, int32 PhaseElapsedSeconds) const;
+	const FText& GetActivationCountdownText() const { return ActivationCountdownText; }
+	USoundBase* GetActivationCountdownSound() const { return ActivationCountdownSound; }
+	USoundBase* GetActivatedSound() const { return ActivatedSound; }
 
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	bool IsZoneCompleted() const { return bZoneCompleted; }
@@ -111,12 +123,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Snow|Control")
 	int32 GetLeadingTeamId() const;
 
-	UFUNCTION(BlueprintPure, Category = "Snow|Control")
-	float GetPointValue() const
-	{
-		return PointValue;
-	}
-
 protected:
 	// 닫힌 메쉬를 지정한다. 패키징 시 메쉬의 Allow CPU Access가 필요하다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
@@ -128,6 +134,25 @@ protected:
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control", meta = (ClampMin = "0"))
 	int32 ActivationPhaseIndex = 3;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Activation")
+	bool bShowActivationCountdown = true;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Activation",
+		meta = (ClampMin = "1", EditCondition = "bShowActivationCountdown", Units = "s"))
+	int32 ActivationCountdownSeconds = 3;
+
+	// {Seconds} 자리에 남은 초를 표시한다.
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Activation",
+		meta = (EditCondition = "bShowActivationCountdown"))
+	FText ActivationCountdownText = NSLOCTEXT(
+		"DRControlZone", "ActivationCountdown", "거점 활성화까지 {Seconds}초");
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Activation")
+	TObjectPtr<USoundBase> ActivationCountdownSound;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Activation")
+	TObjectPtr<USoundBase> ActivatedSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control",
 		meta = (ClampMin = "0.01", ClampMax = "1.0"))
@@ -143,6 +168,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual",
 		meta = (ClampMin = "1", ClampMax = "255"))
 	int32 OutlineStencilValue = 1;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control|Visual",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float ActivationRevealDuration = 2.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Cleanup")
 	bool bCleanupOnGameEnd = true;
@@ -163,13 +192,6 @@ protected:
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Snow|Control")
 	FText DisplayName;
-
-	UPROPERTY(
-		EditInstanceOnly,
-		BlueprintReadOnly,
-		Category = "Snow|Control",
-		meta = (ClampMin = "0.0"))
-	float PointValue = 1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Snow|Control|Visual")
 	FLinearColor Team0Color = FLinearColor::Red;
@@ -199,6 +221,10 @@ private:
 	void RefreshPointLocationWidget();
 	bool EnsureTargetMask() const;
 	void RefreshControlVisuals();
+	void ClearActivationReveal();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastShowActivationReveal(float Duration);
 
 	UFUNCTION()
 	void OnRep_ControlState();
@@ -214,6 +240,8 @@ private:
 
 	bool bRewardGranted = false;
 	bool bControlFrozen = false;
+	bool bActivationRevealShown = false;
+	bool bActivationRevealActive = false;
 	mutable FDRMeshVoxelMask TargetMask;
 	mutable TWeakObjectPtr<UStaticMesh> CachedTargetMesh;
 	mutable TWeakObjectPtr<AVoxelWorld> CachedVoxelWorld;
@@ -281,6 +309,7 @@ private:
 
 	FTimerHandle DebugUpdateTimerHandle;
 	FTimerHandle ControlUpdateTimerHandle;
+	FTimerHandle ActivationRevealTimerHandle;
 
 #pragma endregion
 };

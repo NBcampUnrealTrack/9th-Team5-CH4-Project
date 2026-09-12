@@ -20,33 +20,6 @@
 #include "VoxelWorld.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 
-#if WITH_DEV_AUTOMATION_TESTS
-#include "Misc/AutomationTest.h"
-#endif
-
-FDRPhaseCountdownState FDRGamePhaseConfig::MakeCountdownState(int32 RemainingSeconds) const
-{
-	FDRPhaseCountdownState Countdown;
-	if (RemainingSeconds <= 0)
-	{
-		return Countdown;
-	}
-	const int32 Elapsed = DurationSeconds - RemainingSeconds;
-	// 표시 구간이 겹치면 종료 카운트다운을 먼저 선택한다.
-	if (bShowExitCountdown && RemainingSeconds <= ExitCountdownSeconds)
-	{
-		Countdown.RemainingSeconds = RemainingSeconds;
-		Countdown.bIsExitCountdown = true;
-		Countdown.Text = ExitCountdownText;
-	}
-	else if (bShowEntryCountdown && Elapsed < EntryCountdownSeconds)
-	{
-		Countdown.RemainingSeconds = FMath::Min(EntryCountdownSeconds - Elapsed, RemainingSeconds);
-		Countdown.Text = EntryCountdownText;
-	}
-	return Countdown;
-}
-
 ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
@@ -55,7 +28,6 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 	for (int32 Index = 0; Index < 4; ++Index)
 	{
 		FDRGamePhaseConfig& Phase = GamePhases.AddDefaulted_GetRef();
-		Phase.PhaseIndex = Index;
 		Phase.DurationSeconds = Index < 3 ? 20 : 120;
 	}
 	RecalculateGameDuration();
@@ -98,18 +70,16 @@ bool ADRMiningGameModeBase::StartGame()
 		return false;
 	}
 	int32 Elapsed = 0;
-	int32 PreviousPhase = INDEX_NONE;
 	bool bHasCentralOpeningBoundary = false;
 	for (const FDRGamePhaseConfig& Phase : GamePhases)
 	{
-		if (Phase.PhaseIndex <= PreviousPhase || Phase.DurationSeconds <= 0)
+		if (Phase.DurationSeconds <= 0)
 		{
-			UE_LOG(LogTemp, Error, TEXT("Game phases need increasing indices and positive durations."));
+			UE_LOG(LogTemp, Error, TEXT("Game phases need positive durations."));
 			return false;
 		}
 		bHasCentralOpeningBoundary |= Elapsed == 60;
 		Elapsed += Phase.DurationSeconds;
-		PreviousPhase = Phase.PhaseIndex;
 	}
 	if (!bHasCentralOpeningBoundary)
 	{
@@ -129,7 +99,7 @@ bool ADRMiningGameModeBase::StartGame()
 		MiningGameState->SetGameTimerState(0);
 	}
 	SetGameFlowState(EDRGameFlowState::Loading);
-	bPhaseCarversReady = !HasPhaseCarvers(GamePhases[0].PhaseIndex);
+	bPhaseCarversReady = !HasPhaseCarvers(CurrentPhaseArrayIndex);
 	UpdateReplicatedGamePhase();
 
 	if (bPhaseCarversReady)
@@ -153,6 +123,8 @@ void ADRMiningGameModeBase::BeginPlaying()
 	}
 	StartTeamSwitchTimer();
 	GameRemainingSeconds = FMath::CeilToInt(GameDuration);
+	CapturePhaseTeamSnowTotals();
+	UpdateTeamSnowTotals();
 	UpdateReplicatedGamePhase();
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
@@ -163,6 +135,12 @@ void ADRMiningGameModeBase::BeginPlaying()
 		this,
 		&ThisClass::TickGameTimer,
 		1.f,
+		true);
+	GetWorldTimerManager().SetTimer(
+		TeamSnowShareTimerHandle,
+		this,
+		&ThisClass::UpdateTeamSnowTotals,
+		FMath::Max(0.1f, TeamSnowShareInterval),
 		true);
 }
 
@@ -220,8 +198,8 @@ void ADRMiningGameModeBase::TickGameTimer()
 	{
 		MiningGameState->SetGameTimerState(GameRemainingSeconds);
 	}
-	UpdateReplicatedGamePhase();
 	UpdateControlZoneActivation();
+	UpdateReplicatedGamePhase();
 }
 
 void ADRMiningGameModeBase::AdvanceGamePhase()
@@ -235,9 +213,11 @@ void ADRMiningGameModeBase::AdvanceGamePhase()
 	}
 
 	PhaseRemainingSeconds = FMath::Max(1, GamePhases[CurrentPhaseArrayIndex].DurationSeconds);
-	bPhaseCarversReady = !HasPhaseCarvers(GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
+	bPhaseCarversReady = !HasPhaseCarvers(CurrentPhaseArrayIndex);
 	UE_LOG(LogTemp, Log, TEXT("[GameFlow] Phase=%d Remaining=%d GameRemaining=%d"),
-		GamePhases[CurrentPhaseArrayIndex].PhaseIndex, PhaseRemainingSeconds, GameRemainingSeconds);
+		CurrentPhaseArrayIndex, PhaseRemainingSeconds, GameRemainingSeconds);
+	CapturePhaseTeamSnowTotals();
+	UpdateTeamSnowTotals();
 }
 
 void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
@@ -255,18 +235,30 @@ void ADRMiningGameModeBase::UpdateReplicatedGamePhase()
 
 	const FDRGamePhaseConfig& Phase = GamePhases[CurrentPhaseArrayIndex];
 	MiningGameState->SetGamePhaseState(
-		Phase.PhaseIndex,
+		CurrentPhaseArrayIndex,
 		PhaseRemainingSeconds,
 		Phase.PlayerMessages);
-	MiningGameState->SetPhaseCountdown(IsGameStarted()
-		? Phase.MakeCountdownState(PhaseRemainingSeconds) : FDRPhaseCountdownState());
+	USoundBase* CountdownSound = nullptr;
+	FDRPhaseCountdownState Countdown = IsGameStarted()
+		? GetControlZoneActivationCountdown(CountdownSound) : FDRPhaseCountdownState();
+	MiningGameState->SetPhaseCountdown(Countdown);
+	if (Countdown.RemainingSeconds > 0
+		&& Countdown.RemainingSeconds != LastControlZoneCountdownSoundSecond)
+	{
+		LastControlZoneCountdownSoundSecond = Countdown.RemainingSeconds;
+		MiningGameState->MulticastPlayControlZoneSound(CountdownSound);
+	}
+	else if (Countdown.RemainingSeconds <= 0)
+	{
+		LastControlZoneCountdownSoundSecond = INDEX_NONE;
+	}
 }
 
-bool ADRMiningGameModeBase::HasPhaseCarvers(int32 PhaseIndex) const
+bool ADRMiningGameModeBase::HasPhaseCarvers(int32 PhaseArrayIndex) const
 {
 	for (TActorIterator<ADRMeshVoxelCarver> It(GetWorld()); It; ++It)
 	{
-		if (It->ShouldCarveOnGameStart(PhaseIndex))
+		if (It->ShouldCarveOnGameStart(PhaseArrayIndex))
 		{
 			return true;
 		}
@@ -274,7 +266,7 @@ bool ADRMiningGameModeBase::HasPhaseCarvers(int32 PhaseIndex) const
 	return false;
 }
 
-void ADRMiningGameModeBase::NotifyPhaseCarversReady(int32 PhaseIndex, bool bSucceeded)
+void ADRMiningGameModeBase::NotifyPhaseCarversReady(int32 PhaseArrayIndex, bool bSucceeded)
 {
 	if (!HasAuthority() || !GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
 	{
@@ -283,14 +275,15 @@ void ADRMiningGameModeBase::NotifyPhaseCarversReady(int32 PhaseIndex, bool bSucc
 	if (!bSucceeded)
 	{
 		bPhaseCarveFailed = true;
-		UE_LOG(LogTemp, Error, TEXT("Phase %d carve failed; control zones stay locked."), PhaseIndex);
+		UE_LOG(LogTemp, Error, TEXT("Phase %d carve failed; control zones stay locked."),
+			PhaseArrayIndex);
 		if (GameFlowState == EDRGameFlowState::Loading)
 		{
 			SetGameFlowState(EDRGameFlowState::WaitingForPlayers);
 		}
 		return;
 	}
-	if (GamePhases[CurrentPhaseArrayIndex].PhaseIndex != PhaseIndex)
+	if (CurrentPhaseArrayIndex != PhaseArrayIndex)
 	{
 		return;
 	}
@@ -320,10 +313,58 @@ void ADRMiningGameModeBase::UpdateControlZoneActivation()
 			return;
 		}
 	}
+	const FDRGamePhaseConfig& Phase = GamePhases[CurrentPhaseArrayIndex];
+	const int32 PhaseElapsed = Phase.DurationSeconds - PhaseRemainingSeconds;
+	TArray<ADRSnowControlZone*> ActivatedZones;
 	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
 	{
-		It->ActivateForPhase(GamePhases[CurrentPhaseArrayIndex].PhaseIndex);
+		if (It->GetActivationCountdownRemaining(CurrentPhaseArrayIndex, PhaseElapsed) > 0)
+		{
+			It->ShowActivationReveal();
+			continue;
+		}
+		const bool bWasActive = It->IsZoneActive();
+		It->ActivateForPhase(CurrentPhaseArrayIndex);
+		if (!bWasActive && It->IsZoneActive())
+		{
+			ActivatedZones.Add(*It);
+		}
 	}
+	if (!ActivatedZones.IsEmpty())
+	{
+		if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
+		{
+			for (const ADRSnowControlZone* Zone : ActivatedZones)
+			{
+				MiningGameState->MulticastPlayControlZoneSound(Zone->GetActivatedSound());
+			}
+		}
+	}
+}
+
+FDRPhaseCountdownState ADRMiningGameModeBase::GetControlZoneActivationCountdown(
+	USoundBase*& OutSound) const
+{
+	FDRPhaseCountdownState Countdown;
+	OutSound = nullptr;
+	if (!GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
+	{
+		return Countdown;
+	}
+	const FDRGamePhaseConfig& Phase = GamePhases[CurrentPhaseArrayIndex];
+	const int32 PhaseElapsed = Phase.DurationSeconds - PhaseRemainingSeconds;
+	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
+	{
+		const int32 Remaining = It->GetActivationCountdownRemaining(
+			CurrentPhaseArrayIndex, PhaseElapsed);
+		if (Remaining > Countdown.RemainingSeconds)
+		{
+			Countdown.RemainingSeconds = Remaining;
+			Countdown.Text = It->GetActivationCountdownText();
+			OutSound = It->GetActivationCountdownSound();
+		}
+	}
+	return Countdown;
 }
 
 void ADRMiningGameModeBase::HandleControlZoneCompleted(ADRSnowControlZone* Zone)
@@ -395,6 +436,75 @@ void ADRMiningGameModeBase::RecalculateGameDuration()
 	}
 }
 
+void ADRMiningGameModeBase::CalculateTeamSnowTotals(
+	float& OutTeam0Total,
+	float& OutTeam1Total) const
+{
+	OutTeam0Total = 0.f;
+	OutTeam1Total = 0.f;
+	if (!IsValid(GameState))
+	{
+		return;
+	}
+	for (const APlayerState* Player : GameState->PlayerArray)
+	{
+		const ADRPlayerState* DRPlayerState = Cast<ADRPlayerState>(Player);
+		if (!IsValid(DRPlayerState) || DRPlayerState->IsOnlyASpectator())
+		{
+			continue;
+		}
+		const float SnowTotal = FMath::Max(0.f, DRPlayerState->GetSnowGauge());
+		if (DRPlayerState->GetTeamId() == 0)
+		{
+			OutTeam0Total += SnowTotal;
+		}
+		else if (DRPlayerState->GetTeamId() == 1)
+		{
+			OutTeam1Total += SnowTotal;
+		}
+	}
+}
+
+void ADRMiningGameModeBase::CapturePhaseTeamSnowTotals()
+{
+	CalculateTeamSnowTotals(PhaseTeamSnowTotals[0], PhaseTeamSnowTotals[1]);
+}
+
+void ADRMiningGameModeBase::UpdateTeamSnowTotals()
+{
+	if (!HasAuthority() || !IsGameStarted())
+	{
+		return;
+	}
+	float CurrentTotals[2];
+	CalculateTeamSnowTotals(CurrentTotals[0], CurrentTotals[1]);
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ADRPlayerController* Controller = Cast<ADRPlayerController>(It->Get());
+		const ADRPlayerState* PlayerState = IsValid(Controller)
+			? Controller->GetPlayerState<ADRPlayerState>() : nullptr;
+		if (!IsValid(PlayerState) || (PlayerState->GetTeamId() != 0 && PlayerState->GetTeamId() != 1))
+		{
+			continue;
+		}
+		const int32 OwnTeamId = PlayerState->GetTeamId();
+		const float Team0Display = OwnTeamId == 0 ? CurrentTotals[0] : PhaseTeamSnowTotals[0];
+		const float Team1Display = OwnTeamId == 1 ? CurrentTotals[1] : PhaseTeamSnowTotals[1];
+		Controller->ClientUpdateTeamSnowTotals(Team0Display, Team1Display);
+	}
+}
+
+void ADRMiningGameModeBase::SendFinalTeamSnowTotals(float Team0Total, float Team1Total)
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ADRPlayerController* Controller = Cast<ADRPlayerController>(It->Get()))
+		{
+			Controller->ClientUpdateTeamSnowTotals(Team0Total, Team1Total);
+		}
+	}
+}
+
 void ADRMiningGameModeBase::EndGame()
 {
 	if (!HasAuthority() || !IsGameStarted())
@@ -420,7 +530,6 @@ void ADRMiningGameModeBase::EndGame()
 		Iterator->Destroy();
 	}
 
-	double WeightedTeamScores[2] = {0.0, 0.0};
 	TArray<FString> ZoneDebugTexts;
 	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
@@ -445,39 +554,37 @@ void ADRMiningGameModeBase::EndGame()
 			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[0] / ZoneTeamTotal * 100.f : 0.f;
 		const float ZoneTeam1Percent =
 			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[1] / ZoneTeamTotal * 100.f : 0.f;
-		WeightedTeamScores[0] += ZoneTeam0Percent * Iterator->GetPointValue();
-		WeightedTeamScores[1] += ZoneTeam1Percent * Iterator->GetPointValue();
 		UE_LOG(
 			LogTemp,
 			Warning,
-			TEXT("[GameEnd][Zone=%s] Point=%.2f Team 0=%.2f%% Team 1=%.2f%%"),
+			TEXT("[GameEnd][Zone=%s] Team 0=%.2f%% Team 1=%.2f%%"),
 			*Iterator->GetName(),
-			Iterator->GetPointValue(),
 			ZoneTeam0Percent,
 			ZoneTeam1Percent);
 	}
 
-	const double WeightedScoreTotal = WeightedTeamScores[0] + WeightedTeamScores[1];
-	const int32 Team0Percent = WeightedScoreTotal > 0.0
-		? FMath::RoundToInt(WeightedTeamScores[0] / WeightedScoreTotal * 100.0)
-		: 0;
-	const int32 Team1Percent = WeightedScoreTotal > 0.0 ? 100 - Team0Percent : 0;
+	float TeamCurrency[2];
+	CalculateTeamSnowTotals(TeamCurrency[0], TeamCurrency[1]);
+	const float TotalCurrency = TeamCurrency[0] + TeamCurrency[1];
+	SendFinalTeamSnowTotals(TeamCurrency[0], TeamCurrency[1]);
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("[GameEnd] 게임 끝! Team 0=%d%% Team 1=%d%%"),
-		Team0Percent,
-		Team1Percent);
+		TEXT("[GameEnd] Team currency: Team 0=%.2f Team 1=%.2f"),
+		TeamCurrency[0],
+		TeamCurrency[1]);
 
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameEndDebugText(FString::Join(ZoneDebugTexts, TEXT("\n\n")));
 		FDRControlZoneGameResult Result;
 		Result.bHasResult = true;
-		Result.Team0Ratio = WeightedScoreTotal > 0.0 ? WeightedTeamScores[0] / WeightedScoreTotal : 0.f;
-		Result.Team1Ratio = WeightedScoreTotal > 0.0 ? WeightedTeamScores[1] / WeightedScoreTotal : 0.f;
-		Result.WinningTeamId = FMath::IsNearlyEqual(WeightedTeamScores[0], WeightedTeamScores[1], 0.0001)
-			? INDEX_NONE : WeightedTeamScores[0] > WeightedTeamScores[1] ? 0 : 1;
+		Result.Team0Ratio = TotalCurrency > 0.0 ? TeamCurrency[0] / TotalCurrency : 0.f;
+		Result.Team1Ratio = TotalCurrency > 0.0 ? TeamCurrency[1] / TotalCurrency : 0.f;
+		Result.Team0SnowTotal = TeamCurrency[0];
+		Result.Team1SnowTotal = TeamCurrency[1];
+		Result.WinningTeamId = FMath::IsNearlyEqual(TeamCurrency[0], TeamCurrency[1], 0.01)
+			? INDEX_NONE : TeamCurrency[0] > TeamCurrency[1] ? 0 : 1;
 		MiningGameState->SetControlZoneResult(Result);
 		MiningGameState->RequestControlZoneCleanup();
 
@@ -498,7 +605,7 @@ void ADRMiningGameModeBase::EndGame()
 	{
 		Zones.Add(*It);
 	}
-	PendingZoneCleanups = Zones.Num() + 1;
+	PendingZoneCleanups = Zones.Num();
 	for (ADRSnowControlZone* Zone : Zones)
 	{
 		const TWeakObjectPtr<ADRMiningGameModeBase> WeakThis(this);
@@ -518,16 +625,8 @@ void ADRMiningGameModeBase::EndGame()
 			FinishControlZoneCleanup();
 		}
 	}
-	FinishControlZoneCleanup();
-}
 
-void ADRMiningGameModeBase::FinishControlZoneCleanup()
-{
-	if (!IsGameEnded() || PendingZoneCleanups <= 0 || --PendingZoneCleanups > 0)
-	{
-		return;
-	}
-	// 조형물 정리가 끝난 뒤 결과 표시 시간을 보장한다.
+	// 비동기 거점 정리가 지연되어도 다음 경기 준비 상태로 돌아간다.
 	GetWorldTimerManager().SetTimer(
 		GameResultTimerHandle,
 		this,
@@ -535,8 +634,21 @@ void ADRMiningGameModeBase::FinishControlZoneCleanup()
 		FMath::Max(0.1f, GameResultDisplayDuration),
 		false);
 	TickGameResultCountdown();
-	GetWorldTimerManager().SetTimer(GameResultCountdownTimerHandle,
-		this, &ThisClass::TickGameResultCountdown, 1.f, true);
+	GetWorldTimerManager().SetTimer(
+		GameResultCountdownTimerHandle,
+		this,
+		&ThisClass::TickGameResultCountdown,
+		1.f,
+		true);
+}
+
+void ADRMiningGameModeBase::FinishControlZoneCleanup()
+{
+	if (PendingZoneCleanups <= 0)
+	{
+		return;
+	}
+	--PendingZoneCleanups;
 }
 
 void ADRMiningGameModeBase::TickGameResultCountdown()
@@ -598,6 +710,7 @@ void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 	{
 		GetWorldTimerManager().ClearTimer(TeamSwitchTimerHandle);
 		GetWorldTimerManager().ClearTimer(GameTimerHandle);
+		GetWorldTimerManager().ClearTimer(TeamSnowShareTimerHandle);
 	}
 	else if (GameFlowState == EDRGameFlowState::Results)
 	{
@@ -614,12 +727,11 @@ void ADRMiningGameModeBase::SetGameFlowState(EDRGameFlowState NewState)
 		*StaticEnum<EDRGameFlowState>()->GetNameStringByValue(static_cast<int64>(NewState)),
 		CurrentPhaseArrayIndex, PhaseRemainingSeconds, GameRemainingSeconds);
 	GameFlowState = NewState;
-	// 관리 방은 준비 시작부터 입장을 닫고 결과 화면 이후 Master가 회수한다.
+	// 결과 화면도 같은 서버에서 다음 사이클을 준비하므로 실제 EndPlay 전까지 입장만 닫는다.
 	if (IsManagedRoom())
 	{
 		const ERoomServiceState ReportState = NewState == EDRGameFlowState::WaitingForPlayers
-			? ERoomServiceState::Waiting : NewState == EDRGameFlowState::Results
-			? ERoomServiceState::Ending : ERoomServiceState::Playing;
+			? ERoomServiceState::Waiting : ERoomServiceState::Playing;
 		SetRoomServiceState(ReportState);
 	}
 	if (bWasPreparing != bIsPreparing)
@@ -740,7 +852,11 @@ void ADRMiningGameModeBase::SetGamePreparingBlocked(
 void ADRMiningGameModeBase::ResetGameState()
 {
 	ClearControlZoneRewardEffects();
+	GetWorldTimerManager().ClearTimer(TeamSnowShareTimerHandle);
+	PhaseTeamSnowTotals[0] = 0.f;
+	PhaseTeamSnowTotals[1] = 0.f;
 	PendingZoneCleanups = 0;
+	LastControlZoneCountdownSoundSecond = INDEX_NONE;
 	bPhaseCarveFailed = false;
 	UWorld* World = GetWorld();
 	if (!IsValid(World))
@@ -774,6 +890,7 @@ void ADRMiningGameModeBase::ResetGameState()
 		if (ADRPlayerController* PlayerController = Cast<ADRPlayerController>(Iterator->Get()))
 		{
 			PlayerController->ResetForGameStart();
+			PlayerController->ClientUpdateTeamSnowTotals(0.f, 0.f);
 
 			APawn* Pawn = PlayerController->GetPawn();
 			if (!IsValid(Pawn))
@@ -810,6 +927,7 @@ void ADRMiningGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(GameTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameResultTimerHandle);
 	GetWorldTimerManager().ClearTimer(GameResultCountdownTimerHandle);
+	GetWorldTimerManager().ClearTimer(TeamSnowShareTimerHandle);
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -1134,31 +1252,3 @@ AActor* ADRMiningGameModeBase::ChoosePlayerStart_Implementation(AController* Pla
 
 	return TeamStarts[0];
 }
-
-#if WITH_DEV_AUTOMATION_TESTS
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDRPhaseCountdownTest, "DeepRaiders.GameFlow.PhaseCountdown",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FDRPhaseCountdownTest::RunTest(const FString&)
-{
-	FDRGamePhaseConfig Phase;
-	Phase.DurationSeconds = 5;
-	Phase.EntryCountdownSeconds = 4;
-	Phase.ExitCountdownSeconds = 3;
-	Phase.EntryCountdownText = FText::FromString(TEXT("Entry {Seconds}"));
-	Phase.ExitCountdownText = FText::FromString(TEXT("Exit {Seconds}"));
-	TestEqual(TEXT("Both disabled"), Phase.MakeCountdownState(5).RemainingSeconds, 0);
-	Phase.bShowEntryCountdown = true;
-	TestEqual(TEXT("Entry starts at four"), Phase.MakeCountdownState(5).RemainingSeconds, 4);
-	TestEqual(TEXT("Entry expires"), Phase.MakeCountdownState(1).RemainingSeconds, 0);
-	Phase.bShowExitCountdown = true;
-	const FDRPhaseCountdownState Overlap = Phase.MakeCountdownState(3);
-	TestTrue(TEXT("Exit wins overlap"), Overlap.bIsExitCountdown);
-	TestEqual(TEXT("Exit uses phase remainder"), Overlap.RemainingSeconds, 3);
-	TestTrue(TEXT("Exit keeps its own text"), Overlap.Text.EqualTo(Phase.ExitCountdownText));
-	Phase.bShowEntryCountdown = false;
-	TestEqual(TEXT("Exit not shown early"), Phase.MakeCountdownState(5).RemainingSeconds, 0);
-	TestEqual(TEXT("No countdown after phase"), Phase.MakeCountdownState(0).RemainingSeconds, 0);
-	return true;
-}
-#endif

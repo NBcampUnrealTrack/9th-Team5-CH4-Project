@@ -61,6 +61,7 @@ struct FDRTeamRegisteredTeleportPoint
 
 struct FDRSnowOperationBatcher;
 struct FDRSnowLoadTest;
+class USoundBase;
 
 USTRUCT(BlueprintType)
 struct FDRPhaseCountdownState
@@ -69,9 +70,6 @@ struct FDRPhaseCountdownState
 
 	UPROPERTY(BlueprintReadOnly)
 	int32 RemainingSeconds = 0;
-
-	UPROPERTY(BlueprintReadOnly)
-	bool bIsExitCountdown = false;
 
 	UPROPERTY(BlueprintReadOnly)
 	FText Text;
@@ -91,7 +89,13 @@ struct FDRControlZoneGameResult
 	UPROPERTY(BlueprintReadOnly)
 	float Team1Ratio = 0.f;
 
-	// INDEX_NONE은 동률 또는 양 팀 모두 점유량이 없는 경우다.
+	UPROPERTY(BlueprintReadOnly)
+	float Team0SnowTotal = 0.f;
+
+	UPROPERTY(BlueprintReadOnly)
+	float Team1SnowTotal = 0.f;
+
+	// INDEX_NONE은 양 팀의 보유 금액 합계가 같은 경우다.
 	UPROPERTY(BlueprintReadOnly)
 	int32 WinningTeamId = INDEX_NONE;
 };
@@ -129,7 +133,12 @@ public:
 	void SetGameEndDebugText(const FString& DebugText);
 	void SetGameResultText(const FText& ResultText);
 	void SetPhaseCountdown(const FDRPhaseCountdownState& Countdown);
+
+	// GameMode가 선택한 거점 UI 사운드를 모든 플레이어에게 전달한다.
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayControlZoneSound(USoundBase* Sound);
 	void SetControlZoneResult(const FDRControlZoneGameResult& Result);
+	void SetDisplayedTeamSnowTotals(float Team0Total, float Team1Total);
 	void RequestControlZoneCleanup();
 	void AddControlZoneReward(int32 TeamId, float Amount);
 	void SetResultCountdown(int32 RemainingSeconds, const FText& CountdownText);
@@ -137,6 +146,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Game|Reward")
 	float GetControlZoneRewardTotal(int32 TeamId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Game|Team")
+	float GetDisplayedTeamSnowTotal(int32 TeamId) const;
 
 	UFUNCTION(BlueprintPure, Category = "Game|Result")
 	int32 GetResultRemainingSeconds() const { return ResultRemainingSeconds; }
@@ -198,6 +210,9 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_MatchHUDState)
 	FText ResultCountdownText;
+
+	// 각 클라이언트가 볼 수 있도록 서버가 선별해서 전달한 팀 보유량이다.
+	float DisplayedTeamSnowTotals[2] = {0.f, 0.f};
 
 	UFUNCTION()
 	void OnRep_ControlZoneResult();

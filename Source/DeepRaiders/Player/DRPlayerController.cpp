@@ -15,6 +15,7 @@
 #include "Components/DRQuickSlotComponent.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Core/Settings/DRGameUserSettings.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Item/DRItemInstance.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
@@ -243,6 +244,16 @@ bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerSt
 	const double* ExpireTime = EnemyNameRevealExpireTimes.Find(TargetPlayerState);
 
 	return ExpireTime != nullptr && *ExpireTime > World->GetTimeSeconds();
+}
+
+void ADRPlayerController::ClientUpdateTeamSnowTotals_Implementation(
+	float Team0Total,
+	float Team1Total)
+{
+	if (ADRMiningGameStateBase* MiningGameState = GetWorld()->GetGameState<ADRMiningGameStateBase>())
+	{
+		MiningGameState->SetDisplayedTeamSnowTotals(Team0Total, Team1Total);
+	}
 }
 
 void ADRPlayerController::BeginPlay()

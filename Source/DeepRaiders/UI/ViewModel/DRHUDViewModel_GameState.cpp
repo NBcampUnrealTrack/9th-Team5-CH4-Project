@@ -89,6 +89,8 @@ void UDRHUDViewModel::HandleGameResultTextChanged(const FText& ResultText)
 		? MiningGameState->GetControlZoneResult() : FDRControlZoneGameResult();
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0Ratio, Result.Team0Ratio);
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1Ratio, Result.Team1Ratio);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0SnowTotal, Result.Team0SnowTotal);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1SnowTotal, Result.Team1SnowTotal);
 	UE_MVVM_SET_PROPERTY_VALUE(WinningTeamId, Result.WinningTeamId);
 	UE_MVVM_SET_PROPERTY_VALUE(bHasFinalResult, Result.bHasResult);
 	HandleMatchHUDStateChanged();
@@ -102,8 +104,6 @@ void UDRHUDViewModel::RefreshGameStartStatus()
 	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownText, CountdownText);
 	UE_MVVM_SET_PROPERTY_VALUE(PhaseCountdownSeconds, Countdown.RemainingSeconds);
 	UE_MVVM_SET_PROPERTY_VALUE(bIsPhaseCountdownVisible, Countdown.RemainingSeconds > 0);
-	UE_MVVM_SET_PROPERTY_VALUE(bIsExitCountdown,
-		Countdown.RemainingSeconds > 0 && Countdown.bIsExitCountdown);
 	FText NewStatusText;
 	const EDRGameFlowState FlowState = MiningGameState.IsValid()
 		? MiningGameState->GetGameFlowState() : EDRGameFlowState::WaitingForPlayers;
@@ -113,7 +113,6 @@ void UDRHUDViewModel::RefreshGameStartStatus()
 		NewStatusText = FormatHUDCountdown(CurrentGameFlowMessage, GameStartCountdown);
 		break;
 	case EDRGameFlowState::Playing:
-		// 종료 우선순위는 GameMode가 정한 카운트다운 상태를 그대로 따른다.
 		NewStatusText = bIsPhaseCountdownVisible ? PhaseCountdownText : CurrentPhaseMessageText;
 		break;
 	case EDRGameFlowState::Results:
@@ -209,13 +208,13 @@ void UDRHUDViewModel::RefreshTeamTexts()
 		}
 		else if (MiningGameState->IsGameEnded() && bHasFinalResult)
 		{
-			RedText = FText::AsPercent(FinalTeam0Ratio, &NumberFormat);
-			BlueText = FText::AsPercent(FinalTeam1Ratio, &NumberFormat);
+			RedText = FText::AsNumber(FinalTeam0SnowTotal, &NumberFormat);
+			BlueText = FText::AsNumber(FinalTeam1SnowTotal, &NumberFormat);
 		}
 		else
 		{
-			RedText = FText::AsNumber(MiningGameState->GetControlZoneRewardTotal(0), &NumberFormat);
-			BlueText = FText::AsNumber(MiningGameState->GetControlZoneRewardTotal(1), &NumberFormat);
+			RedText = FText::AsNumber(MiningGameState->GetDisplayedTeamSnowTotal(0), &NumberFormat);
+			BlueText = FText::AsNumber(MiningGameState->GetDisplayedTeamSnowTotal(1), &NumberFormat);
 		}
 	}
 	UE_MVVM_SET_PROPERTY_VALUE(TeamRedText, RedText);

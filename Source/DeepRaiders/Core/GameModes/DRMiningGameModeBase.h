@@ -9,6 +9,7 @@
 
 struct FPropertyChangedChainEvent;
 struct FDRPhaseCountdownState;
+class USoundBase;
 
 enum class EDRSnowJoinSnapshotResult : uint8
 {
@@ -25,9 +26,6 @@ struct FDRGamePhaseConfig
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase")
-	int32 PhaseIndex = 0;
-
 	UPROPERTY(
 		EditAnywhere,
 		BlueprintReadOnly,
@@ -37,32 +35,6 @@ struct FDRGamePhaseConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase")
 	TArray<FText> PlayerMessages;
-
-	// 진입은 페이즈 시작 직후, 종료는 끝나기 직전의 표시 구간이다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown")
-	bool bShowEntryCountdown = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown",
-		meta = (ClampMin = "1", EditCondition = "bShowEntryCountdown", Units = "s"))
-	int32 EntryCountdownSeconds = 3;
-
-	// {Seconds} 자리에 남은 초를 표시한다.
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown",
-		meta = (EditCondition = "bShowEntryCountdown"))
-	FText EntryCountdownText;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown")
-	bool bShowExitCountdown = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown",
-		meta = (ClampMin = "1", EditCondition = "bShowExitCountdown", Units = "s"))
-	int32 ExitCountdownSeconds = 3;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Game Phase|Countdown",
-		meta = (EditCondition = "bShowExitCountdown"))
-	FText ExitCountdownText;
-
-	FDRPhaseCountdownState MakeCountdownState(int32 RemainingSeconds) const;
 };
 
 // 채굴 테스트/플레이용 GameState를 사용하는 GameMode이다.
@@ -94,7 +66,7 @@ public:
 	void RequestGameStart(class ADRGameStartActor* Source, int32 CountdownSeconds);
 	void CancelGameCountdown(class ADRGameStartActor* Source);
 	void NotifyGameStartCarversReady();
-	void NotifyPhaseCarversReady(int32 PhaseIndex, bool bSucceeded);
+	void NotifyPhaseCarversReady(int32 PhaseArrayIndex, bool bSucceeded);
 	void HandleControlZoneCompleted(class ADRSnowControlZone* Zone);
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
@@ -126,6 +98,10 @@ protected:
 		Category = "Team Movement",
 		meta = (ClampMin = "0.01", Units = "s"))
 	float TeamSwitchInterval = 10.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Game|Team",
+		meta = (ClampMin = "0.1", Units = "s"))
+	float TeamSnowShareInterval = 0.2f;
 
 	UPROPERTY(
 		EditDefaultsOnly,
@@ -174,10 +150,15 @@ private:
 	void UpdateReplicatedGamePhase();
 	void RecalculateGameDuration();
 	void UpdateControlZoneActivation();
+	FDRPhaseCountdownState GetControlZoneActivationCountdown(USoundBase*& OutSound) const;
 	void FinishControlZoneCleanup();
 	void TickGameResultCountdown();
-	bool HasPhaseCarvers(int32 PhaseIndex) const;
+	bool HasPhaseCarvers(int32 PhaseArrayIndex) const;
 	void ClearControlZoneRewardEffects();
+	void CalculateTeamSnowTotals(float& OutTeam0Total, float& OutTeam1Total) const;
+	void CapturePhaseTeamSnowTotals();
+	void UpdateTeamSnowTotals();
+	void SendFinalTeamSnowTotals(float Team0Total, float Team1Total);
 	void ReturnToWaiting();
 	void SetGameFlowState(EDRGameFlowState NewState);
 	void SetGamePreparingBlocked(class ADRPlayerState* PlayerState, bool bBlocked) const;
@@ -199,6 +180,7 @@ private:
 	FTimerHandle GameTimerHandle;
 	FTimerHandle GameResultTimerHandle;
 	FTimerHandle GameResultCountdownTimerHandle;
+	FTimerHandle TeamSnowShareTimerHandle;
 	int32 GameRemainingSeconds = 0;
 	int32 CurrentPhaseArrayIndex = INDEX_NONE;
 	int32 PhaseRemainingSeconds = 0;
@@ -206,7 +188,9 @@ private:
 	bool bPhaseCarversReady = false;
 	bool bPhaseCarveFailed = false;
 	int32 PendingZoneCleanups = 0;
+	int32 LastControlZoneCountdownSoundSecond = INDEX_NONE;
 	TArray<FActiveGameplayEffectHandle> ControlZoneRewardEffects;
+	float PhaseTeamSnowTotals[2] = {0.f, 0.f};
 
 	void StartTeamSwitchTimer();
 	void RefreshActiveTeam();

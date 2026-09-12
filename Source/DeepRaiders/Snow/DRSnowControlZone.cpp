@@ -186,6 +186,7 @@ void ADRSnowControlZone::BeginPlay()
 
 void ADRSnowControlZone::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	GetWorldTimerManager().ClearTimer(ActivationRevealTimerHandle);
 	if (CleanupCancellation.IsValid())
 	{
 		*CleanupCancellation = true;
@@ -292,6 +293,9 @@ void ADRSnowControlZone::GetLifetimeReplicatedProps(
 
 void ADRSnowControlZone::ResetForGame()
 {
+	GetWorldTimerManager().ClearTimer(ActivationRevealTimerHandle);
+	bActivationRevealShown = false;
+	bActivationRevealActive = false;
 	if (CleanupCancellation.IsValid())
 	{
 		*CleanupCancellation = true;
@@ -310,6 +314,34 @@ void ADRSnowControlZone::ResetForGame()
 		OnRep_ControlState();
 		ForceNetUpdate();
 	}
+}
+
+void ADRSnowControlZone::ShowActivationReveal()
+{
+	if (!HasAuthority() || bActivationRevealShown || ActivationRevealDuration <= 0.f)
+	{
+		return;
+	}
+	bActivationRevealShown = true;
+	MulticastShowActivationReveal(ActivationRevealDuration);
+}
+
+void ADRSnowControlZone::MulticastShowActivationReveal_Implementation(float Duration)
+{
+	bActivationRevealActive = true;
+	RefreshControlVisuals();
+	GetWorldTimerManager().SetTimer(
+		ActivationRevealTimerHandle,
+		this,
+		&ThisClass::ClearActivationReveal,
+		FMath::Max(Duration, 0.01f),
+		false);
+}
+
+void ADRSnowControlZone::ClearActivationReveal()
+{
+	bActivationRevealActive = false;
+	RefreshControlVisuals();
 }
 
 bool ADRSnowControlZone::PrepareForGame() const
@@ -337,6 +369,16 @@ void ADRSnowControlZone::ActivateForPhase(int32 PhaseIndex)
 	RefreshControlRatio();
 	OnRep_ControlState();
 	ForceNetUpdate();
+}
+
+int32 ADRSnowControlZone::GetActivationCountdownRemaining(
+	int32 PhaseIndex, int32 PhaseElapsedSeconds) const
+{
+	if (!bShowActivationCountdown || !ShouldActivateForPhase(PhaseIndex))
+	{
+		return 0;
+	}
+	return FMath::Max(0, ActivationCountdownSeconds - PhaseElapsedSeconds);
 }
 
 void ADRSnowControlZone::FreezeForGameEnd()
@@ -440,6 +482,11 @@ bool ADRSnowControlZone::StartEndCleanup(TFunction<void(bool)>&& Completion)
 
 void ADRSnowControlZone::OnRep_ControlState()
 {
+	if (bZoneCompleted)
+	{
+		GetWorldTimerManager().ClearTimer(ActivationRevealTimerHandle);
+		bActivationRevealActive = false;
+	}
 	RefreshControlVisuals();
 	RefreshPointLocationWidget();
 }
@@ -448,12 +495,14 @@ void ADRSnowControlZone::RefreshControlVisuals()
 {
 	if (TargetMesh)
 	{
-		// 활성화된 미완성 거점만 목표 모양을 표시한다.
-		const bool bShowTargetMesh = bZoneActive && !bZoneCompleted;
+		const bool bShowActiveMesh = bZoneActive && !bZoneCompleted;
+		const bool bShowTargetMesh = !bZoneCompleted
+			&& (bShowActiveMesh || bActivationRevealActive);
 		TargetMesh->SetRenderCustomDepth(bShowTargetMesh);
 		TargetMesh->SetCustomDepthStencilValue(OutlineStencilValue);
-		TargetMesh->SetRenderInMainPass(true);
-		TargetMesh->SetRenderInDepthPass(true);
+		// 활성화 전 색적 중에는 외곽선만 렌더링한다.
+		TargetMesh->SetRenderInMainPass(bShowActiveMesh);
+		TargetMesh->SetRenderInDepthPass(bShowActiveMesh);
 		TargetMesh->SetVisibility(bShowTargetMesh);
 		TargetMesh->SetHiddenInGame(!bShowTargetMesh);
 		TargetMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);

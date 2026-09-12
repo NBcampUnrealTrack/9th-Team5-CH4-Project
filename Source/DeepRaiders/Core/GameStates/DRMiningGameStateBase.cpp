@@ -12,6 +12,8 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "VoxelTools/VoxelBlueprintLibrary.h"
 #include "VoxelWorld.h"
@@ -433,6 +435,19 @@ float ADRMiningGameStateBase::GetControlZoneRewardTotal(int32 TeamId) const
 	return TeamId == 0 ? Team0ControlZoneReward : TeamId == 1 ? Team1ControlZoneReward : 0.f;
 }
 
+void ADRMiningGameStateBase::SetDisplayedTeamSnowTotals(float Team0Total, float Team1Total)
+{
+	DisplayedTeamSnowTotals[0] = FMath::Max(0.f, Team0Total);
+	DisplayedTeamSnowTotals[1] = FMath::Max(0.f, Team1Total);
+	OnRep_MatchHUDState();
+}
+
+float ADRMiningGameStateBase::GetDisplayedTeamSnowTotal(int32 TeamId) const
+{
+	return TeamId == 0 ? DisplayedTeamSnowTotals[0]
+		: TeamId == 1 ? DisplayedTeamSnowTotals[1] : 0.f;
+}
+
 void ADRMiningGameStateBase::SetResultCountdown(int32 RemainingSeconds, const FText& CountdownText)
 {
 	if (!HasAuthority())
@@ -479,6 +494,14 @@ void ADRMiningGameStateBase::SetPhaseCountdown(const FDRPhaseCountdownState& Cou
 	}
 }
 
+void ADRMiningGameStateBase::MulticastPlayControlZoneSound_Implementation(USoundBase* Sound)
+{
+	if (IsValid(Sound) && GetNetMode() != NM_DedicatedServer)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
+}
+
 void ADRMiningGameStateBase::SetControlZoneResult(const FDRControlZoneGameResult& Result)
 {
 	if (HasAuthority())
@@ -505,10 +528,10 @@ void ADRMiningGameStateBase::OnRep_ControlZoneResult()
 		FNumberFormattingOptions Format;
 		Format.SetMinimumFractionalDigits(1);
 		Format.SetMaximumFractionalDigits(1);
-		GameResultText = FText::Format(NSLOCTEXT("DRGameResult", "ControlZoneResult",
-			"[Red] {0}% : {1}% [Blue]\n{2}"),
-			FText::AsNumber(ControlZoneResult.Team0Ratio * 100.f, &Format),
-			FText::AsNumber(ControlZoneResult.Team1Ratio * 100.f, &Format), Winner);
+		GameResultText = FText::Format(NSLOCTEXT("DRGameResult", "TeamSnowResult",
+			"[Red] {0} : {1} [Blue]\n{2}"),
+			FText::AsNumber(ControlZoneResult.Team0SnowTotal, &Format),
+			FText::AsNumber(ControlZoneResult.Team1SnowTotal, &Format), Winner);
 	}
 	OnRep_GameResultText();
 }
