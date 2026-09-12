@@ -45,8 +45,6 @@ struct DEEPRAIDERS_API FDRSnowAbsorbPresentationData
 	FName AttachSocketName = TEXT("VFXPoint");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Niagara")
-	FName BeamStartParameterName = TEXT("User.BeamStart");
+	FName ScaleParameterName = TEXT("User.Scale");
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Niagara")
-	FName BeamEndParameterName = TEXT("User.BeamEnd");
 };

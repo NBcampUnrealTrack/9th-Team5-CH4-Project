@@ -18,7 +18,6 @@ class DEEPRAIDERS_API ADRGameplayCueAbsorb : public AGameplayCueNotify_Actor
 public:
 	ADRGameplayCueAbsorb(const FObjectInitializer& ObjectInitializer);
 
-	virtual void Tick(float DeltaSeconds) override;
 	virtual bool Recycle() override;
 	virtual void ReuseAfterRecycle() override;
 
@@ -31,8 +30,6 @@ private:
 	bool BeginPresentation(AActor* MyTarget, const FGameplayCueParameters& Parameters);
 	void StopPresentation(bool bPlayEndSound);
 	void ResetPresentationState();
-	bool ResolveBeamEndpoints(FVector& OutBeamStart, FVector& OutBeamEnd) const;
-	void UpdateBeamEndpoints();
 	FGameplayCueParameters BuildSoundParameters() const;
 	void PlayStartAndLoopSounds();
 	void StopLoopAndPlayEndSound(bool bPlayEndSound);
@@ -51,7 +48,6 @@ private:
 	FGameplayTag ActiveLoopSoundCueTag;
 	FGameplayTag ActiveEndSoundCueTag;
 	FName StartSocketName = NAME_None;
-	FName BeamStartParameterName = NAME_None;
-	FName BeamEndParameterName = NAME_None;
+	FName ScaleParameterName = NAME_None;
 	bool bPresentationActive = false;
 };

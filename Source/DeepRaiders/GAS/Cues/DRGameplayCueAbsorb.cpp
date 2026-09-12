@@ -2,23 +2,16 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Item/DRRangedWeaponDefinition.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
-#include "Engine/World.h"
-#include "GameFramework/Controller.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 
 ADRGameplayCueAbsorb::ADRGameplayCueAbsorb(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
-	PrimaryActorTick.TickGroup = TG_PostPhysics;
-
 	SetReplicates(false);
 
 	bAutoDestroyOnRemove = true;
@@ -38,26 +31,6 @@ ADRGameplayCueAbsorb::ADRGameplayCueAbsorb(const FObjectInitializer& ObjectIniti
 	BeamNiagaraComponent->SetAutoActivate(false);
 	BeamNiagaraComponent->SetVisibility(false, true);
 }
-
-void ADRGameplayCueAbsorb::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (!bPresentationActive)
-	{
-		SetActorTickEnabled(false);
-		return;
-	}
-
-	if (!TargetCharacter.IsValid() || !StartComponent.IsValid() || !WeaponDefinition.IsValid())
-	{
-		StopPresentation(false);
-		return;
-	}
-
-	UpdateBeamEndpoints();
-}
-
 bool ADRGameplayCueAbsorb::Recycle()
 {
 	StopPresentation(false);
@@ -119,8 +92,7 @@ bool ADRGameplayCueAbsorb::BeginPresentation(AActor* MyTarget, const FGameplayCu
 	ActiveLoopSoundCueTag = Presentation.LoopSoundCueTag;
 	ActiveEndSoundCueTag = Presentation.EndSoundCueTag;
 	StartSocketName = Presentation.AttachSocketName;
-	BeamStartParameterName = Presentation.BeamStartParameterName;
-	BeamEndParameterName = Presentation.BeamEndParameterName;
+	ScaleParameterName = Presentation.ScaleParameterName;
 	bPresentationActive = true;
 
 	AttachToComponent(EquipmentMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, StartSocketName);
@@ -128,11 +100,25 @@ bool ADRGameplayCueAbsorb::BeginPresentation(AActor* MyTarget, const FGameplayCu
 
 	if (IsValid(Presentation.BeamVFX))
 	{
+		const float Radius = WeaponDefinition->SnowAbsorbSettings.Radius;
+		const float Range = WeaponDefinition->SnowAbsorbSettings.Range;
+		FVector VFXScale = FVector::OneVector;
+		constexpr float VFXMeshSize = 100.f;
+
+		VFXScale.X = FMath::Max(1.f, Radius / VFXMeshSize * 2);
+		VFXScale.Y = FMath::Max(1.f, Radius / VFXMeshSize * 2);
+		VFXScale.Z = FMath::Max(1.f, Range / VFXMeshSize);
+
+		// SetAsset의 기본 동작은 기존 override parameter를 초기화하므로 에셋을 먼저 지정한다.
 		BeamNiagaraComponent->SetAsset(Presentation.BeamVFX);
+
+		if (!ScaleParameterName.IsNone())
+		{
+			BeamNiagaraComponent->SetVariableVec3(ScaleParameterName, VFXScale);
+		}
+
 		BeamNiagaraComponent->SetVisibility(true, true);
-		UpdateBeamEndpoints();
 		BeamNiagaraComponent->Activate(true);
-		SetActorTickEnabled(true);
 	}
 
 	PlayStartAndLoopSounds();
@@ -145,7 +131,6 @@ void ADRGameplayCueAbsorb::StopPresentation(bool bPlayEndSound)
 	StopLoopAndPlayEndSound(bPlayEndSound && bWasPresentationActive);
 
 	bPresentationActive = false;
-	SetActorTickEnabled(false);
 
 	if (IsValid(BeamNiagaraComponent))
 	{
@@ -168,106 +153,7 @@ void ADRGameplayCueAbsorb::ResetPresentationState()
 	ActiveLoopSoundCueTag = FGameplayTag();
 	ActiveEndSoundCueTag = FGameplayTag();
 	StartSocketName = NAME_None;
-	BeamStartParameterName = NAME_None;
-	BeamEndParameterName = NAME_None;
-}
-
-bool ADRGameplayCueAbsorb::ResolveBeamEndpoints(FVector& OutBeamStart, FVector& OutBeamEnd) const
-{
-	const ADRPlayerCharacter* Character = TargetCharacter.Get();
-	const UStaticMeshComponent* EquipmentMesh = StartComponent.Get();
-	const UDRRangedWeaponDefinition* RangedWeaponDefinition = WeaponDefinition.Get();
-	UWorld* World = GetWorld();
-	if (!IsValid(Character) || !IsValid(EquipmentMesh) || !IsValid(RangedWeaponDefinition) || !IsValid(World))
-	{
-		return false;
-	}
-
-	OutBeamStart = EquipmentMesh->DoesSocketExist(StartSocketName)
-		? EquipmentMesh->GetSocketLocation(StartSocketName)
-		: EquipmentMesh->GetComponentLocation();
-
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	if (const AController* Controller = Character->GetController())
-	{
-		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
-	}
-	else
-	{
-		ViewLocation = Character->GetPawnViewLocation();
-		ViewRotation = Character->GetBaseAimRotation();
-	}
-
-	FVector ViewDirection = ViewRotation.Vector().GetSafeNormal();
-	if (ViewDirection.IsNearlyZero())
-	{
-		ViewDirection = Character->GetActorForwardVector();
-	}
-
-	FVector AbsorbOrigin = Character->GetActorLocation();
-	Character->CalculateGameplayFireOrigin(Character->GetActorForwardVector(), AbsorbOrigin);
-	const FVector FrustumOrigin = AbsorbOrigin
-		+ Character->GetActorTransform().TransformVectorNoScale(RangedWeaponDefinition->StartOffset);
-
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(AbsorbCueCameraAim), false, Character);
-	constexpr float CameraTraceDistance = 10000.0f;
-	const FVector CameraTraceEnd = ViewLocation + ViewDirection * CameraTraceDistance;
-	FHitResult CameraHit;
-	const bool bCameraHit = World->LineTraceSingleByChannel(
-		CameraHit,
-		ViewLocation,
-		CameraTraceEnd,
-		DRCollisionChannels::Projectile,
-		QueryParams);
-	const FVector AimPoint = bCameraHit ? CameraHit.ImpactPoint : CameraTraceEnd;
-	const FVector AimDirection = RangedWeaponDefinition->ResolveCameraAimDirection(
-		ViewDirection,
-		FrustumOrigin,
-		AimPoint);
-
-	const float AbsorbRange = FMath::Max(0.0f, RangedWeaponDefinition->SnowAbsorbSettings.Range);
-	if (AbsorbRange <= KINDA_SMALL_NUMBER)
-	{
-		OutBeamEnd = FrustumOrigin;
-		return true;
-	}
-
-	const FVector TraceEnd = FrustumOrigin + AimDirection * AbsorbRange;
-	FHitResult AbsorbHit;
-	const bool bAbsorbHit = World->LineTraceSingleByChannel(
-		AbsorbHit,
-		FrustumOrigin,
-		TraceEnd,
-		DRCollisionChannels::Projectile,
-		QueryParams);
-	OutBeamEnd = bAbsorbHit ? AbsorbHit.ImpactPoint : TraceEnd;
-	return true;
-}
-
-void ADRGameplayCueAbsorb::UpdateBeamEndpoints()
-{
-	if (!IsValid(BeamNiagaraComponent))
-	{
-		return;
-	}
-
-	FVector BeamStart;
-	FVector BeamEnd;
-	if (!ResolveBeamEndpoints(BeamStart, BeamEnd))
-	{
-		return;
-	}
-
-	if (!BeamStartParameterName.IsNone())
-	{
-		BeamNiagaraComponent->SetVariablePosition(BeamStartParameterName, BeamStart);
-	}
-
-	if (!BeamEndParameterName.IsNone())
-	{
-		BeamNiagaraComponent->SetVariablePosition(BeamEndParameterName, BeamEnd);
-	}
+	ScaleParameterName = NAME_None;
 }
 
 FGameplayCueParameters ADRGameplayCueAbsorb::BuildSoundParameters() const
