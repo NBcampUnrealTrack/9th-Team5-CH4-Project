@@ -310,9 +310,7 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 
 		UAbilitySystemComponent* TargetAbilitySystem = IsValid(HitActor) ?
 		UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor)	: nullptr;
-
-		DrawDebugLine(GetWorld(), TraceStart, HitResult.ImpactPoint, FColor::Red, false, 1.0f, 0, 3);
-
+		
 		if (IsValid(TargetAbilitySystem))
 		{
 			if (bApplyServerEffects)

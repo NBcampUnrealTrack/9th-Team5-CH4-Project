@@ -226,6 +226,9 @@ public:
 	FDRWeaponPresentationData FirePresentation;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
+	FDRBeamVFXPresentationData BeamVFX;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
 	FDRWeaponPresentationData ImpactPresentation;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation|Team", meta = (ClampMin = "0"))

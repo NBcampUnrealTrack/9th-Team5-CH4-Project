@@ -22,6 +22,24 @@ struct DEEPRAIDERS_API FDRWeaponPresentationData
 };
 
 USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRBeamVFXPresentationData
+{
+	GENERATED_BODY()
+
+	/** FirePresentation과 같은 시점에 추가로 실행할 선택적 Beam VFX. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	TObjectPtr<UNiagaraSystem> VFX = nullptr;
+
+	/** Niagara Position 타입의 시작점 User Parameter. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Niagara")
+	FName StartPositionParameterName = TEXT("User.StartPosition");
+
+	/** Niagara Position 타입의 끝점 User Parameter. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Niagara")
+	FName EndPositionParameterName = TEXT("User.EndPosition");
+};
+
+USTRUCT(BlueprintType)
 struct DEEPRAIDERS_API FDRSnowAbsorbPresentationData
 {
 	GENERATED_BODY()

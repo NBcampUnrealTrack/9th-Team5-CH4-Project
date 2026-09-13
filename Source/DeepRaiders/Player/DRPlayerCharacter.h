@@ -40,6 +40,18 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FDROnAbilitySystemReady, UAbilitySystemComponent*);
 
+USTRUCT()
+struct FDRProjectileFirePresentationState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FVector_NetQuantize TargetLocation = FVector::ZeroVector;
+
+	UPROPERTY()
+	uint32 Sequence = 0;
+};
+
 /**
  * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
  *
@@ -53,6 +65,7 @@ class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter, public IAbilitySys
 
 public:
 	ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	
@@ -210,6 +223,7 @@ public:
 	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
 	bool CalculateSkillFireOrigin(FVector& OutFireOrigin) const;
 	
+	void PrepareProjectileFirePresentation(const FVector& TargetLocation);
 	void PlayProjectileFirePresentationFromNotify();
 	
 	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
@@ -318,6 +332,19 @@ private:
 	bool bAbilitySystemReady = false;
 
 	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+
+	/**
+	 * GA에서 계산된 발사 끝점과 AnimNotify 실행 시점을 연결하는 임시 프레젠테이션 상태.
+	 * 추후 기존 FirePresentation 실행 경로를 공통화할 때 전용 Weapon Presentation 계층으로 이전해야 한다.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_ProjectileFirePresentationState)
+	FDRProjectileFirePresentationState ProjectileFirePresentationState;
+
+	UFUNCTION()
+	void OnRep_ProjectileFirePresentationState();
+
+	uint32 LastConsumedProjectileFirePresentationSequence = 0;
+	bool bProjectileFirePresentationNotifyPending = false;
 
 	FVector LastLandedLocation = FVector::ZeroVector;
 

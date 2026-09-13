@@ -948,6 +948,14 @@ void UDRGA_RangedWeaponAttack::PlayLocalFirePresentation(
 	FPlatformTime::Seconds(),
 	GFrameCounter);
 
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	Character->PrepareProjectileFirePresentation(TargetLocation);
+
 	PlayFireMontage();
 }
 
@@ -964,9 +972,16 @@ void UDRGA_RangedWeaponAttack::PlayServerFirePresentation(
 		return;
 	}
 
-	// Montage replication만 사용한다.
-	// 실제 SFX / Muzzle VFX는 각 클라이언트가
-	// AnimNotify(FireMoment)에서 재생한다.
+	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(ActorInfo->AvatarActor.Get());
+	if (!IsValid(Character))
+	{
+		return;
+	}
+
+	Character->PrepareProjectileFirePresentation(TargetLocation);
+
+	// TargetLocation은 Character 상태로 복제하고, Montage는 ASC 복제를 사용한다.
+	// 실제 SFX / VFX는 각 클라이언트가 AnimNotify(FireMoment)에서 재생한다.
 	PlayFireMontage();
 }
 

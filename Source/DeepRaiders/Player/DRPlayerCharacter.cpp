@@ -42,6 +42,7 @@
 #include "DeepRaiders/UI/Nameplate/DRPlayerNameplateComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "GameplayCueManager.h"
+#include "Net/UnrealNetwork.h"
 
 ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDRCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -139,6 +140,13 @@ ADRPlayerCharacter::ADRPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	WorldBackEquipmentMesh->SetIsReplicated(false);
 	
 	PlayerNameplateComponent->SetupAttachment(GetCapsuleComponent());
+}
+
+void ADRPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(ADRPlayerCharacter, ProjectileFirePresentationState, COND_SkipOwner);
 }
 
 UAbilitySystemComponent* ADRPlayerCharacter::GetAbilitySystemComponent() const
@@ -829,11 +837,50 @@ bool ADRPlayerCharacter::CalculateSkillFireOrigin(FVector& OutFireOrigin) const
 	return !OutFireOrigin.ContainsNaN();
 }
 
+void ADRPlayerCharacter::PrepareProjectileFirePresentation(const FVector& TargetLocation)
+{
+	if (TargetLocation.ContainsNaN()
+		|| (!HasAuthority() && !IsLocallyControlled()))
+	{
+		return;
+	}
+
+	ProjectileFirePresentationState.TargetLocation = TargetLocation;
+	++ProjectileFirePresentationState.Sequence;
+
+	if (ProjectileFirePresentationState.Sequence == 0)
+	{
+		++ProjectileFirePresentationState.Sequence;
+	}
+
+	if (HasAuthority())
+	{
+		ForceNetUpdate();
+	}
+}
+
+void ADRPlayerCharacter::OnRep_ProjectileFirePresentationState()
+{
+	// Character 상태와 PlayerState ASC의 Montage 복제 순서는 보장되지 않으므로 Notify가 먼저 온 경우 여기서 재시도한다.
+	if (bProjectileFirePresentationNotifyPending
+		&& ProjectileFirePresentationState.Sequence != LastConsumedProjectileFirePresentationSequence)
+	{
+		PlayProjectileFirePresentationFromNotify();
+	}
+}
+
 void ADRPlayerCharacter::PlayProjectileFirePresentationFromNotify()
 {
 	if (GetNetMode() == NM_DedicatedServer
 		|| !IsValid(HeldItemComponent))
 	{
+		return;
+	}
+
+	if (ProjectileFirePresentationState.Sequence == 0
+		|| ProjectileFirePresentationState.Sequence == LastConsumedProjectileFirePresentationSequence)
+	{
+		bProjectileFirePresentationNotifyPending = true;
 		return;
 	}
 
@@ -873,6 +920,15 @@ void ADRPlayerCharacter::PlayProjectileFirePresentationFromNotify()
 
 	FGameplayCueParameters Parameters;
 	Parameters.Location = PresentationLocation;
+
+	const FVector ToTarget = ProjectileFirePresentationState.TargetLocation - PresentationLocation;
+	Parameters.RawMagnitude = ToTarget.Size();
+
+	if (Parameters.RawMagnitude > KINDA_SMALL_NUMBER)
+	{
+		Parameters.Normal = ToTarget / Parameters.RawMagnitude;
+	}
+
 	Parameters.Instigator = this;
 	Parameters.EffectCauser = this;
 	Parameters.SourceObject =
@@ -886,6 +942,9 @@ void ADRPlayerCharacter::PlayProjectileFirePresentationFromNotify()
 	{
 		return;
 	}
+
+	bProjectileFirePresentationNotifyPending = false;
+	LastConsumedProjectileFirePresentationSequence = ProjectileFirePresentationState.Sequence;
 
 	FGameplayTagContainer CueTags;
 	CueTags.AddTag(
