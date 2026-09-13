@@ -18,11 +18,13 @@
 #include "Kismet/GameplayStatics.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimMontage.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameplayPrediction.h"
 #include "DeepRaiders/Player/Components/DRQuickSlotComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "TimerManager.h"
 
 UDRGA_RangedWeaponAttack::UDRGA_RangedWeaponAttack()
 {
@@ -316,11 +318,13 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 	case EDRProjectileWeaponResourceType::InstanceAmmo:
 	{
 		const FGuid InstanceId = ItemInstance->InstanceId;
+		bool bDepleted = false;
 
 		const bool bConsumed = Inventory->ModifyItemInstance(InstanceId,
-			[](FDRItemInstance& Candidate)
+			[&bDepleted](FDRItemInstance& Candidate)
 			{
-				FDRProjectileWeaponRuntimeState* WeaponState =Candidate.RuntimeState.GetMutablePtr<FDRProjectileWeaponRuntimeState>();
+				FDRProjectileWeaponRuntimeState* WeaponState =
+					Candidate.RuntimeState.GetMutablePtr<FDRProjectileWeaponRuntimeState>();
 
 				if (WeaponState == nullptr 
 					|| WeaponState->CurrentAmmo <= 0)
@@ -329,10 +333,25 @@ void UDRGA_RangedWeaponAttack::ApplyCost(const FGameplayAbilitySpecHandle Handle
 				}
 
 				--WeaponState->CurrentAmmo;
+				bDepleted = WeaponState->CurrentAmmo <= 0;
 				return true;
 			});
 
-		ensureMsgf(bConsumed,TEXT("Failed to consume ammo from item instance %s"),*InstanceId.ToString());
+		ensureMsgf(bConsumed, TEXT("Failed to consume ammo from item instance %s"), *InstanceId.ToString());
+
+		if (bConsumed && bDepleted)
+		{
+			const UAnimMontage* FireMontage = IsValid(WeaponDefinition->ItemAnimationSet)
+				? WeaponDefinition->ItemAnimationSet->PrimaryActionMontage.Get()
+				: nullptr;
+			const float EffectivePlayRate = IsValid(FireMontage) ? FMath::Abs(FireMontage->RateScale) : 0.f;
+			const float RemovalDelay = EffectivePlayRate > KINDA_SMALL_NUMBER
+				? FireMontage->GetPlayLength() / EffectivePlayRate
+				: 0.f;
+
+			// 마지막 발사 AnimNotify가 현재 무기의 Presentation을 읽을 때까지 아이템과 AbilitySet을 유지한다.
+			QueueDepletedInstanceAmmoRemoval(Inventory, InstanceId, RemovalDelay);
+		}
 
 		return;
 	}
@@ -1072,6 +1091,58 @@ void UDRGA_RangedWeaponAttack::PlayLocalResourceEmptyFeedback() const
 	{
 		QuickSlot->PlayWeaponResourceEmptySound();
 	}
+}
+
+void UDRGA_RangedWeaponAttack::QueueDepletedInstanceAmmoRemoval(
+	UDRInventoryComponent* Inventory,
+	FGuid InstanceId,
+	float RemovalDelay) const
+{
+	if (!IsValid(Inventory) || !InstanceId.IsValid())
+	{
+		return;
+	}
+
+	UWorld* World = Inventory->GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	FTimerDelegate RemovalDelegate = FTimerDelegate::CreateWeakLambda(
+		Inventory,
+		[Inventory, InstanceId]()
+		{
+			// 예약 이후 아이템이나 탄약 상태가 달라졌다면 제거하지 않는다.
+			const FDRItemInstance* CurrentItem = Inventory->FindItemInstance(InstanceId);
+			const UDRProjectileWeaponItemDefinition* WeaponDefinition = CurrentItem != nullptr
+				? Cast<UDRProjectileWeaponItemDefinition>(CurrentItem->Definition.Get())
+				: nullptr;
+			const FDRProjectileWeaponRuntimeState* WeaponState = CurrentItem != nullptr
+				? CurrentItem->RuntimeState.GetPtr<FDRProjectileWeaponRuntimeState>()
+				: nullptr;
+
+			if (!IsValid(WeaponDefinition)
+				|| WeaponDefinition->ResourceType != EDRProjectileWeaponResourceType::InstanceAmmo
+				|| WeaponState == nullptr
+				|| WeaponState->CurrentAmmo > 0)
+			{
+				return;
+			}
+
+			const int32 Quantity = CurrentItem->Quantity;
+			const bool bRemoved = Inventory->TryRemoveItemInstance(InstanceId, Quantity);
+			ensureMsgf(bRemoved, TEXT("Failed to remove depleted ammo item instance %s"), *InstanceId.ToString());
+		});
+
+	if (RemovalDelay <= KINDA_SMALL_NUMBER)
+	{
+		World->GetTimerManager().SetTimerForNextTick(RemovalDelegate);
+		return;
+	}
+
+	FTimerHandle RemovalTimerHandle;
+	World->GetTimerManager().SetTimer(RemovalTimerHandle, RemovalDelegate, RemovalDelay, false);
 }
 
 float UDRGA_RangedWeaponAttack::GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const

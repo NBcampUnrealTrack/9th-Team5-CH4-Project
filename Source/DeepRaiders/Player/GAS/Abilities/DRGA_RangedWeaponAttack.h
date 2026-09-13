@@ -118,6 +118,10 @@ private:
 
 	void PlayFireMontage();
 	void PlayLocalResourceEmptyFeedback() const;
+	void QueueDepletedInstanceAmmoRemoval(
+		UDRInventoryComponent* Inventory,
+		FGuid InstanceId,
+		float RemovalDelay) const;
 
 	float GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const;
 	
