@@ -10,6 +10,7 @@ UDRRangedWeaponDefinition::UDRRangedWeaponDefinition()
 	SnowAbsorbPresentation.StartSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_Start;
 	SnowAbsorbPresentation.LoopSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_Loop;
 	SnowAbsorbPresentation.EndSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_End;
+	SnowAbsorbPresentation.GainPulseSoundCueTag = DRGameplayTags::GameplayCue_Sound_Weapon_Absorb_GainPulse;
 }
 
 FVector UDRRangedWeaponDefinition::ResolveCameraAimDirection(

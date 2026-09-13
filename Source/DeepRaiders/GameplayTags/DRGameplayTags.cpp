@@ -1032,6 +1032,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Absorb_End,
 		"GameplayCue.Sound.Weapon.Absorb.End",
 		"Snow absorb end sound.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_Absorb_GainPulse,
+		"GameplayCue.Sound.Weapon.Absorb.GainPulse",
+		"Repeated feedback after enough SnowGauge is gained by snow absorption.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Player_Hit,

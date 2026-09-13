@@ -41,6 +41,18 @@ struct DEEPRAIDERS_API FDRSnowAbsorbPresentationData
 		meta = (Categories = "GameplayCue.Sound"))
 	FGameplayTag EndSoundCueTag;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Gain Pulse",
+		meta = (Categories = "GameplayCue.Sound"))
+	FGameplayTag GainPulseSoundCueTag;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Gain Pulse",
+		meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float GainPulseGaugeIntervalMin = 30.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation|Gain Pulse",
+		meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float GainPulseGaugeIntervalMax = 50.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
 	FName AttachSocketName = TEXT("VFXPoint");
 

@@ -10,6 +10,7 @@
 class UAbilitySystemComponent;
 class UGameplayEffect;
 class UAnimMontage;
+class UDRRangedWeaponDefinition;
 
 // Player가 바라보는 표면의 눈을 흡수해 SnowGauge로 전환하는 GA
 UCLASS()
@@ -53,6 +54,16 @@ private:
 	void ScheduleNextAbsorbTick();
 	void StartAbsorbGameplayCue();
 	void StopAbsorbGameplayCue();
+	void HandleGaugeGainPulse(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UDRRangedWeaponDefinition* WeaponDefinition,
+		float ActualGaugeGain);
+	void ResetGaugeGainPulse();
+	float RollGaugeGainPulseThreshold(const UDRRangedWeaponDefinition* WeaponDefinition) const;
+	void ExecuteGaugeGainPulse(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		const UDRRangedWeaponDefinition* WeaponDefinition,
+		float ReachedThreshold) const;
 
 	bool BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const;
 	void ResetAbsorbSummary();
@@ -63,6 +74,8 @@ private:
 		float SolidRemovalPerSnowGauge) const;
 
 	bool bAbsorbGameplayCueActive = false;
+	float GaugeGainSinceLastPulse = 0.f;
+	float NextGaugeGainPulseThreshold = 0.f;
 
 	int32 AbsorbSummaryTickCount = 0;
 	float AbsorbSummaryStartTime = 0.f;

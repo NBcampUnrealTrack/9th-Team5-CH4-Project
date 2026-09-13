@@ -267,6 +267,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Start);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Loop);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_End);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_GainPulse);
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);

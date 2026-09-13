@@ -123,6 +123,7 @@ void UDRGA_AbsorbSnow::ActivateAbility(
 	}
 
 	ResetAbsorbSummary();
+	ResetGaugeGainPulse();
 	PerformAbsorbTick();
 }
 
@@ -151,6 +152,7 @@ void UDRGA_AbsorbSnow::EndAbility(
 	StopAbsorbGameplayCue();
 	LogAbsorbSummary();
 	ResetAbsorbSummary();
+	ResetGaugeGainPulse();
 	
 	Super::EndAbility(
 		Handle,
@@ -245,24 +247,26 @@ void UDRGA_AbsorbSnow::PerformAbsorbTick()
 	
 	const IConsoleVariable* AbsorbLog = IConsoleManager::Get().FindConsoleVariable(TEXT("dr.Snow.Absorb.Log"));
 	const bool bLogGauge = AbsorbLog && AbsorbLog->GetInt() > 0;
-	const float GaugeBefore = bLogGauge ? ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()) : 0.f;
+	const float GaugeBefore = ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 	const float SolidRemovalPerSnowGauge = IsValid(WeaponDefinition)
 		? WeaponDefinition->SnowAbsorbSettings.SolidRemovalPerSnowGauge
 		: 0.f;
-	const float RequestedGaugeGain = ApplySnowGaugeGain(
+	const float ActualGaugeGain = ApplySnowGaugeGain(
 		ASC,
 		RemovedAmount,
 		SolidRemovalPerSnowGauge);
+	HandleGaugeGainPulse(ASC, WeaponDefinition, ActualGaugeGain);
 	++AbsorbSummaryTickCount;
 	AbsorbSummaryRemovedAmount += RemovedAmount;
-	AbsorbSummaryGaugeGain += RequestedGaugeGain;
+	AbsorbSummaryGaugeGain += ActualGaugeGain;
 	AbsorbSummaryPower = EffectiveRemovalSpec.SnowAbsorbPower;
 	AbsorbSummarySolidRemovalPerGauge = SolidRemovalPerSnowGauge;
 	if (bLogGauge)
 	{
 		UE_LOG(LogTemp, Log,
 			TEXT("[DRSnowAbsorb][Gauge] Avatar=%s Removed=%.6f PerGauge=%.6f Gain=%.6f Before=%.6f After=%.6f Max=%.6f Effect=%s"),
-			*GetPathNameSafe(GetAvatarActorFromActorInfo()), RemovedAmount, SolidRemovalPerSnowGauge, RequestedGaugeGain, GaugeBefore,
+			*GetPathNameSafe(GetAvatarActorFromActorInfo()), RemovedAmount, SolidRemovalPerSnowGauge,
+			ActualGaugeGain, GaugeBefore,
 			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetSnowGaugeAttribute()),
 			ASC->GetNumericAttribute(UDRPlayerAttributeSet::GetMaxSnowGaugeAttribute()),
 			*GetNameSafe(SnowGainEffectClass.Get()));
@@ -390,6 +394,94 @@ void UDRGA_AbsorbSnow::StopAbsorbGameplayCue()
 	bAbsorbGameplayCueActive = false;
 }
 
+void UDRGA_AbsorbSnow::HandleGaugeGainPulse(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UDRRangedWeaponDefinition* WeaponDefinition,
+	const float ActualGaugeGain)
+{
+	if (!IsValid(AbilitySystemComponent) || !IsValid(WeaponDefinition) || ActualGaugeGain <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const FDRSnowAbsorbPresentationData& Presentation = WeaponDefinition->SnowAbsorbPresentation;
+	if (!Presentation.GainPulseSoundCueTag.IsValid())
+	{
+		return;
+	}
+
+	if (NextGaugeGainPulseThreshold <= UE_SMALL_NUMBER)
+	{
+		NextGaugeGainPulseThreshold = RollGaugeGainPulseThreshold(WeaponDefinition);
+	}
+
+	if (NextGaugeGainPulseThreshold <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	GaugeGainSinceLastPulse += ActualGaugeGain;
+	if (GaugeGainSinceLastPulse < NextGaugeGainPulseThreshold)
+	{
+		return;
+	}
+
+	const float ReachedThreshold = NextGaugeGainPulseThreshold;
+	GaugeGainSinceLastPulse -= ReachedThreshold;
+	NextGaugeGainPulseThreshold = RollGaugeGainPulseThreshold(WeaponDefinition);
+	ExecuteGaugeGainPulse(AbilitySystemComponent, WeaponDefinition, ReachedThreshold);
+}
+
+void UDRGA_AbsorbSnow::ResetGaugeGainPulse()
+{
+	GaugeGainSinceLastPulse = 0.f;
+	NextGaugeGainPulseThreshold = 0.f;
+}
+
+float UDRGA_AbsorbSnow::RollGaugeGainPulseThreshold(const UDRRangedWeaponDefinition* WeaponDefinition) const
+{
+	if (!IsValid(WeaponDefinition))
+	{
+		return 0.f;
+	}
+
+	const FDRSnowAbsorbPresentationData& Presentation = WeaponDefinition->SnowAbsorbPresentation;
+	const float MinInterval = FMath::Max(1.f,
+		FMath::Min(Presentation.GainPulseGaugeIntervalMin, Presentation.GainPulseGaugeIntervalMax));
+	const float MaxInterval = FMath::Max(MinInterval,
+		FMath::Max(Presentation.GainPulseGaugeIntervalMin, Presentation.GainPulseGaugeIntervalMax));
+	return FMath::FRandRange(MinInterval, MaxInterval);
+}
+
+void UDRGA_AbsorbSnow::ExecuteGaugeGainPulse(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	const UDRRangedWeaponDefinition* WeaponDefinition,
+	const float ReachedThreshold) const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	AActor* AvatarActor = ActorInfo != nullptr ? ActorInfo->AvatarActor.Get() : nullptr;
+	if (!IsValid(AbilitySystemComponent) || !IsValid(WeaponDefinition) || !IsValid(AvatarActor))
+	{
+		return;
+	}
+
+	const FGameplayTag SoundCueTag = WeaponDefinition->SnowAbsorbPresentation.GainPulseSoundCueTag;
+	if (!SoundCueTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.OriginalTag = SoundCueTag;
+	Parameters.Location = AvatarActor->GetActorLocation();
+	Parameters.Normal = AvatarActor->GetActorForwardVector();
+	Parameters.RawMagnitude = ReachedThreshold;
+	Parameters.Instigator = AvatarActor;
+	Parameters.EffectCauser = AvatarActor;
+	Parameters.SourceObject = GetSourceObject(GetCurrentAbilitySpecHandle(), ActorInfo);
+	AbilitySystemComponent->ExecuteGameplayCue(SoundCueTag, Parameters);
+}
+
 bool UDRGA_AbsorbSnow::BuildRemovalSpec(FDRSnowRemovalSpec& OutRemovalSpec) const
 {
 	const UDRRangedWeaponDefinition* WeaponDefinition =
@@ -458,11 +550,15 @@ float UDRGA_AbsorbSnow::ApplySnowGaugeGain(
 	}
 
 	EffectSpec.Data->SetSetByCallerMagnitude(DRGameplayTags::Data_Snow_Amount, GaugeGain);
+	const float GaugeBefore = AbilitySystemComponent->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 	ApplyGameplayEffectSpecToOwner(
 		GetCurrentAbilitySpecHandle(),
 		ActorInfo,
 		GetCurrentActivationInfo(),
 		EffectSpec);
 
-	return GaugeGain;
+	const float GaugeAfter = AbilitySystemComponent->GetNumericAttribute(
+		UDRPlayerAttributeSet::GetSnowGaugeAttribute());
+	return FMath::Max(0.f, GaugeAfter - GaugeBefore);
 }
