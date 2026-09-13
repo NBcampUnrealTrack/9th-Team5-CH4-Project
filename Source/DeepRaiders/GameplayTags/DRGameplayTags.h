@@ -40,6 +40,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MovementAction);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Grapple);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Input_SecondaryCancel);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_Weapon_ResourceEmpty);
 	
 	// Skill
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill);
@@ -268,6 +269,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Loop);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_End);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_GainPulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_ResourceEmpty);
 	
 	// Gameplay Cue - Player
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);

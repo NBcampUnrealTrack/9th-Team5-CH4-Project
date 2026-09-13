@@ -14,6 +14,7 @@
 #include "GameFramework/PlayerController.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
+#include "Abilities/GameplayAbility.h"
 #include "Net/UnrealNetwork.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Engine/World.h"
@@ -677,6 +678,12 @@ bool UDRQuickSlotComponent::CacheAbilitySystemComponent()
 	{
 		AbilityEndedDelegateHandle = FoundASC->OnAbilityEnded.AddUObject(this, &ThisClass::HandleAbilityEnded);
 	}
+
+	if (!AbilityFailedDelegateHandle.IsValid())
+	{
+		AbilityFailedDelegateHandle = FoundASC->AbilityFailedCallbacks.AddUObject(
+			this, &ThisClass::HandleAbilityFailed);
+	}
 	
 	if (!QuickSlotActivationIntervalTagChangedDelegateHandle.IsValid())
 	{
@@ -696,6 +703,11 @@ void UDRQuickSlotComponent::UnbindAbilitySystemComponent()
 		{
 			ASC->OnAbilityEnded.Remove(AbilityEndedDelegateHandle);
 		}
+
+		if (AbilityFailedDelegateHandle.IsValid())
+		{
+			ASC->AbilityFailedCallbacks.Remove(AbilityFailedDelegateHandle);
+		}
 		
 		if (QuickSlotActivationIntervalTagChangedDelegateHandle.IsValid())
 		{
@@ -705,6 +717,7 @@ void UDRQuickSlotComponent::UnbindAbilitySystemComponent()
 	}
 
 	AbilityEndedDelegateHandle.Reset();
+	AbilityFailedDelegateHandle.Reset();
 	QuickSlotActivationIntervalTagChangedDelegateHandle.Reset();
 	AbilitySystemComponent.Reset();
 }
@@ -876,6 +889,42 @@ void UDRQuickSlotComponent::PlayQuickSlotSwitchSound() const
 		SoundTarget,
 		DRGameplayTags::GameplayCue_Sound_Player_QuickSlot_Switch,
 		Parameters);
+}
+
+void UDRQuickSlotComponent::PlayWeaponResourceEmptySound() const
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwner());
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	AActor* SoundTarget = IsValid(PlayerController->GetPawn())
+		? static_cast<AActor*>(PlayerController->GetPawn())
+		: PlayerController;
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = SoundTarget->GetActorLocation();
+	Parameters.Instigator = PlayerController;
+	Parameters.EffectCauser = SoundTarget;
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+		SoundTarget,
+		DRGameplayTags::GameplayCue_Sound_Weapon_ResourceEmpty,
+		Parameters);
+}
+
+void UDRQuickSlotComponent::HandleAbilityFailed(
+	const UGameplayAbility* FailedAbility,
+	const FGameplayTagContainer& FailureTags)
+{
+	if (!IsValid(FailedAbility)
+		|| !FailedAbility->GetAssetTags().HasTagExact(DRGameplayTags::Ability_Attack_Ranged)
+		|| !FailureTags.HasTagExact(DRGameplayTags::Ability_ActivateFail_Weapon_ResourceEmpty))
+	{
+		return;
+	}
+
+	PlayWeaponResourceEmptySound();
 }
 
 void UDRQuickSlotComponent::HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData)

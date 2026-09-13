@@ -227,14 +227,31 @@ bool UDRGA_RangedWeaponAttack::CheckCost(const FGameplayAbilitySpecHandle Handle
 		const float CurrentSnow = AbilitySystem->GetNumericAttribute(
 			UDRPlayerAttributeSet::GetSnowGaugeAttribute());
 
-		return CurrentSnow + KINDA_SMALL_NUMBER >= SnowCost;
+		const bool bHasEnoughSnow = CurrentSnow + KINDA_SMALL_NUMBER >= SnowCost;
+		if (!bHasEnoughSnow && OptionalRelevantTags != nullptr)
+		{
+			OptionalRelevantTags->AddTag(DRGameplayTags::Ability_ActivateFail_Weapon_ResourceEmpty);
+		}
+
+		return bHasEnoughSnow;
 	}
 	case EDRProjectileWeaponResourceType::InstanceAmmo:
 	{
 		const FDRProjectileWeaponRuntimeState* WeaponState =
 			ItemInstance->RuntimeState.GetPtr<FDRProjectileWeaponRuntimeState>();
 
-		return WeaponState != nullptr && WeaponState->CurrentAmmo > 0;
+		if (WeaponState == nullptr)
+		{
+			return false;
+		}
+
+		const bool bHasAmmo = WeaponState->CurrentAmmo > 0;
+		if (!bHasAmmo && OptionalRelevantTags != nullptr)
+		{
+			OptionalRelevantTags->AddTag(DRGameplayTags::Ability_ActivateFail_Weapon_ResourceEmpty);
+		}
+
+		return bHasAmmo;
 	}
 
 	default:
@@ -395,8 +412,14 @@ void UDRGA_RangedWeaponAttack::TryRequestLocalShot()
 		return;
 	}
 	
-	if (!CheckCost(Handle, ActorInfo, nullptr))
+	FGameplayTagContainer CostFailureTags;
+	if (!CheckCost(Handle, ActorInfo, &CostFailureTags))
 	{
+		if (CostFailureTags.HasTagExact(DRGameplayTags::Ability_ActivateFail_Weapon_ResourceEmpty))
+		{
+			PlayLocalResourceEmptyFeedback();
+		}
+
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 		return;
 	}
@@ -1030,6 +1053,25 @@ void UDRGA_RangedWeaponAttack::PlayFireMontage()
 		GetCurrentActivationInfo(),
 		FireMontage,
 		1.f);
+}
+
+void UDRGA_RangedWeaponAttack::PlayLocalResourceEmptyFeedback() const
+{
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	if (ActorInfo == nullptr || !ActorInfo->IsLocallyControlled())
+	{
+		return;
+	}
+
+	ADRPlayerController* PlayerController = Cast<ADRPlayerController>(ActorInfo->PlayerController.Get());
+	UDRQuickSlotComponent* QuickSlot = IsValid(PlayerController)
+		? PlayerController->GetQuickSlotComponent()
+		: nullptr;
+
+	if (IsValid(QuickSlot))
+	{
+		QuickSlot->PlayWeaponResourceEmptySound();
+	}
 }
 
 float UDRGA_RangedWeaponAttack::GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const

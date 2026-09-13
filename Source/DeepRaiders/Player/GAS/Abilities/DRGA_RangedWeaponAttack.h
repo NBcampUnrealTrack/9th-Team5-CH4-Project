@@ -117,6 +117,7 @@ private:
 	void HandleInputReleased(float TimeHeld);
 
 	void PlayFireMontage();
+	void PlayLocalResourceEmptyFeedback() const;
 
 	float GetWeaponStatMultiplier(const FGameplayAttribute& Attribute) const;
 	

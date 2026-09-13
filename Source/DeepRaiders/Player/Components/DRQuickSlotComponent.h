@@ -12,7 +12,9 @@ class UDRInventoryComponent;
 class UDRItemDefinition;
 class UDRWeaponUpgradeProfile;
 class UAbilitySystemComponent;
+class UGameplayAbility;
 struct FAbilityEndedData;
+struct FGameplayTagContainer;
 
 // 모든 퀵슬롯 변경 사항
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRQuickSlotsChanged);	
@@ -66,6 +68,8 @@ public:
 	bool CanRequestLocalWeaponShot(const FGuid& WeaponInstanceId) const;
 
 	void RecordLocalWeaponShot(const FGuid& WeaponInstanceId, float FireInterval);
+
+	void PlayWeaponResourceEmptySound() const;
 	
 	UFUNCTION(BlueprintPure, Category = "Quick Slot")
 	bool GetQuickSlot(int32 SlotIndex, FDRItemInstance& OutItemInstance) const;
@@ -151,6 +155,7 @@ private:
 	void ClearDeferredHeldItemRefresh();
 	
 	void HandleAbilityEnded(const FAbilityEndedData& AbilityEndedData);
+	void HandleAbilityFailed(const UGameplayAbility* FailedAbility, const FGameplayTagContainer& FailureTags);
 	
 	void StartLocalQuickSlotActivationInterval(const FDRItemInstance& ItemInstance);
 	void ApplyAuthorityQuickSlotActivationInterval(const FDRItemInstance& ItemInstance);
@@ -190,6 +195,7 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 	
 	FDelegateHandle AbilityEndedDelegateHandle;
+	FDelegateHandle AbilityFailedDelegateHandle;
 	FTimerHandle DeferredHeldItemRefreshTimerHandle;	
 	
 	uint8 bHeldItemRefreshDeferred = false;

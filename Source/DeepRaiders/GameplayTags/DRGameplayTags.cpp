@@ -459,6 +459,11 @@ namespace DRGameplayTags
 		Ability_Input_SecondaryCancel,
 		"Ability.Input.SecondaryCancel",
 		"Active movement ability receives Secondary input as a cancel request.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Ability_ActivateFail_Weapon_ResourceEmpty,
+		"Ability.ActivateFail.Weapon.ResourceEmpty",
+		"Ranged weapon activation or fire request failed because its resource is insufficient.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Event_Ability_Throw_Release,
@@ -1037,6 +1042,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Weapon_Absorb_GainPulse,
 		"GameplayCue.Sound.Weapon.Absorb.GainPulse",
 		"Repeated feedback after enough SnowGauge is gained by snow absorption.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Weapon_ResourceEmpty,
+		"GameplayCue.Sound.Weapon.ResourceEmpty",
+		"Local feedback when a ranged weapon lacks enough resources to fire.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Player_Hit,
