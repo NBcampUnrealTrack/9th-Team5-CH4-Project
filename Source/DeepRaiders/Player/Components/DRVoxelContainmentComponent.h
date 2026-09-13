@@ -40,7 +40,7 @@ public:
 private:
 	static constexpr int32 ContainmentLayerCount = 3;
 	static constexpr int32 ContainmentSamplesPerLayer = 5;
-	static constexpr int32 EscapeProbeDirectionCount = 9;
+	static constexpr int32 EscapeProbeDirectionCount = 10;
 	static constexpr int32 EscapeProbeMaxStepCount = 8;
 
 	struct FVoxelCapsuleOccupancy
@@ -56,6 +56,8 @@ private:
 		bool bValid = false;
 		bool bStartFits = false;
 		bool bEscapePathFound = false;
+		bool bNonDownwardEscapePathFound = false;
+		bool bDownwardEscapePathFound = false;
 		int32 EscapeDirectionIndex = INDEX_NONE;
 		float StartOccupancyScore = 0.f;
 		float BestEndOccupancyScore = 1.f;

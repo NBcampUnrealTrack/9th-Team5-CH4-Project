@@ -5,7 +5,15 @@
 #include "NiagaraSystem.h"
 #include "Components/SceneComponent.h"
 #include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
+#include "DeepRaiders/Player/DRPlayerCharacter.h"
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "AbilitySystemComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
+#include "VoxelData/VoxelDataIncludes.h"
+#include "VoxelWorld.h"
 
 ADRLootBoxActor::ADRLootBoxActor()
 {
@@ -33,15 +41,20 @@ void ADRLootBoxActor::BeginPlay()
 	}
 	
 	RefreshPresentation();
+	ApplyVisibility();
 	
 	if (GetNetMode() != NM_DedicatedServer)
 	{
 		BP_OnLootTierChanged(LootTier);
+		BindLocalPlayerVisibilityTags();
 	}
 }
 
 void ADRLootBoxActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindLocalPlayerVisibilityTags();
+	GetWorldTimerManager().ClearTimer(LocalPlayerVisibilityBindRetryTimer);
+
 	if (IsValid(LootDropComponent) && LootSpawnSequenceCompletedHandle.IsValid())
 	{
 		LootDropComponent->OnSpawnSequenceCompleted.Remove(LootSpawnSequenceCompletedHandle);
@@ -56,6 +69,62 @@ void ADRLootBoxActor::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(ThisClass, LootTier);
+	DOREPLIFETIME(ThisClass, bIsVoxelExposed);
+}
+
+void ADRLootBoxActor::UpdateVoxelExposure(AVoxelWorld& VoxelWorld)
+{
+	if (!HasAuthority() || !VoxelWorld.IsCreated())
+	{
+		return;
+	}
+
+	const FVoxelIntBox WorldBounds = VoxelWorld.GetWorldBounds();
+	bool bNewVoxelExposure = false;
+	const FBox MeshBounds = BreakableMeshComponent->Bounds.GetBox();
+	TArray<FIntVector, TInlineAllocator<125>> SamplePositions;
+	FVoxelIntBoxWithValidity LockBounds;
+	for (int32 X = 0; X < 5; ++X)
+	{
+		for (int32 Y = 0; Y < 5; ++Y)
+		{
+			for (int32 Z = 0; Z < 5; ++Z)
+			{
+				if (X != 0 && X != 4 && Y != 0 && Y != 4 && Z != 0 && Z != 4)
+				{
+					continue;
+				}
+				const FVector Point(FMath::Lerp(MeshBounds.Min.X, MeshBounds.Max.X, X / 4.f),
+					FMath::Lerp(MeshBounds.Min.Y, MeshBounds.Max.Y, Y / 4.f),
+					FMath::Lerp(MeshBounds.Min.Z, MeshBounds.Max.Z, Z / 4.f));
+				const FIntVector VoxelPosition = VoxelWorld.GlobalToLocal(Point);
+				if (!WorldBounds.Contains(VoxelPosition))
+				{
+					bNewVoxelExposure = true;
+					continue;
+				}
+				SamplePositions.Add(VoxelPosition);
+				LockBounds += VoxelPosition;
+			}
+		}
+	}
+	if (!bNewVoxelExposure && LockBounds.IsValid())
+	{
+		FVoxelData& Data = VoxelWorld.GetData();
+		FVoxelReadScopeLock Lock(Data, LockBounds.GetBox(), FUNCTION_FNAME);
+		bNewVoxelExposure = SamplePositions.ContainsByPredicate([&Data](const FIntVector& Position)
+		{
+			return Data.GetValue(Position, 0).IsEmpty();
+		});
+	}
+	if (bIsVoxelExposed == bNewVoxelExposure)
+	{
+		return;
+	}
+
+	bIsVoxelExposed = bNewVoxelExposure;
+	ApplyVisibility();
+	ForceNetUpdate();
 }
 
 bool ADRLootBoxActor::SetLootTier(EDRLootTier NewLootTier)
@@ -155,6 +224,89 @@ void ADRLootBoxActor::RefreshNiagara()
 	{
 		IdleAuraVFXComponent->Deactivate();
 	}
+}
+
+void ADRLootBoxActor::BindLocalPlayerVisibilityTags()
+{
+	UWorld* World = GetWorld();
+	APlayerController* LocalController = IsValid(World) ? World->GetFirstPlayerController() : nullptr;
+	ADRPlayerCharacter* LocalCharacter = IsValid(LocalController)
+		? Cast<ADRPlayerCharacter>(LocalController->GetPawn())
+		: nullptr;
+	UAbilitySystemComponent* AbilitySystem = IsValid(LocalCharacter)
+		? LocalCharacter->GetAbilitySystemComponent()
+		: nullptr;
+	if (!IsValid(LocalController) || !LocalController->IsLocalController() || !IsValid(AbilitySystem))
+	{
+		GetWorldTimerManager().SetTimer(
+			LocalPlayerVisibilityBindRetryTimer,
+			this,
+			&ThisClass::BindLocalPlayerVisibilityTags,
+			0.25f,
+			false);
+		return;
+	}
+
+	if (LocalPlayerAbilitySystem.Get() != AbilitySystem)
+	{
+		UnbindLocalPlayerVisibilityTags();
+		LocalPlayerAbilitySystem = AbilitySystem;
+		LocalPlayerDeadTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			DRGameplayTags::State_Dead, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleLocalPlayerVisibilityTagChanged);
+		LocalPlayerVoxelContainedTagChangedHandle = AbilitySystem->RegisterGameplayTagEvent(
+			DRGameplayTags::State_VoxelContained, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &ThisClass::HandleLocalPlayerVisibilityTagChanged);
+	}
+
+	RefreshLocalPlayerVisibility();
+}
+
+void ADRLootBoxActor::UnbindLocalPlayerVisibilityTags()
+{
+	if (UAbilitySystemComponent* AbilitySystem = LocalPlayerAbilitySystem.Get())
+	{
+		if (LocalPlayerDeadTagChangedHandle.IsValid())
+		{
+			AbilitySystem->RegisterGameplayTagEvent(DRGameplayTags::State_Dead, EGameplayTagEventType::NewOrRemoved)
+				.Remove(LocalPlayerDeadTagChangedHandle);
+		}
+		if (LocalPlayerVoxelContainedTagChangedHandle.IsValid())
+		{
+			AbilitySystem->RegisterGameplayTagEvent(DRGameplayTags::State_VoxelContained, EGameplayTagEventType::NewOrRemoved)
+				.Remove(LocalPlayerVoxelContainedTagChangedHandle);
+		}
+	}
+
+	LocalPlayerDeadTagChangedHandle.Reset();
+	LocalPlayerVoxelContainedTagChangedHandle.Reset();
+	LocalPlayerAbilitySystem.Reset();
+}
+
+void ADRLootBoxActor::RefreshLocalPlayerVisibility()
+{
+	const UAbilitySystemComponent* AbilitySystem = LocalPlayerAbilitySystem.Get();
+	bHideForContainedDeath = IsValid(AbilitySystem)
+		&& AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_VoxelContained)
+		&& AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead);
+	ApplyVisibility();
+}
+
+void ADRLootBoxActor::HandleLocalPlayerVisibilityTagChanged(
+	const FGameplayTag CallbackTag,
+	const int32 NewCount)
+{
+	RefreshLocalPlayerVisibility();
+}
+
+void ADRLootBoxActor::OnRep_VoxelExposed()
+{
+	ApplyVisibility();
+}
+
+void ADRLootBoxActor::ApplyVisibility()
+{
+	SetActorHiddenInGame(!bIsVoxelExposed || bHideForContainedDeath);
 }
 
 void ADRLootBoxActor::RefreshDynamicMaterialColor()

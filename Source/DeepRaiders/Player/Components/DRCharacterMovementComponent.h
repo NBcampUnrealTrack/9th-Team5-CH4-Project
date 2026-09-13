@@ -170,6 +170,7 @@ private:
 	// 커스텀 이동이 끝났을 때 Walking 또는 Falling으로 복귀
 	void RestoreDefaultMovementMode();
 	bool ShouldKeepVoxelFloor(const FFindFloorResult& OldFloor, const FVector& OldLocation) const;
+	bool TryEnterVoxelContainedModeForFall();
 
 	bool TryHandleZiplineBlockingCollision(const FHitResult& Hit);
 	

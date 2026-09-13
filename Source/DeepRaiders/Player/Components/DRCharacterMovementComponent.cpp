@@ -3,6 +3,7 @@
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Player/Components/DRVoxelContainmentComponent.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/Components/DRMovementActionComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -13,6 +14,7 @@
 #include "GameFramework/Controller.h"
 #include "GameFramework/RootMotionSource.h"
 #include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -350,7 +352,14 @@ bool UDRCharacterMovementComponent::CheckFall(
     int32 Iterations,
     bool bMustJump)
 {
-    // Voxel 데이터는 발밑이 고체라고 하지만 collision floor만 일시적으로
+	// 복셀 편집 당시에는 열려 있었더라도, 이후 이동으로 고체 내부에
+	// 들어갈 수 있다. Falling으로 전환하기 전에 현재 data로 다시 판정한다.
+	if (TryEnterVoxelContainedModeForFall())
+	{
+		return false;
+	}
+
+	// Voxel 데이터는 발밑이 고체라고 하지만 collision floor만 일시적으로
     // 사라진 경우에는 Falling 전환을 시작하지 않는다.
     if (ShouldKeepVoxelFloor(OldFloor, OldLocation))
     {
@@ -366,6 +375,51 @@ bool UDRCharacterMovementComponent::CheckFall(
         TimeTick,
         Iterations,
         bMustJump);
+}
+
+bool UDRCharacterMovementComponent::TryEnterVoxelContainedModeForFall()
+{
+	if (!IsValid(CharacterOwner) || !CharacterOwner->HasAuthority())
+	{
+		return false;
+	}
+
+	UDRVoxelContainmentComponent* Containment =
+		CharacterOwner->FindComponentByClass<UDRVoxelContainmentComponent>();
+	UWorld* World = GetWorld();
+	if (!IsValid(Containment) || !IsValid(World))
+	{
+		return false;
+	}
+
+	auto ContainsCharacter = [this](const AVoxelWorld* VoxelWorld)
+	{
+		return IsValid(VoxelWorld) && VoxelWorld->IsCreated() &&
+			VoxelWorld->GetWorldBounds().Contains(
+				VoxelWorld->GlobalToLocal(CharacterOwner->GetActorLocation()));
+	};
+
+	AVoxelWorld* VoxelWorld = LastVoxelFloorWorld.Get();
+	if (!ContainsCharacter(VoxelWorld))
+	{
+		VoxelWorld = nullptr;
+		for (TActorIterator<AVoxelWorld> It(World); It; ++It)
+		{
+			if (ContainsCharacter(*It))
+			{
+				VoxelWorld = *It;
+				break;
+			}
+		}
+	}
+
+	if (!IsValid(VoxelWorld))
+	{
+		return false;
+	}
+
+	Containment->EvaluateVoxelContainment(VoxelWorld);
+	return IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained);
 }
 
 bool UDRCharacterMovementComponent::ShouldKeepVoxelFloor(
@@ -902,6 +956,14 @@ bool UDRCharacterMovementComponent::ApplyKnockback(
 
 void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode NewMode)
 {
+    if (NewMode != EDRCustomMovementMode::VoxelContained
+        && BoundAbilitySystemComponent.IsValid()
+        && BoundAbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_VoxelContained))
+    {
+        EnterVoxelContainedMode();
+        return;
+    }
+
     if (NewMode == EDRCustomMovementMode::None)
     {
         ExitCustomMovementMode();
@@ -919,6 +981,13 @@ void UDRCharacterMovementComponent::SetCustomMovementMode(EDRCustomMovementMode 
 
 void UDRCharacterMovementComponent::ExitCustomMovementMode()
 {
+    if (BoundAbilitySystemComponent.IsValid()
+        && BoundAbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_VoxelContained))
+    {
+        EnterVoxelContainedMode();
+        return;
+    }
+
     if (MovementMode != MOVE_Custom)
     {
         ManualZiplineInput = 0;
@@ -954,6 +1023,18 @@ void UDRCharacterMovementComponent::ReconcileMovementActionMode()
         return;
     }
 
+    // 매몰은 모든 이동 액션보다 우선한다. 네트워크 보정이나 남아 있는
+    // MovementAction이 VoxelContained 모드를 다시 덮지 못하게 한다.
+    if (BoundAbilitySystemComponent.IsValid()
+        && BoundAbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_VoxelContained))
+    {
+        if (!IsCustomMovementModeActive(EDRCustomMovementMode::VoxelContained))
+        {
+            EnterVoxelContainedMode();
+        }
+        return;
+    }
+
     const UDRMovementActionComponent* MovementAction = GetMovementActionComponent();
     const bool bActionActive = IsValid(MovementAction) && MovementAction->IsMovementActionActive();
     const bool bMovementModeActive = IsCustomMovementModeActive(EDRCustomMovementMode::MovementAction);
@@ -975,6 +1056,13 @@ void UDRCharacterMovementComponent::ReconcileMovementActionMode()
 
 void UDRCharacterMovementComponent::RestoreDefaultMovementMode()
 {
+    if (BoundAbilitySystemComponent.IsValid()
+        && BoundAbilitySystemComponent->HasMatchingGameplayTag(DRGameplayTags::State_VoxelContained))
+    {
+        EnterVoxelContainedMode();
+        return;
+    }
+
     ManualZiplineInput = 0;
     ZiplineRailSpeed = 0.f;
 

@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -53,8 +54,15 @@ void UDRVoxelContainmentComponent::EvaluateVoxelContainment(AVoxelWorld* VoxelWo
 		FMath::Clamp(RequiredSurroundedLayers, 1, ContainmentLayerCount);
 	const FCapsuleEscapeProbeResult EscapeProbe =
 		GetCapsuleEscapeProbe(*VoxelWorld);
-	if (bInternalContained ||
-		(EscapeProbe.bValid && !EscapeProbe.bEscapePathFound))
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const bool bCanFallThroughVerticalShaft = EscapeProbe.bDownwardEscapePathFound
+		&& !EscapeProbe.bNonDownwardEscapePathFound
+		&& IsValid(Character)
+		&& IsValid(Character->GetCharacterMovement())
+		&& Character->GetCharacterMovement()->IsFalling();
+	if (!bCanFallThroughVerticalShaft &&
+		(bInternalContained ||
+			(EscapeProbe.bValid && !EscapeProbe.bNonDownwardEscapePathFound)))
 	{
 		EnterVoxelContainedMode(*VoxelWorld);
 	}
@@ -278,7 +286,8 @@ UDRVoxelContainmentComponent::GetCapsuleEscapeProbe(AVoxelWorld& VoxelWorld) con
 		FVector(Diagonal, -Diagonal, 0.f),
 		FVector(-Diagonal, Diagonal, 0.f),
 		FVector(-Diagonal, -Diagonal, 0.f),
-		FVector::UpVector
+		FVector::UpVector,
+		-FVector::UpVector
 	};
 	const FVector RingDirections[] =
 	{
@@ -414,6 +423,14 @@ UDRVoxelContainmentComponent::GetCapsuleEscapeProbe(AVoxelWorld& VoxelWorld) con
 		{
 			Result.bEscapePathFound = true;
 			Result.EscapeDirectionIndex = DirectionIndex;
+			if (DirectionIndex == EscapeProbeDirectionCount - 1)
+			{
+				Result.bDownwardEscapePathFound = true;
+			}
+			else
+			{
+				Result.bNonDownwardEscapePathFound = true;
+			}
 		}
 	}
 
@@ -535,18 +552,25 @@ void UDRVoxelContainmentComponent::DrawContainmentDebug(AVoxelWorld& VoxelWorld)
 
 	const int32 RequiredLayers = FMath::Clamp(RequiredSurroundedLayers, 1, ContainmentLayerCount);
 	const bool bInternalContained = Occupancy.FullySurroundedLayerCount >= RequiredLayers;
+	const bool bCanFallThroughVerticalShaft = EscapeProbe.bDownwardEscapePathFound
+		&& !EscapeProbe.bNonDownwardEscapePathFound
+		&& IsValid(Character)
+		&& IsValid(Character->GetCharacterMovement())
+		&& Character->GetCharacterMovement()->IsFalling();
 	const bool bProposedContained =
-		bInternalContained || (EscapeProbe.bValid && !EscapeProbe.bEscapePathFound);
+		!bCanFallThroughVerticalShaft &&
+		(bInternalContained || (EscapeProbe.bValid && !EscapeProbe.bNonDownwardEscapePathFound));
 	const UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
 	const bool bStateActive = IsValid(AbilitySystem) && AbilitySystem->HasMatchingGameplayTag(
 		DRGameplayTags::State_VoxelContained);
 	const FString ResultText = FString::Printf(
-		TEXT("INTERNAL: %s | Layers %d/%d |%s\nESCAPE PATH: %s | Occupancy %.2f -> %.2f | PROPOSED: %s | State: %s"),
+		TEXT("INTERNAL: %s | Layers %d/%d |%s\nESCAPE: Side/Up=%s Down=%s | Occupancy %.2f -> %.2f | PROPOSED: %s | State: %s"),
 		bInternalContained ? TEXT("PASS") : TEXT("FAIL"),
 		Occupancy.FullySurroundedLayerCount,
 		RequiredLayers,
 		*LayerSummary,
-		EscapeProbe.bEscapePathFound ? TEXT("FOUND") : TEXT("BLOCKED"),
+		EscapeProbe.bNonDownwardEscapePathFound ? TEXT("FOUND") : TEXT("BLOCKED"),
+		EscapeProbe.bDownwardEscapePathFound ? TEXT("FOUND") : TEXT("BLOCKED"),
 		EscapeProbe.StartOccupancyScore,
 		EscapeProbe.BestEndOccupancyScore,
 		bProposedContained ? TEXT("CONTAINED") : TEXT("NOT CONTAINED"),
@@ -631,7 +655,7 @@ void UDRVoxelContainmentComponent::UpdateVoxelContainedMode()
 	const FCapsuleEscapeProbeResult EscapeProbe =
 		GetCapsuleEscapeProbe(*VoxelWorld);
 	if (bInternalContained ||
-		(EscapeProbe.bValid && !EscapeProbe.bEscapePathFound))
+		(EscapeProbe.bValid && !EscapeProbe.bNonDownwardEscapePathFound))
 	{
 		ReleaseStartTime = -1.f;
 		return;

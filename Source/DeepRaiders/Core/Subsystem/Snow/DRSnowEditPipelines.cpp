@@ -6,6 +6,7 @@
 #include "VoxelWorld.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "DeepRaiders/Player/Components/DRVoxelContainmentComponent.h"
+#include "DeepRaiders/LootBox/DRLootBoxActor.h"
 #include "Components/CapsuleComponent.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
@@ -74,6 +75,15 @@ void EvaluateCharactersInEditedBounds(
 			Character->FindComponentByClass<UDRVoxelContainmentComponent>())
 		{
 			Containment->EvaluateVoxelContainment(&VoxelWorld);
+		}
+	}
+
+	for (TActorIterator<ADRLootBoxActor> It(World); It; ++It)
+	{
+		ADRLootBoxActor* LootBox = *It;
+		if (IsValid(LootBox) && EditedWorldBounds.Intersect(LootBox->GetComponentsBoundingBox()))
+		{
+			LootBox->UpdateVoxelExposure(VoxelWorld);
 		}
 	}
 }
@@ -498,6 +508,7 @@ void FDRSnowRemovalPipeline::ApplyRemovedSurfaceEdit(
 	AVoxelWorld* VoxelWorld = EditResult.VoxelWorld.Get();
 	if (!EditResult.bUseModifiedValuesForVolume || !IsValid(VoxelWorld))
 	{
+		EvaluateSurfaceEdit(EditResult);
 		return;
 	}
 
@@ -506,6 +517,7 @@ void FDRSnowRemovalPipeline::ApplyRemovedSurfaceEdit(
 		Request,
 		EditResult.ModifiedValues,
 		VolumeAmount);
+	EvaluateSurfaceEdit(EditResult);
 }
 
 void FDRSnowRemovalPipeline::RemoveVolumeFromModifiedValues(

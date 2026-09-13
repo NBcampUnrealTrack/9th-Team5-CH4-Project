@@ -9,6 +9,8 @@ class UDRLootDropComponent;
 class USceneComponent;
 class UMaterialInstanceDynamic;
 class UNiagaraComponent;
+class UAbilitySystemComponent;
+class AVoxelWorld;
 
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRLootBoxActor : public ADRBreakableActor
@@ -22,6 +24,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Loot")
 	bool SetLootTier(EDRLootTier NewLootTier);
+
+	/** 복셀 편집 후 호출한다. LootBox 중심이 빈 복셀이 된 경우에만 표시한다. */
+	void UpdateVoxelExposure(AVoxelWorld& VoxelWorld);
 	
 	UFUNCTION(BlueprintPure, Category = "Loot")
 	EDRLootTier GetLootTier() const
@@ -69,6 +74,13 @@ private:
 	void RefreshPresentation();
 	void RefreshDynamicMaterialColor();
 	void RefreshNiagara();
+	void BindLocalPlayerVisibilityTags();
+	void UnbindLocalPlayerVisibilityTags();
+	void RefreshLocalPlayerVisibility();
+	void HandleLocalPlayerVisibilityTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void ApplyVisibility();
+	UFUNCTION()
+	void OnRep_VoxelExposed();
 	
 	FLinearColor GetRarityColor(EDRLootTier Rarity);
 	FLinearColor GetRarityBaseColor(EDRLootTier Rarity);
@@ -78,5 +90,13 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
 
 	FDelegateHandle LootSpawnSequenceCompletedHandle;
+	FTimerHandle LocalPlayerVisibilityBindRetryTimer;
+	TWeakObjectPtr<UAbilitySystemComponent> LocalPlayerAbilitySystem;
+	FDelegateHandle LocalPlayerDeadTagChangedHandle;
+	FDelegateHandle LocalPlayerVoxelContainedTagChangedHandle;
 	bool bWaitingForLootSpawnSequence = false;
+	bool bHideForContainedDeath = false;
+
+	UPROPERTY(ReplicatedUsing = OnRep_VoxelExposed)
+	bool bIsVoxelExposed = false;
 };
