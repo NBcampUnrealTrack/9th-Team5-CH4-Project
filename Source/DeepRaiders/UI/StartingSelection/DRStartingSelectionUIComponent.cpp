@@ -114,6 +114,12 @@ void UDRStartingSelectionUIComponent::HandleGameTimerChanged(
 void UDRStartingSelectionUIComponent::HandleSelectionAvailabilityChanged(
 	bool IsSelectionAvailable)
 {
+	if (!IsSelectionAvailable)
+	{
+		HideStartingSelection();
+		return;
+	}
+
 	if (IsSelectionAvailable
 		&& IsValid(MiningGameState)
 		&& (bIsGameLoading || MiningGameState->IsGameStarted()))

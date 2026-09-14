@@ -166,6 +166,7 @@ void UDRStartingSelectionComponent::ServerSelectSkill_Implementation(FName RowNa
 			IsSkillTwoSelected = true;
 		}
 
+		PlayerController->ForceNetUpdate();
 		NotifySelectionStateChanged();
 	}
 }
