@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DeepRaiders/Combat/Projectile/DRGrabProjectile.h"
 #include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
@@ -319,15 +320,23 @@ bool ADRGameplayCueGrapple::ResolveStartAttachment(
 		 * Skill Grapple
 		 * Character SkeletalMesh의 전용 발사 Socket을 사용한다.
 		 */
-		if (IsValid(Cast<UDRSkillDefinition>(SourceObject)))
+		if (IsValid(Cast<UDRSkillDefinition>(SourceObject))
+			|| IsValid(Cast<ADRGrabProjectile>(SourceObject)))
 		{
 			USkeletalMeshComponent* CharacterMesh =
 				Character->GetMesh();
+			FName ResolvedSkillSocketName = SkillLaunchSocketName;
+			if (IsValid(Cast<ADRGrabProjectile>(SourceObject))
+				&& IsValid(CharacterMesh)
+				&& !CharacterMesh->DoesSocketExist(ResolvedSkillSocketName))
+			{
+				ResolvedSkillSocketName = TEXT("S_HandGrip_R");
+			}
 
 			if (!IsValid(CharacterMesh)
-				|| SkillLaunchSocketName.IsNone()
+				|| ResolvedSkillSocketName.IsNone()
 				|| !CharacterMesh->DoesSocketExist(
-					SkillLaunchSocketName))
+					ResolvedSkillSocketName))
 			{
 				UE_LOG(
 					LogTemp,
@@ -336,13 +345,13 @@ bool ADRGameplayCueGrapple::ResolveStartAttachment(
 						"[GrappleCue] Skill launch socket missing. "
 						"Character=%s Socket=%s"),
 					*GetNameSafe(Character),
-					*SkillLaunchSocketName.ToString());
+					*ResolvedSkillSocketName.ToString());
 
 				return false;
 			}
 
 			OutComponent = CharacterMesh;
-			OutSocketName = SkillLaunchSocketName;
+			OutSocketName = ResolvedSkillSocketName;
 
 			return true;
 		}
