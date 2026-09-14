@@ -70,55 +70,6 @@ int32 ADRSnowControlZone::GetDominantMaterialIndex(
 	return INDEX_NONE;
 }
 
-void ADRSnowControlZone::ExpandVoxelBoundsForWorldPoint(
-	const AVoxelWorld* VoxelWorld,
-	const FVector& WorldPoint,
-	FIntVector& InOutMin,
-	FIntVector& InOutMax)
-{
-	const FIntVector VoxelPoint =
-		VoxelWorld->GlobalToLocal(WorldPoint, EVoxelWorldCoordinatesRounding::RoundDown);
-	InOutMin.X = FMath::Min(InOutMin.X, VoxelPoint.X);
-	InOutMin.Y = FMath::Min(InOutMin.Y, VoxelPoint.Y);
-	InOutMin.Z = FMath::Min(InOutMin.Z, VoxelPoint.Z);
-	InOutMax.X = FMath::Max(InOutMax.X, VoxelPoint.X + 1);
-	InOutMax.Y = FMath::Max(InOutMax.Y, VoxelPoint.Y + 1);
-	InOutMax.Z = FMath::Max(InOutMax.Z, VoxelPoint.Z + 1);
-}
-
-FVoxelIntBox ADRSnowControlZone::MakeVoxelBoundsFromWorldBounds(
-	const AVoxelWorld* VoxelWorld,
-	const FBox& WorldBounds)
-{
-	if (!IsValid(VoxelWorld) || !WorldBounds.IsValid)
-	{
-		return FVoxelIntBox();
-	}
-
-	FIntVector Min(MAX_int32);
-	FIntVector Max(MIN_int32);
-	// 회전된 BoxComponent도 정확히 포함하도록 월드 bounds의 8개 꼭짓점을 voxel 좌표로 변환한다.
-	for (int32 X = 0; X < 2; ++X)
-	{
-		for (int32 Y = 0; Y < 2; ++Y)
-		{
-			for (int32 Z = 0; Z < 2; ++Z)
-			{
-				ExpandVoxelBoundsForWorldPoint(
-					VoxelWorld,
-					FVector(
-						X == 0 ? WorldBounds.Min.X : WorldBounds.Max.X,
-						Y == 0 ? WorldBounds.Min.Y : WorldBounds.Max.Y,
-						Z == 0 ? WorldBounds.Min.Z : WorldBounds.Max.Z),
-					Min,
-					Max);
-			}
-		}
-	}
-
-	return FVoxelIntBox(Min, Max);
-}
-
 #pragma endregion
 
 ADRSnowControlZone::ADRSnowControlZone()
@@ -130,12 +81,6 @@ ADRSnowControlZone::ADRSnowControlZone()
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
-
-	ZoneBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("ZoneBounds"));
-	ZoneBounds->SetupAttachment(Root);
-	ZoneBounds->SetBoxExtent(FVector(500.f, 500.f, 200.f));
-	ZoneBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	ZoneBounds->SetHiddenInGame(true);
 
 	TargetMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TargetMesh"));
 	TargetMesh->SetupAttachment(Root);
@@ -208,7 +153,7 @@ FBox ADRSnowControlZone::GetZoneWorldBounds() const
 	{
 		return TargetMesh->Bounds.GetBox();
 	}
-	return IsValid(ZoneBounds) ? ZoneBounds->Bounds.GetBox() : FBox(ForceInit);
+	return FBox(ForceInit);
 }
 
 FDRSnowControlRatio ADRSnowControlZone::GetControlRatio() const
@@ -261,23 +206,9 @@ void ADRSnowControlZone::RefreshControlRatio()
 		}
 		return;
 	}
-	UWorld* World = GetWorld();
-	if (!IsValid(World))
-	{
-		CachedControlRatio = FDRSnowControlRatio();
-		RefreshPointLocationWidget();
-		return;
-	}
-
-	const UDRSnowSubsystem* SnowSubsystem = World->GetSubsystem<UDRSnowSubsystem>();
-	if (!IsValid(SnowSubsystem))
-	{
-		CachedControlRatio = FDRSnowControlRatio();
-		RefreshPointLocationWidget();
-		return;
-	}
-
-	CachedControlRatio = SnowSubsystem->QuerySnowInBounds(GetZoneWorldBounds());
+	// 메쉬가 없으면 점령 계산을 하지 않고 이전 결과를 초기화한다.
+	CachedControlRatio = FDRSnowControlRatio();
+	CompletionRatio = 0.f;
 	RefreshPointLocationWidget();
 }
 
@@ -602,8 +533,8 @@ void ADRSnowControlZone::DeinitializeDebug()
 FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 {
 	FDRSnowVoxelMaterialScanResult Result;
-	const bool bUseMesh = TargetMesh && TargetMesh->GetStaticMesh();
-	if (bUseMesh && !EnsureTargetMask())
+	// 실제 메쉬 내부 마스크만 검사한다.
+	if (!EnsureTargetMask())
 	{
 		Result.bTruncated = true;
 		return Result;
@@ -611,14 +542,12 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 
 	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
 	if (!IsValid(VoxelWorld) ||
-		!VoxelWorld->IsCreated() ||
-		!IsValid(ZoneBounds))
+		!VoxelWorld->IsCreated())
 	{
 		return Result;
 	}
 
-	const FVoxelIntBox VoxelBounds = bUseMesh ? TargetMask.Bounds
-		: MakeVoxelBoundsFromWorldBounds(VoxelWorld, GetZoneWorldBounds());
+	const FVoxelIntBox VoxelBounds = TargetMask.Bounds;
 	if (!VoxelBounds.IsValid())
 	{
 		return Result;
@@ -633,16 +562,8 @@ FDRSnowVoxelMaterialScanResult ADRSnowControlZone::ScanVoxelMaterials() const
 			{
 				for (int32 X = VoxelBounds.Min.X; X < VoxelBounds.Max.X; ++X)
 				{
-					if (!bUseMesh && MaxVoxelScanCount > 0 && Result.ScannedVoxelCount >= MaxVoxelScanCount)
-					{
-						Result.bTruncated = true;
-						break;
-					}
-
 					const FIntVector VoxelPosition(X, Y, Z);
-					const FVector WorldLocation = VoxelWorld->LocalToGlobal(VoxelPosition);
-					if (bUseMesh ? !TargetMask.InsideVoxels.Contains(VoxelPosition)
-						: !IsWorldLocationInsideZoneBounds(WorldLocation))
+					if (!TargetMask.InsideVoxels.Contains(VoxelPosition))
 					{
 						continue;
 					}
@@ -769,25 +690,6 @@ AVoxelWorld* ADRSnowControlZone::ResolveVoxelWorld() const
 	}
 
 	return nullptr;
-}
-
-bool ADRSnowControlZone::IsWorldLocationInsideZoneBounds(const FVector& WorldLocation) const
-{
-	if (!IsValid(ZoneBounds))
-	{
-		return false;
-	}
-
-	const FVector LocalLocation = ZoneBounds->GetComponentTransform().InverseTransformPosition(WorldLocation);
-	const FVector Extent = ZoneBounds->GetUnscaledBoxExtent();
-
-	if (FMath::Abs(LocalLocation.Z) > Extent.Z)
-	{
-		return false;
-	}
-
-	return FMath::Abs(LocalLocation.X) <= Extent.X &&
-		FMath::Abs(LocalLocation.Y) <= Extent.Y;
 }
 
 void ADRSnowControlZone::UpdateDebugWidget()

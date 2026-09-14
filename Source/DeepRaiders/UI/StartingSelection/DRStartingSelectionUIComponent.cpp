@@ -27,6 +27,9 @@ void UDRStartingSelectionUIComponent::InitializeStartingSelection(
 	}
 
 	SelectionComponent = InSelectionComponent;
+	SelectionComponent->OnSelectionAvailabilityChanged.AddUObject(
+		this,
+		&ThisClass::HandleSelectionAvailabilityChanged);
 	MiningGameState = PlayerController->GetWorld()->GetGameState<ADRMiningGameStateBase>();
 	if (!IsValid(MiningGameState))
 	{
@@ -108,9 +111,25 @@ void UDRStartingSelectionUIComponent::HandleGameTimerChanged(
 	}
 }
 
+void UDRStartingSelectionUIComponent::HandleSelectionAvailabilityChanged(
+	bool IsSelectionAvailable)
+{
+	if (IsSelectionAvailable
+		&& IsValid(MiningGameState)
+		&& (bIsGameLoading || MiningGameState->IsGameStarted()))
+	{
+		ShowStartingSelection();
+	}
+}
+
 void UDRStartingSelectionUIComponent::EndPlay(
 	const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsValid(SelectionComponent))
+	{
+		SelectionComponent->OnSelectionAvailabilityChanged.RemoveAll(this);
+	}
+
 	if (IsValid(MiningGameState))
 	{
 		MiningGameState->OnGameTimerChanged.RemoveDynamic(

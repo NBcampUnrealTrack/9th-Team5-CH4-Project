@@ -19,7 +19,7 @@ class DEEPRAIDERS_API UDRShopComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
-	/** 상점 데이터와 거래 범위 참조를 관리하는 컴포넌트를 초기화한다. */
+	/** 상점 데이터를 관리하는 컴포넌트를 초기화한다. */
 	UDRShopComponent();
 
 	/** DataTable에서 생성된 상품 Offer 목록을 반환한다. */
@@ -50,11 +50,8 @@ public:
 		UDRItemDefinition* ItemDefinition,
 		float AvailableSnowGauge) const;
 
-	/** 플레이어가 현재 상점 범위 안에 있는지 확인한다. */
-	bool IsTransactionAllowed(const APawn* Pawn) const;
-
 protected:
-	/** 상점 범위 컴포넌트를 찾고 아이템 Offer를 구성한다. */
+	/** 아이템 Offer를 구성한다. */
 	virtual void BeginPlay() override;
 
 private:
@@ -77,7 +74,4 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<FDRShopItemOffer> ItemOffers;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDRShopAreaComponent> ShopAreaComponent;
 };

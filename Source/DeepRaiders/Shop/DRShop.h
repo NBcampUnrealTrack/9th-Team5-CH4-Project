@@ -43,15 +43,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	bool FindInteractionPoint(
 		APawn* Interactor,
 		FVector& OutInteractionLocation) const;
-
-	UFUNCTION()
-	void HandleShopAreaExited(APawn* Pawn);
 
 	UPROPERTY(VisibleAnywhere, Category = "Shop")
 	TObjectPtr<USceneComponent> Root;

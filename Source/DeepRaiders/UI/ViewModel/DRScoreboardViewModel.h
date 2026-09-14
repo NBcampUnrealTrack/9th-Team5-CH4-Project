@@ -30,10 +30,10 @@ protected:
 	int32 Deaths = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
-	float DamageDealt = 0.f;
+	int32 DamageDealt = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
-	float DamageTaken = 0.f;
+	int32 DamageTaken = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Scoreboard")
 	bool bIsLocalPlayer = false;

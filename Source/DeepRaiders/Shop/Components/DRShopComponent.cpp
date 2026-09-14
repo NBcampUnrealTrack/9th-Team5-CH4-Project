@@ -1,12 +1,10 @@
 #include "DRShopComponent.h"
 
-#include "DRShopAreaComponent.h"
 #include "DeepRaiders/Inventory/Component/DRInventoryComponent.h"
 #include "DeepRaiders/Item/DRItemDefinition.h"
 #include "DeepRaiders/Perk/Components/DRPerkComponent.h"
 #include "DeepRaiders/Perk/DRPerkDefinition.h"
 #include "Engine/DataTable.h"
-#include "GameFramework/Pawn.h"
 
 UDRShopComponent::UDRShopComponent()
 {
@@ -94,19 +92,10 @@ bool UDRShopComponent::CanPurchaseItem(
 		&& Inventory->CanAddItem(ItemDefinition, 1);
 }
 
-bool UDRShopComponent::IsTransactionAllowed(const APawn* Pawn) const
-{
-	return IsValid(ShopAreaComponent)
-		&& IsValid(Pawn)
-		&& ShopAreaComponent->IsOverlappingActor(Pawn);
-}
-
 void UDRShopComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ShopAreaComponent =
-		GetOwner()->FindComponentByClass<UDRShopAreaComponent>();
 	LoadItemOffers();
 }
 

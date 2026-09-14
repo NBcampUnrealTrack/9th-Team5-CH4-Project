@@ -89,8 +89,8 @@ void UDRHUDViewModel::HandleGameResultTextChanged(const FText& ResultText)
 		? MiningGameState->GetControlZoneResult() : FDRControlZoneGameResult();
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0Ratio, Result.Team0Ratio);
 	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1Ratio, Result.Team1Ratio);
-	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0SnowTotal, Result.Team0SnowTotal);
-	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1SnowTotal, Result.Team1SnowTotal);
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam0SnowTotal, FMath::TruncToInt(Result.Team0SnowTotal));
+	UE_MVVM_SET_PROPERTY_VALUE(FinalTeam1SnowTotal, FMath::TruncToInt(Result.Team1SnowTotal));
 	UE_MVVM_SET_PROPERTY_VALUE(WinningTeamId, Result.WinningTeamId);
 	UE_MVVM_SET_PROPERTY_VALUE(bHasFinalResult, Result.bHasResult);
 	HandleMatchHUDStateChanged();
@@ -179,8 +179,7 @@ void UDRHUDViewModel::RefreshTeamTexts()
 	FText BlueText;
 	if (MiningGameState.IsValid())
 	{
-		FNumberFormattingOptions NumberFormat;
-		NumberFormat.SetMaximumFractionalDigits(1);
+		// 팀 보유량도 스코어보드와 동일하게 소수점 없이 표시한다.
 		const EDRGameFlowState FlowState = MiningGameState->GetGameFlowState();
 		const bool bPreparing = FlowState == EDRGameFlowState::WaitingForPlayers
 			|| FlowState == EDRGameFlowState::Loading || FlowState == EDRGameFlowState::Countdown;
@@ -208,13 +207,13 @@ void UDRHUDViewModel::RefreshTeamTexts()
 		}
 		else if (MiningGameState->IsGameEnded() && bHasFinalResult)
 		{
-			RedText = FText::AsNumber(FinalTeam0SnowTotal, &NumberFormat);
-			BlueText = FText::AsNumber(FinalTeam1SnowTotal, &NumberFormat);
+			RedText = FText::AsNumber(FinalTeam0SnowTotal);
+			BlueText = FText::AsNumber(FinalTeam1SnowTotal);
 		}
 		else
 		{
-			RedText = FText::AsNumber(MiningGameState->GetDisplayedTeamSnowTotal(0), &NumberFormat);
-			BlueText = FText::AsNumber(MiningGameState->GetDisplayedTeamSnowTotal(1), &NumberFormat);
+			RedText = FText::AsNumber(FMath::TruncToInt(MiningGameState->GetDisplayedTeamSnowTotal(0)));
+			BlueText = FText::AsNumber(FMath::TruncToInt(MiningGameState->GetDisplayedTeamSnowTotal(1)));
 		}
 	}
 	UE_MVVM_SET_PROPERTY_VALUE(TeamRedText, RedText);

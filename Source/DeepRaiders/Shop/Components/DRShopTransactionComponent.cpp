@@ -73,7 +73,6 @@ void UDRShopTransactionComponent::ServerRequestOffer_Implementation(
 	const TCHAR* FailureReason = !IsValid(PlayerState) ? TEXT("MissingPlayerState")
 		: !IsValid(ShopComponent) ? TEXT("MissingShopComponent")
 		: !Request.IsValidRequest() ? TEXT("InvalidRequest")
-		: !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()) ? TEXT("OutsideShopArea")
 		: (Request.OfferType == EDRShopOfferType::Purchase && !IsValid(Inventory)) ? TEXT("MissingInventory")
 		: nullptr;
 	if (FailureReason)
@@ -156,8 +155,7 @@ void UDRShopTransactionComponent::ServerRequestSell_Implementation(
 		|| !IsValid(ShopComponent)
 		|| !IsValid(Inventory)
 		|| !IsValid(Definition)
-		|| !Definition->IsSellable()
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
+		|| !Definition->IsSellable())
 	{
 		return;
 	}
@@ -189,8 +187,7 @@ void UDRShopTransactionComponent::ServerRequestSellPerk_Implementation(
 		|| !IsValid(ShopComponent)
 		|| !IsValid(PerkComponent)
 		|| !IsValid(PerkDefinition)
-		|| !PerkDefinition->IsSellable()
-		|| !ShopComponent->IsTransactionAllowed(PlayerState->GetPawn()))
+		|| !PerkDefinition->IsSellable())
 	{
 		return;
 	}

@@ -128,35 +128,4 @@ void ADRShop::BeginPlay()
 	ShopAreaComponent->SetCollisionResponseToChannel(
 		DRCollisionChannels::Interaction,
 		ECR_Overlap);
-
-	ShopAreaComponent->OnPawnExited.AddDynamic(
-		this,
-		&ThisClass::HandleShopAreaExited);
-}
-
-void ADRShop::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	if (IsValid(ShopAreaComponent))
-	{
-		ShopAreaComponent->OnPawnExited.RemoveDynamic(
-			this,
-			&ThisClass::HandleShopAreaExited);
-	}
-
-	Super::EndPlay(EndPlayReason);
-}
-
-void ADRShop::HandleShopAreaExited(APawn* Pawn)
-{
-	if (!IsValid(Pawn)
-		|| (!Pawn->IsLocallyControlled() && !Pawn->HasAuthority()))
-	{
-		return;
-	}
-
-	if (ADRPlayerController* PlayerController =
-		Cast<ADRPlayerController>(Pawn->GetController()))
-	{
-		PlayerController->NotifyShopAreaExited(this);
-	}
 }
