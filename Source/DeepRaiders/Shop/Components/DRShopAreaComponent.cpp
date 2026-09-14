@@ -22,6 +22,13 @@ UDRShopAreaComponent::UDRShopAreaComponent()
 		&ThisClass::HandleEndOverlap);
 }
 
+void UDRShopAreaComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	SetHiddenInGame(!IsDebugVisible);
+}
+
 void UDRShopAreaComponent::HandleBeginOverlap(
 	UPrimitiveComponent* OverlappedComponent,
 	AActor* OtherActor,

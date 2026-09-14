@@ -27,7 +27,13 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Shop|Area")
 	FDRShopAreaPawnSignature OnPawnExited;
 
+protected:
+	virtual void BeginPlay() override;
+
 private:
+	UPROPERTY(EditAnywhere, Category = "Shop|Area|Debug")
+	bool IsDebugVisible = false;
+
 	TSet<TWeakObjectPtr<APawn>> OverlappingPawns;
 
 	/** 진입한 액터가 Pawn이면 상점 진입 이벤트를 전달한다. */
