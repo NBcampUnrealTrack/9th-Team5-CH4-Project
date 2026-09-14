@@ -181,20 +181,25 @@ void ADRSnowControlZone::RefreshControlRatio()
 			OnRep_ControlState();
 			return;
 		}
-		// 메쉬 거점은 실제 채워진 복셀의 팀 재질로 보상과 최종 결과를 함께 계산한다.
+		// 점령 완성도에는 두 플레이어 팀의 눈만 포함한다. 내부 TeamId는 0과 1이다.
+		int32 OwnedVoxelCount = 0;
 		CachedControlRatio = FDRSnowControlRatio();
 		CachedControlRatio.TotalAmount = Scan.FilledVoxelCount;
 		CachedControlRatio.NeutralAmount = Scan.NeutralCount + Scan.UnknownCount;
 		CachedControlRatio.SampledCellCount = Scan.ScannedVoxelCount;
 		for (const FDRSnowVoxelMaterialTeamCount& Team : Scan.Teams)
 		{
+			if (Team.TeamId == 0 || Team.TeamId == 1)
+			{
+				OwnedVoxelCount += Team.VoxelCount;
+			}
 			FDRSnowTeamAmount& Amount = CachedControlRatio.Teams.AddDefaulted_GetRef();
 			Amount.TeamId = Team.TeamId;
 			Amount.Amount = Team.VoxelCount;
 			Amount.Ratio = Scan.FilledVoxelCount > 0
 				? float(Team.VoxelCount) / Scan.FilledVoxelCount : 0.f;
 		}
-		CompletionRatio = float(Scan.FilledVoxelCount) / Scan.ScannedVoxelCount;
+		CompletionRatio = float(OwnedVoxelCount) / Scan.ScannedVoxelCount;
 		bZoneCompleted |= CompletionRatio >= FMath::Clamp(RequiredCompletionRatio, 0.01f, 1.f);
 		OnRep_ControlState();
 		if (bZoneCompleted && !bRewardGranted && GetLeadingTeamId() != INDEX_NONE)
