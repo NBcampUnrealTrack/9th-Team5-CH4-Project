@@ -90,8 +90,9 @@ void UDRScoreboardPlayerEntryViewModel::ApplyStats(const FDRMatchCombatStats& St
 {
 	UE_MVVM_SET_PROPERTY_VALUE(Kills, Stats.Kills);
 	UE_MVVM_SET_PROPERTY_VALUE(Deaths, Stats.Deaths);
-	UE_MVVM_SET_PROPERTY_VALUE(DamageDealt, Stats.DamageDealt);
-	UE_MVVM_SET_PROPERTY_VALUE(DamageTaken, Stats.DamageTaken);
+	// 표시용 피해량은 누적값의 소수점 이하를 버린다.
+	UE_MVVM_SET_PROPERTY_VALUE(DamageDealt, FMath::TruncToInt(Stats.DamageDealt));
+	UE_MVVM_SET_PROPERTY_VALUE(DamageTaken, FMath::TruncToInt(Stats.DamageTaken));
 }
 
 void UDRScoreboardPlayerEntryViewModel::HandlePlayerIdentityChanged()

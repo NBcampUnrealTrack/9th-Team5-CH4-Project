@@ -280,6 +280,11 @@ void ADRPlayerState::ResetForGameStart()
 	{
 		CharacterUpgradeComponent->ResetUpgrades();
 	}
+	
+	if (IsValid(CombatStatsComponent))
+	{
+		CombatStatsComponent->ResetMatchStats();
+	}
 
 	ClearFrozenState();
 	ResetHeatState();

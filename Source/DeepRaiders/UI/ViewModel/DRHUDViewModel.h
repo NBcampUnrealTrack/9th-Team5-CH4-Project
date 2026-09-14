@@ -248,10 +248,10 @@ protected:
 	float FinalTeam1Ratio = 0.f;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
-	float FinalTeam0SnowTotal = 0.f;
+	int32 FinalTeam0SnowTotal = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
-	float FinalTeam1SnowTotal = 0.f;
+	int32 FinalTeam1SnowTotal = 0;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "HUD|Result")
 	int32 WinningTeamId = INDEX_NONE;

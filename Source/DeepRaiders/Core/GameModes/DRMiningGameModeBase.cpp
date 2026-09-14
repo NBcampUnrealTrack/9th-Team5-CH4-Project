@@ -24,7 +24,7 @@ ADRMiningGameModeBase::ADRMiningGameModeBase()
 {
 	GameStateClass = ADRMiningGameStateBase::StaticClass();
 	bStartPlayersAsSpectators = true;
-	// 기본 준비 페이즈는 20초씩 세 번, 60초 이후에는 거점전을 진행한다.
+	// 초기 기본값이며, 실제 진행 순서와 시간은 설정된 GamePhases를 따른다.
 	for (int32 Index = 0; Index < 4; ++Index)
 	{
 		FDRGamePhaseConfig& Phase = GamePhases.AddDefaulted_GetRef();
@@ -69,8 +69,7 @@ bool ADRMiningGameModeBase::StartGame()
 	{
 		return false;
 	}
-	int32 Elapsed = 0;
-	bool bHasCentralOpeningBoundary = false;
+	// 페이즈 시작 시각을 강제하지 않고 각 구간의 유효한 시간만 검사한다.
 	for (const FDRGamePhaseConfig& Phase : GamePhases)
 	{
 		if (Phase.DurationSeconds <= 0)
@@ -78,13 +77,6 @@ bool ADRMiningGameModeBase::StartGame()
 			UE_LOG(LogTemp, Error, TEXT("Game phases need positive durations."));
 			return false;
 		}
-		bHasCentralOpeningBoundary |= Elapsed == 60;
-		Elapsed += Phase.DurationSeconds;
-	}
-	if (!bHasCentralOpeningBoundary)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Game phases must start a control phase at elapsed 60 seconds."));
-		return false;
 	}
 
 	ResetGameState();
@@ -301,8 +293,7 @@ void ADRMiningGameModeBase::NotifyPhaseCarversReady(int32 PhaseArrayIndex, bool 
 void ADRMiningGameModeBase::UpdateControlZoneActivation()
 {
 	if (!IsGameStarted() || !bPhaseCarversReady || bPhaseCarveFailed
-		|| !GamePhases.IsValidIndex(CurrentPhaseArrayIndex)
-		|| FMath::CeilToInt(GameDuration) - GameRemainingSeconds < 60)
+		|| !GamePhases.IsValidIndex(CurrentPhaseArrayIndex))
 	{
 		return;
 	}
@@ -596,7 +587,8 @@ void ADRMiningGameModeBase::EndGame()
 		UDRInventoryComponent* Inventory = IsValid(PlayerController) ? PlayerController->GetInventoryComponent() : nullptr;
 		if (IsValid(Inventory))
 		{
-			Inventory->ResetWeaponUpgrades();
+			// EndGame 이후 무기 업그레이드를 하지 않도록 주석 처리
+			//Inventory->ResetWeaponUpgrades();
 		}
 	}
 
