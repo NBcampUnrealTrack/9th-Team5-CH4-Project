@@ -112,7 +112,9 @@ FDRSnowSurfaceEditResult AddOrientedBoxSnow(
 		return Result;
 	}
 
-	FVoxelMaterial SnowMaterial;
+	// FVoxelMaterial의 기본 생성자는 채널을 초기화하지 않는다. SingleIndex(A) 외의
+	// 쓰레기 채널이 렌더 데이터에 섞이지 않도록 투명 색으로 먼저 초기화한다.
+	FVoxelMaterial SnowMaterial = FVoxelMaterial::CreateFromColor(FLinearColor::Transparent);
 	SnowMaterial.SetSingleIndex(DRSnowMaterialMapping::TeamToMaterialIndex(Request.Context.TeamId));
 	TArray<FModifiedVoxelValue> ModifiedValues;
 	FVoxelData& Data = VoxelWorld->GetData();
