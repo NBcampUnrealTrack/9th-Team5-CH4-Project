@@ -52,6 +52,7 @@ UDRGA_AbsorbSnow::UDRGA_AbsorbSnow()
 	SetAssetTags(AssetTags);
 
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
 	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);

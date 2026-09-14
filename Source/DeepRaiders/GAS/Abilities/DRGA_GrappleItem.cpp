@@ -38,6 +38,7 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Skill);
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack);
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Snow_Absorb);
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
 
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Skill);
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack);

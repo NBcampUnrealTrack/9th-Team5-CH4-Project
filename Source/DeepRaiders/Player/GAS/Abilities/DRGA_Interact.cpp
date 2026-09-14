@@ -22,6 +22,8 @@ UDRGA_Interact::UDRGA_Interact()
 	AssetTags.AddTag(DRGameplayTags::Ability_Action);
 	SetAssetTags(AssetTags);
 
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
+	
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 }
 
