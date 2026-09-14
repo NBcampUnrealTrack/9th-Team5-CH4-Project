@@ -58,6 +58,8 @@ void UDRRoomServiceWidget::Open(UUserWidget* InReturnWidget, UWidget* InTitleCon
 		TitleContent->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	SetVisibility(ESlateVisibility::Visible);
+	// 접속 패널 연결 후 즉시 갱신해 Private 버튼이 Master 응답을 기다리지 않게 한다.
+	RefreshEnabledState();
 	FocusRoomScreen();
 	RefreshRooms();
 }
