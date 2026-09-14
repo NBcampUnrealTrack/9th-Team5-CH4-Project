@@ -146,6 +146,15 @@ void ADRGameplayCueAbsorb::StopPresentation(bool bPlayEndSound)
 void ADRGameplayCueAbsorb::ResetPresentationState()
 {
 	bPresentationActive = false;
+
+	// 무기 외형 복제가 Cue 제거보다 먼저 도착하면 부착 중인 Cue가 새 무기 Scale을 상속할 수 있다.
+	// 재활용된 Actor가 그 World Scale을 다음 활성화로 가져가지 않도록 Presentation Transform을 복구한다.
+	SetActorScale3D(FVector::OneVector);
+	if (IsValid(BeamNiagaraComponent))
+	{
+		BeamNiagaraComponent->SetRelativeTransform(FTransform::Identity);
+	}
+
 	TargetCharacter.Reset();
 	StartComponent.Reset();
 	WeaponDefinition.Reset();
