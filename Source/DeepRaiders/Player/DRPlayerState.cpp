@@ -266,29 +266,37 @@ void ADRPlayerState::ResetForGameStart()
 		return;
 	}
 
+	if (IsValid(PerkComponent))
+	{
+		PerkComponent->ResetPerks();
+	}
+
+	if (IsValid(SkillComponent))
+	{
+		SkillComponent->ResetSkills();
+	}
+
+	if (IsValid(CharacterUpgradeComponent))
+	{
+		CharacterUpgradeComponent->ResetUpgrades();
+	}
+
+	ClearFrozenState();
 	ResetHeatState();
+
 	if (IsValid(ShieldComponent))
 	{
 		ShieldComponent->ClearShieldLayers();
 	}
+
 	if (IsValid(AbilitySystemComponent))
 	{
 		FGameplayTagContainer ShieldTags;
 		ShieldTags.AddTag(DRGameplayTags::State_PersonalShield);
 		AbilitySystemComponent->RemoveActiveEffectsWithGrantedTags(ShieldTags);
-		AbilitySystemComponent->SetNumericAttributeBase(
-			UDRPlayerAttributeSet::GetShieldAttribute(),
-			0.f);
 	}
-	if (IsValid(PerkComponent))
-	{
-		PerkComponent->ResetPerks();
-	}
-	if (IsValid(SkillComponent))
-	{
-		SkillComponent->ResetSkills();
-	}
-	CharacterUpgradeComponent->ResetUpgrades();
+
+	ResetGameplayAttributesForGameStart();
 }
 
 void ADRPlayerState::ResetForRespawn()
@@ -1048,6 +1056,28 @@ void ADRPlayerState::RefreshJetpackVisualOnPawn()
 	{
 		PlayerCharacter->RefreshJetpackVisual();
 	}
+}
+
+void ADRPlayerState::ResetGameplayAttributesForGameStart()
+{
+	if (!HasAuthority() || !IsValid(AbilitySystemComponent) || !IsValid(PlayerAttributeSet))
+	{
+		return;
+	}
+
+	// 전투 상태
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHealthAttribute(), PlayerAttributeSet->GetMaxHealth());
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetShieldAttribute(), 0.f);
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetFreezeGaugeAttribute(), 0.f);
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetHeatGaugeAttribute(), 0.f);
+
+	// 시작 자원
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetSnowGaugeAttribute(), InitialSnowGauge);
+
+	// Instant 처리용 임시 Attribute들도 청소
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetIncomingDamageAttribute(), 0.f);
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetIncomingShieldAttribute(), 0.f);
+	AbilitySystemComponent->SetNumericAttributeBase(UDRPlayerAttributeSet::GetIncomingKnockbackDistanceAttribute(), 0.f);
 }
 
 #pragma region Teleport
