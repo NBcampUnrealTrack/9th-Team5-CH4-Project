@@ -22,8 +22,7 @@ UDRGA_MeleeAttack::UDRGA_MeleeAttack()
 	InitialTags.AddTag(DRGameplayTags::Ability_Attack_Melee);
 	SetAssetTags(InitialTags);
 	
-	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
-
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_GamePreparing);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
