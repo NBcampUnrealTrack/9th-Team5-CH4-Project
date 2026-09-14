@@ -183,10 +183,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<USceneComponent> Root;
 
-	// 레벨에 배치한 뒤 BoxExtent로 점령/계산 구역을 지정한다.
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
-	TObjectPtr<UBoxComponent> ZoneBounds;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Snow|Control")
 	TObjectPtr<UWidgetComponent> PointLocationWidgetComponent;
 
@@ -287,18 +283,9 @@ protected:
 
 private:
 	static int32 GetDominantMaterialIndex(const FVoxelMaterial& Material, EVoxelMaterialConfig MaterialConfig);
-	static void ExpandVoxelBoundsForWorldPoint(
-		const AVoxelWorld* VoxelWorld,
-		const FVector& WorldPoint,
-		FIntVector& InOutMin,
-		FIntVector& InOutMax);
-	static FVoxelIntBox MakeVoxelBoundsFromWorldBounds(
-		const AVoxelWorld* VoxelWorld,
-		const FBox& WorldBounds);
 	void InitializeDebug();
 	void DeinitializeDebug();
 	AVoxelWorld* ResolveVoxelWorld() const;
-	bool IsWorldLocationInsideZoneBounds(const FVector& WorldLocation) const;
 	void UpdateDebugWidget();
 
 	UPROPERTY(Transient)
