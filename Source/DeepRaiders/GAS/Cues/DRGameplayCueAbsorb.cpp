@@ -27,6 +27,7 @@ ADRGameplayCueAbsorb::ADRGameplayCueAbsorb(const FObjectInitializer& ObjectIniti
 
 	PresentationRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
 	SetRootComponent(PresentationRoot);
+	PresentationRoot->SetAbsolute(false, false, true);
 
 	BeamNiagaraComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("BeamNiagaraComponent"));
 	BeamNiagaraComponent->SetupAttachment(PresentationRoot);
