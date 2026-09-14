@@ -1,10 +1,12 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "DeepRaiders/Core/GameStates/DRGameFlowState.h"
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
 #include "DRLootTypes.h"
 #include "DRLootBoxActor.generated.h"
 
+class ADRMiningGameStateBase;
 class UDRLootDropComponent;
 class USceneComponent;
 class UMaterialInstanceDynamic;
@@ -21,6 +23,8 @@ public:
 	ADRLootBoxActor();
 	
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+		class AController* EventInstigator, AActor* DamageCauser) override;
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Loot")
 	bool SetLootTier(EDRLootTier NewLootTier);
@@ -71,6 +75,11 @@ protected:
 	
 private:
 	void HandleLootSpawnSequenceCompleted();
+	void BindGameFlowState();
+	void UnbindGameFlowState();
+	void ApplyGameFlowAvailability();
+	UFUNCTION()
+	void HandleGameFlowStateChanged(EDRGameFlowState GameFlowState);
 	void RefreshPresentation();
 	void RefreshDynamicMaterialColor();
 	void RefreshNiagara();
@@ -89,6 +98,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
 
+	UPROPERTY(Transient)
+	TObjectPtr<ADRMiningGameStateBase> MiningGameState;
+
 	FDelegateHandle LootSpawnSequenceCompletedHandle;
 	FTimerHandle LocalPlayerVisibilityBindRetryTimer;
 	TWeakObjectPtr<UAbilitySystemComponent> LocalPlayerAbilitySystem;
@@ -96,6 +108,7 @@ private:
 	FDelegateHandle LocalPlayerVoxelContainedTagChangedHandle;
 	bool bWaitingForLootSpawnSequence = false;
 	bool bHideForContainedDeath = false;
+	bool bIsGameFlowAvailable = false;
 
 	UPROPERTY(ReplicatedUsing = OnRep_VoxelExposed)
 	bool bIsVoxelExposed = false;

@@ -4,6 +4,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
 #include "Components/SceneComponent.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
 #include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
@@ -41,7 +42,7 @@ void ADRLootBoxActor::BeginPlay()
 	}
 	
 	RefreshPresentation();
-	ApplyVisibility();
+	BindGameFlowState();
 	
 	if (GetNetMode() != NM_DedicatedServer)
 	{
@@ -52,6 +53,7 @@ void ADRLootBoxActor::BeginPlay()
 
 void ADRLootBoxActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindGameFlowState();
 	UnbindLocalPlayerVisibilityTags();
 	GetWorldTimerManager().ClearTimer(LocalPlayerVisibilityBindRetryTimer);
 
@@ -70,6 +72,17 @@ void ADRLootBoxActor::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>
 	
 	DOREPLIFETIME(ThisClass, LootTier);
 	DOREPLIFETIME(ThisClass, bIsVoxelExposed);
+}
+
+float ADRLootBoxActor::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
+	AController* EventInstigator, AActor* DamageCauser)
+{
+	if (!bIsGameFlowAvailable)
+	{
+		return 0.f;
+	}
+
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 }
 
 void ADRLootBoxActor::UpdateVoxelExposure(AVoxelWorld& VoxelWorld)
@@ -180,6 +193,47 @@ void ADRLootBoxActor::HandleLootSpawnSequenceCompleted()
 
 	bWaitingForLootSpawnSequence = false;
 	StartBrokenDestructionCountdown();
+}
+
+void ADRLootBoxActor::BindGameFlowState()
+{
+	UnbindGameFlowState();
+
+	UWorld* World = GetWorld();
+	MiningGameState = IsValid(World) ? World->GetGameState<ADRMiningGameStateBase>() : nullptr;
+	if (IsValid(MiningGameState))
+	{
+		MiningGameState->OnGameFlowStateChanged.AddUniqueDynamic(
+			this, &ThisClass::HandleGameFlowStateChanged);
+		HandleGameFlowStateChanged(MiningGameState->GetGameFlowState());
+		return;
+	}
+
+	HandleGameFlowStateChanged(EDRGameFlowState::WaitingForPlayers);
+}
+
+void ADRLootBoxActor::UnbindGameFlowState()
+{
+	if (IsValid(MiningGameState))
+	{
+		MiningGameState->OnGameFlowStateChanged.RemoveDynamic(
+			this, &ThisClass::HandleGameFlowStateChanged);
+	}
+
+	MiningGameState = nullptr;
+}
+
+void ADRLootBoxActor::HandleGameFlowStateChanged(EDRGameFlowState GameFlowState)
+{
+	bIsGameFlowAvailable = GameFlowState == EDRGameFlowState::Countdown
+		|| GameFlowState == EDRGameFlowState::Playing;
+	ApplyGameFlowAvailability();
+}
+
+void ADRLootBoxActor::ApplyGameFlowAvailability()
+{
+	SetActorEnableCollision(bIsGameFlowAvailable && !IsBroken());
+	ApplyVisibility();
 }
 
 void ADRLootBoxActor::OnConstruction(const FTransform& Transform)
@@ -306,7 +360,7 @@ void ADRLootBoxActor::OnRep_VoxelExposed()
 
 void ADRLootBoxActor::ApplyVisibility()
 {
-	SetActorHiddenInGame(!bIsVoxelExposed || bHideForContainedDeath);
+	SetActorHiddenInGame(!bIsGameFlowAvailable || !bIsVoxelExposed || bHideForContainedDeath);
 }
 
 void ADRLootBoxActor::RefreshDynamicMaterialColor()
