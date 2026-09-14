@@ -596,7 +596,8 @@ void ADRMiningGameModeBase::EndGame()
 		UDRInventoryComponent* Inventory = IsValid(PlayerController) ? PlayerController->GetInventoryComponent() : nullptr;
 		if (IsValid(Inventory))
 		{
-			Inventory->ResetWeaponUpgrades();
+			// EndGame 이후 무기 업그레이드를 하지 않도록 주석 처리
+			//Inventory->ResetWeaponUpgrades();
 		}
 	}
 
