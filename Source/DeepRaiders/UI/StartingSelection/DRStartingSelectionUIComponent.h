@@ -31,6 +31,7 @@ private:
 
 	void ShowStartingSelection();
 	void RefreshMoveInput();
+	void HandleSelectionAvailabilityChanged(bool IsSelectionAvailable);
 
 	UFUNCTION()
 	void HandleGameFlowStateChanged(EDRGameFlowState GameFlowState);
