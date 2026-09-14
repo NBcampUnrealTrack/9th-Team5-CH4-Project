@@ -700,12 +700,27 @@ bool UDRGA_FireProjectile::ResolveProjectileAimPoint(const FVector& FireOrigin, 
 	FCollisionQueryParams QueryParams;
 	BuildWeaponTraceQueryParams(QueryParams);
 
-	FHitResult ObstructionHit;
-	const bool bBlockingHit = World->LineTraceSingleByChannel(
-		ObstructionHit, FireOrigin, ObstructionTraceEnd, DRCollisionChannels::Projectile, QueryParams);
-	if (bBlockingHit)
+	// 총구 검사도 아군 배리어를 통과시켜 카메라 조준과 같은 팀 판정 정책을 따른다.
+	constexpr int32 MaxFriendlyPassThroughIterations = 16;
+	for (int32 Iteration = 0; Iteration < MaxFriendlyPassThroughIterations; ++Iteration)
 	{
+		FHitResult ObstructionHit;
+		const bool bBlockingHit = World->LineTraceSingleByChannel(
+			ObstructionHit, FireOrigin, ObstructionTraceEnd, DRCollisionChannels::Projectile, QueryParams);
+		if (!bBlockingHit)
+		{
+			break;
+		}
+
+		AActor* HitActor = ObstructionHit.GetActor();
+		if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
+		{
+			QueryParams.AddIgnoredActor(HitActor);
+			continue;
+		}
+
 		OutAimPoint = ObstructionHit.ImpactPoint;
+		break;
 	}
 
 	return !OutAimPoint.ContainsNaN() && !OutAimPoint.Equals(FireOrigin, KINDA_SMALL_NUMBER);
