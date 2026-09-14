@@ -17,10 +17,12 @@ ADRGameplayCueAbsorb::ADRGameplayCueAbsorb(const FObjectInitializer& ObjectIniti
 	bAutoDestroyOnRemove = true;
 	AutoDestroyDelay = 0.0f;
 	bAutoAttachToOwner = false;
-	bUniqueInstancePerInstigator = true;
-	bUniqueInstancePerSourceObject = true;
-	bAllowMultipleOnActiveEvents = false;
-	bAllowMultipleWhileActiveEvents = false;
+	// 예측 Cue의 parameterless Removed도 현재 Target의 흡수 CueActor를 찾을 수 있어야 한다.
+	// 흡수 Presentation은 무기별 인스턴스가 아니라 Target별 하나만 유지한다.
+	bUniqueInstancePerInstigator = false;
+	bUniqueInstancePerSourceObject = false;
+	bAllowMultipleOnActiveEvents = true;
+	bAllowMultipleWhileActiveEvents = true;
 	GameplayCueName = GameplayCueTag.GetTagName();
 
 	PresentationRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PresentationRoot"));
@@ -61,21 +63,26 @@ bool ADRGameplayCueAbsorb::OnRemove_Implementation(AActor* MyTarget, const FGame
 
 bool ADRGameplayCueAbsorb::BeginPresentation(AActor* MyTarget, const FGameplayCueParameters& Parameters)
 {
-	if (bPresentationActive)
-	{
-		return true;
-	}
-
-	StopPresentation(false);
-
 	ADRPlayerCharacter* Character = Cast<ADRPlayerCharacter>(MyTarget);
 	const UDRRangedWeaponDefinition* RangedWeaponDefinition =
 		Cast<UDRRangedWeaponDefinition>(Parameters.SourceObject.Get());
 	UStaticMeshComponent* EquipmentMesh = Character ? Character->GetWorldHandEquipmentMesh() : nullptr;
 	if (!IsValid(Character) || !IsValid(RangedWeaponDefinition) || !IsValid(EquipmentMesh))
 	{
+		StopPresentation(false);
 		return false;
 	}
+
+	// OnActive와 WhileActive가 연속으로 들어오거나 같은 Cue가 재전달된 경우에는 다시 시작하지 않는다.
+	if (bPresentationActive
+		&& TargetCharacter.Get() == Character
+		&& WeaponDefinition.Get() == RangedWeaponDefinition)
+	{
+		return true;
+	}
+
+	// 무기 교체 중 새 SourceObject가 들어오면 남아 있는 이전 무기 Presentation을 같은 Actor에서 교체한다.
+	StopPresentation(false);
 
 	const FDRSnowAbsorbPresentationData& Presentation = RangedWeaponDefinition->SnowAbsorbPresentation;
 	const bool bHasSound = Presentation.StartSoundCueTag.IsValid() || Presentation.LoopSoundCueTag.IsValid()
