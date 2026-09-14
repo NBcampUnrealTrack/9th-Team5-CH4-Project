@@ -54,6 +54,7 @@ protected:
 
 private:
 	TArray<FGameplayEffectSpecHandle> PendingLandingEffectSpecs;
+	TArray<FGameplayEffectSpecHandle> PendingOwnerLandingEffectSpecs;
 	TWeakObjectPtr<UAbilitySystemComponent> LandingSourceAbilitySystem;
 	TWeakObjectPtr<ADRPlayerCharacter> LandingSourceCharacter;
 	TWeakObjectPtr<UDRCharacterMovementComponent> LandingMovementComponent;

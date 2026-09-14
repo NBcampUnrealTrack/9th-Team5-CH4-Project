@@ -131,6 +131,13 @@ public:
 		EDRSkillEffectTrigger Trigger,
 		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
 
+	/** 소유 캐릭터 대상으로 지정된 Rule의 완성된 GameplayEffectSpec을 생성한다. */
+	void BuildOwnerSkillEffectSpecs(
+		UAbilitySystemComponent* AbilitySystemComponent,
+		FGameplayTag SkillId,
+		EDRSkillEffectTrigger Trigger,
+		TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const;
+
 	/** 고유 ID가 일치하는 퍽의 효과와 슬롯을 함께 제거한다. */
 	bool TryRemovePerk(FGuid PerkInstanceId);
 

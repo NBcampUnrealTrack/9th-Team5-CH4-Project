@@ -66,6 +66,7 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 		MaxAirSpeedMultiplier);
 
 	TArray<FGameplayEffectSpecHandle> LandingEffectSpecs;
+	TArray<FGameplayEffectSpecHandle> OwnerLandingEffectSpecs;
 	if (ActorInfo->IsNetAuthority())
 	{
 		const ADRPlayerState* PlayerState =
@@ -79,14 +80,20 @@ void UDRGA_SuperJumpSkill::ActivateAbility(
 			PerkComponent->BuildEquippedSkillEffectSpecs(
 				ActorInfo->AbilitySystemComponent.Get(),
 				SkillDefinition->SkillId,
-				EDRSkillEffectTrigger::OnSkillCommitted,
+				EDRSkillEffectTrigger::OnSkillLanded,
 				LandingEffectSpecs);
+			PerkComponent->BuildOwnerSkillEffectSpecs(
+				ActorInfo->AbilitySystemComponent.Get(),
+				SkillDefinition->SkillId,
+				EDRSkillEffectTrigger::OnSkillLanded,
+				OwnerLandingEffectSpecs);
 		}
 	}
 
-	if (!LandingEffectSpecs.IsEmpty())
+	if (!LandingEffectSpecs.IsEmpty() || !OwnerLandingEffectSpecs.IsEmpty())
 	{
 		PendingLandingEffectSpecs = MoveTemp(LandingEffectSpecs);
+		PendingOwnerLandingEffectSpecs = MoveTemp(OwnerLandingEffectSpecs);
 		LandingSourceAbilitySystem = ActorInfo->AbilitySystemComponent.Get();
 		LandingSourceCharacter = Character;
 		LandingMovementComponent = MovementComponent;
@@ -136,8 +143,20 @@ void UDRGA_SuperJumpSkill::ApplyLandingEffects()
 		|| !SourceCharacter->HasAuthority()
 		|| !IsValid(SourceAbilitySystem)
 		|| !IsValid(World)
-		|| LandingEffectRadius <= 0.f
-		|| PendingLandingEffectSpecs.IsEmpty())
+		|| (PendingLandingEffectSpecs.IsEmpty() && PendingOwnerLandingEffectSpecs.IsEmpty()))
+	{
+		return;
+	}
+
+	for (const FGameplayEffectSpecHandle& EffectSpec : PendingOwnerLandingEffectSpecs)
+	{
+		if (EffectSpec.IsValid())
+		{
+			SourceAbilitySystem->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+		}
+	}
+
+	if (PendingLandingEffectSpecs.IsEmpty() || LandingEffectRadius <= 0.f)
 	{
 		return;
 	}
@@ -227,6 +246,7 @@ void UDRGA_SuperJumpSkill::ClearPendingLandingEffects()
 	}
 
 	PendingLandingEffectSpecs.Reset();
+	PendingOwnerLandingEffectSpecs.Reset();
 	LandingSourceAbilitySystem.Reset();
 	LandingSourceCharacter.Reset();
 	LandingMovementComponent.Reset();
