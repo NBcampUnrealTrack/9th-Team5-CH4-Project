@@ -22,15 +22,16 @@ namespace
 		TArray<int32> Indices;
 	};
 
-	template<typename T>
+	template <typename T>
 	TMap<FIntVector, FDepositDataBatch> GroupDataBatches(const TArray<T>& Cells, bool bIncludeSupport)
 	{
 		TMap<FIntVector, FDepositDataBatch> Batches;
 		for (int32 Index = 0; Index < Cells.Num(); ++Index)
 		{
 			const FIntVector Position = Cells[Index].Position;
-			const FIntVector Key(FMath::FloorToInt(double(Position.X) / 32),
-				FMath::FloorToInt(double(Position.Y) / 32), FMath::FloorToInt(double(Position.Z) / 32));
+			const FIntVector Key(FMath::FloorToInt(static_cast<double>(Position.X) / 32),
+			                     FMath::FloorToInt(static_cast<double>(Position.Y) / 32),
+			                     FMath::FloorToInt(static_cast<double>(Position.Z) / 32));
 			auto& Batch = Batches.FindOrAdd(Key);
 			Batch.Bounds += Position;
 			if (bIncludeSupport) { Batch.Bounds += Position - FIntVector(0, 0, 1); }
@@ -42,22 +43,23 @@ namespace
 	void UpdateChangedChunks(AVoxelWorld* VoxelWorld, const TArray<FDRVoxelDepositCell>& Cells)
 	{
 		// Scattered writes must not rebuild the large empty box between drops.
-		constexpr int32 ChunkSize = 32;
 		TMap<FIntVector, FVoxelIntBoxWithValidity> Chunks;
 		for (const FDRVoxelDepositCell& Cell : Cells)
 		{
-			const FIntVector Chunk(FMath::FloorToInt(double(Cell.Position.X) / ChunkSize),
-				FMath::FloorToInt(double(Cell.Position.Y) / ChunkSize),
-				FMath::FloorToInt(double(Cell.Position.Z) / ChunkSize));
+			constexpr int32 ChunkSize = 32;
+			const FIntVector Chunk(FMath::FloorToInt(static_cast<double>(Cell.Position.X) / ChunkSize),
+			                       FMath::FloorToInt(static_cast<double>(Cell.Position.Y) / ChunkSize),
+			                       FMath::FloorToInt(static_cast<double>(Cell.Position.Z) / ChunkSize));
 			Chunks.FindOrAdd(Chunk) += Cell.Position;
 		}
 		for (const auto& Chunk : Chunks)
 		{
 			// Group nearby writes, but never expand a small edit to an entire chunk.
 			UVoxelBlueprintLibrary::UpdateBounds(VoxelWorld,
-				Chunk.Value.GetBox().Extend(1));
+			                                     Chunk.Value.GetBox().Extend(1));
 		}
 	}
+
 	FVoxelMaterial MakeDepositMaterial(uint8 MaterialIndex)
 	{
 		// 기본 생성자는 채널을 초기화하지 않습니다. 맵의 기본 눈과 색상/UV를 맞춥니다.
@@ -225,7 +227,7 @@ namespace
 		TArray<FDRVoxelDepositCell>& ChangedCells)
 	{
 		const float DepositAmount = FMath::Min(0.25f,
-			Plan.Settings.DepositAmountPerPass * FMath::Max(0.f, Write.AmountScale));
+		                                       Plan.Settings.DepositAmountPerPass * FMath::Max(0.f, Write.AmountScale));
 		if (DepositAmount <= SMALL_NUMBER ||
 			!IsInsideBounds(Write.Position, Plan.WriteVoxelMin, Plan.WriteVoxelMax) ||
 			Write.Position.Z <= Plan.WriteVoxelMin.Z ||
@@ -253,18 +255,18 @@ namespace
 		}
 
 		const float SurfaceHeight = BelowValue <= 0.f
-			? BelowPosition.Z + (-BelowValue) / (CurrentValue - BelowValue)
-			: Write.StaticMeshSurfaceZ;
+			                            ? BelowPosition.Z + (-BelowValue) / (CurrentValue - BelowValue)
+			                            : Write.StaticMeshSurfaceZ;
 		const float NewHeight = SurfaceHeight + DepositAmount;
 		// 두 셀의 연속적인 표면 값을 함께 낮춥니다. 기존 고체는 재질을 바꾸지 않습니다.
 		if (Write.bAllowBelowSupport && !WrittenPositions.Contains(BelowPosition))
 		{
 			RecordDepositVoxel(Data, Material, BelowPosition,
-				FMath::Min(BelowValue, FMath::Clamp(BelowPosition.Z - NewHeight, -1.f, 1.f)),
-				WrittenPositions, ModifiedBounds, ChangedCells, BelowValue > 0.f);
+			                   FMath::Min(BelowValue, FMath::Clamp(BelowPosition.Z - NewHeight, -1.f, 1.f)),
+			                   WrittenPositions, ModifiedBounds, ChangedCells, BelowValue > 0.f);
 		}
 		const float NewValue = FMath::Min(CurrentValue,
-			FMath::Clamp(Write.Position.Z - NewHeight, -1.f, 1.f));
+		                                  FMath::Clamp(Write.Position.Z - NewHeight, -1.f, 1.f));
 		if (!FMath::IsNearlyEqual(CurrentValue, NewValue))
 		{
 			RecordDepositVoxel(
@@ -277,7 +279,6 @@ namespace
 				ChangedCells);
 		}
 	}
-
 }
 
 bool FDRVoxelDepositOperations::PrepareDepositCommand(
@@ -299,9 +300,9 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 	// Vertical data columns require an upright voxel world, just like mesh support heights.
 	if (!VoxelWorld->GetActorUpVector().Equals(FVector::UpVector, 0.001f)) { return false; }
 	GetLocalVoxelBoundsForWorldBox(VoxelWorld, Command.AreaCenter, Command.AreaExtent,
-		OutPlan.WriteVoxelMin, OutPlan.WriteVoxelMax);
+	                               OutPlan.WriteVoxelMin, OutPlan.WriteVoxelMax);
 	if (!IsSafeInclusiveVoxelBounds(OutPlan.WriteVoxelMin, OutPlan.WriteVoxelMax)) { return false; }
-	const int64 Depth = int64(OutPlan.WriteVoxelMax.Z) - OutPlan.WriteVoxelMin.Z + 1;
+	const int64 Depth = static_cast<int64>(OutPlan.WriteVoxelMax.Z) - OutPlan.WriteVoxelMin.Z + 1;
 	const double RadiusFloat = Settings.DepositSpreadRadius / VoxelWorld->VoxelSize;
 	if (Depth < 2 || Depth > 4096 || RadiusFloat > 16) { return false; }
 	const int32 Radius = FMath::RoundToInt(RadiusFloat);
@@ -315,12 +316,12 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 	for (int32 Drop = 0; Drop < Drops; ++Drop)
 	{
 		const FIntPoint Center(Random.RandRange(OutPlan.WriteVoxelMin.X, OutPlan.WriteVoxelMax.X),
-			Random.RandRange(OutPlan.WriteVoxelMin.Y, OutPlan.WriteVoxelMax.Y));
+		                       Random.RandRange(OutPlan.WriteVoxelMin.Y, OutPlan.WriteVoxelMax.Y));
 		for (int32 X = -Radius; X <= Radius; ++X)
 		{
 			for (int32 Y = -Radius; Y <= Radius; ++Y)
 			{
-				const float Distance = FMath::Sqrt(float(X * X + Y * Y));
+				const float Distance = FMath::Sqrt(static_cast<float>(X * X + Y * Y));
 				if (Distance > Radius + 0.5f) { continue; }
 				const FIntPoint XY = Center + FIntPoint(X, Y);
 				if (XY.X < OutPlan.WriteVoxelMin.X || XY.X > OutPlan.WriteVoxelMax.X ||
@@ -339,7 +340,8 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 	for (TActorIterator<APawn> It(World); It; ++It) { Query.AddIgnoredActor(*It); }
 	const float Top = Command.AreaCenter.Z + Command.AreaExtent.Z;
 	const float Bottom = Command.AreaCenter.Z - Command.AreaExtent.Z;
-	const float MinimumNormalZ = FMath::Cos(FMath::DegreesToRadians(FMath::Clamp(Command.MaxStaticMeshSlopeAngle, 0.f, 90.f)));
+	const float MinimumNormalZ = FMath::Cos(
+		FMath::DegreesToRadians(FMath::Clamp(Command.MaxStaticMeshSlopeAngle, 0.f, 90.f)));
 	FVoxelData& Data = VoxelWorld->GetData();
 	for (const auto& Column : Columns)
 	{
@@ -347,14 +349,14 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 		const FVector Sample = VoxelWorld->LocalToGlobalFloatBP(FVector(XY.X, XY.Y, 0));
 		TArray<FHitResult> Hits;
 		World->LineTraceMultiByObjectType(Hits, FVector(Sample.X, Sample.Y, Top),
-			FVector(Sample.X, Sample.Y, Bottom), Objects, Query);
+		                                  FVector(Sample.X, Sample.Y, Bottom), Objects, Query);
 		const FHitResult* Hit = FindHighestHit(Hits);
 		const float MeshZ = Hit ? VoxelWorld->GlobalToLocalFloat(Hit->ImpactPoint).Z : -MAX_flt;
 		int32 SolidZ = MIN_int32;
 		float VoxelHeight = -MAX_flt;
 		{
 			const FVoxelIntBox Bounds(FIntVector(XY.X, XY.Y, OutPlan.WriteVoxelMin.Z),
-				FIntVector(XY.X + 1, XY.Y + 1, OutPlan.WriteVoxelMax.Z + 1));
+			                          FIntVector(XY.X + 1, XY.Y + 1, OutPlan.WriteVoxelMax.Z + 1));
 			FVoxelReadScopeLock Lock(Data, Bounds, FUNCTION_FNAME);
 			float Above = Data.GetValue(FIntVector(XY.X, XY.Y, OutPlan.WriteVoxelMax.Z), 0).ToFloat();
 			// A solid ceiling has no exposed surface within this area.
@@ -376,7 +378,10 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 		{
 			// An ineligible roof still occludes the snow below it.
 			if (!Command.bDepositOnStaticMeshes || !FMath::IsFinite(MeshZ) ||
-				!IsEligibleStaticMeshDepositHit(*Hit, MinimumNormalZ, Command.RequiredStaticMeshSurfaceTag)) { continue; }
+				!IsEligibleStaticMeshDepositHit(*Hit, MinimumNormalZ, Command.RequiredStaticMeshSurfaceTag))
+			{
+				continue;
+			}
 			Write.Position = FIntVector(XY.X, XY.Y, FMath::FloorToInt(MeshZ) + 1);
 			Write.bHasStaticMeshSupport = true;
 			Write.StaticMeshSurfaceZ = MeshZ;
@@ -390,7 +395,8 @@ bool FDRVoxelDepositOperations::PrepareDepositCommand(
 		if (!IsInsideBounds(Write.Position, OutPlan.WriteVoxelMin, OutPlan.WriteVoxelMax) ||
 			!Command.ContainsWorldPosition(VoxelWorld->LocalToGlobalFloatBP(FVector(Write.Position)))) { continue; }
 		Write.bAllowBelowSupport = Write.Position.Z > OutPlan.WriteVoxelMin.Z &&
-			Command.ContainsWorldPosition(VoxelWorld->LocalToGlobalFloatBP(FVector(Write.Position - FIntVector(0, 0, 1))));
+			Command.ContainsWorldPosition(
+				VoxelWorld->LocalToGlobalFloatBP(FVector(Write.Position - FIntVector(0, 0, 1))));
 		Write.AmountScale = Column.Value;
 		OutPlan.Writes.Add(Write);
 	}
@@ -480,8 +486,8 @@ void FDRVoxelDepositOperations::LevelDepositPlan(AVoxelWorld* VoxelWorld, FDRVox
 				continue;
 			}
 			const float Height = Below <= 0.f
-				? Write.Position.Z - 1.f + (-Below) / (Above - Below)
-				: Write.StaticMeshSurfaceZ;
+				                     ? Write.Position.Z - 1.f + (-Below) / (Above - Below)
+				                     : Write.StaticMeshSurfaceZ;
 			Surfaces.Add(FIntPoint(Write.Position.X, Write.Position.Y), {Height, &Write});
 		}
 	}
