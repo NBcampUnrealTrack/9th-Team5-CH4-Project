@@ -8,6 +8,7 @@
 #include "DeepRaiders/LootBox/Component/DRLootDropComponent.h"
 #include "DeepRaiders/Player/DRPlayerCharacter.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -18,6 +19,8 @@
 
 ADRLootBoxActor::ADRLootBoxActor()
 {
+	IdleLoopSoundCueTag = DRGameplayTags::GameplayCue_Sound_Breakable_LootBox_Idle;
+
 	LootDropComponent = CreateDefaultSubobject<UDRLootDropComponent>(TEXT("LootDropComponent"));
 	LootDropComponent->SetSpawnMode(EDRLootSpawnMode::Sequential);
 	LootSpawnPointComponent = CreateDefaultSubobject<USceneComponent>(TEXT("LootSpawnPointComponent"));
@@ -53,6 +56,7 @@ void ADRLootBoxActor::BeginPlay()
 
 void ADRLootBoxActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	StopIdleLoopSound();
 	UnbindGameFlowState();
 	UnbindLocalPlayerVisibilityTags();
 	GetWorldTimerManager().ClearTimer(LocalPlayerVisibilityBindRetryTimer);
@@ -179,6 +183,14 @@ void ADRLootBoxActor::HandleBroken(const FDRBreakableDamageContext& DamageContex
 	bWaitingForLootSpawnSequence = LootDropComponent->IsSpawnSequenceActive();
 }
 
+void ADRLootBoxActor::ApplyBrokenPresentation()
+{
+	Super::ApplyBrokenPresentation();
+
+	RefreshNiagara();
+	RefreshIdleLoopSound();
+}
+
 bool ADRLootBoxActor::ShouldDeferBrokenDestruction() const
 {
 	return bWaitingForLootSpawnSequence;
@@ -280,6 +292,44 @@ void ADRLootBoxActor::RefreshNiagara()
 	}
 }
 
+void ADRLootBoxActor::RefreshIdleLoopSound()
+{
+	if (GetNetMode() == NM_DedicatedServer || !IdleLoopSoundCueTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = GetActorLocation();
+	Parameters.Instigator = this;
+	Parameters.EffectCauser = this;
+
+	// 눈에 묻혀 보이지 않더라도 위치를 찾을 수 있도록 bIsVoxelExposed는 재생 조건에 포함하지 않는다.
+	const bool bShouldPlay = bIsGameFlowAvailable && !IsBroken() && !bHideForContainedDeath;
+	if (bShouldPlay)
+	{
+		UDRGameplayCuePresentationLibrary::ActivateLocalSoundCue(this, IdleLoopSoundCueTag, Parameters);
+		return;
+	}
+
+	UDRGameplayCuePresentationLibrary::RemoveLocalSoundCue(this, IdleLoopSoundCueTag, Parameters);
+}
+
+void ADRLootBoxActor::StopIdleLoopSound()
+{
+	if (GetNetMode() == NM_DedicatedServer || !IdleLoopSoundCueTag.IsValid())
+	{
+		return;
+	}
+
+	FGameplayCueParameters Parameters;
+	Parameters.Location = GetActorLocation();
+	Parameters.Instigator = this;
+	Parameters.EffectCauser = this;
+
+	UDRGameplayCuePresentationLibrary::RemoveLocalSoundCue(this, IdleLoopSoundCueTag, Parameters);
+}
+
 void ADRLootBoxActor::BindLocalPlayerVisibilityTags()
 {
 	UWorld* World = GetWorld();
@@ -361,6 +411,7 @@ void ADRLootBoxActor::OnRep_VoxelExposed()
 void ADRLootBoxActor::ApplyVisibility()
 {
 	SetActorHiddenInGame(!bIsGameFlowAvailable || !bIsVoxelExposed || bHideForContainedDeath);
+	RefreshIdleLoopSound();
 }
 
 void ADRLootBoxActor::RefreshDynamicMaterialColor()

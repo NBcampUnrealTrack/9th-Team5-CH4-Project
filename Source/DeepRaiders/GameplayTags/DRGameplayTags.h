@@ -250,6 +250,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_Destroyed);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Hit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Destroyed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Idle);
 
 	// Gameplay Cue - Sound - World / Etc
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);

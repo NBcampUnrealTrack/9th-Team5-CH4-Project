@@ -989,6 +989,11 @@ namespace DRGameplayTags
 		GameplayCue_Sound_Breakable_LootBox_Destroyed,
 		"GameplayCue.Sound.Breakable.LootBox.Destroyed",
 		"Breakable actor was destroyed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Breakable_LootBox_Idle,
+		"GameplayCue.Sound.Breakable.LootBox.Idle",
+		"Looping positional sound emitted by an available loot box.");
 	
 	// =====================================================
 	// Gameplay Cue - Sound - Weapon

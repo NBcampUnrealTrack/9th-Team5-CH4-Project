@@ -43,6 +43,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	virtual void HandleBroken(const FDRBreakableDamageContext& DamageContext) override;
+	virtual void ApplyBrokenPresentation() override;
 	virtual bool ShouldDeferBrokenDestruction() const override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	
@@ -72,6 +73,10 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "VFX")
 	TObjectPtr<UNiagaraComponent> IdleAuraVFXComponent;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Loot|Sound",
+		meta = (Categories = "GameplayCue.Sound"))
+	FGameplayTag IdleLoopSoundCueTag;
 	
 private:
 	void HandleLootSpawnSequenceCompleted();
@@ -83,6 +88,8 @@ private:
 	void RefreshPresentation();
 	void RefreshDynamicMaterialColor();
 	void RefreshNiagara();
+	void RefreshIdleLoopSound();
+	void StopIdleLoopSound();
 	void BindLocalPlayerVisibilityTags();
 	void UnbindLocalPlayerVisibilityTags();
 	void RefreshLocalPlayerVisibility();
