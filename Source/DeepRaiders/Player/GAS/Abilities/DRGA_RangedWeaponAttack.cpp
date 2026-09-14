@@ -882,6 +882,8 @@ void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* T
 	{
 		return;
 	}
+
+	bool bAppliedAnyEffect = false;
 	
 	for (const FGameplayEffectSpecHandle& SpecHandle : ImpactEffectSpecs)
 	{
@@ -893,8 +895,30 @@ void UDRGA_RangedWeaponAttack::ApplyImpactEffectSpecs(UAbilitySystemComponent* T
 		FGameplayEffectSpec ImpactSpec(*SpecHandle.Data.Get());
 		ImpactSpec.GetContext().AddHitResult(HitResult, true);
 		
-		SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);		
-	}	
+		SourceAbilitySystem->ApplyGameplayEffectSpecToTarget(ImpactSpec, TargetAbilitySystem);
+		bAppliedAnyEffect = true;
+	}
+
+	if (!bAppliedAnyEffect)
+	{
+		return;
+	}
+
+	ADRPlayerCharacter* TargetCharacter = Cast<ADRPlayerCharacter>(TargetAbilitySystem->GetAvatarActor());
+	if (!IsValid(TargetCharacter))
+	{
+		return;
+	}
+
+	AActor* SourceActor = ActorInfo->AvatarActor.Get();
+	FGameplayCueParameters Parameters;
+	Parameters.Location = HitResult.ImpactPoint;
+	Parameters.Normal = HitResult.ImpactNormal;
+	Parameters.Instigator = SourceActor;
+	Parameters.EffectCauser = SourceActor;
+	Parameters.SourceObject = const_cast<UDRProjectileWeaponItemDefinition*>(GetCurrentWeaponDefinition());
+
+	TargetAbilitySystem->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Player_Hit, Parameters);
 }
 
 

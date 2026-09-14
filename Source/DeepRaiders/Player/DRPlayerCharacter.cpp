@@ -37,6 +37,7 @@
 #include "DeepRaiders/Item/DRMeleeWeaponDefinition.h"
 #include "DeepRaiders/Item/DRWeaponPresentationTypes.h"
 #include "DeepRaiders/Player/Components/DRCharacterShadowComponent.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "Animation/AnimInstance.h"
 #include "DeepRaiders/Item/Animation/DRHitReactionSet.h"
 #include "DeepRaiders/UI/Nameplate/DRPlayerNameplateComponent.h"
@@ -962,8 +963,26 @@ void ADRPlayerCharacter::PlayHitReaction(
 	const FVector& ImpactLocation)
 {
 	if (GetNetMode() == NM_DedicatedServer
-		|| !IsValid(GetMesh())
 		|| IsDead())
+	{
+		return;
+	}
+
+	if (IsLocallyControlled())
+	{
+		// 공통 Hit Cue의 기존 3D 사운드와 별개로, 피격 당사자에게만 전경 2D 피드백을 한 번 재생한다.
+		FGameplayCueParameters Parameters;
+		Parameters.Location = ImpactLocation;
+		Parameters.Instigator = this;
+		Parameters.EffectCauser = this;
+
+		UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(
+			this,
+			DRGameplayTags::GameplayCue_Sound_Player_Hit_LocalFeedback,
+			Parameters);
+	}
+
+	if (!IsValid(GetMesh()))
 	{
 		return;
 	}

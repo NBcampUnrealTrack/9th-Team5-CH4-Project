@@ -866,6 +866,11 @@ namespace DRGameplayTags
 		"Player received a resolved hostile hit.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Hit_LocalFeedback,
+		"GameplayCue.Sound.Player.Hit.LocalFeedback",
+		"Local 2D feedback for the player who received a hit.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Dig,
 		"GameplayCue.Sound.Dig",
 		"Digging sound.");
