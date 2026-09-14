@@ -41,6 +41,11 @@ bool ADRShop::IsPawnInShopArea(const APawn* Pawn) const
 
 bool ADRShop::CanInteract_Implementation(APawn* Interactor) const
 {
+	if (IsPawnInShopArea(Interactor))
+	{
+		return IsValid(Interactor->GetController());
+	}
+
 	FVector InteractionLocation;
 	return FindInteractionPoint(Interactor, InteractionLocation);
 }
