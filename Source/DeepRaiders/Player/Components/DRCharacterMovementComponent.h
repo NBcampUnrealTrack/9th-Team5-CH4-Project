@@ -157,6 +157,7 @@ private:
 	void UnbindAbilitySystem();
 	void HandleMoveSpeedMultiplierChanged(const FOnAttributeChangeData& Data);
 	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void HandleFrozenTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
 	void ApplyMoveSpeedMultiplier(float Multiplier);
 
 	void PhysMovementAction(float DeltaTime, int32 Iterations);
@@ -178,6 +179,7 @@ private:
 	TWeakObjectPtr<AVoxelWorld> LastVoxelFloorWorld;
 	FDelegateHandle MoveSpeedChangedDelegateHandle;
 	FDelegateHandle VoxelContainedTagChangedDelegateHandle;
+	FDelegateHandle FrozenTagChangedDelegateHandle;
 	float BaseWalkSpeed = 0.f;
 	float AirControlBeforeSuperJump = 0.f;
 	float SuperJumpMaxAirSpeedMultiplier = 1.f;

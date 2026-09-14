@@ -645,6 +645,15 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
             this,
             &ThisClass::HandleVoxelContainedTagChanged);
 
+    FrozenTagChangedDelegateHandle =
+        AbilitySystemComponent
+            ->RegisterGameplayTagEvent(
+                DRGameplayTags::State_Frozen,
+                EGameplayTagEventType::NewOrRemoved)
+            .AddUObject(
+                this,
+                &ThisClass::HandleFrozenTagChanged);
+        
     ApplyMoveSpeedMultiplier(
         AbilitySystemComponent->GetNumericAttribute(
             UDRPlayerAttributeSet::GetMoveSpeedMultiplierAttribute()));
@@ -653,6 +662,11 @@ void UDRCharacterMovementComponent::BindAbilitySystem(
         DRGameplayTags::State_VoxelContained,
         AbilitySystemComponent->GetTagCount(
             DRGameplayTags::State_VoxelContained));
+    
+    HandleFrozenTagChanged(
+        DRGameplayTags::State_Frozen,
+        AbilitySystemComponent->GetTagCount(
+            DRGameplayTags::State_Frozen));
 }
 
 void UDRCharacterMovementComponent::ActivateSuperJumpAirControl(
@@ -704,9 +718,20 @@ void UDRCharacterMovementComponent::UnbindAbilitySystem()
         .Remove(VoxelContainedTagChangedDelegateHandle);
     }
 
+    if (BoundAbilitySystemComponent.IsValid()
+        && FrozenTagChangedDelegateHandle.IsValid())
+    {
+        BoundAbilitySystemComponent
+            ->RegisterGameplayTagEvent(
+                DRGameplayTags::State_Frozen,
+                EGameplayTagEventType::NewOrRemoved)
+            .Remove(FrozenTagChangedDelegateHandle);
+    }
+
     MoveSpeedChangedDelegateHandle.Reset();
 	VoxelContainedTagChangedDelegateHandle.Reset();
     BoundAbilitySystemComponent.Reset();
+    FrozenTagChangedDelegateHandle.Reset();
 }
 
 void UDRCharacterMovementComponent::HandleMoveSpeedMultiplierChanged(
@@ -726,6 +751,48 @@ void UDRCharacterMovementComponent::HandleVoxelContainedTagChanged(
 	}
 
 	ExitVoxelContainedMode();
+}
+
+void UDRCharacterMovementComponent::HandleFrozenTagChanged(
+    const FGameplayTag CallbackTag,
+    int32 NewCount)
+{
+    if (NewCount <= 0
+        || !IsValid(CharacterOwner)
+        || !CharacterOwner->HasAuthority())
+    {
+        return;
+    }
+
+    UDRMovementActionComponent* MovementAction =
+        GetMovementActionComponent();
+
+    if (!IsValid(MovementAction)
+        || !MovementAction->IsZiplineActive())
+    {
+        return;
+    }
+
+    /*
+     * Frozen 상태에서는 Zipline 탑승을 유지하지 않는다.
+     * 기존 Rail / Attach 보정 속도도 Falling으로 넘기지 않는다.
+     */
+    Velocity = FVector::ZeroVector;
+    ZiplineRailSpeed = 0.f;
+    ManualZiplineInput = 0;
+
+    ClearAccumulatedForces();
+
+    MovementAction->EndMovementAction(
+        EDRMovementActionEndReason::Invalidated);
+
+    if (IsCustomMovementModeActive(
+            EDRCustomMovementMode::MovementAction))
+    {
+        ExitCustomMovementMode();
+    }
+
+    CharacterOwner->ForceNetUpdate();
 }
 
 void UDRCharacterMovementComponent::ApplyMoveSpeedMultiplier(float Multiplier)
