@@ -25,8 +25,7 @@ UDRGA_CharacterSkillBase::UDRGA_CharacterSkillBase()
 	InitialAbilityTags.AddTag(DRGameplayTags::Ability_Skill);
 	SetAssetTags(InitialAbilityTags);
 
-	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
-	
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_GamePreparing);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Dead);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);

@@ -42,6 +42,7 @@ UDRGA_ThrowItem::UDRGA_ThrowItem()
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_GamePreparing);
 	
 	TargetActorClass = ADRThrowTargetActor::StaticClass();	
 }

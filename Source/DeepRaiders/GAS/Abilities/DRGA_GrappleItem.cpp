@@ -38,7 +38,6 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Skill);
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack);
 	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Snow_Absorb);
-	BlockAbilitiesWithTag.AddTag(DRGameplayTags::State_GamePreparing);
 
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Skill);
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack);
@@ -48,6 +47,7 @@ UDRGA_GrappleItem::UDRGA_GrappleItem()
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_Frozen);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_VoxelContained);
 	ActivationBlockedTags.AddTag(DRGameplayTags::State_QuickSlot_ActivationInterval);
+	ActivationBlockedTags.AddTag(DRGameplayTags::State_GamePreparing);
 
 	TargetActorClass = ADRGrappleTargetActor::StaticClass();
 }
