@@ -62,7 +62,7 @@ protected:
 	float GetChargeQueueTailRemaining(
 		const FGameplayAbilityActorInfo* ActorInfo,
 		FGameplayTag CooldownTag) const;
-	void ScheduleCooldownSafetyCleanup(
+	void ScheduleTimedTagSafetyCleanup(
 		const FGameplayAbilityActorInfo* ActorInfo,
 		FActiveGameplayEffectHandle CooldownEffectHandle,
 		FGameplayTag CooldownTag,

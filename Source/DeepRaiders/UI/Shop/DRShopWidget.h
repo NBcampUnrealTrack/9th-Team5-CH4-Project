@@ -56,9 +56,6 @@ private:
 	void HandleBuyPanelButtonClicked();
 
 	UFUNCTION()
-	void HandleSellPanelButtonClicked();
-
-	UFUNCTION()
 	void HandleCloseButtonClicked();
 
 	UFUNCTION()
@@ -68,12 +65,6 @@ private:
 	void HandleSellRequested(EDRShopSellTargetType TargetType, FGuid InstanceId);
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> BuyPanelButton;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> SellPanelButton;
-
-	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
 
 	UPROPERTY(meta = (BindWidget))
@@ -81,8 +72,5 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UDRShopBuyPanelWidget> BuyPanel;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UDRShopSellPanelWidget> SellPanel;
 
 };

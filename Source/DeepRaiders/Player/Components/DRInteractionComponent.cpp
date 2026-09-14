@@ -7,6 +7,7 @@
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
 #include "DeepRaiders/Shop/DRShop.h"
+#include "DeepRaiders/Item/DRWorldItemActor.h"
 
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -231,6 +232,19 @@ EDRInteractionValidationResult UDRInteractionComponent::EvaluateInteractionTarge
 		return EDRInteractionValidationResult::InvalidInteractor;
 	}
 
+	const ADRShop* Shop = Cast<ADRShop>(Target);
+	if (IsValid(Shop) && Shop->IsPawnInShopArea(Interactor))
+	{
+		OutAimDot = 1.f;
+		OutDistanceSquared = 0.f;
+		if (OutPromptData != nullptr)
+		{
+			*OutPromptData = PromptData;
+		}
+
+		return EDRInteractionValidationResult::Success;
+	}
+
 	FVector ViewLocation;
 	FRotator ViewRotation;
 	Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
@@ -344,10 +358,26 @@ bool UDRInteractionComponent::HasClearLineOfSight(UWorld* World, APawn* Interact
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRInteractLineOfSight), true, Interactor);
 
 	FHitResult HitResult;
-	const bool bBlockingHit = World->LineTraceSingleByChannel(HitResult, ViewLocation, TargetLocation,
-	                                                          ECC_Visibility, QueryParams);
+	while (World->LineTraceSingleByChannel(
+		HitResult, ViewLocation, TargetLocation, ECC_Visibility, QueryParams))
+	{
+		if (HitResult.GetActor() == Target)
+		{
+			return true;
+		}
 
-	return !bBlockingHit || HitResult.GetActor() == Target;
+		const ADRShop* BlockingShop = Cast<ADRShop>(HitResult.GetActor());
+		if (!Target->IsA<ADRWorldItemActor>()
+			|| !IsValid(BlockingShop)
+			|| !BlockingShop->IsPawnInShopArea(Interactor))
+		{
+			return false;
+		}
+
+		QueryParams.AddIgnoredActor(BlockingShop);
+	}
+
+	return true;
 }
 
 void UDRInteractionComponent::SetFocusedTarget(AActor* NewTarget, const FDRInteractionPromptData& NewPromptData)

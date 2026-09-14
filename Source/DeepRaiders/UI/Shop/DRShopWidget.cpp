@@ -23,26 +23,11 @@ void UDRShopWidget::InitializeInventoryPanels(
 	{
 		BuyPanel->InitializeInventory(InventoryComponent);
 	}
-
-	if (IsValid(SellPanel))
-	{
-		SellPanel->InitializeInventory(InventoryComponent, PerkComponent);
-	}
 }
 
 void UDRShopWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
-
-	if (IsValid(BuyPanelButton))
-	{
-		BuyPanelButton->OnClicked.AddDynamic(this, &ThisClass::HandleBuyPanelButtonClicked);
-	}
-
-	if (IsValid(SellPanelButton))
-	{
-		SellPanelButton->OnClicked.AddDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
-	}
 
 	if (IsValid(CloseButton))
 	{
@@ -54,25 +39,11 @@ void UDRShopWidget::NativeOnInitialized()
 		BuyPanel->OnOfferRequested.AddDynamic(this, &ThisClass::HandleOfferRequested);
 	}
 
-	if (IsValid(SellPanel))
-	{
-		SellPanel->OnSellRequested.AddDynamic(this, &ThisClass::HandleSellRequested);
-	}
-
 	HandleBuyPanelButtonClicked();
 }
 
 void UDRShopWidget::NativeDestruct()
 {
-	if (IsValid(BuyPanelButton))
-	{
-		BuyPanelButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleBuyPanelButtonClicked);
-	}
-
-	if (IsValid(SellPanelButton))
-	{
-		SellPanelButton->OnClicked.RemoveDynamic(this, &ThisClass::HandleSellPanelButtonClicked);
-	}
 
 	if (IsValid(CloseButton))
 	{
@@ -84,11 +55,6 @@ void UDRShopWidget::NativeDestruct()
 		BuyPanel->OnOfferRequested.RemoveDynamic(this, &ThisClass::HandleOfferRequested);
 	}
 
-	if (IsValid(SellPanel))
-	{
-		SellPanel->OnSellRequested.RemoveDynamic(this, &ThisClass::HandleSellRequested);
-	}
-
 	Super::NativeDestruct();
 }
 
@@ -97,14 +63,6 @@ void UDRShopWidget::HandleBuyPanelButtonClicked()
 	if (IsValid(PanelSwitcher) && IsValid(BuyPanel))
 	{
 		PanelSwitcher->SetActiveWidget(BuyPanel);
-	}
-}
-
-void UDRShopWidget::HandleSellPanelButtonClicked()
-{
-	if (IsValid(PanelSwitcher) && IsValid(SellPanel))
-	{
-		PanelSwitcher->SetActiveWidget(SellPanel);
 	}
 }
 

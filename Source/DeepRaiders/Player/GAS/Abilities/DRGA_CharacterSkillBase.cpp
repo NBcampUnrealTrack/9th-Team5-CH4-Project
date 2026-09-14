@@ -265,7 +265,7 @@ void UDRGA_CharacterSkillBase::ApplyCooldown(
 		AppliedCooldownHandle.WasSuccessfullyApplied());
 	if (AppliedCooldownHandle.WasSuccessfullyApplied())
 	{
-		ScheduleCooldownSafetyCleanup(
+		ScheduleTimedTagSafetyCleanup(
 			ActorInfo,
 			AppliedCooldownHandle,
 			SkillDefinition->CooldownTag,
@@ -433,7 +433,7 @@ float UDRGA_CharacterSkillBase::GetChargeQueueTailRemaining(
 	return QueueTailRemaining;
 }
 
-void UDRGA_CharacterSkillBase::ScheduleCooldownSafetyCleanup(
+void UDRGA_CharacterSkillBase::ScheduleTimedTagSafetyCleanup(
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FActiveGameplayEffectHandle CooldownEffectHandle,
 	const FGameplayTag CooldownTag,
@@ -459,8 +459,8 @@ void UDRGA_CharacterSkillBase::ScheduleCooldownSafetyCleanup(
 	}
 
 	// 정상적으로는 GE의 Duration이 태그를 회수한다. 서버 지연이나 취소 경로로
-	// GE가 남은 경우를 대비해, 쿨다운 종료 시점보다 조금 뒤에 해당 Handle만
-	// 강제로 회수한다. 다른 스킬/차지의 쿨다운은 건드리지 않는다.
+	// GE가 남은 경우를 대비해, 종료 시점보다 조금 뒤에 해당 Handle만 강제로
+	// 회수한다. 같은 태그를 쓰는 다른 효과는 건드리지 않는다.
 	constexpr float CleanupGraceSeconds = 0.25f;
 	const TWeakObjectPtr<UAbilitySystemComponent> WeakAbilitySystem =
 		AbilitySystemComponent;
@@ -476,7 +476,7 @@ void UDRGA_CharacterSkillBase::ScheduleCooldownSafetyCleanup(
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("[SkillCooldown][SafetyCleanup] Tag=%s Handle=%s Active=%d TagPresent=%d"),
+				TEXT("[TimedTag][SafetyCleanup] Tag=%s Handle=%s Active=%d TagPresent=%d"),
 				*CooldownTag.ToString(),
 				*CooldownEffectHandle.ToString(),
 				bEffectStillActive,
