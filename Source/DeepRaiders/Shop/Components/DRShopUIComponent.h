@@ -78,6 +78,8 @@ private:
 	/** 보유 눈이 변경되면 구매 가능 상태를 다시 계산한다. */
 	void HandleSnowGaugeChanged(const FOnAttributeChangeData& Data);
 
+	void HandleBlockingStateChanged(FGameplayTag Tag, int32 NewCount);
+
 	/** 현재 플레이어 상태에 맞춰 지정한 Offer UI를 갱신한다. */
 	void RefreshOffers(EDRShopOfferType OfferType);
 

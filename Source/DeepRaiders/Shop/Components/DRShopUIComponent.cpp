@@ -106,6 +106,14 @@ void UDRShopUIComponent::ShowShopWidget(AActor* ShopActor)
 		return;
 	}
 
+	const UAbilitySystemComponent* AbilitySystem = PlayerState->GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystem)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Frozen)
+		|| AbilitySystem->HasMatchingGameplayTag(DRGameplayTags::State_Dead))
+	{
+		return;
+	}
+
 	ShopWidget = Cast<UDRShopWidget>(UIManager->PushScreen(DRGameplayTags::UI_Screen_Shop));
 
 	if (!IsValid(ShopWidget))
@@ -218,6 +226,13 @@ void UDRShopUIComponent::BindShopEvents()
 			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
 				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).AddUObject(
 					this, &ThisClass::HandleSnowGaugeChanged);
+
+			const FGameplayTag BlockingTags[] = {DRGameplayTags::State_Frozen, DRGameplayTags::State_Dead};
+			for (const FGameplayTag Tag : BlockingTags)
+			{
+				AbilitySystem->RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
+					.AddUObject(this, &ThisClass::HandleBlockingStateChanged);
+			}
 		}
 	}
 }
@@ -262,6 +277,13 @@ void UDRShopUIComponent::UnbindShopEvents()
 		{
 			AbilitySystem->GetGameplayAttributeValueChangeDelegate(
 				UDRPlayerAttributeSet::GetSnowGaugeAttribute()).RemoveAll(this);
+
+			const FGameplayTag BlockingTags[] = {DRGameplayTags::State_Frozen, DRGameplayTags::State_Dead};
+			for (const FGameplayTag Tag : BlockingTags)
+			{
+				AbilitySystem->RegisterGameplayTagEvent(Tag, EGameplayTagEventType::NewOrRemoved)
+					.RemoveAll(this);
+			}
 		}
 	}
 }
@@ -320,6 +342,14 @@ void UDRShopUIComponent::HandleInventoryChanged()
 void UDRShopUIComponent::HandlePerksChanged()
 {
 	RefreshOffers(EDRShopOfferType::Perk);
+}
+
+void UDRShopUIComponent::HandleBlockingStateChanged(FGameplayTag, int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		HideShopWidget();
+	}
 }
 
 void UDRShopUIComponent::HandleSnowGaugeChanged(const FOnAttributeChangeData&)
