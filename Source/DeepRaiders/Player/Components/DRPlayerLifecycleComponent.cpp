@@ -160,11 +160,12 @@ void UDRPlayerLifecycleComponent::HandleDeathFromServer()
 		Parameters.Location = Character->GetActorLocation();
 		ASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Death, Parameters);
 
-		FGameplayTagContainer AttackTags;
+		FGameplayTagContainer AbilitiesToCancel;
 
-		AttackTags.AddTag(DRGameplayTags::Ability_Attack);
+		AbilitiesToCancel.AddTag(DRGameplayTags::Ability_Attack);
+		AbilitiesToCancel.AddTag(DRGameplayTags::Ability_Snow_Absorb);
 
-		ASC->CancelAbilities(&AttackTags, nullptr, nullptr);
+		ASC->CancelAbilities(&AbilitiesToCancel, nullptr, nullptr);
 	}
 
 	if (UDRJetpackComponent* Jetpack = Character->GetJetpackComponent())
