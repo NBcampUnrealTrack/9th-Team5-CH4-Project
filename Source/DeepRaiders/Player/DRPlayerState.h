@@ -329,6 +329,11 @@ private:
 	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
 	void RefreshJetpackVisualOnPawn();
 
+	UPROPERTY(EditDefaultsOnly, Category="GAS|Initial Attributes")
+	float InitialSnowGauge = 200.f;
+	
+	void ResetGameplayAttributesForGameStart();
+	
 #pragma region Teleport
 public:
 	UFUNCTION(BlueprintPure, Category = "Player|Teleport")

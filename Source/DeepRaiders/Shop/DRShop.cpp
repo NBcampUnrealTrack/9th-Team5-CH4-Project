@@ -1,7 +1,6 @@
 #include "DRShop.h"
 
 #include "Components/SceneComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/Shop/Components/DRShopAreaComponent.h"
 #include "DeepRaiders/Shop/Components/DRShopComponent.h"
@@ -95,10 +94,7 @@ bool ADRShop::FindInteractionPoint(
 		return false;
 	}
 
-	UStaticMeshComponent* ShopMesh =
-		FindComponentByClass<UStaticMeshComponent>();
-
-	if (!IsValid(ShopMesh))
+	if (!IsValid(ShopAreaComponent))
 	{
 		return false;
 	}
@@ -108,10 +104,10 @@ bool ADRShop::FindInteractionPoint(
 	Interactor->GetController()->GetPlayerViewPoint(ViewLocation, ViewRotation);
 
 	FHitResult HitResult;
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRShopInteraction), true, Interactor);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(DRShopInteraction), false, Interactor);
 	const FVector TraceEnd = ViewLocation + ViewRotation.Vector() * WORLD_MAX;
 
-	if (!ShopMesh->LineTraceComponent(HitResult, ViewLocation, TraceEnd, QueryParams))
+	if (!ShopAreaComponent->LineTraceComponent(HitResult, ViewLocation, TraceEnd, QueryParams))
 	{
 		return false;
 	}
@@ -124,13 +120,9 @@ void ADRShop::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (UStaticMeshComponent* ShopMesh =
-		FindComponentByClass<UStaticMeshComponent>())
-	{
-		ShopMesh->SetCollisionResponseToChannel(
-			DRCollisionChannels::Interaction,
-			ECR_Overlap);
-	}
+	ShopAreaComponent->SetCollisionResponseToChannel(
+		DRCollisionChannels::Interaction,
+		ECR_Overlap);
 
 	ShopAreaComponent->OnPawnExited.AddDynamic(
 		this,
