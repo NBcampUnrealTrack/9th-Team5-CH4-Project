@@ -962,6 +962,42 @@ void UDRPerkComponent::BuildEquippedSkillEffectSpecs(
 	}
 }
 
+void UDRPerkComponent::BuildOwnerSkillEffectSpecs(
+	UAbilitySystemComponent* AbilitySystemComponent,
+	FGameplayTag SkillId,
+	EDRSkillEffectTrigger Trigger,
+	TArray<FGameplayEffectSpecHandle>& OutEffectSpecs) const
+{
+	if (!IsValid(AbilitySystemComponent) || !GetOwner()->HasAuthority() || !SkillId.IsValid())
+	{
+		return;
+	}
+
+	for (const FDRPerkEntry& PerkEntry : PerkEntries)
+	{
+		const UDRPerkDefinition* PerkDefinition = PerkEntry.PerkDefinition;
+		if (!IsValid(PerkDefinition) || PerkEntry.EquippedSkillId != SkillId)
+		{
+			continue;
+		}
+
+		for (const FDRSkillEffectRule& EffectRule : PerkDefinition->EffectRules)
+		{
+			if (EffectRule.Trigger == Trigger
+				&& ResolveEffectTarget(*PerkDefinition, EffectRule) == EDRPerkEffectTarget::OwnerCharacter
+				&& EffectRule.EffectClass != nullptr)
+			{
+				FGameplayEffectSpecHandle EffectSpec = BuildSkillEffectRuleSpec(
+					AbilitySystemComponent, PerkDefinition, EffectRule, PerkDefinition->bPersistThroughDeath);
+				if (EffectSpec.IsValid())
+				{
+					OutEffectSpecs.Add(MoveTemp(EffectSpec));
+				}
+			}
+		}
+	}
+}
+
 bool UDRPerkComponent::TryRemovePerk(FGuid PerkInstanceId)
 {
 	ADRPlayerState* PlayerState = Cast<ADRPlayerState>(GetOwner());

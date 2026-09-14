@@ -25,7 +25,10 @@ enum class EDRSkillEffectTrigger : uint8
 	WhileSkillActive,
 
 	/** 스킬이 취소되지 않고 정상적으로 종료된 직후 한 번 적용한다. */
-	OnSkillCompleted
+	OnSkillCompleted,
+
+	/** 스킬별 실제 착지 판정이 성공한 직후 한 번 적용한다. 현재 슈퍼점프가 이 이벤트를 발생시킨다. */
+	OnSkillLanded
 };
 
 /** 퍽의 개별 EffectRule이 퍽 정의의 기존 EffectTarget을 선택적으로 재정의하는 방식이다. */
