@@ -71,11 +71,21 @@ void UDRGA_BlinkSkill::ActivateAbility(
 			RecoverySpec.Data->SetSetByCallerMagnitude(
 				DRGameplayTags::Data_BlinkRecovery_Duration,
 				RecoveryDuration);
-			ApplyGameplayEffectSpecToOwner(
+			const FActiveGameplayEffectHandle RecoveryEffectHandle = ApplyGameplayEffectSpecToOwner(
 				Handle,
 				ActorInfo,
 				ActivationInfo,
 				RecoverySpec);
+			if (RecoveryEffectHandle.WasSuccessfullyApplied())
+			{
+				// Duration GE가 종료된 뒤에도 남는 경우에는 이 GE만 회수한다.
+				// 다른 효과가 부여한 BlinkRecovery 태그는 건드리지 않는다.
+				ScheduleTimedTagSafetyCleanup(
+					ActorInfo,
+					RecoveryEffectHandle,
+					DRGameplayTags::State_BlinkRecovery,
+					RecoveryDuration);
+			}
 		}
 	}
 
