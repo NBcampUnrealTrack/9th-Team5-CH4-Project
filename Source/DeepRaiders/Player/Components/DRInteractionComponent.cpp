@@ -6,6 +6,7 @@
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/GameplayTags/DRGameplayTags.h"
 #include "DeepRaiders/Core/Interface/DRInteractableInterface.h"
+#include "DeepRaiders/Shop/DRShop.h"
 
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
@@ -149,8 +150,12 @@ AActor* UDRInteractionComponent::FindBestInteractionTarget(APawn* Interactor,
 		const bool bCloserToCrosshair = AimDot > BestAimDot + KINDA_SMALL_NUMBER;
 		const bool bSameAngleButCloser = FMath::IsNearlyEqual(AimDot, BestAimDot, KINDA_SMALL_NUMBER)
 			&& DistanceSquared < BestDistanceSquared;
+		const bool IsCandidateShop = Candidate->IsA<ADRShop>();
+		const bool IsBestTargetShop = IsValid(BestTarget) && BestTarget->IsA<ADRShop>();
 		
-		if (bCloserToCrosshair || bSameAngleButCloser)
+		if (!IsValid(BestTarget)
+			|| (!IsCandidateShop && IsBestTargetShop)
+			|| (IsCandidateShop == IsBestTargetShop && (bCloserToCrosshair || bSameAngleButCloser)))
 		{
 			BestTarget = Candidate;
 			BestAimDot = AimDot;
@@ -161,7 +166,8 @@ AActor* UDRInteractionComponent::FindBestInteractionTarget(APawn* Interactor,
 	
 	if (bCurrentTargetValid
 		&& IsValid(BestTarget)
-		&& BestTarget != CurrentTarget)
+		&& BestTarget != CurrentTarget
+		&& CurrentTarget->IsA<ADRShop>() == BestTarget->IsA<ADRShop>())
 	{
 		const float CurrentAngleDegrees = FMath::RadiansToDegrees(
 			FMath::Acos(FMath::Clamp(CurrentAimDot, -1.f, 1.f)));
