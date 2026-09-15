@@ -22,7 +22,8 @@ void UDRRoomEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 void UDRRoomEntryWidget::RefreshRoom()
 {
 	const FRoomServiceInfo Info = CurrentItem ? CurrentItem->RoomInfo : FRoomServiceInfo();
-	RoomId->SetText(FText::FromString(Info.RoomId));
+	// 목록에는 앞 6글자만 표시하고 접속에는 전체 ID를 사용한다.
+	RoomId->SetText(FText::FromString(Info.RoomId.Left(6)));
 	RoomName->SetText(FText::FromString(Info.Title));
 	RoomJoinCount->SetText(FText::Format(NSLOCTEXT("Rooms", "PlayerCount", "{0} / {1}"),
 		FText::AsNumber(Info.CurrentPlayers), FText::AsNumber(Info.MaxPlayers)));

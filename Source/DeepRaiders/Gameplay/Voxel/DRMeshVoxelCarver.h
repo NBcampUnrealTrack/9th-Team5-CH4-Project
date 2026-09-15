@@ -139,6 +139,14 @@ private:
 	bool StartCarveAsync(TFunction<void(bool)>&& Completion);
 	void TryExecuteCarveBatch();
 	void ExecuteNextCarver();
+	void ClearWorldReadyBindings();
+	void HandleWorldReadyTimeout();
+
+	UFUNCTION()
+	void HandleVoxelWorldGenerated();
+
+	TArray<TWeakObjectPtr<AVoxelWorld>> WaitingVoxelWorlds;
+	FTimerHandle WorldReadyTimeoutHandle;
 
 	UFUNCTION()
 	void HandleGamePhaseChanged(

@@ -252,6 +252,7 @@ void ADRMeshVoxelCarver::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADRMeshVoxelCarver::RestartCarveBatch()
 {
+	ClearWorldReadyBindings();
 	++BatchGeneration;
 	if (CarveCancellation.IsValid())
 	{
@@ -273,7 +274,8 @@ bool ADRMeshVoxelCarver::ShouldCarveOnGameStart(int32 PhaseIndex) const
 bool ADRMeshVoxelCarver::IsCarving() const
 {
 	return (CarveCancellation.IsValid() && !*CarveCancellation)
-		|| GetWorldTimerManager().IsTimerActive(RetryTimerHandle) || !PendingCarvers.IsEmpty();
+		|| GetWorldTimerManager().IsTimerActive(RetryTimerHandle)
+		|| !WaitingVoxelWorlds.IsEmpty() || !PendingCarvers.IsEmpty();
 }
 
 void ADRMeshVoxelCarver::HandleGamePhaseChanged(
@@ -293,6 +295,7 @@ void ADRMeshVoxelCarver::HandleGamePhaseChanged(
 
 void ADRMeshVoxelCarver::StartCarveBatch(bool bForGameStart)
 {
+	ClearWorldReadyBindings();
 	++BatchGeneration;
 	bBatchSucceeded = true;
 	bCarveBatchForGameStart = bForGameStart;
@@ -705,6 +708,43 @@ AVoxelWorld* ADRMeshVoxelCarver::ResolveVoxelWorld()
 	return nullptr;
 }
 
+void ADRMeshVoxelCarver::ClearWorldReadyBindings()
+{
+	for (const TWeakObjectPtr<AVoxelWorld>& World : WaitingVoxelWorlds)
+	{
+		if (World.IsValid())
+		{
+			World->OnGenerateWorld.RemoveDynamic(this, &ThisClass::HandleVoxelWorldGenerated);
+		}
+	}
+	WaitingVoxelWorlds.Reset();
+	GetWorldTimerManager().ClearTimer(WorldReadyTimeoutHandle);
+}
+
+void ADRMeshVoxelCarver::HandleVoxelWorldGenerated()
+{
+	// 생성 콜스택을 빠져나온 후 모든 대상 월드의 준비 상태를 다시 확인한다.
+	GetWorldTimerManager().SetTimer(
+		RetryTimerHandle, this, &ThisClass::TryExecuteCarveBatch,
+		DRMeshVoxelCarver::RetryInterval, false);
+}
+
+void ADRMeshVoxelCarver::HandleWorldReadyTimeout()
+{
+	ClearWorldReadyBindings();
+	GetWorldTimerManager().ClearTimer(RetryTimerHandle);
+	bBatchSucceeded = false;
+	UE_LOG(LogTemp, Error, TEXT("[Carver] BatchFailed Actor=%s Phase=%d Reason=WorldReadyTimeout"),
+		*GetPathName(), ActiveGamePhaseIndex);
+	if (bCarveBatchForGameStart)
+	{
+		if (ADRMiningGameModeBase* Mode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+		{
+			Mode->NotifyPhaseCarversReady(ActiveGamePhaseIndex, false);
+		}
+	}
+}
+
 void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 {
 	TArray<ADRMeshVoxelCarver*> Carvers;
@@ -736,36 +776,49 @@ void ADRMeshVoxelCarver::TryExecuteCarveBatch()
 
 	if (Carvers.IsEmpty() || Carvers[0] != this)
 	{
+		ClearWorldReadyBindings();
 		GetWorldTimerManager().ClearTimer(RetryTimerHandle);
 		return;
 	}
 
-	ADRMeshVoxelCarver* WaitingCarver = nullptr;
+	bool bMissingWorld = false;
+	bool bWaitingForCreation = false;
 	for (ADRMeshVoxelCarver* Carver : Carvers)
 	{
-		AVoxelWorld* VoxelWorld = IsValid(Carver) ? Carver->ResolveVoxelWorld() : nullptr;
-		if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated())
+		AVoxelWorld* VoxelWorld = Carver->ResolveVoxelWorld();
+		if (!IsValid(VoxelWorld))
 		{
-			WaitingCarver = Carver;
-			break;
+			bMissingWorld = true;
+			continue;
+		}
+		if (!VoxelWorld->IsCreated())
+		{
+			bWaitingForCreation = true;
+			VoxelWorld->OnGenerateWorld.AddUniqueDynamic(
+				this, &ThisClass::HandleVoxelWorldGenerated);
+			WaitingVoxelWorlds.AddUnique(VoxelWorld);
 		}
 	}
-	if (WaitingCarver != nullptr)
+	if (bMissingWorld || bWaitingForCreation)
 	{
-		if (++RetryCount >= DRMeshVoxelCarver::MaxRetryCount)
+		// 액터가 아직 없을 때만 검색을 재시도한다. 생성 대기는 델리게이트로 재개한다.
+		GetWorldTimerManager().ClearTimer(RetryTimerHandle);
+		if (bMissingWorld)
 		{
-			GetWorldTimerManager().ClearTimer(RetryTimerHandle);
-			UE_LOG(LogTemp, Error,
-				TEXT("[Carver] BatchFailed WaitingActor=%s Phase=%d Reason=WorldNotReady"),
-				*GetPathNameSafe(WaitingCarver), ActiveGamePhaseIndex);
-			if (ADRMiningGameModeBase* Mode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
-			{
-				Mode->NotifyPhaseCarversReady(ActiveGamePhaseIndex, false);
-			}
+			GetWorldTimerManager().SetTimer(
+				RetryTimerHandle, this, &ThisClass::TryExecuteCarveBatch,
+				DRMeshVoxelCarver::RetryInterval, false);
+		}
+		if (!GetWorldTimerManager().IsTimerActive(WorldReadyTimeoutHandle))
+		{
+			GetWorldTimerManager().SetTimer(
+				WorldReadyTimeoutHandle, this, &ThisClass::HandleWorldReadyTimeout,
+				DRMeshVoxelCarver::RetryInterval * DRMeshVoxelCarver::MaxRetryCount, false);
 		}
 		return;
 	}
 
+	ClearWorldReadyBindings();
 	GetWorldTimerManager().ClearTimer(RetryTimerHandle);
 	PendingCarvers.Reset(Carvers.Num());
 	for (ADRMeshVoxelCarver* Carver : Carvers)
