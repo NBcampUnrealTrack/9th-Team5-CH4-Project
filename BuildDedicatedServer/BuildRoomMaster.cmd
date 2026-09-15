@@ -1,15 +1,16 @@
 @echo off
 setlocal
-rem Build the launcher only; do not package the dedicated game server.
-set "PROJECT_ROOT=C:\Users\shs\Documents\Unreal Projects\DeepRaiders"
+rem Place this file beside BuildDedicatedServer.ps1.
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
 set "ENGINE_ROOT=C:\Program Files\Epic Games\UE_5.7"
 if exist "%PROJECT_ROOT%\DedicatedServer\EnginePath.txt" set /p ENGINE_ROOT=<"%PROJECT_ROOT%\DedicatedServer\EnginePath.txt"
-if not exist "%PROJECT_ROOT%\BuildDedicatedServer\BuildDedicatedServer.ps1" (
-    echo Build script not found.
+if not exist "%~dp0BuildDedicatedServer.ps1" (
+    echo BuildDedicatedServer.ps1 not found beside this file.
     pause
     exit /b 1
 )
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\BuildDedicatedServer\BuildDedicatedServer.ps1" -EngineRoot "%ENGINE_ROOT%" -LauncherOnly
+rem Build the launcher only; do not package the dedicated game server.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0BuildDedicatedServer.ps1" -EngineRoot "%ENGINE_ROOT%" -LauncherOnly
 set "BUILD_RESULT=%ERRORLEVEL%"
 echo.
 if "%BUILD_RESULT%"=="0" (
