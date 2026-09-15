@@ -280,6 +280,10 @@ protected:
 	void EvaluateOverheatedState(float HeatGauge);
 	void EnterOverheatedState();
 	void ClearOverheatedState();
+
+	/** 과열 상태 전환음은 소유 플레이어에게만 전달한다. */
+	UFUNCTION(Client, Reliable)
+	void ClientPlayOverheatedSound(bool bEntered);
 	void ResetHeatState();
 	void RestartHeatDecay();
 	void TickHeatDecay();

@@ -5,6 +5,7 @@
 #include "DeepRaiders/Core/Subsystem/DRVoxelTerrainSubsystem.h"
 #include "DeepRaiders/Snow/DRSnowTypes.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameplayTagContainer.h"
 #include "DRMiningGameStateBase.generated.h"
 
 class ADRTeleportPoint;
@@ -111,6 +112,10 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void SetGameTimerState(int32 RemainingSeconds);
+
+	/** 경기 공통 알림음을 모든 클라이언트의 로컬 Cue로 전달한다. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayMatchSound(FGameplayTag SoundTag);
 	void SetGameFlowState(
 		EDRGameFlowState NewState,
 		const FText& NewMessage = FText::GetEmpty());

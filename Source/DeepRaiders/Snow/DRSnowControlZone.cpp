@@ -323,10 +323,7 @@ void ADRSnowControlZone::FreezeForGameEnd()
 	{
 		return;
 	}
-	const bool bWasActive = bZoneActive;
-	bZoneActive = true;
-	RefreshControlRatio();
-	bZoneActive = bWasActive;
+	// 종료 시 추가 스캔 없이 플레이 중 마지막 계산 결과를 유지한다.
 	bControlFrozen = true;
 	ForceNetUpdate();
 }
@@ -383,7 +380,8 @@ bool ADRSnowControlZone::StartEndCleanup(TFunction<void(bool)>&& Completion)
 		Completion(true);
 		return true;
 	}
-	if (!EnsureTargetMask() || !CleanupBounds)
+	AVoxelWorld* VoxelWorld = ResolveVoxelWorld();
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || !CleanupBounds)
 	{
 		return false;
 	}
@@ -391,24 +389,54 @@ bool ADRSnowControlZone::StartEndCleanup(TFunction<void(bool)>&& Completion)
 	{
 		return false;
 	}
-	FDRMeshVoxelMask KeepMask = TargetMask;
+	TArray<TPair<UStaticMeshComponent*, int32>> Meshes;
+	Meshes.Emplace(TargetMesh.Get(), MaxVoxelScanCount);
 	// 정리 Box가 겹쳐도 다른 거점의 목표 모양은 함께 보존한다.
 	for (TActorIterator<ADRSnowControlZone> It(GetWorld()); It; ++It)
 	{
 		if (*It != this && It->ResolveVoxelWorld() == ResolveVoxelWorld()
 			&& It->GetZoneWorldBounds().Intersect(CleanupBounds->Bounds.GetBox()))
 		{
-			if (!It->EnsureTargetMask())
-			{
-				return false;
-			}
-			KeepMask.InsideVoxels.Append(It->TargetMask.InsideVoxels);
+			Meshes.Emplace(It->TargetMesh.Get(), It->MaxVoxelScanCount);
 		}
 	}
 	CleanupCancellation = MakeShared<FThreadSafeBool, ESPMode::ThreadSafe>(false);
-	const bool bStarted = ADRMeshVoxelCarver::TrimOutsideMesh(ResolveVoxelWorld(),
-		CleanupBounds->GetComponentTransform(), CleanupBounds->GetUnscaledBoxExtent(), KeepMask,
-		MaxCleanupVoxelCount, CleanupCancellation.ToSharedRef(), MoveTemp(Completion));
+	const auto Cancellation = CleanupCancellation.ToSharedRef();
+	const TWeakObjectPtr<ADRSnowControlZone> WeakThis(this);
+	const TWeakObjectPtr<AVoxelWorld> WeakWorld(VoxelWorld);
+	const FTransform BoxTransform = CleanupBounds->GetComponentTransform();
+	const FVector BoxExtent = CleanupBounds->GetUnscaledBoxExtent();
+	// 종료 정리는 점유율 계산용 동기 캐시를 만들지 않고 별도의 비동기 마스크를 사용한다.
+	const bool bStarted = ADRMeshVoxelCarver::BuildMeshVoxelMasksAsync(
+		VoxelWorld, Meshes, Cancellation,
+		[WeakThis, WeakWorld, BoxTransform, BoxExtent, Cancellation,
+		Completion = MoveTemp(Completion)](TArray<FDRMeshVoxelMask>&& Masks) mutable
+		{
+			ADRSnowControlZone* Zone = WeakThis.Get();
+			if (!Zone || !WeakWorld.IsValid() || *Cancellation || Masks.IsEmpty())
+			{
+				*Cancellation = true;
+				Completion(false);
+				return;
+			}
+			FDRMeshVoxelMask KeepMask = Masks[0];
+			for (int32 Index = 1; Index < Masks.Num(); ++Index)
+			{
+				KeepMask.InsideVoxels.Append(Masks[Index].InsideVoxels);
+			}
+			// 시작 실패 시에도 완료 콜백을 한 번 전달할 수 있도록 보관한다.
+			const auto Finish = MakeShared<TFunction<void(bool)>>(MoveTemp(Completion));
+			if (!ADRMeshVoxelCarver::TrimOutsideMesh(WeakWorld.Get(), BoxTransform, BoxExtent,
+				KeepMask, Zone->MaxCleanupVoxelCount, Masks[0], Cancellation,
+				[Finish](bool bSucceeded)
+				{
+					(*Finish)(bSucceeded);
+				}))
+			{
+				*Cancellation = true;
+				(*Finish)(false);
+			}
+		});
 	if (!bStarted)
 	{
 		*CleanupCancellation = true;

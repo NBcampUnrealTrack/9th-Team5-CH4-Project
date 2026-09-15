@@ -72,9 +72,14 @@ void ADRMapMusicActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADRMapMusicActor::HandleGameTimerChanged(int32, bool bGameStarted, bool bGameEnded)
 {
-	SetMusicPhase(bGameEnded
-		? EMusicPhase::GameOver
-		: (bGameStarted ? EMusicPhase::Game : EMusicPhase::Map));
+	if (bGameEnded)
+	{
+		// 종료 사운드는 GameState의 공통 Cue로 재생한다.
+		Destroy();
+		return;
+	}
+
+	SetMusicPhase(bGameStarted ? EMusicPhase::Game : EMusicPhase::Map);
 }
 
 void ADRMapMusicActor::HandleMusicFinished()
@@ -143,8 +148,6 @@ const TArray<TObjectPtr<USoundBase>>& ADRMapMusicActor::GetCurrentPlaylist() con
 	{
 	case EMusicPhase::Game:
 		return GameMusicPlaylist;
-	case EMusicPhase::GameOver:
-		return GameOverMusicPlaylist;
 	case EMusicPhase::Map:
 	case EMusicPhase::None:
 	default:

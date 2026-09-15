@@ -1,4 +1,5 @@
 #include "DRMiningGameStateBase.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 
 #include "DeepRaiders/Snow/DRSnowNetworkUtils.h"
 
@@ -340,6 +341,16 @@ void ADRMiningGameStateBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(ADRMiningGameStateBase, Team1ControlZoneReward);
 	DOREPLIFETIME(ADRMiningGameStateBase, ResultRemainingSeconds);
 	DOREPLIFETIME(ADRMiningGameStateBase, ResultCountdownText);
+}
+
+void ADRMiningGameStateBase::MulticastPlayMatchSound_Implementation(FGameplayTag SoundTag)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	FGameplayCueParameters Parameters;
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(this, SoundTag, Parameters);
 }
 
 void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds)

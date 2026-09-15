@@ -916,6 +916,31 @@ namespace DRGameplayTags
 		"Player died from fall damage.");
 	
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Game_EndCountdown,
+		"GameplayCue.Sound.Game.EndCountdown",
+		"Match countdown at three, two and one seconds remaining.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Game_Ended,
+		"GameplayCue.Sound.Game.Ended",
+		"Match ended.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_ControlZone_Completed,
+		"GameplayCue.Sound.ControlZone.Completed",
+		"Control zone completion reward confirmed.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Overheated_Enter,
+		"GameplayCue.Sound.Player.Overheated.Enter",
+		"Owner-only feedback when overheating begins.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		GameplayCue_Sound_Player_Overheated_Exit,
+		"GameplayCue.Sound.Player.Overheated.Exit",
+		"Owner-only feedback when overheating ends.");
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		GameplayCue_Sound_Player_Frozen_Enter,
 		"GameplayCue.Sound.Player.Frozen.Enter",
 		"Player entered frozen state.");
