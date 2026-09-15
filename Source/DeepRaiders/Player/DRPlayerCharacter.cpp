@@ -1230,7 +1230,7 @@ void ADRPlayerCharacter::RefreshHeldWeaponTeamMaterial()
 		return;
 	}
 
-	const UDRProjectileWeaponItemDefinition* WeaponDefinition = Cast<UDRProjectileWeaponItemDefinition>(HeldItemComponent->GetHeldItemDefinition());
+	const UDRRangedWeaponDefinition* WeaponDefinition = Cast<UDRRangedWeaponDefinition>(HeldItemComponent->GetHeldItemDefinition());
 
 	if (!IsValid(WeaponDefinition))
 	{
