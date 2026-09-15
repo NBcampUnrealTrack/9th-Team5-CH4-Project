@@ -476,8 +476,30 @@ TArray<FDRShopOfferView> UDRShopUIComponent::MakeOfferViews(
 	EDRShopOfferType OfferType) const
 {
 	TArray<FDRShopOfferView> OfferViews;
+	TArray<FDRShopItemOffer> SortedOffers = Offers;
 
-	for (const FDRShopItemOffer& Offer : Offers)
+	if (OfferType == EDRShopOfferType::Perk)
+	{
+		SortedOffers.StableSort(
+			[](const FDRShopItemOffer& Left, const FDRShopItemOffer& Right)
+			{
+				const UDRPerkDefinition* LeftPerk = Cast<UDRPerkDefinition>(Left.ItemDefinition);
+				const UDRPerkDefinition* RightPerk = Cast<UDRPerkDefinition>(Right.ItemDefinition);
+				const bool IsLeftGlobal = !IsValid(LeftPerk) || LeftPerk->CompatibleSkillTags.IsEmpty();
+				const bool IsRightGlobal = !IsValid(RightPerk) || RightPerk->CompatibleSkillTags.IsEmpty();
+
+				if (IsLeftGlobal != IsRightGlobal)
+				{
+					return !IsLeftGlobal;
+				}
+
+				return !IsLeftGlobal
+					&& LeftPerk->CompatibleSkillTags.ToStringSimple()
+						< RightPerk->CompatibleSkillTags.ToStringSimple();
+			});
+	}
+
+	for (const FDRShopItemOffer& Offer : SortedOffers)
 	{
 		if (Offer.OfferType != OfferType
 			|| !IsValid(Offer.ItemDefinition))

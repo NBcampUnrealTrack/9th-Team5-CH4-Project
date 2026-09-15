@@ -56,6 +56,7 @@ void UDRShopViewModel::Deinitialize()
 void UDRShopViewModel::RebuildOfferEntries()
 {
 	TArray<TObjectPtr<UDRShopOfferEntryViewModel>> NewEntries;
+	TArray<FDRShopOfferView> SectionOffers;
 
 	for (const FDRShopOfferView& Offer : Offers)
 	{
@@ -64,6 +65,21 @@ void UDRShopViewModel::RebuildOfferEntries()
 			continue;
 		}
 
+		SectionOffers.Add(Offer);
+	}
+
+	if (SelectedSection == EDRShopOfferSection::Equipment
+		|| SelectedSection == EDRShopOfferSection::Consumable)
+	{
+		SectionOffers.StableSort(
+			[](const FDRShopOfferView& Left, const FDRShopOfferView& Right)
+			{
+				return Left.Price < Right.Price;
+			});
+	}
+
+	for (const FDRShopOfferView& Offer : SectionOffers)
+	{
 		UDRShopOfferEntryViewModel* Entry = NewObject<UDRShopOfferEntryViewModel>(this);
 		Entry->Initialize(Offer);
 		NewEntries.Add(Entry);
