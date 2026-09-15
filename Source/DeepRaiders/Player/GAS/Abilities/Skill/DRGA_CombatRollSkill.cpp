@@ -20,9 +20,14 @@ UDRGA_CombatRollSkill::UDRGA_CombatRollSkill()
 	CombatRollAbilityTags.AddTag(DRGameplayTags::Ability_Skill_CombatRoll);
 	SetAssetTags(CombatRollAbilityTags);
 
-	// 발사 입력을 누르고 있는 중에도 구르기는 발동해야 한다.
-	// 구르기 시작 시 유지 중인 총격 Ability를 종료한다.
+	// 구르기 몽타주가 끝날 때까지 다른 플레이어 액션의 활성화를 막는다.
+	// 이 차단은 Ability 종료 시 GAS가 자동으로 해제한다.
+	BlockAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Action);
+
+	// 공격 입력을 누르고 있는 중에도 구르기는 발동해야 한다.
+	// 구르기 시작 시 이미 진행 중인 공격은 종료해 몽타주 충돌을 방지한다.
 	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Ranged);
+	CancelAbilitiesWithTag.AddTag(DRGameplayTags::Ability_Attack_Melee);
 }
 
 bool UDRGA_CombatRollSkill::CanActivateAbility(
