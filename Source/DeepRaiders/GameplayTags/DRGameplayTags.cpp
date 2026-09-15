@@ -54,6 +54,11 @@ namespace DRGameplayTags
 		State_Absorbing,
 		"State.Absorbing",
 		"Player is absorbing snow.");
+	
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		State_Spraying,
+		"State.Spraying",
+		"Player is Spraying snow.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		State_Overheated,

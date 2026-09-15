@@ -820,6 +820,60 @@ void ADRPlayerController::FullSnow()
 #endif
 }
 
+void ADRPlayerController::AutoFire()
+{
+#if !UE_BUILD_SHIPPING
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		return;
+	}
+
+	const int32 InputId =
+		static_cast<int32>(EDRAbilityInputId::Primary);
+
+	// 이미 켜져 있으면 OFF
+	if (World->GetTimerManager().IsTimerActive(
+		DebugAutoFireTimer))
+	{
+		World->GetTimerManager().ClearTimer(
+			DebugAutoFireTimer);
+
+		HandleGASInputReleased(InputId);
+
+		ClientMessage(TEXT("AutoFire OFF"));
+		return;
+	}
+
+	// 마우스 처음 누른 것처럼
+	HandleGASInputStarted(InputId);
+
+	// 마우스 누르고 있는 것처럼 반복
+	World->GetTimerManager().SetTimer(
+		DebugAutoFireTimer,
+		this,
+		&ThisClass::DebugAutoFireTick,
+		0.016f,
+		true);
+
+	ClientMessage(TEXT("AutoFire ON"));
+#endif
+}
+
+void ADRPlayerController::DebugAutoFireTick()
+{
+#if !UE_BUILD_SHIPPING
+	HandleGASInputTriggered(
+		static_cast<int32>(
+			EDRAbilityInputId::Primary));
+#endif
+}
+
 void ADRPlayerController::ServerFullSnow_Implementation()
 {
 #if !UE_BUILD_SHIPPING
