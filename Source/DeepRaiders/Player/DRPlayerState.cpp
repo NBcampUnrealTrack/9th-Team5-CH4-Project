@@ -115,7 +115,7 @@ void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, flo
 			{
 				const FString KillerName = bPlayerKill
 					? SourcePlayerState->GetDisplayPlayerName().ToString()
-					: FString();
+					: TEXT("파무침");
 				const int32 KillerTeamId = bPlayerKill
 					? SourcePlayerState->GetTeamId()
 					: INDEX_NONE;
@@ -1027,7 +1027,7 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 				if (IsValid(PlayerController))
 				{
 					PlayerController->ClientPushKillFeed(
-						TEXT(""),
+						TEXT("파무침"),
 						INDEX_NONE,
 						VictimName,
 						VictimTeamId,
