@@ -350,8 +350,15 @@ void ADRMiningGameStateBase::SetGameTimerState(int32 RemainingSeconds)
 	}
 
 	GameRemainingSeconds = FMath::Max(0, RemainingSeconds);
-	OnRep_GameTimerState();
+	MulticastUpdateGameTimer(GameRemainingSeconds);
 	ForceNetUpdate();
+}
+
+void ADRMiningGameStateBase::MulticastUpdateGameTimer_Implementation(int32 RemainingSeconds)
+{
+	// 서버의 매초 갱신을 수신 즉시 기존 HUD 이벤트로 전달한다.
+	GameRemainingSeconds = RemainingSeconds;
+	OnRep_GameTimerState();
 }
 
 void ADRMiningGameStateBase::OnRep_GameTimerState()

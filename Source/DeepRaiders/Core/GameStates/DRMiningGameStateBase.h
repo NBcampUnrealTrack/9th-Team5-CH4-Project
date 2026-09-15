@@ -236,6 +236,10 @@ private:
 	UFUNCTION()
 	void OnRep_GameTimerState();
 
+	// 초당 시간 갱신을 전달하고, 복제 속성은 중도 접속 초기화에도 사용한다.
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastUpdateGameTimer(int32 RemainingSeconds);
+
 	UFUNCTION()
 	void OnRep_GameEndDebugText();
 
