@@ -967,6 +967,15 @@ void ADRPlayerCharacter::PlayHitReaction(
 	{
 		return;
 	}
+	
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+
+	if (IsValid(ASC) 
+		&& (ASC->HasMatchingGameplayTag(DRGameplayTags::State_Absorbing) 
+		|| ASC->HasMatchingGameplayTag(DRGameplayTags::State_Spraying)))
+	{
+		return;
+	}
 
 	if (IsLocallyControlled())
 	{
