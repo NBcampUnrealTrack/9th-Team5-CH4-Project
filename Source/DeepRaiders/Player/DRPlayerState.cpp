@@ -125,6 +125,15 @@ void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, flo
 					? EDRKillFeedCause::Player
 					: EDRKillFeedCause::Snow;
 
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("[KillFeed][Server] Cause=Player Killer='%s' KillerTeam=%d Victim='%s' VictimTeam=%d"),
+					*KillerName,
+					KillerTeamId,
+					*VictimName,
+					VictimTeamId);
+				
 				for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 				{
 					ADRPlayerController* PlayerController = Cast<ADRPlayerController>(It->Get());
@@ -990,8 +999,43 @@ void ADRPlayerState::EvaluateFrozenState(float FreezeGauge, float Health)
 	// 매몰은 게이지가 한계에 도달한 즉시 기존 DeadEffect 경로로 사망한다.
 	// 일반 빙결은 State.VoxelContained가 없으므로 기존 Frozen 상태만 유지한다.
 	if (AbilitySystemComponent->HasMatchingGameplayTag(
-		DRGameplayTags::State_VoxelContained))
+	DRGameplayTags::State_VoxelContained))
 	{
+		const FString VictimName =
+			GetDisplayPlayerName().ToString();
+
+		const int32 VictimTeamId =
+			GetTeamId();
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[KillFeed][Server] Cause=Snow Victim='%s' VictimTeam=%d"),
+			*VictimName,
+			VictimTeamId);
+
+		if (UWorld* World = GetWorld())
+		{
+			for (FConstPlayerControllerIterator It =
+					 World->GetPlayerControllerIterator();
+				 It;
+				 ++It)
+			{
+				ADRPlayerController* PlayerController =
+					Cast<ADRPlayerController>(It->Get());
+
+				if (IsValid(PlayerController))
+				{
+					PlayerController->ClientPushKillFeed(
+						TEXT(""),
+						INDEX_NONE,
+						VictimName,
+						VictimTeamId,
+						EDRKillFeedCause::Snow);
+				}
+			}
+		}
+
 		AbilitySystemComponent->SetNumericAttributeBase(
 			UDRPlayerAttributeSet::GetHealthAttribute(),
 			0.f);

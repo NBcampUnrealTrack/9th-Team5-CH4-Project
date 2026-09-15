@@ -238,7 +238,17 @@ void ADRPlayerController::ClientPushKillFeed_Implementation(
 	{
 		return;
 	}
-
+	
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[KillFeed][Client] Killer='%s' KillerTeam=%d Victim='%s' VictimTeam=%d Cause=%d"),
+		*KillerName,
+		KillerTeamId,
+		*VictimName,
+		VictimTeamId,
+		static_cast<int32>(Cause));
+	
 	OnKillFeedEntry.Broadcast(
 		KillerName,
 		KillerTeamId,

@@ -116,6 +116,16 @@ void UDRKillFeedViewModel::HandleKillFeedEntry(
 			EntryLifetimeSeconds,
 			false);
 	}
+	
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[KillFeed][VM] Killer='%s' KillerTeam=%d Victim='%s' VictimTeam=%d Cause=%d"),
+		*KillerName,
+		KillerTeamId,
+		*VictimName,
+		VictimTeamId,
+		static_cast<int32>(Cause));
 }
 
 void UDRKillFeedViewModel::RemoveEntry(UDRKillFeedEntryViewModel* Entry)
