@@ -1,0 +1,393 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "AbilitySystemInterface.h"
+#include "DRPlayerCharacter.generated.h"
+
+class UCameraComponent;
+class UStaticMeshComponent;
+class USceneComponent;
+class UStaticMesh;
+class UMaterialInterface;
+class UAnimMontage;
+class UDRItemDefinition;
+
+class UVoxelNoClippingComponent;
+class UDRVoxelContainmentComponent;
+class UDRCharacterMovementComponent;
+class UDRMiningComponent;
+class UDRTeleportComponent;
+class UDRMeleeCombatComponent;
+class UDRJetpackComponent;
+class UDRPlayerLifecycleComponent;
+class UDRHeldItemComponent;
+class UAbilitySystemComponent;
+class UGameplayEffect;
+class USpringArmComponent;
+class UDRPlayerAttributeSet;
+class UDRItemAnimationSet;
+class UDRFreezeVisualComponent;
+class UDRSilhouetteComponent;
+class UDRHitReactionSet;
+class UDRMovementActionComponent;
+class UDRPlayerCameraComponent;
+class UDRCharacterShadowComponent;
+class UDRPlayerNameplateComponent;
+class UDRLootDropComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDROnPlayerCharacterDeath);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FDROnAbilitySystemReady, UAbilitySystemComponent*);
+
+USTRUCT()
+struct FDRProjectileFirePresentationState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FVector_NetQuantize TargetLocation = FVector::ZeroVector;
+
+	UPROPERTY()
+	uint32 Sequence = 0;
+};
+
+/**
+ * 플레이어 캐릭터의 이동 실행, 카메라와 장비 외형 표현을 담당한다.
+ *
+ * 입력 바인딩은 DRPlayerController가 담당하며,
+ * 인벤토리, 퀵슬롯과 실제 장착 상태는 별도 컴포넌트가 관리한다.
+ */
+UCLASS()
+class DEEPRAIDERS_API ADRPlayerCharacter : public ACharacter, public IAbilitySystemInterface
+{
+	GENERATED_BODY()
+
+public:
+	ADRPlayerCharacter(const FObjectInitializer& ObjectInitializer);
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	
+	float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser);
+	
+	float GetCurrentHealth() const;
+	float GetMaxHealth() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	float GetHealthRatio() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Health")
+	bool IsDead() const;
+
+	/** 서버에서 확정된 넉백을 현재 생존 상태에 맞는 이동 또는 래그돌 반응으로 전달한다. */
+	void ApplyKnockback(const FVector& Origin, float Distance);
+
+	virtual void Landed(const FHitResult& Hit) override;
+
+	/** 서버에서 기록한 가장 최근 착지 위치를 반환한다. */
+	const FVector& GetLastLandedLocation() const
+	{
+		return LastLandedLocation;
+	}
+
+	void HandleJumpPressed();
+	void HandleJumpReleased();
+	
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_Controller() override;
+	virtual void OnRep_PlayerState() override;
+
+	/** 복제된 팀에 맞춰 지정 슬롯의 머티리얼을 갱신한다. */
+	void RefreshTeamColor();
+
+	void ApplyHandEquipmentVisual(UStaticMesh* WorldMesh, FName AttachSocketName, FTransform WorldItemOffset);
+		
+	/** 현재 손 장비 외형을 제거한다. */
+	void ClearHandEquipmentVisual();
+
+	/** 등 소켓에 장비 외형을 적용한다. */
+	void ApplyBackEquipmentVisual(UStaticMesh* BackMesh, const FTransform& BackTransform);
+
+	/** 현재 등 장비 외형을 제거한다. */
+	void ClearBackEquipmentVisual();
+
+	/** 1인칭 카메라에서 로컬 캐릭터 본체와 등 장비만 숨긴다. */
+	void SetLocalFirstPersonVisualsHidden(bool bHideForFirstPerson);
+
+	/*
+	 *  제트팩 외형을 적용한다
+	 *  적용 시점은 아래와 같음
+	 *  PossessedBy
+	 *  OnRep_PlayerState
+	 *  제트팩 획득 직후 서버
+	 *  PlayerState 복제 수신 직후 클라이언트
+	 */
+	void RefreshJetpackVisual();
+
+	void MoveInput(const FVector2D& MoveInput);
+	void LookInput(const FVector2D& LookInput);
+
+	/** 마지막 WASD 입력을 ControlRotation 기준 월드 방향으로 변환한다. */
+	FVector GetSkillMovementDirection() const;
+
+	UDRMeleeCombatComponent* GetMeleeCombatComponent() const
+	{
+		return MeleeCombatComponent;
+	}
+
+	UStaticMeshComponent* GetWorldHandEquipmentMesh() const
+	{
+		return WorldHandEquipmentMesh;
+	}
+
+	UStaticMeshComponent* GetWorldBackEquipmentMesh() const
+	{
+		return WorldBackEquipmentMesh;
+	}
+	
+	UDRSilhouetteComponent* GetSilhouetteComponent() const
+	{
+		return SilhouetteComponent;
+	}
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStartSharedSearchReveal(
+		int32 SourceTeamId,
+		int32 SourcePlayerId,
+		FGuid RevealId,
+		float Duration,
+		int32 StencilValue);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStopSharedSearchReveal(FGuid RevealId);
+
+	UDRJetpackComponent* GetJetpackComponent() const
+	{
+		return JetpackComponent;
+	}
+
+	UDRPlayerCameraComponent* GetPlayerCameraComponent() const
+	{
+		return PlayerCameraComponent;
+	}
+	
+	UDRMovementActionComponent* GetMovementActionComponent() const
+	{
+		return MovementActionComponent;
+	}
+
+	UDRLootDropComponent* GetDeathLootDropComponent() const
+	{
+		return DeathLootDropComponent;
+	}
+
+	/**
+	 * HUD에서 사용할 제트팩 연료 비율.
+	 * 소유 게스트는 서버 Fuel Snapshot의
+	 * 보간 표시값을 사용한다.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack|UI")
+	float GetDisplayedJetpackFuelRatio() const;
+
+	/** PlayerState의 서버 연료값을 로컬 표시값에 반영한다. */
+	void ReconcileJetpackFuelFromServer(float ServerFuel);
+
+	FDROnPlayerCharacterDeath OnPlayerCharacterDeathDelegate;
+	
+	bool IsFrozen() const;
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Animation")
+	UDRItemAnimationSet* GetCurrentItemAnimationSet() const;
+
+	FDROnAbilitySystemReady OnAbilitySystemReady;
+
+	bool IsAbilitySystemReady() const
+	{
+		return bAbilitySystemReady;
+	}
+	
+	UFUNCTION(BlueprintPure, Category = "Player|Aim")
+	float GetAimPitchDegrees() const;
+
+	float GetAimPitchMinDegrees() const
+	{
+		return AimPitchMinDegrees;
+	}
+
+	float GetAimPitchMaxDegrees() const
+	{
+		return AimPitchMaxDegrees;
+	}
+	
+	bool CalculateGameplayFireOrigin(const FVector& AimDirection, FVector& OutFireOrigin) const;
+	bool CalculateSkillFireOrigin(FVector& OutFireOrigin) const;
+	
+	void PrepareProjectileFirePresentation(const FVector& TargetLocation);
+	void PlayProjectileFirePresentationFromNotify();
+	
+	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
+	void PlayHitReaction(const FVector& ImpactLocation);
+	
+	FLinearColor GetTeamDisplayColor() const;
+	
+protected:
+	virtual void BeginPlay() override;
+	
+	void InitializeAbilitySystem();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
+	TObjectPtr<UVoxelNoClippingComponent> VoxelNoClippingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Voxel")
+	TObjectPtr<UDRVoxelContainmentComponent> VoxelContainmentComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRMeleeCombatComponent> MeleeCombatComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRJetpackComponent> JetpackComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRPlayerLifecycleComponent> PlayerLifecycleComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Lifecycle", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRLootDropComponent> DeathLootDropComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Held Item", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRHeldItemComponent> HeldItemComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Freeze", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRFreezeVisualComponent> FreezeVisualComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Silhouette", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRSilhouetteComponent> SilhouetteComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shadow", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRCharacterShadowComponent> CharacterShadowComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Movement", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRMovementActionComponent> MovementActionComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|UI", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRPlayerNameplateComponent> PlayerNameplateComponent;
+	
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
+	TObjectPtr<USpringArmComponent> CameraBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
+	TObjectPtr<UCameraComponent> FollowCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Camera")
+	TObjectPtr<UDRPlayerCameraComponent> PlayerCameraComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
+	TObjectPtr<UStaticMeshComponent> WorldHandEquipmentMesh;
+
+	/** 1인칭일 때만 손 장비를 축소해 화면 중앙 시야를 확보한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Equipment|First Person", meta = (ClampMin = "0.1", UIMin = "0.1"))
+	float FirstPersonHandEquipmentScale = 0.55f;
+
+	/** 1인칭일 때 손 장비에 더할 로컬 오프셋. 오른쪽 아래로 옮겨 중앙 조준점을 비운다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Equipment|First Person")
+	FVector FirstPersonHandEquipmentOffset = FVector(0.f, 25.f, 0.f);
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat")
+	TObjectPtr<USceneComponent> GameplayFireAnchor;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Combat", meta = (ClampMin = "0.0", UIMin = "0.0", Units = "cm"))
+	float GameplayFireForwardDistance = 100.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat")
+	TObjectPtr<USceneComponent> SkillFireAnchor;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Equipment")
+	TObjectPtr<UStaticMeshComponent> WorldBackEquipmentMesh;
+	
+private:
+	UFUNCTION(Server, Unreliable)
+	void ServerSetLatestMovementInput(FVector2D InMovementInput);
+
+	/** 서버에서 확정된 넉백을 소유 클라이언트의 CharacterMovement에도 같은 Root Motion으로 적용한다. */
+	UFUNCTION(Client, Reliable)
+	void ClientApplyKnockback(FVector_NetQuantizeNormal Direction, float Distance, float Duration, float ServerStartTime);
+
+	/**
+	 * GetLastMovementInputVector는 CharacterMovement tick 뒤에 비워질 수 있다.
+	 * 이동 스킬은 이 값을 사용해, 입력 시점의 8방향을 보존한다.
+	 */
+	FVector2D LatestMovementInput = FVector2D::ZeroVector;
+
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Damage")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Respawn")
+	TSubclassOf<UGameplayEffect> RespawnRestoreHealthEffectClass;
+	
+	void ApplySpawnAttributeReset();
+	
+	bool bAbilitySystemReady = false;
+
+	TWeakObjectPtr<UAbilitySystemComponent> ReadyAbilitySystemComponent;
+
+	/**
+	 * GA에서 계산된 발사 끝점과 AnimNotify 실행 시점을 연결하는 임시 프레젠테이션 상태.
+	 * 추후 기존 FirePresentation 실행 경로를 공통화할 때 전용 Weapon Presentation 계층으로 이전해야 한다.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_ProjectileFirePresentationState)
+	FDRProjectileFirePresentationState ProjectileFirePresentationState;
+
+	UFUNCTION()
+	void OnRep_ProjectileFirePresentationState();
+
+	uint32 LastConsumedProjectileFirePresentationSequence = 0;
+	bool bProjectileFirePresentationNotifyPending = false;
+
+	FVector LastLandedLocation = FVector::ZeroVector;
+
+	/** 로컬 플레이어가 현재 1인칭 본체 숨김 상태인지 기록한다. */
+	bool bLocalFirstPersonVisualsHidden = false;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMinDegrees = -90.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Aim")
+	float AimPitchMaxDegrees = 90.f;
+
+	// 팀별 MI를 적용할 캐릭터 메쉬 슬롯.
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team", meta = (ClampMin = "0"))
+	int32 TeamMaterialSlotIndex = 0;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	TObjectPtr<UMaterialInterface> Team0Material;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	TObjectPtr<UMaterialInterface> Team1Material;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team0Color = FLinearColor::Red;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Player|Team")
+	FLinearColor Team1Color = FLinearColor::Blue;
+
+	float LastHitReactionTime = -BIG_NUMBER;
+	
+	void RefreshHeldWeaponTeamMaterial();
+	
+#pragma region QuickSlot
+
+public:
+	void SetHeldItemDefinition(UDRItemDefinition* NewItemDefinition);
+
+#pragma endregion
+
+#pragma region Teleport
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Teleport", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UDRTeleportComponent> TeleportComponent;
+#pragma endregion
+};

@@ -1,0 +1,37 @@
+#include "DRGE_WeaponStatUpgrade.h"
+
+#include "DeepRaiders/GameplayTags/DRGameplayTags.h"
+#include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+
+UDRGE_WeaponStatUpgrade::UDRGE_WeaponStatUpgrade()
+{
+	DurationPolicy = EGameplayEffectDurationType::Infinite;
+
+	AddStat(UDRPlayerAttributeSet::GetWeaponDamageMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_DamageModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponFireIntervalMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_FireIntervalModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponSnowCostMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_SnowCostModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponProjectileCountMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_ProjectileCountModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponHeatGenerationMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_HeatGenerationModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponSnowAbsorbPowerMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_SnowAbsorbPowerModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponSnowAddAmountMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_SnowAddAmountModifier);
+	AddStat(UDRPlayerAttributeSet::GetWeaponFreezeAmountMultiplierAttribute(),
+		DRGameplayTags::Data_Weapon_FreezeAmountModifier);
+}
+
+void UDRGE_WeaponStatUpgrade::AddStat(const FGameplayAttribute& Attribute, FGameplayTag ValueTag)
+{
+	FSetByCallerFloat Value;
+	Value.DataTag = ValueTag;
+
+	FGameplayModifierInfo& Modifier = Modifiers.AddDefaulted_GetRef();
+	Modifier.Attribute = Attribute;
+	Modifier.ModifierOp = EGameplayModOp::Multiplicitive;
+	Modifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(Value);
+}

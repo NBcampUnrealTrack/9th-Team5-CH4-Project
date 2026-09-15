@@ -1,0 +1,46 @@
+﻿#pragma once
+
+#include "CoreMinimal.h"
+#include "DeepRaiders/GAS/DRGameplayEffectData.h"
+#include "DRItemDefinition.h"
+#include "DRMeleeWeaponDefinition.generated.h"
+
+/**
+ * 근접 무기 전용 Definition.
+ *
+ * 공통 Item 데이터는 UDRItemDefinition이 담당하고,
+ * 근접 전투에 필요한 수치만 이 클래스가 가진다.
+ */
+USTRUCT(BlueprintType)
+struct DEEPRAIDERS_API FDRMeleeWeaponDataTableRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName RowName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float BreakableDamage = 40.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float SweepRadius = 35.f;
+};
+
+UCLASS(BlueprintType)
+class DEEPRAIDERS_API UDRMeleeWeaponItemDefinition : public UDRItemDefinition
+{
+	GENERATED_BODY()
+
+public:
+	UDRMeleeWeaponItemDefinition();
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Melee|Damage", meta = (ClampMin = "0.0"))
+	float BreakableDamage = 40.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Melee|Trace", meta = (ClampMin = "0.0", Units = "cm"))
+	float SweepRadius = 35.f;
+
+	/** 적중 시 배열 순서대로 적용할 GameplayEffect와 SetByCaller 값. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Melee|Effect")
+	TArray<FDRGameplayEffectData> ImpactEffects;
+};

@@ -1,0 +1,171 @@
+﻿#pragma once
+
+#include "CoreMinimal.h"
+#include "AttributeSet.h"
+#include "AbilitySystemComponent.h"
+#include "DRPlayerAttributeSet.generated.h"
+
+#define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
+	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
+
+struct FGameplayEffectModCallbackData;
+
+UCLASS()
+class DEEPRAIDERS_API UDRPlayerAttributeSet : public UAttributeSet
+{
+	GENERATED_BODY()
+
+public:
+	UDRPlayerAttributeSet();
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, Health)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHealth)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, Shield)
+
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, FreezeGauge)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxFreezeGauge)
+
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, SnowGauge)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxSnowGauge)
+
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, HeatGauge)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MaxHeatGauge)
+	
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingDamage)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingShield)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, IncomingKnockbackDistance)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, DamageReduction)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, MoveSpeedMultiplier)
+
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponDamageMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponFireIntervalMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowCostMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponProjectileCountMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponHeatGenerationMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowAbsorbPowerMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponSnowAddAmountMultiplier)
+	ATTRIBUTE_ACCESSORS(UDRPlayerAttributeSet, WeaponFreezeAmountMultiplier)
+
+protected:
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "Player|Health")
+	FGameplayAttributeData Health;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHealth, Category = "Player|Health")
+	FGameplayAttributeData MaxHealth;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Shield, Category = "Player|Shield")
+	FGameplayAttributeData Shield;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_FreezeGauge, Category = "Player|Freeze")
+	FGameplayAttributeData FreezeGauge;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_FreezeGauge, Category = "Player|Freeze")
+	FGameplayAttributeData MaxFreezeGauge;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_SnowGauge, Category = "Player|Snow")
+	FGameplayAttributeData SnowGauge;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxSnowGauge, Category = "Player|Snow")
+	FGameplayAttributeData MaxSnowGauge;
+
+	/** 무기 과열 게이지. SnowGauge와 별개인 전투 상태 리소스다. */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_HeatGauge, Category = "Player|Heat")
+	FGameplayAttributeData HeatGauge;
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_MaxHeatGauge, Category = "Player|Heat")
+	FGameplayAttributeData MaxHeatGauge;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
+	FGameplayAttributeData IncomingDamage;
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
+	FGameplayAttributeData IncomingShield;
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Meta")
+	FGameplayAttributeData IncomingKnockbackDistance;
+
+	/** 0.0~0.95 범위의 받는 피해 감소 비율이다. 0.5는 50% 감소를 뜻한다. */
+	UPROPERTY(
+		BlueprintReadOnly,
+		ReplicatedUsing = OnRep_DamageReduction,
+		Category = "Player|Defense")
+	FGameplayAttributeData DamageReduction;
+
+	UPROPERTY(
+		BlueprintReadOnly,
+		ReplicatedUsing = OnRep_MoveSpeedMultiplier,
+		Category = "Player|Movement")
+	FGameplayAttributeData MoveSpeedMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponDamageMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponDamageMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponFireIntervalMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponFireIntervalMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowCostMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowCostMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponProjectileCountMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponProjectileCountMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponHeatGenerationMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponHeatGenerationMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowAbsorbPowerMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowAbsorbPowerMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponSnowAddAmountMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponSnowAddAmountMultiplier;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_WeaponFreezeAmountMultiplier, Category = "Player|Weapon")
+	FGameplayAttributeData WeaponFreezeAmountMultiplier;
+	
+	UFUNCTION()
+	void OnRep_Health(const FGameplayAttributeData& OldHealth);
+	UFUNCTION()
+	void OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth);
+	UFUNCTION()
+	void OnRep_Shield(const FGameplayAttributeData& OldShield);
+
+	UFUNCTION()
+	void OnRep_FreezeGauge(const FGameplayAttributeData& OldFreezeGauge);
+
+	UFUNCTION()
+	void OnRep_SnowGauge(const FGameplayAttributeData& OldSnowGauge);
+	UFUNCTION()
+	void OnRep_MaxSnowGauge(const FGameplayAttributeData& OldMaxSnowGauge);
+
+	UFUNCTION()
+	void OnRep_HeatGauge(const FGameplayAttributeData& OldHeatGauge);
+	UFUNCTION()
+	void OnRep_MaxHeatGauge(const FGameplayAttributeData& OldMaxHeatGauge);
+	UFUNCTION()
+	void OnRep_MoveSpeedMultiplier(
+		const FGameplayAttributeData& OldMoveSpeedMultiplier);
+	UFUNCTION()
+	void OnRep_DamageReduction(
+		const FGameplayAttributeData& OldDamageReduction);
+	UFUNCTION()
+	void OnRep_WeaponDamageMultiplier(const FGameplayAttributeData& OldWeaponDamageMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponFireIntervalMultiplier(const FGameplayAttributeData& OldWeaponFireIntervalMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowCostMultiplier(const FGameplayAttributeData& OldWeaponSnowCostMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponProjectileCountMultiplier(const FGameplayAttributeData& OldWeaponProjectileCountMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponHeatGenerationMultiplier(const FGameplayAttributeData& OldWeaponHeatGenerationMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowAbsorbPowerMultiplier(const FGameplayAttributeData& OldWeaponSnowAbsorbPowerMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponSnowAddAmountMultiplier(const FGameplayAttributeData& OldWeaponSnowAddAmountMultiplier);
+	UFUNCTION()
+	void OnRep_WeaponFreezeAmountMultiplier(const FGameplayAttributeData& OldWeaponFreezeAmountMultiplier);
+
+	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
+	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
+	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
+
+	void ClampAttributeValue(const FGameplayAttribute& Attribute, float& NewValue) const;
+	
+	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
+};

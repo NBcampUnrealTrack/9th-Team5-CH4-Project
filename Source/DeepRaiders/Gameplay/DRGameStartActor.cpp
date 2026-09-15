@@ -1,0 +1,285 @@
+#include "DRGameStartActor.h"
+
+#include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
+#include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
+#include "DeepRaiders/Core/GameStates/DRMiningGameStateBase.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
+#include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
+
+ADRGameStartActor::ADRGameStartActor()
+{
+	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
+	InteractionMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InteractionMesh"));
+	InteractionMesh->SetupAttachment(SceneRoot);
+	InteractionMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteractionMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+	InteractionMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	InteractionMesh->SetCollisionResponseToChannel(DRCollisionChannels::Interaction, ECR_Overlap);
+}
+
+void ADRGameStartActor::BeginPlay()
+{
+	Super::BeginPlay();
+	RefreshLocalReadyColor();
+
+	if (HasAuthority())
+	{
+		RefreshPlayerRoster();
+	}
+}
+
+void ADRGameStartActor::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ThisClass, ReadyPlayers);
+	DOREPLIFETIME(ThisClass, bGameStarted);
+	DOREPLIFETIME(ThisClass, CountdownSecondsRemaining);
+	DOREPLIFETIME(ThisClass, TotalPlayerCount);
+}
+
+bool ADRGameStartActor::CanInteract_Implementation(APawn* Interactor) const
+{
+	const ADRMiningGameStateBase* GameState = GetWorld()->GetGameState<ADRMiningGameStateBase>();
+	const bool bCanReady = IsValid(GameState)
+		&& (GameState->GetGameFlowState() == EDRGameFlowState::WaitingForPlayers
+			|| GameState->GetGameFlowState() == EDRGameFlowState::Countdown);
+	return bCanReady && IsValid(Interactor) && IsValid(Interactor->GetPlayerState());
+}
+
+bool ADRGameStartActor::Interact_Implementation(APawn* Interactor)
+{
+	if (!HasAuthority() || !Execute_CanInteract(this, Interactor))
+	{
+		return false;
+	}
+
+	APlayerState* PlayerState = Interactor->GetPlayerState();
+	if (ReadyPlayers.Contains(PlayerState))
+	{
+		ReadyPlayers.Remove(PlayerState);
+	}
+	else
+	{
+		ReadyPlayers.Add(PlayerState);
+	}
+
+	RefreshLocalReadyColor();
+	RefreshReadyState();
+	return true;
+}
+
+bool ADRGameStartActor::GetInteractionPromptData_Implementation(
+	APawn* Interactor,
+	FDRInteractionPromptData& OutPromptData) const
+{
+	if (!CanInteract_Implementation(Interactor))
+	{
+		return false;
+	}
+
+	OutPromptData.TitleText =
+		NSLOCTEXT("DRGameStart", "Title", "준비 상태");
+	OutPromptData.ActionText = IsPlayerReady(Interactor->GetPlayerState())
+		? NSLOCTEXT("DRGameStart", "CancelReady", "준비 해제")
+		: NSLOCTEXT("DRGameStart", "Ready", "준비");
+	return true;
+}
+
+bool ADRGameStartActor::IsPlayerReady(const APlayerState* PlayerState) const
+{
+	return IsValid(PlayerState) && ReadyPlayers.Contains(PlayerState);
+}
+
+TArray<APlayerState*> ADRGameStartActor::GetReadyPlayers() const
+{
+	TArray<APlayerState*> Players;
+	Players.Reserve(ReadyPlayers.Num());
+	for (APlayerState* PlayerState : ReadyPlayers)
+	{
+		if (IsValid(PlayerState))
+		{
+			Players.Add(PlayerState);
+		}
+	}
+	return Players;
+}
+
+int32 ADRGameStartActor::GetReadyPlayerCount() const
+{
+	return GetReadyPlayers().Num();
+}
+
+int32 ADRGameStartActor::GetTotalPlayerCount() const
+{
+	return TotalPlayerCount;
+}
+
+void ADRGameStartActor::RefreshPlayerRoster()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	RefreshReadyState();
+}
+
+void ADRGameStartActor::OnRep_ReadyPlayers()
+{
+	RefreshLocalReadyColor();
+	BroadcastReadyStatus();
+}
+
+void ADRGameStartActor::OnRep_GameStarted()
+{
+	BroadcastReadyStatus();
+	if (bGameStarted)
+	{
+		OnAllPlayersReady.Broadcast();
+	}
+}
+
+void ADRGameStartActor::OnRep_CountdownSecondsRemaining()
+{
+	BroadcastReadyStatus();
+}
+
+void ADRGameStartActor::OnRep_TotalPlayerCount()
+{
+	BroadcastReadyStatus();
+}
+
+void ADRGameStartActor::RefreshReadyState()
+{
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
+	ReadyPlayers.RemoveAll([GameState](const TObjectPtr<APlayerState>& PlayerState)
+	{
+		return !IsValid(PlayerState) || !IsValid(GameState) || PlayerState->IsOnlyASpectator() ||
+			!GameState->PlayerArray.Contains(PlayerState);
+	});
+
+	TotalPlayerCount = GetEligiblePlayerCount();
+	const bool bAllPlayersReady = TotalPlayerCount > 0 && ReadyPlayers.Num() >= TotalPlayerCount;
+	BroadcastReadyStatus();
+	ForceNetUpdate();
+
+	ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>();
+	if (!IsValid(GameMode))
+	{
+		return;
+	}
+	if (bAllPlayersReady)
+	{
+		GameMode->RequestGameStart(this, GameStartCountdownSeconds);
+	}
+	else
+	{
+		GameMode->CancelGameCountdown(this);
+	}
+}
+
+void ADRGameStartActor::BroadcastReadyStatus()
+{
+	const bool bAllPlayersReady = TotalPlayerCount > 0 && ReadyPlayers.Num() >= TotalPlayerCount;
+	OnReadyStateChanged.Broadcast(ReadyPlayers.Num(), TotalPlayerCount, bAllPlayersReady);
+	OnGameStartCountdownChanged.Broadcast(CountdownSecondsRemaining);
+}
+
+void ADRGameStartActor::SetCountdownSecondsRemaining(int32 SecondsRemaining)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	CountdownSecondsRemaining = FMath::Max(0, SecondsRemaining);
+	BroadcastReadyStatus();
+	ForceNetUpdate();
+}
+
+void ADRGameStartActor::RefreshLocalReadyColor()
+{
+	if (!IsValid(InteractionMesh))
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	const APlayerController* LocalController = IsValid(World)
+		? World->GetFirstPlayerController()
+		: nullptr;
+	const APlayerState* LocalPlayerState = IsValid(LocalController)
+		? LocalController->PlayerState
+		: nullptr;
+	const FLinearColor Color = IsPlayerReady(LocalPlayerState) ? ReadyColor : NotReadyColor;
+	InteractionMesh->SetVectorParameterValueOnMaterials(
+		ReadyColorParameterName,
+		FVector(Color.R, Color.G, Color.B));
+}
+
+void ADRGameStartActor::NotifyGameStarted()
+{
+	if (!HasAuthority() || bGameStarted)
+	{
+		return;
+	}
+
+	CountdownSecondsRemaining = 0;
+	bGameStarted = true;
+	BroadcastReadyStatus();
+	OnAllPlayersReady.Broadcast();
+	ForceNetUpdate();
+}
+
+void ADRGameStartActor::ResetForNextGame()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (ADRMiningGameModeBase* GameMode = GetWorld()->GetAuthGameMode<ADRMiningGameModeBase>())
+	{
+		GameMode->CancelGameCountdown(this);
+	}
+	ReadyPlayers.Reset();
+	CountdownSecondsRemaining = 0;
+	bGameStarted = false;
+	RefreshLocalReadyColor();
+	BroadcastReadyStatus();
+	ForceNetUpdate();
+}
+
+int32 ADRGameStartActor::GetEligiblePlayerCount() const
+{
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GameState = IsValid(World) ? World->GetGameState() : nullptr;
+	if (!IsValid(GameState))
+	{
+		return 0;
+	}
+
+	int32 PlayerCount = 0;
+	for (const APlayerState* PlayerState : GameState->PlayerArray)
+	{
+		if (IsValid(PlayerState) && !PlayerState->IsOnlyASpectator())
+		{
+			++PlayerCount;
+		}
+	}
+	return PlayerCount;
+}

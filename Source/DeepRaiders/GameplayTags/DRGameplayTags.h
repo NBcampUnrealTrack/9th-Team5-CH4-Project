@@ -1,0 +1,288 @@
+﻿#pragma once
+
+#include "NativeGameplayTags.h"
+
+namespace DRGameplayTags
+{
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Character_Upgrade_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MaxHealth);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Upgrade_MoveSpeed);
+
+	// State
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frozen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VoxelContained);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Overheated);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PersonalShield);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_RespawnInvincible);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_InventoryOpen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_ShopOpen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_UI_TeleportOpen);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_MovementAction_Zipline);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_QuickSlot_ActivationInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Stealthed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Aiming_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_GamePreparing);
+	
+	// Ability
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Root);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Action);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Ranged);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Attack_Melee);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Snow_Absorb);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MovementAction);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Item_Grapple);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Input_SecondaryCancel);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_Weapon_ResourceEmpty);
+	
+	// Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Blink);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Perk_SuperJump_RocketBoots);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_HotPack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SpearThrow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SlowProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_IceWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grab);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Grapple);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Barrier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Skill_Turret);
+
+	// Perk
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Charges);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Debuff);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Grab_Enhancement);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_SnowReduction);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_RangeBonus);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Grab_HitScaleBonus);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Search_TeamShare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_HotPack_InstantCare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_ExtremeSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SlowProjectile_AllySpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_StatBoost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Turret_CannonProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_PortableGenerator);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_Barrier_TeslaField);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SuperJump_RocketBoots);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Perk_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_SuperJump_RocketBoots_MoveSpeed);
+	
+	// Weapon Upgrade - Rifle
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Rifle_SnowAddAmount);
+
+	// Weapon Upgrade - Shotgun
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_ProjectileCount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Shotgun_SnowAddAmount);
+
+	// Weapon Upgrade - Cannon
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_FireInterval);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAbsorbPower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Cannon_SnowAddAmount);
+
+	// Weapon Upgrade - Sprayer
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_FreezeAmount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_SnowCost);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_HeatGeneration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_Upgrade_Sprayer_SnowAbsorbPower);
+	
+	// Event
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ability_Throw_Release);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_MovementAction_Cancel);
+	
+	// Cooldown
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Ranged);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_One);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Two);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Blink);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_HotPack);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grab);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Grapple);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SnowWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_IceWall);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SpearThrow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_SlowProjectile);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Barrier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Skill_Turret);
+	
+	// Data
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Snow_Amount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Freeze_Amount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Knockback_Distance);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Health_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cooldown_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_BlinkRecovery_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Charges_Max);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Shield_Amount);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Effect_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_QuickSlot_ActivationInterval_Duration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaRadius);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_AreaDuration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_HealthRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_HotPack_FreezeGaugeRecovery);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_DamageBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_FireRateBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Turret_RangeBonusRatio);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Perk_Barrier_MaxHealthMultiplier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_DamageModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FireIntervalModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowCostModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_ProjectileCountModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_HeatGenerationModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAbsorbPowerModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_SnowAddAmountModifier);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Weapon_FreezeAmountModifier);
+	
+	// Effect Policy
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Effect_Policy_PersistThroughDeath);
+	
+	// Gameplay Cue - Throwable
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Item_Throwable_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Item_Throwable_Impact);
+	
+	// Gameplay Cue - VFX
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_Heal);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_MoveSpeed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Effect_SpeedSlow);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Blink);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Search);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_VFX_Skill_Blink_End);
+	
+	// Weapon Effect
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Projectile_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Weapon_Absorb_Active);
+	
+	// UI Screen
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_HUD);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Loading);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_QuickSlot);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Inventory_Player);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Inventory_Storage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Teleport);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Shop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_StartingSelection);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Scoreboard);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(UI_Screen_Menu);
+	
+	// Gameplay Cue - Sound - Melee
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Miss);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Kill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Melee_Attack_Swing);
+
+	// Gameplay Cue - Sound - Projectile
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Projectile_Snow_Impact);
+
+	// Gameplay Cue - Sound - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_ForwardDash);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_CombatRoll);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_SuperJump_HeroLanding);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Turret_Install);
+
+	// Gameplay Cue - Sound - Player
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Snowball_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Hit_LocalFeedback);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Land);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Enter);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Death);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Kill);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Footstep);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Jump);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_QuickSlot_Switch);
+
+	// Gameplay Cue - Sound - Item
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Throw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Throwable_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_Emergence);
+
+	// Gameplay Cue - Sound - Movement Action
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_MovementAction_Grapple_Launch);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_MovementAction_Grapple_Attach);
+
+	// Gameplay Cue - Sound - Breakable
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_Destroyed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Hit);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Destroyed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Breakable_LootBox_Idle);
+
+	// Gameplay Cue - Sound - World / Etc
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Dig);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_PickedUp);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Item_EffectPickedUp);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Dropped);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Ore_Discovered);
+
+	// Gameplay Cue - Sound - Weapon
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Rifle_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Rifle_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Shotgun_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Shotgun_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Fire);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Cannon_Impact);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Sprayer_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Start);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_Loop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_End);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_Absorb_GainPulse);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Weapon_ResourceEmpty);
+	
+	// Gameplay Cue - Player
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Player_Hit);
+	
+	// Gameplay Cue - Movement Action
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Active);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_MovementAction_Grapple_Failed);
+
+	// Gameplay Cue - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Skill_Grab_Active);
+	
+	//Gameplaye Cue - Sound - Skill
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Skill_Blink);
+}

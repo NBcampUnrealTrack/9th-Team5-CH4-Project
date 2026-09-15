@@ -1,0 +1,357 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
+#include "GameFramework/PlayerState.h"
+#include "AbilitySystemInterface.h"
+#include "ActiveGameplayEffectHandle.h"
+#include "TimerManager.h"
+#include "DeepRaiders/GAS/DRAbilitySet.h"
+#include "DRPlayerState.generated.h"
+
+class FLifetimeProperty;
+class UAbilitySystemComponent;
+class UDRAbilitySystemComponent;
+class UDRPlayerAttributeSet;
+class UDRCharacterUpgradeComponent;
+class UDRPerkComponent;
+class UDRSkillComponent;
+class UGameplayAbility;
+class UGameplayEffect;
+class UDRQuickSlotComponent;
+class UDRShieldComponent;
+class UDRItemDefinition;
+struct FOnAttributeChangeData;
+class UDRCombatStatsComponent;
+
+USTRUCT(BlueprintType)
+struct FDRPublicQuickSlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UDRItemDefinition> ItemDefinition;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 Quantity = 0;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FDRPublicQuickSlotsChanged);
+DECLARE_MULTICAST_DELEGATE(FDROnPlayerIdentityChanged);
+
+UCLASS()
+class DEEPRAIDERS_API ADRPlayerState 
+	: public APlayerState
+	, public IAbilitySystemInterface
+{
+	GENERATED_BODY()
+
+public:
+	ADRPlayerState();
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	UDRAbilitySystemComponent* GetDRAbilitySystemComponent() const;
+
+	const UDRPlayerAttributeSet* GetPlayerAttributeSet() const
+	{
+		return PlayerAttributeSet;
+	}
+
+	UDRPerkComponent* GetPerkComponent() const
+	{
+		return PerkComponent;
+	}
+
+	UDRCharacterUpgradeComponent* GetCharacterUpgradeComponent() const
+	{
+		return CharacterUpgradeComponent;
+	}
+
+	UDRSkillComponent* GetSkillComponent() const
+	{
+		return SkillComponent;
+	}
+	
+	UDRCombatStatsComponent* GetCombatStatsComponent() const
+	{
+		return CombatStatsComponent;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Shield")
+	UDRShieldComponent* GetShieldComponent() const
+	{
+		return ShieldComponent;
+	}
+	
+	/*
+	 * 서버에서 실제 Damage가 확정됐을 때 호출.
+	 * SourcePlayerState == nullptr -> 환경 Damage 등
+	 * SourcePlayerState == this -> 낙사 / 자해 등
+	 * SourcePlayerState != this -> 다른 Player가 가한 Damage
+	 */
+	void HandleDamageResolved(
+		ADRPlayerState* SourcePlayerState,
+		float AppliedDamage,
+		bool bFatal);
+
+	/*
+	 * 서버에서 다른 플레이어가 가한 유효 피격이 확정됐을 때 호출한다.
+	 * Health Damage와 FreezeGauge 증가가 공통으로 이 경로를 사용한다.
+	 */
+	void HandleHostileHitResolved(ADRPlayerState* SourcePlayerState);
+	
+	/** 서버 퀵슬롯을 팀 UI용 읽기 전용 스냅샷으로 갱신한다. */
+	void UpdatePublicQuickSlots(const UDRQuickSlotComponent* QuickSlotComponent);
+
+	const TArray<FDRPublicQuickSlot>& GetPublicQuickSlots() const
+	{
+		return PublicQuickSlots;
+	}
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Quick Slot")
+	FDRPublicQuickSlotsChanged OnPublicQuickSlotsChanged;
+	
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 서버에서 더 깊은 채굴 위치만 갱신
+	bool UpdateDeepestDigLocation(const FVector& Location);
+
+	UFUNCTION(BlueprintPure, Category = "Player|Mining")
+	bool HasDeepestDigLocation() const { return bHasDeepestDigLocation; }
+
+	UFUNCTION(BlueprintPure, Category = "Player|Mining")
+	FVector GetDeepestDigLocation() const { return DeepestDigLocation; }
+
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
+	bool HasJetpack() const
+	{
+		return bHasJetpack;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
+	float GetJetpackFuel() const
+	{
+		return CurrentJetpackFuel;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
+	float GetMaxJetpackFuel() const
+	{
+		return MaxJetpackFuel;
+	}
+
+	UFUNCTION(BlueprintPure, Category = "Player|Jetpack")
+	float GetJetpackFuelRatio() const
+	{
+		if (MaxJetpackFuel <= 0.f)
+		{
+			return 0.f;
+		}
+
+		return FMath::Clamp(
+			CurrentJetpackFuel / MaxJetpackFuel,
+			0.f,
+			1.f);
+	}
+
+	/** 서버에서 플레이어에게 제트팩을 지급한다. */
+	void GrantJetpack();
+
+	/** 서버에서 연료를 소비한다. */
+	bool ConsumeJetpackFuel(float Amount);
+	
+	/** 서버에서 제트팩 연료를 최대치까지 충전한다. */
+	bool RefillJetpackFuel();
+
+	UFUNCTION(BlueprintPure, Category = "Player|Snow")
+	float GetSnowGauge() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Player|Snow")
+	void AddSnowGauge(float Amount);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Lifecycle")
+	void ResetForRespawn();
+
+	/** 새 경기용 퍽 상태를 기본값으로 되돌린다. */
+	void ResetForGameStart();
+	
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsFrozen() const;
+
+	/** 서버에서 성공한 원거리 무기 사용이 확정된 뒤 Heat를 누적한다. */
+	void AddWeaponHeat(float HeatAmount, float DecayDelay, float RecoveryDuration);
+
+	UFUNCTION(BlueprintPure, Category = "GAS|Status")
+	bool IsOverheated() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "GAS|Status")
+	void ClearFrozenState();
+	
+	void HandleFreezeGaugeResolved();
+	
+	FText GetDisplayPlayerName() const;
+	
+	FDROnPlayerIdentityChanged OnPlayerIdentityChanged;
+
+	virtual void OnRep_PlayerName() override;
+	
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
+	TSubclassOf<UGameplayEffect> FrozenEffectClass;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status")
+	TSubclassOf<UGameplayEffect> DeadEffectClass;
+
+	/** Infinite GE. BP에서 State.Overheated를 Granted Tag로 부여한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat")
+	TSubclassOf<UGameplayEffect> OverheatedEffectClass;
+
+	void HandleHealthChanged(const FOnAttributeChangeData& Data);
+	void EvaluateDeadState();
+	FDelegateHandle HealthChangedHandle;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Abilities")
+	TObjectPtr<UDRAbilitySet> DefaultAbilitySet;
+
+	void GrantDefaultAbilities();
+	
+	FDRAbilitySet_GrantedHandles GrantedHandles;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
+	TObjectPtr<UDRPlayerAttributeSet> PlayerAttributeSet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Upgrade")
+	TObjectPtr<UDRCharacterUpgradeComponent> CharacterUpgradeComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Perk")
+	TObjectPtr<UDRPerkComponent> PerkComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Skill")
+	TObjectPtr<UDRSkillComponent> SkillComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Combat Stats")
+	TObjectPtr<UDRCombatStatsComponent> CombatStatsComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Player|Shield")
+	TObjectPtr<UDRShieldComponent> ShieldComponent;
+	
+	void BindStatusPolicy();
+	void UnbindStatusPolicy();
+
+	void HandleFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleHeatGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleMaxFreezeGaugeChanged(const FOnAttributeChangeData& Data);
+	void HandleFrozenTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void HandleVoxelContainedTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void HandlePersonalShieldTagChanged(const FGameplayTag CallbackTag, int32 NewCount);
+	void SetFrozenAbilityBlockActive(bool bActive);
+	
+	void EvaluateFrozenState(float FreezeGauge, float Health);
+
+	// Freeze Decay
+	void RestartFreezeDecay();
+	void TickFreezeDecay();
+	void StopFreezeDecay();
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0", Units = "s"))
+	float FreezeDecayDelay = 3.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.01", Units = "s"))
+	float FreezeDecayInterval = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Freeze", meta = (ClampMin = "0.0"))
+	float FreezeDecayRatePerSecond = 10.f;
+
+	FTimerHandle FreezeDecayTimerHandle;
+	FDelegateHandle FreezeGaugeChangedHandle;
+	FDelegateHandle FrozenTagChangedHandle;
+	FDelegateHandle VoxelContainedTagChangedHandle;
+	FDelegateHandle PersonalShieldTagChangedHandle;
+	bool bFrozenAbilityBlockApplied = false;
+
+	// Heat / Overheat
+	void EvaluateOverheatedState(float HeatGauge);
+	void EnterOverheatedState();
+	void ClearOverheatedState();
+	void ResetHeatState();
+	void RestartHeatDecay();
+	void TickHeatDecay();
+	void StopHeatDecay();
+
+	/** Heat 감소는 UI 보간보다 충분히 낮은 빈도로 서버에서만 실행한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS|Status|Heat", meta = (ClampMin = "0.02", Units = "s"))
+	float HeatDecayInterval = 0.1f;
+
+	float CurrentHeatDecayDelay = 1.f;
+	float CurrentHeatDecayRatePerSecond = 25.f;
+	FTimerHandle HeatDecayTimerHandle;
+	FDelegateHandle HeatGaugeChangedHandle;
+	FActiveGameplayEffectHandle OverheatedEffectHandle;
+	
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
+	bool bHasDeepestDigLocation = false;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Mining")
+	FVector_NetQuantize DeepestDigLocation = FVector::ZeroVector;
+
+	/** 모든 플레이어가 알아야 하는 제트팩 보유 상태 */
+	UPROPERTY(ReplicatedUsing = OnRep_HasJetpack, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack")
+	bool bHasJetpack = false;
+
+	/** 소유 플레이어 UI에서 사용할 현재 연료 */
+	UPROPERTY(ReplicatedUsing = OnRep_JetpackFuel, VisibleAnywhere, BlueprintReadOnly, Category = "Player|Jetpack")
+	float CurrentJetpackFuel = 0.f;
+
+	/** 프로토타입에서는 모든 인스턴스가 같은 기본값을 사용한다. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|Jetpack")
+	float MaxJetpackFuel = 100.f;
+
+	UFUNCTION()
+	void OnRep_HasJetpack();
+
+	UFUNCTION()
+	void OnRep_JetpackFuel();
+
+private:
+	UFUNCTION()
+	void OnRep_PublicQuickSlots();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PublicQuickSlots)
+	TArray<FDRPublicQuickSlot> PublicQuickSlots;
+
+	/** 연결된 Pawn의 제트팩 외형을 현재 상태에 맞게 갱신한다. */
+	void RefreshJetpackVisualOnPawn();
+
+	UPROPERTY(EditDefaultsOnly, Category="GAS|Initial Attributes")
+	float InitialSnowGauge = 200.f;
+	
+	void ResetGameplayAttributesForGameStart();
+	
+#pragma region Teleport
+public:
+	UFUNCTION(BlueprintPure, Category = "Player|Teleport")
+	int32 GetTeamId() const { return TeamId != INDEX_NONE ? TeamId : GetPlayerId(); }
+	bool HasAssignedTeam() const { return TeamId != INDEX_NONE; }
+
+	void SetTeamId(int32 NewTeamId);
+
+private:
+	UFUNCTION()
+	void OnRep_TeamId();
+
+	UPROPERTY(
+		ReplicatedUsing = OnRep_TeamId,
+		VisibleAnywhere,
+		BlueprintReadOnly,
+		Category = "Player|Teleport",
+		meta = (AllowPrivateAccess = "true"))
+	int32 TeamId = INDEX_NONE;
+#pragma endregion
+};

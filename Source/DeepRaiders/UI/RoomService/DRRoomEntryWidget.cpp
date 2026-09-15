@@ -1,0 +1,76 @@
+#include "DRRoomEntryWidget.h"
+
+#include "DRRoomServiceWidget.h"
+#include "Components/Image.h"
+#include "Components/TextBlock.h"
+
+void UDRRoomEntryWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
+{
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
+	CurrentItem = Cast<UDRRoomListItem>(ListItemObject);
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.AddUObject(this, &ThisClass::RefreshRoom);
+	}
+	RefreshRoom();
+	IUserObjectListEntry::NativeOnListItemObjectSet(ListItemObject);
+}
+
+void UDRRoomEntryWidget::RefreshRoom()
+{
+	const FRoomServiceInfo Info = CurrentItem ? CurrentItem->RoomInfo : FRoomServiceInfo();
+	// 목록에는 앞 6글자만 표시하고 접속에는 전체 ID를 사용한다.
+	RoomId->SetText(FText::FromString(Info.RoomId.Left(6)));
+	RoomName->SetText(FText::FromString(Info.Title));
+	RoomJoinCount->SetText(FText::Format(NSLOCTEXT("Rooms", "PlayerCount", "{0} / {1}"),
+		FText::AsNumber(Info.CurrentPlayers), FText::AsNumber(Info.MaxPlayers)));
+	FText StateText = NSLOCTEXT("Rooms", "Unavailable", "입장 불가");
+	if (Info.State == TEXT("Waiting"))
+	{
+		StateText = NSLOCTEXT("Rooms", "Waiting", "대기 중");
+	}
+	else if (Info.State == TEXT("Playing"))
+	{
+		StateText = NSLOCTEXT("Rooms", "Playing", "진행 중");
+	}
+	else if (Info.State == TEXT("Ending"))
+	{
+		StateText = NSLOCTEXT("Rooms", "Ending", "종료 중");
+	}
+	RoomState->SetText(StateText);
+	RoomImage->SetBrushFromTexture(CurrentItem ? CurrentItem->Preview.Get() : nullptr);
+	Join->SetIsEnabled(CurrentItem && Info.State == TEXT("Waiting")
+		&& Info.CurrentPlayers < Info.MaxPlayers);
+}
+
+void UDRRoomEntryWidget::NativeOnEntryReleased()
+{
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
+	CurrentItem = nullptr;
+	Join->SetIsEnabled(false);
+	IUserObjectListEntry::NativeOnEntryReleased();
+}
+
+void UDRRoomEntryWidget::HandleJoinClicked()
+{
+	// 행 선택은 접속하지 않는다. 입장 버튼만 이 함수를 호출한다.
+	if (CurrentItem && CurrentItem->RoomOwner.IsValid())
+	{
+		CurrentItem->RoomOwner->JoinRoomById(CurrentItem->RoomInfo.RoomId);
+	}
+}
+
+void UDRRoomEntryWidget::NativeDestruct()
+{
+	if (CurrentItem)
+	{
+		CurrentItem->OnChanged.RemoveAll(this);
+	}
+	Super::NativeDestruct();
+}
