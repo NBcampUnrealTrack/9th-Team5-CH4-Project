@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "GameplayPrediction.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
+#include "DeepRaiders/Skill/Barrier/DRBarrierGenerator.h"
 
 namespace
 {
@@ -302,7 +303,10 @@ FVector UDRGA_FireHitScan::TraceHitScan(const FVector& TraceStart, const FVector
 
 		AActor* HitActor = HitResult.GetActor();
 
-		if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
+		const ADRBarrierGenerator* BarrierGenerator = Cast<ADRBarrierGenerator>(HitActor);
+		const bool bStartedInsideBarrier = IsValid(BarrierGenerator)
+			&& BarrierGenerator->ContainsPoint(TraceStart);
+		if (IsValid(HitActor) && (IsFriendlyTarget(HitActor) || bStartedInsideBarrier))
 		{
 			QueryParams.AddIgnoredActor(HitActor);
 			continue;

@@ -646,8 +646,9 @@ void ADRProjectile::HandleBarrierOverlap(ADRBarrierGenerator* BarrierGenerator)
 		return;
 	}
 
-	// 아군탄은 애초에 Blocking Hit가 발생하지 않았으므로 아무 처리 없이 그대로 비행한다.
-	if (IsFriendlyTarget(BarrierGenerator))
+	// 아군탄 또는 배리어 내부에서 출발한 탄은 팀과 무관하게 해당 배리어를 통과한다.
+	// 외부에서 진입한 적 탄은 기존처럼 배리어에 충돌한다.
+	if (IsFriendlyTarget(BarrierGenerator) || BarrierGenerator->ContainsPoint(LaunchLocation))
 	{
 		return;
 	}

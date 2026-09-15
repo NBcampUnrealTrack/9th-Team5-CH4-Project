@@ -26,6 +26,8 @@ public:
 		float InBarrierMaxHealth, const TArray<FGameplayEffectSpecHandle>& InAreaEffectSpecs);
 	virtual int32 GetCombatTeamId() const override { return OwnerTeamId; }
 	virtual UPrimitiveComponent* GetBarrierCollisionComponent() const;
+	/** 지정 지점이 배리어 충돌 영역 내부에 있는지 반환한다. */
+	bool ContainsPoint(const FVector& WorldPoint) const;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent,
 		AController* EventInstigator, AActor* DamageCauser) override;
 
