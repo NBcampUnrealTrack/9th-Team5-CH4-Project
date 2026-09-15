@@ -5,7 +5,7 @@
 
 ADRSnowWall::ADRSnowWall()
 {
-	SetReplicates(true);
+	bReplicates = true;
 	SetReplicateMovement(true);
 
 	CollisionComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
