@@ -77,5 +77,5 @@ private:
 	TWeakObjectPtr<ADRPlayerController> PlayerController;
 
 	static constexpr int32 MaxEntries = 5;
-	static constexpr float EntryLifetimeSeconds = 4.f;
+	static constexpr float EntryLifetimeSeconds = 8.0f;
 };
