@@ -75,35 +75,68 @@ void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, flo
 	 */
 	HandleHostileHitResolved(SourcePlayerState);
 
-	if (bFatal && IsValid(SourcePlayerState) && SourcePlayerState != this)
+	if (bFatal)
 	{
-		UAbilitySystemComponent* SourceASC = SourcePlayerState->GetAbilitySystemComponent();
-		if (IsValid(SourceASC))
-		{
-			AActor* SourceActor = IsValid(SourcePlayerState->GetPawn())
-				? static_cast<AActor*>(SourcePlayerState->GetPawn())
-				: SourcePlayerState;
-			FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
-			Context.AddInstigator(SourceActor, SourceActor);
+		const bool bPlayerKill =
+			IsValid(SourcePlayerState)
+			&& SourcePlayerState != this;
 
-			FGameplayCueParameters Parameters(Context);
-			Parameters.Location = SourceActor->GetActorLocation();
-			SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Kill, Parameters);
+		if (bPlayerKill)
+		{
+			UAbilitySystemComponent* SourceASC = SourcePlayerState->GetAbilitySystemComponent();
+			if (IsValid(SourceASC))
+			{
+				AActor* SourceActor = IsValid(SourcePlayerState->GetPawn())
+					? static_cast<AActor*>(SourcePlayerState->GetPawn())
+					: SourcePlayerState;
+				FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
+				Context.AddInstigator(SourceActor, SourceActor);
+
+				FGameplayCueParameters Parameters(Context);
+				Parameters.Location = SourceActor->GetActorLocation();
+				SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Kill, Parameters);
+			}
 		}
 
-		// Kill Feed는 누적 MatchStats가 아니라 일시적인 presentation event다.
-		// 서버가 확정한 PvP Kill만 모든 소유 클라이언트에 전달한다.
-		if (UWorld* World = GetWorld())
-		{
-			const FString KillerName = SourcePlayerState->GetDisplayPlayerName().ToString();
-			const FString VictimName = GetDisplayPlayerName().ToString();
+		/*
+		 * Player Kill은 팀킬을 포함해 그대로 표시한다.
+		 * Player source가 없는 사망 중 VoxelContained 상태면 Snow Death로 표시한다.
+		 * 다른 환경사/낙사는 현재 Kill Feed에 올리지 않는다.
+		 */
+		const bool bSnowDeath =
+			!bPlayerKill
+			&& IsValid(AbilitySystemComponent)
+			&& AbilitySystemComponent->HasMatchingGameplayTag(
+				DRGameplayTags::State_VoxelContained);
 
-			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		if (bPlayerKill || bSnowDeath)
+		{
+			if (UWorld* World = GetWorld())
 			{
-				ADRPlayerController* PlayerController = Cast<ADRPlayerController>(It->Get());
-				if (IsValid(PlayerController))
+				const FString KillerName = bPlayerKill
+					? SourcePlayerState->GetDisplayPlayerName().ToString()
+					: FString();
+				const int32 KillerTeamId = bPlayerKill
+					? SourcePlayerState->GetTeamId()
+					: INDEX_NONE;
+				const FString VictimName = GetDisplayPlayerName().ToString();
+				const int32 VictimTeamId = GetTeamId();
+				const EDRKillFeedCause Cause = bPlayerKill
+					? EDRKillFeedCause::Player
+					: EDRKillFeedCause::Snow;
+
+				for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 				{
-					PlayerController->ClientPushKillFeed(KillerName, VictimName);
+					ADRPlayerController* PlayerController = Cast<ADRPlayerController>(It->Get());
+					if (IsValid(PlayerController))
+					{
+						PlayerController->ClientPushKillFeed(
+							KillerName,
+							KillerTeamId,
+							VictimName,
+							VictimTeamId,
+							Cause);
+					}
 				}
 			}
 		}

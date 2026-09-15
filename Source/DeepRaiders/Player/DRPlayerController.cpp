@@ -229,14 +229,22 @@ void ADRPlayerController::ClientReceiveSnowGaugePresentation_Implementation(
 
 void ADRPlayerController::ClientPushKillFeed_Implementation(
 	const FString& KillerName,
-	const FString& VictimName)
+	const int32 KillerTeamId,
+	const FString& VictimName,
+	const int32 VictimTeamId,
+	const EDRKillFeedCause Cause)
 {
 	if (!IsLocalController())
 	{
 		return;
 	}
 
-	OnKillFeedEntry.Broadcast(KillerName, VictimName);
+	OnKillFeedEntry.Broadcast(
+		KillerName,
+		KillerTeamId,
+		VictimName,
+		VictimTeamId,
+		Cause);
 }
 
 bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const
