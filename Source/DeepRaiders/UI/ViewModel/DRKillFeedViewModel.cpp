@@ -11,7 +11,7 @@ void UDRKillFeedEntryViewModel::Initialize(
 	const EDRKillFeedCause InCause)
 {
 	const bool bSnowDeath = InCause == EDRKillFeedCause::Snow;
-	const FString KillerDisplayName = bSnowDeath ? TEXT("SNOW") : InKillerName;
+	const FString KillerDisplayName = bSnowDeath ? TEXT("파무침") : InKillerName;
 
 	UE_MVVM_SET_PROPERTY_VALUE(KillerName, FText::FromString(KillerDisplayName));
 	UE_MVVM_SET_PROPERTY_VALUE(KillerTeamId, InKillerTeamId);
