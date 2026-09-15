@@ -19,6 +19,7 @@
 #include "DeepRaiders/Player/Components/DRShieldComponent.h"
 #include "DeepRaiders/Input/DRInputTypes.h"
 #include "DRPlayerController.h"
+#include "Engine/World.h"
 #include "HAL/PlatformProcess.h"
 
 ADRPlayerState::ADRPlayerState()
@@ -88,6 +89,23 @@ void ADRPlayerState::HandleDamageResolved(ADRPlayerState* SourcePlayerState, flo
 			FGameplayCueParameters Parameters(Context);
 			Parameters.Location = SourceActor->GetActorLocation();
 			SourceASC->ExecuteGameplayCue(DRGameplayTags::GameplayCue_Sound_Player_Kill, Parameters);
+		}
+
+		// Kill Feed는 누적 MatchStats가 아니라 일시적인 presentation event다.
+		// 서버가 확정한 PvP Kill만 모든 소유 클라이언트에 전달한다.
+		if (UWorld* World = GetWorld())
+		{
+			const FString KillerName = SourcePlayerState->GetDisplayPlayerName().ToString();
+			const FString VictimName = GetDisplayPlayerName().ToString();
+
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ADRPlayerController* PlayerController = Cast<ADRPlayerController>(It->Get());
+				if (IsValid(PlayerController))
+				{
+					PlayerController->ClientPushKillFeed(KillerName, VictimName);
+				}
+			}
 		}
 	}
 

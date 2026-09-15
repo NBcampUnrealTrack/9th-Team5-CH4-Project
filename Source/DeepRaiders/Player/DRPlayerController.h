@@ -42,6 +42,7 @@ class UDRSnowJoinComponent;
 
 // 현재 플레이어가 열고 있는 Storage에 변경이 생긴 경우
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDRCurrentStorageChanged, ADRStorage*, CurrentStorage);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FDRKillFeedEntrySignature, FString, KillerName, FString, VictimName);
 
 UENUM(BlueprintType)
 enum class EDRStorageTransferDirection : uint8
@@ -81,6 +82,14 @@ public:
 
 	/** 확정된 SnowGauge를 소유 클라이언트 HUD에만 빠르게 전달한다. */
 	void SendSnowGaugePresentation(float SnowGauge);
+
+	/** 서버에서 확정된 PvP Kill을 로컬 Kill Feed UI에 전달한다. */
+	UFUNCTION(Client, Reliable)
+	void ClientPushKillFeed(const FString& KillerName, const FString& VictimName);
+
+	/** 로컬 UI가 바인딩하는 Kill Feed presentation event. */
+	UPROPERTY(BlueprintAssignable, Category = "UI|Kill Feed")
+	FDRKillFeedEntrySignature OnKillFeedEntry;
 
 	/** 로컬 설치 조준이 시작될 때 휠 입력을 배치 회전 모드로 전환한다. */
 	void BeginPlacementInput(ADRPlacementTargetActor* TargetActor);

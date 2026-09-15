@@ -227,6 +227,18 @@ void ADRPlayerController::ClientReceiveSnowGaugePresentation_Implementation(
 	}
 }
 
+void ADRPlayerController::ClientPushKillFeed_Implementation(
+	const FString& KillerName,
+	const FString& VictimName)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	OnKillFeedEntry.Broadcast(KillerName, VictimName);
+}
+
 bool ADRPlayerController::IsEnemyNameRevealActive(ADRPlayerState* TargetPlayerState) const
 {
 	if (!IsLocalController() || !IsValid(TargetPlayerState))
