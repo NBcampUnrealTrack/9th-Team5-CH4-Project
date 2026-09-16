@@ -50,8 +50,15 @@ public:
 
 	static bool BuildMeshVoxelMask(UStaticMeshComponent* Mesh, AVoxelWorld* VoxelWorld,
 		int32 MaxSamples, FDRMeshVoxelMask& OutMask);
+	/** 메쉬 데이터를 복사한 뒤 작업 스레드에서 마스크를 생성한다. 콜백은 게임 스레드다. */
+	static bool BuildMeshVoxelMasksAsync(AVoxelWorld* VoxelWorld,
+		const TArray<TPair<UStaticMeshComponent*, int32>>& Meshes,
+		const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
+		TFunction<void(TArray<FDRMeshVoxelMask>&&)>&& Completion);
+	/** 비동기로 Box 안의 비보존 복셀을 제거하고 FillMask 내부의 빈 복셀을 채운다. */
 	static bool TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransform& BoxTransform,
 		const FVector& BoxExtent, const FDRMeshVoxelMask& KeepMask, int32 MaxSamples,
+		const FDRMeshVoxelMask& FillMask,
 		const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
 		TFunction<void(bool)>&& Completion);
 

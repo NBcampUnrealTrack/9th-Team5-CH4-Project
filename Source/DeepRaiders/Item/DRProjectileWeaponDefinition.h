@@ -230,13 +230,4 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation")
 	FDRWeaponPresentationData ImpactPresentation;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation|Team", meta = (ClampMin = "0"))
-	int32 TeamMaterialSlotIndex = 0;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation|Team")
-	TObjectPtr<UMaterialInterface> Team0Material = nullptr;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Presentation|Team")
-	TObjectPtr<UMaterialInterface> Team1Material = nullptr;
 };

@@ -14,6 +14,7 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_VoxelContained);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Absorbing);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Spraying);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Overheated);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_BlinkRecovery);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_PersonalShield);
@@ -229,6 +230,11 @@ namespace DRGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDamage);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_FallDeath);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Enter);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Overheated_Enter);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Game_EndCountdown);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Game_Ended);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_ControlZone_Completed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Overheated_Exit);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Frozen_Death);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Death);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Sound_Player_Kill);

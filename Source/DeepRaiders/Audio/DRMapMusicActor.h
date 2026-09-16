@@ -8,7 +8,7 @@ class ADRMiningGameStateBase;
 class UAudioComponent;
 class USoundBase;
 
-/** 레벨의 대기, 게임, 게임오버 음악 목록을 로컬 클라이언트에서 재생한다. */
+/** 대기와 게임 음악을 로컬에서 재생하고 게임 종료 시 제거한다. */
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRMapMusicActor : public AActor
 {
@@ -30,9 +30,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Music")
 	TArray<TObjectPtr<USoundBase>> GameMusicPlaylist;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Music")
-	TArray<TObjectPtr<USoundBase>> GameOverMusicPlaylist;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Music",
 		meta = (ClampMin = "0.0", Units = "s"))
 	float FadeInDuration = 0.5f;
@@ -42,8 +39,7 @@ private:
 	{
 		None,
 		Map,
-		Game,
-		GameOver
+		Game
 	};
 
 	UFUNCTION()

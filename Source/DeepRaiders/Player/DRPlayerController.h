@@ -322,6 +322,9 @@ public:
 	
 	UFUNCTION(Exec)
 	void FullSnow();
+	
+	UFUNCTION(Exec)
+	void AutoFire();
 
 private:
 	UFUNCTION(Server, Reliable)
@@ -340,6 +343,10 @@ private:
 
 	UFUNCTION(Server, Reliable)
 	void ServerGiveWeaponForDebug(const FString& WeaponName);
+	
+	void DebugAutoFireTick();
+
+	FTimerHandle DebugAutoFireTimer;
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Player|QuickSlot|Test")

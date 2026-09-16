@@ -1,4 +1,5 @@
 #include "DRMeshVoxelCarver.h"
+#include "Async/Async.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "DeepRaiders/Core/GameModes/DRMiningGameModeBase.h"
@@ -54,6 +55,7 @@ namespace DRMeshVoxelCarver
 		FTransform CleanupTransform;
 		FVector CleanupExtent = FVector::ZeroVector;
 		TSet<FIntVector> KeepVoxels;
+		TSet<FIntVector> FillVoxels;
 		TSharedPtr<FThreadSafeBool, ESPMode::ThreadSafe> Cancellation;
 		TFunction<void(bool)> Completion;
 	};
@@ -503,9 +505,19 @@ void DRMeshVoxelCarver::StartNextCarveChunk(
 					if (Context->bTrimOutsideMesh)
 					{
 						const FIntVector Position(X, Y, Z);
-						if (ShouldTrimVoxel(*Context, Position))
+						if (Context->FillVoxels.Contains(Position))
 						{
-							// 보존 마스크 내부는 값과 재질 모두 쓰지 않는다.
+							// 빈 곳만 중립 복셀로 채워 기존 눈과 팀 재질을 보존한다.
+							if (Data.GetValue(Position, 0).IsEmpty())
+							{
+								FVoxelMaterial Material(ForceInit);
+								Data.SetMaterial(Position, Material);
+								Data.SetValue(Position, FVoxelValue::Full());
+							}
+						}
+						else if (ShouldTrimVoxel(*Context, Position))
+						{
+							// 다른 거점의 보존 마스크 내부는 변경하지 않는다.
 							Data.SetValue(Position, FVoxelValue::Empty());
 						}
 						continue;
@@ -642,8 +654,91 @@ bool ADRMeshVoxelCarver::BuildMeshVoxelMask(UStaticMeshComponent* Mesh, AVoxelWo
 	return !OutMask.InsideVoxels.IsEmpty();
 }
 
+bool ADRMeshVoxelCarver::BuildMeshVoxelMasksAsync(AVoxelWorld* VoxelWorld,
+	const TArray<TPair<UStaticMeshComponent*, int32>>& Meshes,
+	const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
+	TFunction<void(TArray<FDRMeshVoxelMask>&&)>&& Completion)
+{
+	check(IsInGameThread());
+	if (!IsValid(VoxelWorld) || !VoxelWorld->IsCreated() || Meshes.IsEmpty())
+	{
+		return false;
+	}
+	struct FMeshInput
+	{
+		TArray<FVector3f> Vertices;
+		TArray<uint32> Indices;
+		FTransform Transform;
+		FVoxelIntBox Bounds;
+	};
+	TArray<FMeshInput> Inputs;
+	for (const auto& Entry : Meshes)
+	{
+		if (!IsValid(Entry.Key))
+		{
+			return false;
+		}
+		FMeshInput& Input = Inputs.AddDefaulted_GetRef();
+		Input.Transform = Entry.Key->GetComponentTransform();
+		Input.Bounds = DRMeshVoxelCarver::GetVoxelBounds(VoxelWorld, Entry.Key->Bounds.GetBox());
+		const FIntVector Size = Input.Bounds.Max - Input.Bounds.Min;
+		const int64 Count = int64(Size.X) * Size.Y * Size.Z;
+		if (Count <= 0 || Count > Entry.Value
+			|| !DRMeshVoxelCarver::ReadMesh(Entry.Key->GetStaticMesh(), Input.Vertices, Input.Indices))
+		{
+			return false;
+		}
+	}
+	const FTransform VoxelTransform = VoxelWorld->GetTransform();
+	const FIntVector WorldOffset = VoxelWorld->GetWorldOffset();
+	const float VoxelSize = VoxelWorld->VoxelSize;
+	Async(EAsyncExecution::ThreadPool,
+		[Inputs = MoveTemp(Inputs), VoxelTransform, WorldOffset, VoxelSize, Cancellation,
+		Completion = MoveTemp(Completion)]() mutable
+		{
+			const double StartedAt = FPlatformTime::Seconds();
+			TArray<FDRMeshVoxelMask> Masks;
+			for (const FMeshInput& Input : Inputs)
+			{
+				FDRMeshVoxelMask& Mask = Masks.AddDefaulted_GetRef();
+				Mask.Bounds = Input.Bounds;
+				for (int32 X = Input.Bounds.Min.X; X < Input.Bounds.Max.X && !*Cancellation; ++X)
+				{
+					for (int32 Y = Input.Bounds.Min.Y; Y < Input.Bounds.Max.Y && !*Cancellation; ++Y)
+					{
+						for (int32 Z = Input.Bounds.Min.Z; Z < Input.Bounds.Max.Z && !*Cancellation; ++Z)
+						{
+							const FIntVector Position(X, Y, Z);
+							const FVector WorldPoint = VoxelTransform.TransformPosition(
+								VoxelSize * FVector(Position + WorldOffset));
+							const FVector Local = Input.Transform.InverseTransformPosition(WorldPoint);
+							if (DRMeshVoxelCarver::IsPointInsideMesh(Local, Input.Vertices, Input.Indices))
+							{
+								Mask.InsideVoxels.Add(Position);
+							}
+						}
+					}
+				}
+				if (*Cancellation || Mask.InsideVoxels.IsEmpty())
+				{
+					Masks.Reset();
+					break;
+				}
+			}
+			UE_LOG(LogTemp, Log, TEXT("[ZoneCleanup] Async masks=%d Time=%.3fs Cancelled=%d"),
+				Masks.Num(), FPlatformTime::Seconds() - StartedAt, bool(*Cancellation));
+			AsyncTask(ENamedThreads::GameThread,
+				[Masks = MoveTemp(Masks), Completion = MoveTemp(Completion)]() mutable
+				{
+					Completion(MoveTemp(Masks));
+				});
+		});
+	return true;
+}
+
 bool ADRMeshVoxelCarver::TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransform& BoxTransform,
 	const FVector& BoxExtent, const FDRMeshVoxelMask& KeepMask, int32 MaxSamples,
+	const FDRMeshVoxelMask& FillMask,
 	const TSharedRef<FThreadSafeBool, ESPMode::ThreadSafe>& Cancellation,
 	TFunction<void(bool)>&& Completion)
 {
@@ -652,7 +747,9 @@ bool ADRMeshVoxelCarver::TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransfo
 		return false;
 	}
 	const FBox WorldBox = FBox(-BoxExtent, BoxExtent).TransformBy(BoxTransform);
-	const FVoxelIntBox Bounds = DRMeshVoxelCarver::GetVoxelBounds(VoxelWorld, WorldBox);
+	const FVoxelIntBox CleanupVoxelBounds = DRMeshVoxelCarver::GetVoxelBounds(VoxelWorld, WorldBox);
+	// 타겟이 정리 Box 밖으로 나와 있어도 내부의 빈 부분은 모두 채운다.
+	const FVoxelIntBox Bounds = CleanupVoxelBounds + FillMask.Bounds;
 	const FIntVector Size = Bounds.Max - Bounds.Min;
 	const int64 Count = int64(Size.X) * Size.Y * Size.Z;
 	if (Count <= 0 || Count > MaxSamples)
@@ -672,6 +769,7 @@ bool ADRMeshVoxelCarver::TrimOutsideMesh(AVoxelWorld* VoxelWorld, const FTransfo
 	Context->CleanupTransform = BoxTransform;
 	Context->CleanupExtent = BoxExtent;
 	Context->KeepVoxels = KeepMask.InsideVoxels;
+	Context->FillVoxels = FillMask.InsideVoxels;
 	Context->Cancellation = Cancellation;
 	Context->Completion = MoveTemp(Completion);
 	// 종료 정리는 Step=1, Cube 고정으로 경계 안쪽을 침범하지 않는다.

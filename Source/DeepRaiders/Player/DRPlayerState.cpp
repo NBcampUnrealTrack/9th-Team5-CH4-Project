@@ -1,4 +1,5 @@
 #include "DRPlayerState.h"
+#include "DeepRaiders/GAS/Cues/DRGameplayCuePresentationLibrary.h"
 #include "DeepRaiders/Upgrade/DRCharacterUpgradeComponent.h"
 
 #include "DRPlayerCharacter.h"
@@ -833,6 +834,11 @@ void ADRPlayerState::EnterOverheatedState()
 		return;
 	}
 
+	if (IsOverheated())
+	{
+		ClientPlayOverheatedSound(true);
+	}
+
 	// 상태 진입 순간 이미 실행 중인 행동만 정리한다.
 	// 신규 활성화 차단 정책은 각 GA BP의 ActivationBlockedTags가 소유한다.
 	FGameplayTagContainer AbilitiesToCancel;
@@ -848,11 +854,36 @@ void ADRPlayerState::ClearOverheatedState()
 		return;
 	}
 
+	const bool bWasOverheated = IsOverheated();
 	if (OverheatedEffectHandle.IsValid())
 	{
 		AbilitySystemComponent->RemoveActiveGameplayEffect(OverheatedEffectHandle);
 		OverheatedEffectHandle.Invalidate();
 	}
+	// 해제 요청이 반복되어도 실제 상태가 바뀐 순간에만 재생한다.
+	if (bWasOverheated && !IsOverheated())
+	{
+		ClientPlayOverheatedSound(false);
+	}
+}
+
+void ADRPlayerState::ClientPlayOverheatedSound_Implementation(bool bEntered)
+{
+	const APlayerController* Controller = Cast<APlayerController>(GetOwner());
+	APawn* Pawn = GetPawn();
+	if (!IsValid(Controller) || !Controller->IsLocalController() || !IsValid(Pawn))
+	{
+		return;
+	}
+	FGameplayCueParameters Parameters;
+	Parameters.Instigator = Pawn;
+	Parameters.EffectCauser = Pawn;
+	Parameters.Location = Pawn->GetActorLocation();
+	const FGameplayTag CueTag = bEntered
+		? DRGameplayTags::GameplayCue_Sound_Player_Overheated_Enter
+		: DRGameplayTags::GameplayCue_Sound_Player_Overheated_Exit;
+	// ASC의 Multicast 대신 기존 로컬 Cue 경로를 사용한다.
+	UDRGameplayCuePresentationLibrary::ExecuteLocalSoundCue(Pawn, CueTag, Parameters);
 }
 
 void ADRPlayerState::ResetHeatState()

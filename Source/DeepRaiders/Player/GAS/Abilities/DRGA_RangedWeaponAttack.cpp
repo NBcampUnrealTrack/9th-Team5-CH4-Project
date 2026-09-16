@@ -14,6 +14,7 @@
 #include "DeepRaiders/Player/DRPlayerState.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
 #include "DeepRaiders/Gameplay/Breakable/DRBreakableActor.h"
+#include "DeepRaiders/Skill/Barrier/DRBarrierGenerator.h"
 
 #include "Kismet/GameplayStatics.h"
 #include "Abilities/Tasks/AbilityTask_WaitInputRelease.h"
@@ -629,7 +630,10 @@ bool UDRGA_RangedWeaponAttack::TraceCameraAim(const FVector& ViewLocation, const
 		}
 
 		AActor* HitActor = OutHitResult.GetActor();
-		if (!IsValid(HitActor) || !IsFriendlyTarget(HitActor))
+		const ADRBarrierGenerator* BarrierGenerator = Cast<ADRBarrierGenerator>(HitActor);
+		const bool bStartedInsideBarrier = IsValid(BarrierGenerator)
+			&& BarrierGenerator->ContainsPoint(ViewLocation);
+		if (!IsValid(HitActor) || (!IsFriendlyTarget(HitActor) && !bStartedInsideBarrier))
 		{
 			return true;
 		}

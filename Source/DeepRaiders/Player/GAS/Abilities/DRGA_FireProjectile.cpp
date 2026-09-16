@@ -5,6 +5,7 @@
 #include "DeepRaiders/Core/Collision/DRCollisionChannels.h"
 #include "DeepRaiders/Item/DRProjectileWeaponDefinition.h"
 #include "DeepRaiders/Player/GAS/DRPlayerAttributeSet.h"
+#include "DeepRaiders/Skill/Barrier/DRBarrierGenerator.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -713,7 +714,10 @@ bool UDRGA_FireProjectile::ResolveProjectileAimPoint(const FVector& FireOrigin, 
 		}
 
 		AActor* HitActor = ObstructionHit.GetActor();
-		if (IsValid(HitActor) && IsFriendlyTarget(HitActor))
+		const ADRBarrierGenerator* BarrierGenerator = Cast<ADRBarrierGenerator>(HitActor);
+		const bool bStartedInsideBarrier = IsValid(BarrierGenerator)
+			&& BarrierGenerator->ContainsPoint(FireOrigin);
+		if (IsValid(HitActor) && (IsFriendlyTarget(HitActor) || bStartedInsideBarrier))
 		{
 			QueryParams.AddIgnoredActor(HitActor);
 			continue;

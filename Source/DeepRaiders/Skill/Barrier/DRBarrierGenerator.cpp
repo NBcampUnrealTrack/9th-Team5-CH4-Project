@@ -64,6 +64,18 @@ UPrimitiveComponent* ADRBarrierGenerator::GetBarrierCollisionComponent() const
 	return BarrierCollision.Get();
 }
 
+bool ADRBarrierGenerator::ContainsPoint(const FVector& WorldPoint) const
+{
+	const UPrimitiveComponent* CollisionComponent = GetBarrierCollisionComponent();
+	if (!IsValid(CollisionComponent))
+	{
+		return false;
+	}
+
+	FVector ClosestPoint;
+	return CollisionComponent->GetClosestPointOnCollision(WorldPoint, ClosestPoint) <= KINDA_SMALL_NUMBER;
+}
+
 void ADRBarrierGenerator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

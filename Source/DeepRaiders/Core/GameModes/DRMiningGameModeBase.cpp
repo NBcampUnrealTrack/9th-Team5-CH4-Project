@@ -191,6 +191,14 @@ void ADRMiningGameModeBase::TickGameTimer()
 		MiningGameState->SetGameTimerState(GameRemainingSeconds);
 	}
 	UpdateControlZoneActivation();
+	// 종료 직전 3, 2, 1초에 각각 한 번씩 전체 참가자에게 알린다.
+	if (GameRemainingSeconds <= 3)
+	{
+		if (ADRMiningGameStateBase* State = GetGameState<ADRMiningGameStateBase>())
+		{
+			State->MulticastPlayMatchSound(DRGameplayTags::GameplayCue_Sound_Game_EndCountdown);
+		}
+	}
 	UpdateReplicatedGamePhase();
 }
 
@@ -402,6 +410,9 @@ void ADRMiningGameModeBase::HandleControlZoneCompleted(ADRSnowControlZone* Zone)
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->AddControlZoneReward(WinningTeam, TotalReceived);
+		// 보상을 한 번 확보한 경로에서만 재생해 반복 점령 갱신에 의한 중복을 막는다.
+		MiningGameState->MulticastPlayMatchSound(
+			DRGameplayTags::GameplayCue_Sound_ControlZone_Completed);
 	}
 }
 
@@ -514,6 +525,8 @@ void ADRMiningGameModeBase::EndGame()
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
 		MiningGameState->SetGameTimerState(0);
+		// 종료 알림음은 각 클라이언트에서 한 번 재생한다.
+		MiningGameState->MulticastPlayMatchSound(DRGameplayTags::GameplayCue_Sound_Game_Ended);
 	}
 	UpdateReplicatedGamePhase();
 	for (TActorIterator<ADRTurret> Iterator(GetWorld()); Iterator; ++Iterator)
@@ -521,37 +534,10 @@ void ADRMiningGameModeBase::EndGame()
 		Iterator->Destroy();
 	}
 
-	TArray<FString> ZoneDebugTexts;
+	// 종료 시 거점은 마지막 갱신 상태로 고정하고 승패는 팀 보유 눈으로 결정한다.
 	for (TActorIterator<ADRSnowControlZone> Iterator(GetWorld()); Iterator; ++Iterator)
 	{
 		Iterator->FreezeForGameEnd();
-		const FDRSnowVoxelMaterialScanResult MaterialScan = Iterator->ScanVoxelMaterials();
-		const FString ZoneDebugText = Iterator->BuildSnowCountDebugTextFromScan(MaterialScan);
-		ZoneDebugTexts.Add(FString::Printf(TEXT("[%s]\n%s"), *Iterator->GetName(), *ZoneDebugText));
-		UE_LOG(LogTemp, Warning, TEXT("[GameEnd][Zone=%s]\n%s"), *Iterator->GetName(), *ZoneDebugText);
-		Iterator->RefreshControlRatio();
-		const FDRSnowControlRatio Ratio = Iterator->GetControlRatio();
-		float ZoneTeamAmounts[2] = {0.f, 0.f};
-		for (const FDRSnowTeamAmount& Team : Ratio.Teams)
-		{
-			if (Team.TeamId == 0 || Team.TeamId == 1)
-			{
-				ZoneTeamAmounts[Team.TeamId] += Team.Amount;
-			}
-		}
-
-		const float ZoneTeamTotal = ZoneTeamAmounts[0] + ZoneTeamAmounts[1];
-		const float ZoneTeam0Percent =
-			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[0] / ZoneTeamTotal * 100.f : 0.f;
-		const float ZoneTeam1Percent =
-			ZoneTeamTotal > 0.f ? ZoneTeamAmounts[1] / ZoneTeamTotal * 100.f : 0.f;
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[GameEnd][Zone=%s] Team 0=%.2f%% Team 1=%.2f%%"),
-			*Iterator->GetName(),
-			ZoneTeam0Percent,
-			ZoneTeam1Percent);
 	}
 
 	float TeamCurrency[2];
@@ -567,7 +553,7 @@ void ADRMiningGameModeBase::EndGame()
 
 	if (ADRMiningGameStateBase* MiningGameState = GetGameState<ADRMiningGameStateBase>())
 	{
-		MiningGameState->SetGameEndDebugText(FString::Join(ZoneDebugTexts, TEXT("\n\n")));
+		MiningGameState->SetGameEndDebugText(FString());
 		FDRControlZoneGameResult Result;
 		Result.bHasResult = true;
 		Result.Team0Ratio = TotalCurrency > 0.0 ? TeamCurrency[0] / TotalCurrency : 0.f;
