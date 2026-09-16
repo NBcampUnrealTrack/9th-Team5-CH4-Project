@@ -8,7 +8,7 @@ class ADRMiningGameStateBase;
 class UAudioComponent;
 class USoundBase;
 
-/** 대기와 게임 음악을 로컬에서 재생하고 게임 종료 시 제거한다. */
+/** 대기와 게임 음악을 로컬에서 재생하고 결과 화면에서는 음악만 정지한다. */
 UCLASS(Blueprintable)
 class DEEPRAIDERS_API ADRMapMusicActor : public AActor
 {
