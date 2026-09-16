@@ -74,8 +74,8 @@ void ADRMapMusicActor::HandleGameTimerChanged(int32, bool bGameStarted, bool bGa
 {
 	if (bGameEnded)
 	{
-		// 종료 사운드는 GameState의 공통 Cue로 재생한다.
-		Destroy();
+		// 종료 Cue 동안 음악만 멈추고 다음 대기 상태를 계속 수신한다.
+		SetMusicPhase(EMusicPhase::None);
 		return;
 	}
 
@@ -112,7 +112,8 @@ void ADRMapMusicActor::SetMusicPhase(EMusicPhase NewPhase)
 
 void ADRMapMusicActor::PlayNextMusic()
 {
-	if (!IsValid(MusicComponent))
+	// Stop의 완료 콜백이 들어와도 결과 화면에서는 다음 곡을 재생하지 않는다.
+	if (MusicPhase == EMusicPhase::None || !IsValid(MusicComponent))
 	{
 		return;
 	}
